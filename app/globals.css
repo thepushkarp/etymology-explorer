@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+
+:root {
+  --cream: #fdfbf7;
+  --cream-dark: #f5f0e8;
+  --charcoal: #2c2c2c;
+  --charcoal-light: #4a4a4a;
+}
+
+@theme inline {
+  --color-cream: var(--cream);
+  --color-cream-dark: var(--cream-dark);
+  --color-charcoal: var(--charcoal);
+  --color-charcoal-light: var(--charcoal-light);
+  --font-serif: var(--font-libre-baskerville);
+}
+
+html {
+  background: var(--cream);
+  color: var(--charcoal);
+}
+
+body {
+  font-family: var(--font-serif), Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Custom max-width for content */
+.max-w-content {
+  max-width: 42rem;
+}

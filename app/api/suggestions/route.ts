@@ -1,0 +1,35 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getSuggestions, isKnownWord } from '@/lib/spellcheck'
+import { ApiResponse, WordSuggestion } from '@/lib/types'
+
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams
+  const query = searchParams.get('q')
+
+  if (!query) {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: 'Query parameter "q" is required',
+      },
+      { status: 400 }
+    )
+  }
+
+  // If it's a known word, return it as the only suggestion
+  if (isKnownWord(query)) {
+    return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>({
+      success: true,
+      data: {
+        suggestions: [{ word: query.toLowerCase(), distance: 0 }],
+      },
+    })
+  }
+
+  const suggestions = getSuggestions(query)
+
+  return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>({
+    success: true,
+    data: { suggestions },
+  })
+}

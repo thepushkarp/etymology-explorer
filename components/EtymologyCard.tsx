@@ -1,0 +1,201 @@
+'use client'
+
+import { EtymologyResult } from '@/lib/types'
+import { RootChip } from './RootChip'
+
+interface EtymologyCardProps {
+  result: EtymologyResult
+  onWordClick: (word: string) => void
+}
+
+export function EtymologyCard({ result, onWordClick }: EtymologyCardProps) {
+  return (
+    <article
+      className="
+        relative
+        bg-white
+        rounded-lg
+        shadow-sm
+        border border-charcoal/5
+        overflow-hidden
+        animate-fadeIn
+      "
+    >
+      {/* Paper texture overlay */}
+      <div
+        className="absolute inset-0 opacity-[0.02] pointer-events-none"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+        }}
+      />
+
+      {/* Main content */}
+      <div className="relative p-8 md:p-12">
+        {/* Header: Word + Pronunciation */}
+        <header className="mb-8 pb-6 border-b border-charcoal/10">
+          <div className="flex items-baseline gap-4 flex-wrap">
+            {/* Main word - styled like a dictionary headword */}
+            <h1
+              className="
+              font-serif text-4xl md:text-5xl
+              font-bold text-charcoal
+              tracking-tight
+            "
+            >
+              {result.word}
+            </h1>
+
+            {/* Pronunciation in IPA */}
+            <span
+              className="
+              font-serif text-lg
+              text-charcoal-light italic
+            "
+            >
+              {result.pronunciation}
+            </span>
+          </div>
+
+          {/* Definition */}
+          <p
+            className="
+            mt-4 font-serif text-lg
+            text-charcoal/80
+            leading-relaxed
+          "
+          >
+            {result.definition}
+          </p>
+        </header>
+
+        {/* Roots section */}
+        <section className="mb-8">
+          <h2
+            className="
+            font-serif text-sm uppercase
+            text-charcoal-light tracking-widest
+            mb-4
+          "
+          >
+            Etymological Roots
+          </h2>
+
+          <div className="flex flex-wrap gap-3">
+            {result.roots.map((root, index) => (
+              <RootChip key={`${root.root}-${index}`} root={root} onWordClick={onWordClick} />
+            ))}
+          </div>
+        </section>
+
+        {/* Lore section - the memorable narrative */}
+        <section className="mb-8">
+          <h2
+            className="
+            font-serif text-sm uppercase
+            text-charcoal-light tracking-widest
+            mb-4
+          "
+          >
+            The Story
+          </h2>
+
+          <div
+            className="
+            relative
+            pl-6
+            border-l-2 border-charcoal/20
+          "
+          >
+            {/* Decorative quotation mark */}
+            <span
+              className="
+              absolute -left-3 -top-2
+              text-4xl font-serif
+              text-charcoal/10
+              select-none
+            "
+            >
+              &ldquo;
+            </span>
+
+            <p
+              className="
+              font-serif text-lg
+              text-charcoal/90
+              leading-relaxed italic
+            "
+            >
+              {result.lore}
+            </p>
+          </div>
+        </section>
+
+        {/* Sources footer */}
+        <footer
+          className="
+          pt-6
+          border-t border-charcoal/10
+          flex items-center justify-between
+          flex-wrap gap-4
+        "
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className="
+              font-serif text-xs uppercase
+              text-charcoal-light/60 tracking-wider
+            "
+            >
+              Sources
+            </span>
+            <div className="flex gap-2">
+              {result.sources.map((source) => (
+                <SourceBadge key={source} source={source} />
+              ))}
+            </div>
+          </div>
+
+          {/* Decorative flourish */}
+          <div
+            className="
+            flex items-center gap-2
+            text-charcoal/20
+          "
+          >
+            <span className="w-8 h-px bg-current" />
+            <span className="text-xs font-serif italic">§</span>
+            <span className="w-8 h-px bg-current" />
+          </div>
+        </footer>
+      </div>
+    </article>
+  )
+}
+
+function SourceBadge({ source }: { source: string }) {
+  const labels: Record<string, string> = {
+    etymonline: 'Etymonline',
+    wiktionary: 'Wiktionary',
+    synthesized: 'AI Synthesis',
+  }
+
+  const colors: Record<string, string> = {
+    etymonline: 'bg-amber-50 text-amber-700 border-amber-200',
+    wiktionary: 'bg-blue-50 text-blue-700 border-blue-200',
+    synthesized: 'bg-purple-50 text-purple-700 border-purple-200',
+  }
+
+  return (
+    <span
+      className={`
+        px-2 py-0.5
+        text-xs font-serif
+        rounded
+        border
+        ${colors[source] || 'bg-gray-50 text-gray-700 border-gray-200'}
+      `}
+    >
+      {labels[source] || source}
+    </span>
+  )
+}
