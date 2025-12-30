@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Libre_Baskerville } from 'next/font/google'
+import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
 const libreBaskerville = Libre_Baskerville({
@@ -46,7 +47,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${libreBaskerville.variable} min-h-screen`}>{children}</body>
+      <body className={`${libreBaskerville.variable} min-h-screen`}>
+        {children}
+        <Analytics />
+      </body>
     </html>
   )
 }
