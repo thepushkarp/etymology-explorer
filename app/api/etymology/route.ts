@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { EtymologyRequest, EtymologyResult, ApiResponse } from '@/lib/types'
+import { EtymologyRequest, EtymologyResult, ApiResponse, LLMConfig } from '@/lib/types'
 import { fetchWiktionary } from '@/lib/wiktionary'
 import { fetchEtymonline } from '@/lib/etymonline'
 import { synthesizeEtymology } from '@/lib/claude'
@@ -7,10 +7,22 @@ import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
 
+function isValidLLMConfig(config: LLMConfig): boolean {
+  if (config.provider === 'anthropic') {
+    return typeof config.anthropicApiKey === 'string' && config.anthropicApiKey.length > 0
+  }
+  return (
+    typeof config.openrouterApiKey === 'string' &&
+    config.openrouterApiKey.length > 0 &&
+    typeof config.openrouterModel === 'string' &&
+    config.openrouterModel.length > 0
+  )
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: EtymologyRequest = await request.json()
-    const { word, apiKey } = body
+    const { word, llmConfig } = body
 
     // Validate inputs
     if (!word || typeof word !== 'string') {
@@ -23,11 +35,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!apiKey || typeof apiKey !== 'string') {
+    if (!llmConfig || !isValidLLMConfig(llmConfig)) {
       return NextResponse.json<ApiResponse<null>>(
         {
           success: false,
-          error: 'API key is required',
+          error: 'Valid LLM configuration is required',
         },
         { status: 400 }
       )
@@ -90,11 +102,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Synthesize with Claude
+    // Synthesize with LLM
     const result = await synthesizeEtymology(
       normalizedWord,
       { etymonline: etymonlineData, wiktionary: wiktionaryData },
-      apiKey
+      llmConfig
     )
 
     return NextResponse.json<ApiResponse<EtymologyResult>>({
@@ -104,13 +116,17 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Etymology API error:', error)
 
-    // Check for Anthropic API errors
+    // Check for LLM API errors
     if (error instanceof Error) {
-      if (error.message.includes('401') || error.message.includes('invalid_api_key')) {
+      if (
+        error.message.includes('401') ||
+        error.message.includes('invalid_api_key') ||
+        error.message.includes('Invalid')
+      ) {
         return NextResponse.json<ApiResponse<null>>(
           {
             success: false,
-            error: 'Invalid API key. Please check your Anthropic API key in settings.',
+            error: 'Invalid API key. Please check your API key in settings.',
           },
           { status: 401 }
         )
@@ -122,6 +138,15 @@ export async function POST(request: NextRequest) {
             error: 'Rate limit exceeded. Please wait a moment and try again.',
           },
           { status: 429 }
+        )
+      }
+      if (error.message.includes('OpenRouter')) {
+        return NextResponse.json<ApiResponse<null>>(
+          {
+            success: false,
+            error: error.message,
+          },
+          { status: 500 }
         )
       }
     }
