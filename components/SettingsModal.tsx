@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { LLMProvider, AnthropicModel, LLMConfig } from '@/lib/types'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { LLMProvider, LLMConfig, AnthropicModelInfo } from '@/lib/types'
 
-const ANTHROPIC_MODELS: { value: AnthropicModel; label: string }[] = [
-  { value: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku (Fast)' },
-  { value: 'claude-3-5-sonnet-latest', label: 'Claude 3.5 Sonnet (Balanced)' },
-  { value: 'claude-3-opus-latest', label: 'Claude 3 Opus (Powerful)' },
+// Fallback models if API fetch fails
+const FALLBACK_MODELS: AnthropicModelInfo[] = [
+  { id: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4' },
+  { id: 'claude-3-5-haiku-latest', displayName: 'Claude 3.5 Haiku' },
+  { id: 'claude-3-5-sonnet-latest', displayName: 'Claude 3.5 Sonnet' },
 ]
 
 interface SettingsModalProps {
@@ -19,12 +20,78 @@ interface SettingsModalProps {
 export function SettingsModal({ isOpen, onClose, llmConfig, onSaveConfig }: SettingsModalProps) {
   const [provider, setProvider] = useState<LLMProvider>(llmConfig.provider)
   const [anthropicApiKey, setAnthropicApiKey] = useState(llmConfig.anthropicApiKey)
-  const [anthropicModel, setAnthropicModel] = useState<AnthropicModel>(llmConfig.anthropicModel)
+  const [anthropicModel, setAnthropicModel] = useState(llmConfig.anthropicModel)
   const [openrouterApiKey, setOpenrouterApiKey] = useState(llmConfig.openrouterApiKey)
   const [openrouterModel, setOpenrouterModel] = useState(llmConfig.openrouterModel)
   const [showAnthropicKey, setShowAnthropicKey] = useState(false)
   const [showOpenrouterKey, setShowOpenrouterKey] = useState(false)
   const anthropicInputRef = useRef<HTMLInputElement>(null)
+
+  // Models state
+  const [availableModels, setAvailableModels] = useState<AnthropicModelInfo[]>(FALLBACK_MODELS)
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Fetch models from Anthropic API
+  const fetchModels = useCallback(
+    async (apiKey: string) => {
+      if (!apiKey || apiKey.length < 10) {
+        setAvailableModels(FALLBACK_MODELS)
+        setModelsError(null)
+        return
+      }
+
+      setModelsLoading(true)
+      setModelsError(null)
+
+      try {
+        const response = await fetch('/api/models', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey }),
+        })
+
+        const data = await response.json()
+
+        if (data.success && data.data?.length > 0) {
+          setAvailableModels(data.data)
+          // If current model not in list, select first available
+          if (!data.data.some((m: AnthropicModelInfo) => m.id === anthropicModel)) {
+            setAnthropicModel(data.data[0].id)
+          }
+        } else {
+          setModelsError(data.error || 'Failed to fetch models')
+          setAvailableModels(FALLBACK_MODELS)
+        }
+      } catch {
+        setModelsError('Failed to fetch models')
+        setAvailableModels(FALLBACK_MODELS)
+      } finally {
+        setModelsLoading(false)
+      }
+    },
+    [anthropicModel]
+  )
+
+  // Debounced fetch when API key changes
+  useEffect(() => {
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current)
+    }
+
+    if (provider === 'anthropic' && anthropicApiKey) {
+      fetchTimeoutRef.current = setTimeout(() => {
+        fetchModels(anthropicApiKey)
+      }, 500)
+    }
+
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+      }
+    }
+  }, [anthropicApiKey, provider, fetchModels])
 
   // Sync with props
   useEffect(() => {
@@ -34,6 +101,13 @@ export function SettingsModal({ isOpen, onClose, llmConfig, onSaveConfig }: Sett
     setOpenrouterApiKey(llmConfig.openrouterApiKey)
     setOpenrouterModel(llmConfig.openrouterModel)
   }, [llmConfig])
+
+  // Fetch models on open if we have an API key
+  useEffect(() => {
+    if (isOpen && llmConfig.anthropicApiKey && provider === 'anthropic') {
+      fetchModels(llmConfig.anthropicApiKey)
+    }
+  }, [isOpen, llmConfig.anthropicApiKey, provider, fetchModels])
 
   // Focus appropriate input when modal opens
   useEffect(() => {
@@ -67,6 +141,8 @@ export function SettingsModal({ isOpen, onClose, llmConfig, onSaveConfig }: Sett
   const handleClear = () => {
     if (provider === 'anthropic') {
       setAnthropicApiKey('')
+      setAvailableModels(FALLBACK_MODELS)
+      setModelsError(null)
     } else {
       setOpenrouterApiKey('')
       setOpenrouterModel('')
@@ -224,34 +300,7 @@ export function SettingsModal({ isOpen, onClose, llmConfig, onSaveConfig }: Sett
             {/* Anthropic Settings */}
             {provider === 'anthropic' && (
               <div className="space-y-4">
-                {/* Model selector */}
-                <label className="block">
-                  <span className="block mb-2 font-serif text-sm text-charcoal">Model</span>
-                  <select
-                    value={anthropicModel}
-                    onChange={(e) => setAnthropicModel(e.target.value as AnthropicModel)}
-                    className="
-                      w-full
-                      px-4 py-3
-                      font-serif text-sm
-                      bg-cream-dark/50
-                      border border-charcoal/10
-                      rounded-lg
-                      text-charcoal
-                      focus:outline-none focus:border-charcoal/30
-                      transition-colors
-                      cursor-pointer
-                    "
-                  >
-                    {ANTHROPIC_MODELS.map((model) => (
-                      <option key={model.value} value={model.value}>
-                        {model.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                {/* API Key */}
+                {/* API Key - moved above model selector */}
                 <label className="block">
                   <span className="block mb-2 font-serif text-sm text-charcoal">API Key</span>
                   <p className="text-xs text-charcoal-light/70 mb-3 font-serif">
@@ -316,6 +365,48 @@ export function SettingsModal({ isOpen, onClose, llmConfig, onSaveConfig }: Sett
                     API key configured
                   </div>
                 )}
+
+                {/* Model selector */}
+                <label className="block">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-serif text-sm text-charcoal">Model</span>
+                    {modelsLoading && (
+                      <div className="w-3 h-3 border border-charcoal/30 border-t-charcoal rounded-full animate-spin" />
+                    )}
+                  </div>
+                  {modelsError && !modelsLoading && (
+                    <p className="text-xs text-amber-600 mb-2 font-serif">
+                      Using fallback models. {modelsError}
+                    </p>
+                  )}
+                  <select
+                    value={anthropicModel}
+                    onChange={(e) => setAnthropicModel(e.target.value)}
+                    disabled={modelsLoading}
+                    className="
+                      w-full
+                      px-4 py-3
+                      font-serif text-sm
+                      bg-cream-dark/50
+                      border border-charcoal/10
+                      rounded-lg
+                      text-charcoal
+                      focus:outline-none focus:border-charcoal/30
+                      transition-colors
+                      cursor-pointer
+                      disabled:opacity-50 disabled:cursor-wait
+                    "
+                  >
+                    {availableModels.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.displayName}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-charcoal-light/50 mt-2 font-serif">
+                    Models are fetched from the Anthropic API
+                  </p>
+                </label>
               </div>
             )}
 

@@ -67,22 +67,22 @@ export interface HistoryEntry {
 export type LLMProvider = 'anthropic' | 'openrouter'
 
 /**
- * Available Anthropic models
- */
-export type AnthropicModel =
-  | 'claude-3-5-haiku-latest'
-  | 'claude-3-5-sonnet-latest'
-  | 'claude-3-opus-latest'
-
-/**
  * LLM configuration for API calls
  */
 export interface LLMConfig {
   provider: LLMProvider
   anthropicApiKey: string
-  anthropicModel: AnthropicModel
+  anthropicModel: string // Dynamic model ID from API
   openrouterApiKey: string
   openrouterModel: string // User-specified model like "anthropic/claude-3.5-sonnet"
+}
+
+/**
+ * Anthropic model info from the models API
+ */
+export interface AnthropicModelInfo {
+  id: string
+  displayName: string
 }
 
 /**
