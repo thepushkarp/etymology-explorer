@@ -3,7 +3,45 @@ import { EtymologyResult, RawSourceData, SourceReference, LLMConfig } from './ty
 import { SYSTEM_PROMPT, buildUserPrompt } from './prompts'
 
 /**
- * Call OpenRouter API to synthesize etymology
+ * JSON Schema for etymology result - used for structured outputs
+ */
+const ETYMOLOGY_SCHEMA = {
+  type: 'object',
+  properties: {
+    word: { type: 'string', description: 'The word being analyzed' },
+    pronunciation: { type: 'string', description: 'IPA pronunciation' },
+    definition: { type: 'string', description: 'Brief 5-10 word definition' },
+    roots: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          root: { type: 'string', description: 'Root morpheme' },
+          origin: { type: 'string', description: 'Language of origin' },
+          meaning: { type: 'string', description: 'What this root means' },
+          relatedWords: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '6-8 GRE-level words sharing this root',
+          },
+        },
+        required: ['root', 'origin', 'meaning', 'relatedWords'],
+        additionalProperties: false,
+      },
+    },
+    lore: { type: 'string', description: '2-3 sentences of memorable etymology narrative' },
+    sources: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'List of sources used',
+    },
+  },
+  required: ['word', 'pronunciation', 'definition', 'roots', 'lore', 'sources'],
+  additionalProperties: false,
+} as const
+
+/**
+ * Call OpenRouter API with structured output
  */
 async function callOpenRouter(userPrompt: string, config: LLMConfig): Promise<string> {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -21,6 +59,14 @@ async function callOpenRouter(userPrompt: string, config: LLMConfig): Promise<st
         { role: 'user', content: userPrompt },
       ],
       max_tokens: 1024,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'etymology_result',
+          strict: true,
+          schema: ETYMOLOGY_SCHEMA,
+        },
+      },
     }),
   })
 
@@ -44,16 +90,18 @@ async function callOpenRouter(userPrompt: string, config: LLMConfig): Promise<st
 }
 
 /**
- * Call Anthropic API directly to synthesize etymology
+ * Call Anthropic API with structured output
  */
 async function callAnthropic(userPrompt: string, config: LLMConfig): Promise<string> {
   const client = new Anthropic({
     apiKey: config.anthropicApiKey,
   })
 
-  const response = await client.messages.create({
+  // Use the beta API for structured outputs
+  const response = await client.beta.messages.create({
     model: config.anthropicModel,
     max_tokens: 1024,
+    betas: ['structured-outputs-2025-11-13'],
     system: SYSTEM_PROMPT,
     messages: [
       {
@@ -61,6 +109,10 @@ async function callAnthropic(userPrompt: string, config: LLMConfig): Promise<str
         content: userPrompt,
       },
     ],
+    output_format: {
+      type: 'json_schema',
+      schema: ETYMOLOGY_SCHEMA,
+    },
   })
 
   const textContent = response.content.find((block) => block.type === 'text')
@@ -91,26 +143,21 @@ export async function synthesizeEtymology(
     responseText = await callAnthropic(userPrompt, llmConfig)
   }
 
-  // Parse JSON response
-  try {
-    const result = JSON.parse(responseText) as EtymologyResult
+  // Parse JSON response (should always be valid with structured outputs)
+  const result = JSON.parse(responseText) as EtymologyResult
 
-    // Build sources array with URLs
-    const sources: SourceReference[] = []
-    if (sourceData.etymonline) {
-      sources.push({ name: 'etymonline', url: sourceData.etymonline.url })
-    }
-    if (sourceData.wiktionary) {
-      sources.push({ name: 'wiktionary', url: sourceData.wiktionary.url })
-    }
-    if (sources.length === 0) {
-      sources.push({ name: 'synthesized' })
-    }
-    result.sources = sources
-
-    return result
-  } catch (error) {
-    console.error('Failed to parse LLM response:', responseText, error)
-    throw new Error('Invalid JSON response from LLM')
+  // Build sources array with URLs
+  const sources: SourceReference[] = []
+  if (sourceData.etymonline) {
+    sources.push({ name: 'etymonline', url: sourceData.etymonline.url })
   }
+  if (sourceData.wiktionary) {
+    sources.push({ name: 'wiktionary', url: sourceData.wiktionary.url })
+  }
+  if (sources.length === 0) {
+    sources.push({ name: 'synthesized' })
+  }
+  result.sources = sources
+
+  return result
 }
