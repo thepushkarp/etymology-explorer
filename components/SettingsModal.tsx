@@ -5,6 +5,7 @@ import { LLMProvider, LLMConfig, AnthropicModelInfo } from '@/lib/types'
 
 // Fallback models if API fetch fails (sorted by recency)
 const FALLBACK_MODELS: AnthropicModelInfo[] = [
+  { id: 'claude-haiku-4-5-20251001', displayName: 'Claude Haiku 4.5' },
   { id: 'claude-sonnet-4-5-20250514', displayName: 'Claude Sonnet 4.5' },
   { id: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4' },
   { id: 'claude-3-7-sonnet-latest', displayName: 'Claude 3.7 Sonnet' },

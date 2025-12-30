@@ -19,7 +19,7 @@ type ErrorType = 'nonsense' | 'no-api-key' | 'network-error' | 'typo'
 const DEFAULT_LLM_CONFIG: LLMConfig = {
   provider: 'anthropic',
   anthropicApiKey: '',
-  anthropicModel: 'claude-sonnet-4-5-20250514',
+  anthropicModel: 'claude-haiku-4-5-20251001',
   openrouterApiKey: '',
   openrouterModel: '',
 }
