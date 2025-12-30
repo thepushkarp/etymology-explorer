@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { EtymologyResult, WordSuggestion } from '@/lib/types'
+import { EtymologyResult, WordSuggestion, LLMConfig } from '@/lib/types'
 import { useHistory } from '@/lib/hooks/useHistory'
 import { useLocalStorage } from '@/lib/hooks/useLocalStorage'
 import { SearchBar } from '@/components/SearchBar'
@@ -15,6 +15,14 @@ import { ErrorState, EmptyState } from '@/components/ErrorState'
 
 type AppState = 'idle' | 'loading' | 'success' | 'error'
 type ErrorType = 'nonsense' | 'no-api-key' | 'network-error' | 'typo'
+
+const DEFAULT_LLM_CONFIG: LLMConfig = {
+  provider: 'anthropic',
+  anthropicApiKey: '',
+  anthropicModel: 'claude-3-5-haiku-latest',
+  openrouterApiKey: '',
+  openrouterModel: '',
+}
 
 function HomeContent() {
   const router = useRouter()
@@ -29,7 +37,10 @@ function HomeContent() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   // Hooks
-  const [apiKey, setApiKey] = useLocalStorage<string>('etymology-api-key', '')
+  const [llmConfig, setLlmConfig] = useLocalStorage<LLMConfig>(
+    'etymology-llm-config',
+    DEFAULT_LLM_CONFIG
+  )
   const { history, addToHistory, clearHistory, removeFromHistory } = useHistory()
 
   // Search function
@@ -38,11 +49,20 @@ function HomeContent() {
       const trimmed = word.trim().toLowerCase()
       if (!trimmed) return
 
-      // Check API key
-      if (!apiKey) {
+      // Check for valid LLM config
+      const isConfigValid =
+        llmConfig.provider === 'anthropic'
+          ? llmConfig.anthropicApiKey.length > 0
+          : llmConfig.openrouterApiKey.length > 0 && llmConfig.openrouterModel.length > 0
+
+      if (!isConfigValid) {
         setState('error')
         setErrorType('no-api-key')
-        setErrorMessage("You'll need an Anthropic API key to explore etymologies.")
+        setErrorMessage(
+          llmConfig.provider === 'anthropic'
+            ? "You'll need an Anthropic API key to explore etymologies."
+            : "You'll need to configure OpenRouter with an API key and model."
+        )
         return
       }
 
@@ -54,7 +74,7 @@ function HomeContent() {
         const response = await fetch('/api/etymology', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ word: trimmed, apiKey }),
+          body: JSON.stringify({ word: trimmed, llmConfig }),
         })
 
         const data = await response.json()
@@ -82,7 +102,7 @@ function HomeContent() {
         setErrorMessage('Something went awry in the ether...')
       }
     },
-    [apiKey, addToHistory]
+    [llmConfig, addToHistory]
   )
 
   // Handle URL-based search on mount and param changes - intentional URL → action sync
@@ -142,8 +162,8 @@ function HomeContent() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        apiKey={apiKey}
-        onSaveApiKey={setApiKey}
+        llmConfig={llmConfig}
+        onSaveConfig={setLlmConfig}
       />
 
       {/* Main content */}

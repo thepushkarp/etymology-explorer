@@ -33,7 +33,7 @@ export interface EtymologyResult {
  */
 export interface EtymologyRequest {
   word: string
-  apiKey: string
+  llmConfig: LLMConfig
 }
 
 /**
@@ -59,6 +59,30 @@ export interface WordSuggestion {
 export interface HistoryEntry {
   word: string
   timestamp: number
+}
+
+/**
+ * LLM provider type
+ */
+export type LLMProvider = 'anthropic' | 'openrouter'
+
+/**
+ * Available Anthropic models
+ */
+export type AnthropicModel =
+  | 'claude-3-5-haiku-latest'
+  | 'claude-3-5-sonnet-latest'
+  | 'claude-3-opus-latest'
+
+/**
+ * LLM configuration for API calls
+ */
+export interface LLMConfig {
+  provider: LLMProvider
+  anthropicApiKey: string
+  anthropicModel: AnthropicModel
+  openrouterApiKey: string
+  openrouterModel: string // User-specified model like "anthropic/claude-3.5-sonnet"
 }
 
 /**
