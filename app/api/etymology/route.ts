@@ -118,10 +118,12 @@ export async function POST(request: NextRequest) {
 
     // Check for LLM API errors
     if (error instanceof Error) {
+      // Check for authentication errors (be specific to avoid false positives)
       if (
         error.message.includes('401') ||
         error.message.includes('invalid_api_key') ||
-        error.message.includes('Invalid')
+        error.message.includes('Invalid API key') ||
+        error.message.includes('authentication_error')
       ) {
         return NextResponse.json<ApiResponse<null>>(
           {
@@ -149,6 +151,14 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         )
       }
+      // Return the actual error message for debugging
+      return NextResponse.json<ApiResponse<null>>(
+        {
+          success: false,
+          error: error.message,
+        },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json<ApiResponse<null>>(
