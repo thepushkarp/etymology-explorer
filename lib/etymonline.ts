@@ -4,12 +4,17 @@
  * Always implement graceful fallback.
  */
 
+export interface EtymonlineResult {
+  text: string
+  url: string
+}
+
 /**
  * Fetch etymology text from Etymonline
  * @param word - The word to look up
- * @returns Raw etymology text or null if not found/failed
+ * @returns Object with text and URL, or null if not found/failed
  */
-export async function fetchEtymonline(word: string): Promise<string | null> {
+export async function fetchEtymonline(word: string): Promise<EtymonlineResult | null> {
   const normalizedWord = word.toLowerCase().trim().replace(/\s+/g, '-')
   const url = `https://www.etymonline.com/word/${encodeURIComponent(normalizedWord)}`
 
@@ -42,14 +47,14 @@ export async function fetchEtymonline(word: string): Promise<string | null> {
     for (const pattern of patterns) {
       const match = html.match(pattern)
       if (match) {
-        return stripHtml(match[1])
+        return { text: stripHtml(match[1]), url }
       }
     }
 
     // Fallback: try to find any paragraph with etymology content
     const fallbackMatch = html.match(/<p[^>]*>([\s\S]*?from[\s\S]*?)<\/p>/i)
     if (fallbackMatch) {
-      return stripHtml(fallbackMatch[1])
+      return { text: stripHtml(fallbackMatch[1]), url }
     }
 
     return null

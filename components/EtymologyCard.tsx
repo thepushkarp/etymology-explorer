@@ -1,6 +1,6 @@
 'use client'
 
-import { EtymologyResult } from '@/lib/types'
+import { EtymologyResult, SourceReference } from '@/lib/types'
 import { RootChip } from './RootChip'
 
 interface EtymologyCardProps {
@@ -150,7 +150,7 @@ export function EtymologyCard({ result, onWordClick }: EtymologyCardProps) {
             </span>
             <div className="flex gap-2">
               {result.sources.map((source) => (
-                <SourceBadge key={source} source={source} />
+                <SourceBadge key={source.name} source={source} />
               ))}
             </div>
           </div>
@@ -172,7 +172,7 @@ export function EtymologyCard({ result, onWordClick }: EtymologyCardProps) {
   )
 }
 
-function SourceBadge({ source }: { source: string }) {
+function SourceBadge({ source }: { source: SourceReference }) {
   const labels: Record<string, string> = {
     etymonline: 'Etymonline',
     wiktionary: 'Wiktionary',
@@ -180,22 +180,41 @@ function SourceBadge({ source }: { source: string }) {
   }
 
   const colors: Record<string, string> = {
-    etymonline: 'bg-amber-50 text-amber-700 border-amber-200',
-    wiktionary: 'bg-blue-50 text-blue-700 border-blue-200',
+    etymonline:
+      'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 hover:border-amber-300',
+    wiktionary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300',
     synthesized: 'bg-purple-50 text-purple-700 border-purple-200',
   }
 
-  return (
-    <span
-      className={`
-        px-2 py-0.5
-        text-xs font-serif
-        rounded
-        border
-        ${colors[source] || 'bg-gray-50 text-gray-700 border-gray-200'}
-      `}
-    >
-      {labels[source] || source}
-    </span>
-  )
+  const baseClasses = `
+    px-2 py-0.5
+    text-xs font-serif
+    rounded
+    border
+    transition-colors duration-200
+    ${colors[source.name] || 'bg-gray-50 text-gray-700 border-gray-200'}
+  `
+
+  if (source.url) {
+    return (
+      <a
+        href={source.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={`${baseClasses} inline-flex items-center gap-1`}
+      >
+        {labels[source.name] || source.name}
+        <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+          />
+        </svg>
+      </a>
+    )
+  }
+
+  return <span className={baseClasses}>{labels[source.name] || source.name}</span>
 }

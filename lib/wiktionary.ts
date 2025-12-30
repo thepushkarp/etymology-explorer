@@ -14,13 +14,19 @@ interface WiktionaryResponse {
   }
 }
 
+export interface WiktionaryResult {
+  text: string
+  url: string
+}
+
 /**
  * Fetch raw etymology text from Wiktionary
  * @param word - The word to look up
- * @returns Raw etymology text or null if not found
+ * @returns Object with text and URL, or null if not found
  */
-export async function fetchWiktionary(word: string): Promise<string | null> {
+export async function fetchWiktionary(word: string): Promise<WiktionaryResult | null> {
   const normalizedWord = word.toLowerCase().trim()
+  const pageUrl = `https://en.wiktionary.org/wiki/${encodeURIComponent(normalizedWord)}`
 
   // Wiktionary API endpoint - get plain text extract
   const url = new URL('https://en.wiktionary.org/w/api.php')
@@ -59,8 +65,9 @@ export async function fetchWiktionary(word: string): Promise<string | null> {
     // Extract just the etymology section if present
     const extract = page.extract
     const etymologyMatch = extract.match(/Etymology[\s\S]*?(?=\n\n[A-Z]|\n\nPronunciation|$)/i)
+    const text = etymologyMatch ? etymologyMatch[0].trim() : extract.slice(0, 1000)
 
-    return etymologyMatch ? etymologyMatch[0].trim() : extract.slice(0, 1000)
+    return { text, url: pageUrl }
   } catch (error) {
     console.error('Wiktionary fetch error:', error)
     return null

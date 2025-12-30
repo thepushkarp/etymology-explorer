@@ -9,6 +9,14 @@ export interface Root {
 }
 
 /**
+ * A source reference with name and URL
+ */
+export interface SourceReference {
+  name: 'etymonline' | 'wiktionary' | 'synthesized'
+  url?: string // URL of the actual page used (undefined for 'synthesized')
+}
+
+/**
  * Complete etymology result for a word
  */
 export interface EtymologyResult {
@@ -17,7 +25,7 @@ export interface EtymologyResult {
   definition: string // Brief definition
   roots: Root[]
   lore: string // 2-3 sentence memorable narrative
-  sources: ('etymonline' | 'wiktionary' | 'synthesized')[]
+  sources: SourceReference[]
 }
 
 /**
@@ -54,9 +62,17 @@ export interface HistoryEntry {
 }
 
 /**
+ * Raw data fetched from a single external source
+ */
+export interface SourceData {
+  text: string
+  url: string
+}
+
+/**
  * Raw data fetched from external sources before Claude synthesis
  */
 export interface RawSourceData {
-  etymonline?: string | null
-  wiktionary?: string | null
+  etymonline?: SourceData | null
+  wiktionary?: SourceData | null
 }

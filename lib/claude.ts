@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { EtymologyResult, RawSourceData } from './types'
+import { EtymologyResult, RawSourceData, SourceReference } from './types'
 import { SYSTEM_PROMPT, buildUserPrompt } from './prompts'
 
 /**
@@ -14,11 +14,11 @@ export async function synthesizeEtymology(
     apiKey,
   })
 
-  const userPrompt = buildUserPrompt(
-    word,
-    sourceData.etymonline ?? null,
-    sourceData.wiktionary ?? null
-  )
+  // Extract text for the prompt
+  const etymonlineText = sourceData.etymonline?.text ?? null
+  const wiktionaryText = sourceData.wiktionary?.text ?? null
+
+  const userPrompt = buildUserPrompt(word, etymonlineText, wiktionaryText)
 
   const response = await client.messages.create({
     model: 'claude-3-5-haiku-latest',
@@ -42,11 +42,18 @@ export async function synthesizeEtymology(
   try {
     const result = JSON.parse(textContent.text) as EtymologyResult
 
-    // Determine sources used
-    result.sources = []
-    if (sourceData.etymonline) result.sources.push('etymonline')
-    if (sourceData.wiktionary) result.sources.push('wiktionary')
-    if (result.sources.length === 0) result.sources.push('synthesized')
+    // Build sources array with URLs
+    const sources: SourceReference[] = []
+    if (sourceData.etymonline) {
+      sources.push({ name: 'etymonline', url: sourceData.etymonline.url })
+    }
+    if (sourceData.wiktionary) {
+      sources.push({ name: 'wiktionary', url: sourceData.wiktionary.url })
+    }
+    if (sources.length === 0) {
+      sources.push({ name: 'synthesized' })
+    }
+    result.sources = sources
 
     return result
   } catch (error) {
