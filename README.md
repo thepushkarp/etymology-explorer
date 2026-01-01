@@ -2,6 +2,9 @@
 
 A beautiful, interactive web app that helps you discover the origins and roots of words. Perfect for vocabulary enthusiasts who want to understand words deeply through their etymological roots.
 
+Try it out at [etymology.theoushkarp.com](https://etymology.theoushkarp.com)
+
+
 ## Features
 
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
