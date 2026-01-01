@@ -1,16 +1,16 @@
 # Etymology Explorer
 
-A beautiful, interactive web app that helps you discover the origins and roots of words. Perfect for GRE/TOEFL vocabulary learners who want to understand words deeply through their etymological roots.
+A beautiful, interactive web app that helps you discover the origins and roots of words. Perfect for vocabulary enthusiasts who want to understand words deeply through their etymological roots.
 
 ## Features
 
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
 - **Memorable Lore**: Each word comes with a 2-3 sentence narrative that makes the etymology stick
-- **Related Words**: Discover GRE/TOEFL-level words that share the same roots
+- **Related Words**: Discover words that share the same roots
 - **Multiple LLM Providers**: Choose between Anthropic (Claude) or OpenRouter for flexibility
 - **Dynamic Model Selection**: Automatically fetches available models from Anthropic API
 - **Search History**: Track your vocabulary exploration with a persistent sidebar
-- **Surprise Me**: Discover random GRE words to expand your vocabulary
+- **Surprise Me**: Discover random words to expand your vocabulary
 - **Structured Outputs**: Guaranteed valid JSON responses using constrained decoding
 
 ## Screenshots
@@ -82,7 +82,7 @@ etymology-explorer/
 │   ├── api/
 │   │   ├── etymology/     # Main etymology synthesis endpoint
 │   │   ├── models/        # Fetch available Anthropic models
-│   │   ├── random-word/   # Random GRE word selection
+│   │   ├── random-word/   # Random word selection
 │   │   └── suggestions/   # Typo correction suggestions
 │   ├── layout.tsx         # Root layout with fonts
 │   └── page.tsx           # Main page with search UI
@@ -101,7 +101,7 @@ etymology-explorer/
 │   ├── types.ts           # TypeScript interfaces
 │   └── hooks/             # React hooks (localStorage, history)
 └── data/
-    └── gre-words.json     # GRE vocabulary list
+    └── gre-words.json     # Vocabulary word list
 ```
 
 ## API Endpoints
@@ -111,7 +111,7 @@ etymology-explorer/
 | `/api/etymology`   | POST   | Synthesize etymology for a word  |
 | `/api/models`      | POST   | Fetch available Anthropic models |
 | `/api/suggestions` | GET    | Get typo correction suggestions  |
-| `/api/random-word` | GET    | Get a random GRE word            |
+| `/api/random-word` | GET    | Get a random word                |
 
 ## How It Works
 
