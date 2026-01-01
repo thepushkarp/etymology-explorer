@@ -2,7 +2,7 @@
 
 A beautiful, interactive web app that helps you discover the origins and roots of words. Perfect for vocabulary enthusiasts who want to understand words deeply through their etymological roots.
 
-Try it out at [etymology.theoushkarp.com](https://etymology.theoushkarp.com)
+Try it out at [etymology.thepushkarp.com](https://etymology.thepushkarp.com)
 
 
 ## Features
