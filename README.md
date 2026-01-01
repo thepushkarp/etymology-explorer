@@ -13,15 +13,6 @@ A beautiful, interactive web app that helps you discover the origins and roots o
 - **Surprise Me**: Discover random words to expand your vocabulary
 - **Structured Outputs**: Guaranteed valid JSON responses using constrained decoding
 
-## Screenshots
-
-The app features a clean, typography-focused design with:
-
-- Serif fonts for an academic feel
-- Expandable root chips showing related words
-- Source attribution (Etymonline, Wiktionary)
-- IPA pronunciation guides
-
 ## Getting Started
 
 ### Prerequisites
