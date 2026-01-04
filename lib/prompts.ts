@@ -14,23 +14,31 @@ Your responses must be valid JSON matching this exact structure:
       "root": "root morpheme",
       "origin": "language of origin (Latin, Greek, Old English, etc.)",
       "meaning": "what this root means",
-      "relatedWords": ["6-8 GRE-level words sharing this root"]
+      "relatedWords": ["6-8 GRE-level words sharing this root"],
+      "ancestorRoots": ["older forms like PIE roots, optional"],
+      "descendantWords": ["modern derivatives in other languages, optional"]
     }
   ],
-  "lore": "2-3 sentences of memorable etymology narrative - make it stick! Include historical context, cultural significance, or interesting evolution.",
+  "lore": "4-6 sentences of rich etymology narrative...",
   "sources": ["list which sources contributed: etymonline, wiktionary, or synthesized"]
 }
 
 Guidelines:
-- Prioritize GRE/TOEFL-relevant related words over obscure terms
-- Make the lore memorable and interesting - this is what helps learners remember
-- Be accurate about language origins (Latin, Greek, Proto-Indo-European, Old French, etc.)
-- If the word has multiple roots, include all of them
+- ROOTS: Include ALL constituent roots. Simple words may have just 1 root, compound words like "telephone" have 2 (tele + phone), complex words like "autobiography" have 3+ (auto + bio + graph). Never force exactly 2 roots.
+- RELATED WORDS: Prioritize GRE/TOEFL-relevant words over obscure terms. Include 6-8 words per root.
+- ANCESTOR ROOTS: When available, include Proto-Indo-European (PIE) or older language roots to show deep ancestry.
+- LORE: Write 4-6 rich sentences that tell the word's story:
+  * Trace the word's journey through languages (PIE → Greek → Latin → French → English)
+  * Include historical/cultural context (when and why meanings shifted)
+  * Connect to sibling words and cognates in other languages
+  * Add memorable anecdotes or metaphors that aid retention
+  * Reference the research context provided about related roots
+- Be accurate about language origins (Latin, Greek, Proto-Indo-European, Old French, Germanic, etc.)
 - Keep the definition brief - we're not a dictionary
 - Output ONLY valid JSON, no markdown or explanation`
 
 /**
- * Build the user prompt with source data
+ * Build the user prompt with source data (legacy simple format)
  */
 export function buildUserPrompt(
   word: string,
@@ -52,6 +60,27 @@ export function buildUserPrompt(
   }
 
   prompt += `Extract the etymology following the JSON schema in your instructions.`
+
+  return prompt
+}
+
+/**
+ * Build a rich user prompt from agentic research context
+ */
+export function buildRichUserPrompt(word: string, researchData: string): string {
+  let prompt = `Analyze the etymology of: "${word}"\n\n`
+
+  prompt += `I've conducted deep research on this word, its roots, and related terms. Use this comprehensive data to create a rich etymology with detailed lore:\n\n`
+  prompt += researchData
+  prompt += `\n\n`
+
+  prompt += `Using all the research above, extract a comprehensive etymology. Pay special attention to:
+1. Identify ALL constituent roots (1 to many based on the word's composition)
+2. Trace the etymological ancestry through language layers
+3. Connect related words and cognates mentioned in the research
+4. Write rich, memorable lore (4-6 sentences) that tells the word's full story
+
+Follow the JSON schema in your instructions.`
 
   return prompt
 }

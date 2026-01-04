@@ -1,11 +1,14 @@
 /**
  * A single etymological root component of a word
+ * Words can have 1 to many roots (e.g., "cat" has 1, "telephone" has 2, "autobiography" has 3)
  */
 export interface Root {
   root: string // e.g., "fides"
   origin: string // e.g., "Latin"
   meaning: string // e.g., "faith, trust"
   relatedWords: string[] // e.g., ["fidelity", "confide", "diffident"]
+  ancestorRoots?: string[] // Older forms (e.g., PIE *bheid- for "fides")
+  descendantWords?: string[] // Modern derivatives in other languages
 }
 
 /**
@@ -23,8 +26,8 @@ export interface EtymologyResult {
   word: string
   pronunciation: string // IPA, e.g., "/pərˈfɪdiəs/"
   definition: string // Brief definition
-  roots: Root[]
-  lore: string // 2-3 sentence memorable narrative
+  roots: Root[] // 1 to many roots depending on word composition
+  lore: string // 4-6 sentence rich etymology narrative with ancestry context
   sources: SourceReference[]
 }
 
@@ -99,4 +102,29 @@ export interface SourceData {
 export interface RawSourceData {
   etymonline?: SourceData | null
   wiktionary?: SourceData | null
+}
+
+/**
+ * Research data for a single root
+ */
+export interface RootResearchData {
+  root: string
+  etymonlineData: SourceData | null
+  wiktionaryData: SourceData | null
+  relatedTerms: string[]
+}
+
+/**
+ * Aggregated research context from agentic exploration
+ */
+export interface ResearchContext {
+  mainWord: {
+    word: string
+    etymonline: SourceData | null
+    wiktionary: SourceData | null
+  }
+  identifiedRoots: string[]
+  rootResearch: RootResearchData[]
+  relatedWordsData: Record<string, SourceData>
+  totalSourcesFetched: number
 }
