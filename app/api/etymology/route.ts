@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { EtymologyRequest, EtymologyResult, ApiResponse, LLMConfig } from '@/lib/types'
-import { fetchWiktionary } from '@/lib/wiktionary'
-import { fetchEtymonline } from '@/lib/etymonline'
-import { synthesizeEtymology } from '@/lib/claude'
+import { synthesizeFromResearch } from '@/lib/claude'
+import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
@@ -70,14 +69,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fetch from sources in parallel
-    const [etymonlineData, wiktionaryData] = await Promise.all([
-      fetchEtymonline(normalizedWord),
-      fetchWiktionary(normalizedWord),
-    ])
+    // Conduct agentic research (fetches main word, extracts roots, explores related terms)
+    console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
+    const researchContext = await conductAgenticResearch(normalizedWord, llmConfig)
 
     // If no source data found, check if it's a typo
-    if (!etymonlineData && !wiktionaryData) {
+    if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
       if (isLikelyTypo(normalizedWord)) {
         const suggestions = getSuggestions(normalizedWord)
         return NextResponse.json<ApiResponse<{ suggestions: string[] }>>(
@@ -102,12 +99,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Synthesize with LLM
-    const result = await synthesizeEtymology(
-      normalizedWord,
-      { etymonline: etymonlineData, wiktionary: wiktionaryData },
-      llmConfig
+    console.log(
+      `[Etymology API] Research complete. Fetched ${researchContext.totalSourcesFetched} sources, ` +
+        `identified ${researchContext.identifiedRoots.length} roots`
     )
+
+    // Synthesize with LLM using rich research context
+    const result = await synthesizeFromResearch(researchContext, llmConfig)
 
     return NextResponse.json<ApiResponse<EtymologyResult>>({
       success: true,

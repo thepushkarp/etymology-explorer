@@ -14,23 +14,74 @@ Your responses must be valid JSON matching this exact structure:
       "root": "root morpheme",
       "origin": "language of origin (Latin, Greek, Old English, etc.)",
       "meaning": "what this root means",
-      "relatedWords": ["6-8 GRE-level words sharing this root"]
+      "relatedWords": ["6-8 GRE-level words sharing this root"],
+      "ancestorRoots": ["older forms like PIE roots, optional"],
+      "descendantWords": ["modern derivatives in other languages, optional"]
     }
   ],
-  "lore": "2-3 sentences of memorable etymology narrative - make it stick! Include historical context, cultural significance, or interesting evolution.",
+  "ancestryGraph": {
+    "branches": [
+      {
+        "root": "tele",
+        "stages": [
+          { "stage": "Greek", "form": "tēle (τῆλε)", "note": "meaning 'far, distant'" },
+          { "stage": "Scientific Latin", "form": "tele-", "note": "prefix for distance" }
+        ]
+      },
+      {
+        "root": "phone",
+        "stages": [
+          { "stage": "PIE", "form": "*bʰeh₂-", "note": "to speak, sound" },
+          { "stage": "Greek", "form": "phōnē (φωνή)", "note": "voice, sound" },
+          { "stage": "Scientific Latin", "form": "-phone", "note": "suffix for sound devices" }
+        ]
+      }
+    ],
+    "mergePoint": {
+      "form": "telephone",
+      "note": "coined 1835, 'far-sound' device"
+    },
+    "postMerge": [
+      { "stage": "Modern English", "form": "telephone → phone", "note": "shortened in casual use" }
+    ]
+  },
+  "lore": "The narrative etymology...",
   "sources": ["list which sources contributed: etymonline, wiktionary, or synthesized"]
 }
 
 Guidelines:
-- Prioritize GRE/TOEFL-relevant related words over obscure terms
-- Make the lore memorable and interesting - this is what helps learners remember
-- Be accurate about language origins (Latin, Greek, Proto-Indo-European, Old French, etc.)
-- If the word has multiple roots, include all of them
+- ROOTS: Include ALL constituent roots. Simple words may have just 1 root, compound words like "telephone" have 2 (tele + phone), complex words like "autobiography" have 3+ (auto + bio + graph). Never force exactly 2 roots.
+- RELATED WORDS: Prioritize GRE/TOEFL-relevant words over obscure terms. Include 6-8 words per root.
+- ANCESTOR ROOTS: When available, include Proto-Indo-European (PIE) or older language roots to show deep ancestry.
+- ANCESTRY GRAPH: Show how each root evolved INDEPENDENTLY, then merged:
+  * "branches": Array of root evolution paths. Each branch has:
+    - "root": The root morpheme this branch traces
+    - "stages": Array of {stage, form, note} showing evolution through languages
+  * "mergePoint": (optional, for compound words) Where roots combine:
+    - "form": The combined word form
+    - "note": Context about when/how they merged
+  * "postMerge": (optional) Further evolution after merging
+
+  For SINGLE-ROOT words (like "cat", "run"): Just one branch, no mergePoint.
+  For COMPOUND words (like "telephone"): Multiple branches that merge.
+  For COMPLEX words (like "autobiography"): Multiple branches, possibly nested merges.
+
+  Each branch should have 2-4 stages. Show the interesting transformations.
+
+- LORE: Write a revelationary narrative (4-6 sentences) that creates "aha!" moments:
+  * DON'T just list facts or trace paths mechanically
+  * DO reveal surprising connections that make the reader pause
+  * Start with an intriguing hook or unexpected angle
+  * Let meanings unfold naturally, building to insight
+  * End with a memorable realization that ties everything together
+  * The reader should feel they've discovered something, not been lectured
+  Example tone: "The word 'salary' seems mundane until you learn Roman soldiers were sometimes paid in salt—so valuable it was literally worth its weight in... well, salary. That precious mineral (sal in Latin) was so essential that our word for earned wages still carries its crystalline legacy."
+- Be accurate about language origins (Latin, Greek, Proto-Indo-European, Old French, Germanic, etc.)
 - Keep the definition brief - we're not a dictionary
 - Output ONLY valid JSON, no markdown or explanation`
 
 /**
- * Build the user prompt with source data
+ * Build the user prompt with source data (legacy simple format)
  */
 export function buildUserPrompt(
   word: string,
@@ -52,6 +103,27 @@ export function buildUserPrompt(
   }
 
   prompt += `Extract the etymology following the JSON schema in your instructions.`
+
+  return prompt
+}
+
+/**
+ * Build a rich user prompt from agentic research context
+ */
+export function buildRichUserPrompt(word: string, researchData: string): string {
+  let prompt = `Analyze the etymology of: "${word}"\n\n`
+
+  prompt += `I've conducted deep research on this word, its roots, and related terms. Use this comprehensive data to create a rich etymology with detailed lore:\n\n`
+  prompt += researchData
+  prompt += `\n\n`
+
+  prompt += `Using all the research above, extract a comprehensive etymology. Pay special attention to:
+1. Identify ALL constituent roots (1 to many based on the word's composition)
+2. Trace the etymological ancestry through language layers
+3. Connect related words and cognates mentioned in the research
+4. Write rich, memorable lore (4-6 sentences) that tells the word's full story
+
+Follow the JSON schema in your instructions.`
 
   return prompt
 }

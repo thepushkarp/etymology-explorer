@@ -1,11 +1,14 @@
 /**
  * A single etymological root component of a word
+ * Words can have 1 to many roots (e.g., "cat" has 1, "telephone" has 2, "autobiography" has 3)
  */
 export interface Root {
   root: string // e.g., "fides"
   origin: string // e.g., "Latin"
   meaning: string // e.g., "faith, trust"
   relatedWords: string[] // e.g., ["fidelity", "confide", "diffident"]
+  ancestorRoots?: string[] // Older forms (e.g., PIE *bheid- for "fides")
+  descendantWords?: string[] // Modern derivatives in other languages
 }
 
 /**
@@ -17,14 +20,47 @@ export interface SourceReference {
 }
 
 /**
+ * A stage in a single branch of the word's etymological ancestry
+ */
+export interface AncestryStage {
+  stage: string // Language/period: "Proto-Indo-European", "Greek", "Latin", etc.
+  form: string // The word form at this stage
+  note: string // Brief annotation about meaning/context at this stage
+}
+
+/**
+ * A branch representing one root's evolution through time
+ * Multiple branches can exist for compound words and merge together
+ */
+export interface AncestryBranch {
+  root: string // The root this branch traces (e.g., "tele", "phone")
+  stages: AncestryStage[] // Evolution stages for this root
+}
+
+/**
+ * Graph-based ancestry showing how roots evolved and merged
+ * Supports: single roots, compound words with merging branches, post-merge evolution
+ */
+export interface AncestryGraph {
+  branches: AncestryBranch[] // Independent evolution paths for each root
+  mergePoint?: {
+    // Where branches combine (for compound words)
+    form: string // The combined form
+    note: string // Context about the combination
+  }
+  postMerge?: AncestryStage[] // Evolution after merge (optional)
+}
+
+/**
  * Complete etymology result for a word
  */
 export interface EtymologyResult {
   word: string
   pronunciation: string // IPA, e.g., "/pərˈfɪdiəs/"
   definition: string // Brief definition
-  roots: Root[]
-  lore: string // 2-3 sentence memorable narrative
+  roots: Root[] // 1 to many roots depending on word composition
+  ancestryGraph: AncestryGraph // Graph showing how roots evolved and merged
+  lore: string // 4-6 sentence revelationary narrative with "aha" moments
   sources: SourceReference[]
 }
 
@@ -99,4 +135,29 @@ export interface SourceData {
 export interface RawSourceData {
   etymonline?: SourceData | null
   wiktionary?: SourceData | null
+}
+
+/**
+ * Research data for a single root
+ */
+export interface RootResearchData {
+  root: string
+  etymonlineData: SourceData | null
+  wiktionaryData: SourceData | null
+  relatedTerms: string[]
+}
+
+/**
+ * Aggregated research context from agentic exploration
+ */
+export interface ResearchContext {
+  mainWord: {
+    word: string
+    etymonline: SourceData | null
+    wiktionary: SourceData | null
+  }
+  identifiedRoots: string[]
+  rootResearch: RootResearchData[]
+  relatedWordsData: Record<string, SourceData>
+  totalSourcesFetched: number
 }
