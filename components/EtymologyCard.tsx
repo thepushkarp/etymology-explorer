@@ -2,6 +2,7 @@
 
 import { EtymologyResult, SourceReference } from '@/lib/types'
 import { RootChip } from './RootChip'
+import { AncestryTree } from './AncestryTree'
 
 interface EtymologyCardProps {
   result: EtymologyResult
@@ -86,6 +87,11 @@ export function EtymologyCard({ result, onWordClick }: EtymologyCardProps) {
             ))}
           </div>
         </section>
+
+        {/* Ancestry path - visual journey through languages */}
+        {result.ancestryPath && result.ancestryPath.length > 0 && (
+          <AncestryTree stages={result.ancestryPath} word={result.word} />
+        )}
 
         {/* Lore section - the memorable narrative */}
         <section className="mb-8">

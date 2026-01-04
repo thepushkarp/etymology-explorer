@@ -49,10 +49,30 @@ const ETYMOLOGY_SCHEMA = {
         additionalProperties: false,
       },
     },
+    ancestryPath: {
+      type: 'array',
+      description: "The word's journey through languages/time, 3-6 stages",
+      items: {
+        type: 'object',
+        properties: {
+          stage: {
+            type: 'string',
+            description: 'Language/period: PIE, Greek, Latin, Old French, etc.',
+          },
+          form: { type: 'string', description: 'The word form at this stage' },
+          note: {
+            type: 'string',
+            description: 'Brief annotation about meaning/context at this stage',
+          },
+        },
+        required: ['stage', 'form', 'note'],
+        additionalProperties: false,
+      },
+    },
     lore: {
       type: 'string',
       description:
-        '4-6 sentences of rich etymology narrative with language journey, cultural context, and memorable details',
+        'Revelationary 4-6 sentence narrative with aha moments, not mechanical fact-listing',
     },
     sources: {
       type: 'array',
@@ -60,7 +80,7 @@ const ETYMOLOGY_SCHEMA = {
       description: 'List of sources used',
     },
   },
-  required: ['word', 'pronunciation', 'definition', 'roots', 'lore', 'sources'],
+  required: ['word', 'pronunciation', 'definition', 'roots', 'ancestryPath', 'lore', 'sources'],
   additionalProperties: false,
 } as const
 

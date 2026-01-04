@@ -20,6 +20,15 @@ export interface SourceReference {
 }
 
 /**
+ * A stage in the word's etymological ancestry path
+ */
+export interface AncestryStage {
+  stage: string // Language/period: "Proto-Indo-European", "Greek", "Latin", etc.
+  form: string // The word form at this stage
+  note: string // Brief annotation about meaning/context at this stage
+}
+
+/**
  * Complete etymology result for a word
  */
 export interface EtymologyResult {
@@ -27,7 +36,8 @@ export interface EtymologyResult {
   pronunciation: string // IPA, e.g., "/pərˈfɪdiəs/"
   definition: string // Brief definition
   roots: Root[] // 1 to many roots depending on word composition
-  lore: string // 4-6 sentence rich etymology narrative with ancestry context
+  ancestryPath: AncestryStage[] // Journey through languages/time
+  lore: string // 4-6 sentence revelationary narrative with "aha" moments
   sources: SourceReference[]
 }
 

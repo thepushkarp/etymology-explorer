@@ -19,7 +19,29 @@ Your responses must be valid JSON matching this exact structure:
       "descendantWords": ["modern derivatives in other languages, optional"]
     }
   ],
-  "lore": "4-6 sentences of rich etymology narrative...",
+  "ancestryPath": [
+    {
+      "stage": "Proto-Indo-European",
+      "form": "*bʰeh₂- (to speak)",
+      "note": "ancient root meaning 'to speak'"
+    },
+    {
+      "stage": "Greek",
+      "form": "phōnē (φωνή)",
+      "note": "evolved to mean 'sound, voice'"
+    },
+    {
+      "stage": "Latin",
+      "form": "borrowed as technical term",
+      "note": "used in learned compounds"
+    },
+    {
+      "stage": "English",
+      "form": "phone",
+      "note": "1870s, from Greek via scientific Latin"
+    }
+  ],
+  "lore": "The narrative etymology...",
   "sources": ["list which sources contributed: etymonline, wiktionary, or synthesized"]
 }
 
@@ -27,12 +49,19 @@ Guidelines:
 - ROOTS: Include ALL constituent roots. Simple words may have just 1 root, compound words like "telephone" have 2 (tele + phone), complex words like "autobiography" have 3+ (auto + bio + graph). Never force exactly 2 roots.
 - RELATED WORDS: Prioritize GRE/TOEFL-relevant words over obscure terms. Include 6-8 words per root.
 - ANCESTOR ROOTS: When available, include Proto-Indo-European (PIE) or older language roots to show deep ancestry.
-- LORE: Write 4-6 rich sentences that tell the word's story:
-  * Trace the word's journey through languages (PIE → Greek → Latin → French → English)
-  * Include historical/cultural context (when and why meanings shifted)
-  * Connect to sibling words and cognates in other languages
-  * Add memorable anecdotes or metaphors that aid retention
-  * Reference the research context provided about related roots
+- ANCESTRY PATH: Show the word's journey through time as discrete stages. Each stage has:
+  * "stage": The language/period (PIE, Greek, Latin, Old French, Middle English, Modern English, etc.)
+  * "form": The word form at that stage (use original script sparingly, focus on transliteration)
+  * "note": Brief annotation about meaning evolution or historical context at this stage
+  Include 3-6 stages showing key transformations. For compound words, trace the primary/most interesting root.
+- LORE: Write a revelationary narrative (4-6 sentences) that creates "aha!" moments:
+  * DON'T just list facts or trace paths mechanically
+  * DO reveal surprising connections that make the reader pause
+  * Start with an intriguing hook or unexpected angle
+  * Let meanings unfold naturally, building to insight
+  * End with a memorable realization that ties everything together
+  * The reader should feel they've discovered something, not been lectured
+  Example tone: "The word 'salary' seems mundane until you learn Roman soldiers were sometimes paid in salt—so valuable it was literally worth its weight in... well, salary. That precious mineral (sal in Latin) was so essential that our word for earned wages still carries its crystalline legacy."
 - Be accurate about language origins (Latin, Greek, Proto-Indo-European, Old French, Germanic, etc.)
 - Keep the definition brief - we're not a dictionary
 - Output ONLY valid JSON, no markdown or explanation`
