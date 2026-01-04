@@ -20,12 +20,35 @@ export interface SourceReference {
 }
 
 /**
- * A stage in the word's etymological ancestry path
+ * A stage in a single branch of the word's etymological ancestry
  */
 export interface AncestryStage {
   stage: string // Language/period: "Proto-Indo-European", "Greek", "Latin", etc.
   form: string // The word form at this stage
   note: string // Brief annotation about meaning/context at this stage
+}
+
+/**
+ * A branch representing one root's evolution through time
+ * Multiple branches can exist for compound words and merge together
+ */
+export interface AncestryBranch {
+  root: string // The root this branch traces (e.g., "tele", "phone")
+  stages: AncestryStage[] // Evolution stages for this root
+}
+
+/**
+ * Graph-based ancestry showing how roots evolved and merged
+ * Supports: single roots, compound words with merging branches, post-merge evolution
+ */
+export interface AncestryGraph {
+  branches: AncestryBranch[] // Independent evolution paths for each root
+  mergePoint?: {
+    // Where branches combine (for compound words)
+    form: string // The combined form
+    note: string // Context about the combination
+  }
+  postMerge?: AncestryStage[] // Evolution after merge (optional)
 }
 
 /**
@@ -36,7 +59,7 @@ export interface EtymologyResult {
   pronunciation: string // IPA, e.g., "/pərˈfɪdiəs/"
   definition: string // Brief definition
   roots: Root[] // 1 to many roots depending on word composition
-  ancestryPath: AncestryStage[] // Journey through languages/time
+  ancestryGraph: AncestryGraph // Graph showing how roots evolved and merged
   lore: string // 4-6 sentence revelationary narrative with "aha" moments
   sources: SourceReference[]
 }

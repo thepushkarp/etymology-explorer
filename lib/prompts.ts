@@ -19,28 +19,32 @@ Your responses must be valid JSON matching this exact structure:
       "descendantWords": ["modern derivatives in other languages, optional"]
     }
   ],
-  "ancestryPath": [
-    {
-      "stage": "Proto-Indo-European",
-      "form": "*bʰeh₂- (to speak)",
-      "note": "ancient root meaning 'to speak'"
+  "ancestryGraph": {
+    "branches": [
+      {
+        "root": "tele",
+        "stages": [
+          { "stage": "Greek", "form": "tēle (τῆλε)", "note": "meaning 'far, distant'" },
+          { "stage": "Scientific Latin", "form": "tele-", "note": "prefix for distance" }
+        ]
+      },
+      {
+        "root": "phone",
+        "stages": [
+          { "stage": "PIE", "form": "*bʰeh₂-", "note": "to speak, sound" },
+          { "stage": "Greek", "form": "phōnē (φωνή)", "note": "voice, sound" },
+          { "stage": "Scientific Latin", "form": "-phone", "note": "suffix for sound devices" }
+        ]
+      }
+    ],
+    "mergePoint": {
+      "form": "telephone",
+      "note": "coined 1835, 'far-sound' device"
     },
-    {
-      "stage": "Greek",
-      "form": "phōnē (φωνή)",
-      "note": "evolved to mean 'sound, voice'"
-    },
-    {
-      "stage": "Latin",
-      "form": "borrowed as technical term",
-      "note": "used in learned compounds"
-    },
-    {
-      "stage": "English",
-      "form": "phone",
-      "note": "1870s, from Greek via scientific Latin"
-    }
-  ],
+    "postMerge": [
+      { "stage": "Modern English", "form": "telephone → phone", "note": "shortened in casual use" }
+    ]
+  },
   "lore": "The narrative etymology...",
   "sources": ["list which sources contributed: etymonline, wiktionary, or synthesized"]
 }
@@ -49,11 +53,21 @@ Guidelines:
 - ROOTS: Include ALL constituent roots. Simple words may have just 1 root, compound words like "telephone" have 2 (tele + phone), complex words like "autobiography" have 3+ (auto + bio + graph). Never force exactly 2 roots.
 - RELATED WORDS: Prioritize GRE/TOEFL-relevant words over obscure terms. Include 6-8 words per root.
 - ANCESTOR ROOTS: When available, include Proto-Indo-European (PIE) or older language roots to show deep ancestry.
-- ANCESTRY PATH: Show the word's journey through time as discrete stages. Each stage has:
-  * "stage": The language/period (PIE, Greek, Latin, Old French, Middle English, Modern English, etc.)
-  * "form": The word form at that stage (use original script sparingly, focus on transliteration)
-  * "note": Brief annotation about meaning evolution or historical context at this stage
-  Include 3-6 stages showing key transformations. For compound words, trace the primary/most interesting root.
+- ANCESTRY GRAPH: Show how each root evolved INDEPENDENTLY, then merged:
+  * "branches": Array of root evolution paths. Each branch has:
+    - "root": The root morpheme this branch traces
+    - "stages": Array of {stage, form, note} showing evolution through languages
+  * "mergePoint": (optional, for compound words) Where roots combine:
+    - "form": The combined word form
+    - "note": Context about when/how they merged
+  * "postMerge": (optional) Further evolution after merging
+
+  For SINGLE-ROOT words (like "cat", "run"): Just one branch, no mergePoint.
+  For COMPOUND words (like "telephone"): Multiple branches that merge.
+  For COMPLEX words (like "autobiography"): Multiple branches, possibly nested merges.
+
+  Each branch should have 2-4 stages. Show the interesting transformations.
+
 - LORE: Write a revelationary narrative (4-6 sentences) that creates "aha!" moments:
   * DON'T just list facts or trace paths mechanically
   * DO reveal surprising connections that make the reader pause

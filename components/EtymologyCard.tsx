@@ -88,9 +88,9 @@ export function EtymologyCard({ result, onWordClick }: EtymologyCardProps) {
           </div>
         </section>
 
-        {/* Ancestry path - visual journey through languages */}
-        {result.ancestryPath && result.ancestryPath.length > 0 && (
-          <AncestryTree stages={result.ancestryPath} word={result.word} />
+        {/* Ancestry graph - visual journey showing root branches merging */}
+        {result.ancestryGraph && result.ancestryGraph.branches?.length > 0 && (
+          <AncestryTree graph={result.ancestryGraph} word={result.word} />
         )}
 
         {/* Lore section - the memorable narrative */}

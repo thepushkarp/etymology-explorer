@@ -13,6 +13,18 @@ import { buildResearchPrompt } from './research'
  * JSON Schema for etymology result - used for structured outputs
  * Supports 1 to many roots (dynamic based on word composition)
  */
+// Schema for a single ancestry stage
+const ANCESTRY_STAGE_SCHEMA = {
+  type: 'object',
+  properties: {
+    stage: { type: 'string', description: 'Language/period: PIE, Greek, Latin, etc.' },
+    form: { type: 'string', description: 'The word form at this stage' },
+    note: { type: 'string', description: 'Brief annotation about meaning/context' },
+  },
+  required: ['stage', 'form', 'note'],
+  additionalProperties: false,
+}
+
 const ETYMOLOGY_SCHEMA = {
   type: 'object',
   properties: {
@@ -49,25 +61,45 @@ const ETYMOLOGY_SCHEMA = {
         additionalProperties: false,
       },
     },
-    ancestryPath: {
-      type: 'array',
-      description: "The word's journey through languages/time, 3-6 stages",
-      items: {
-        type: 'object',
-        properties: {
-          stage: {
-            type: 'string',
-            description: 'Language/period: PIE, Greek, Latin, Old French, etc.',
-          },
-          form: { type: 'string', description: 'The word form at this stage' },
-          note: {
-            type: 'string',
-            description: 'Brief annotation about meaning/context at this stage',
+    ancestryGraph: {
+      type: 'object',
+      description: 'Graph showing how roots evolved independently then merged',
+      properties: {
+        branches: {
+          type: 'array',
+          description: 'Independent evolution paths for each root',
+          items: {
+            type: 'object',
+            properties: {
+              root: { type: 'string', description: 'The root this branch traces' },
+              stages: {
+                type: 'array',
+                items: ANCESTRY_STAGE_SCHEMA,
+                description: 'Evolution stages for this root',
+              },
+            },
+            required: ['root', 'stages'],
+            additionalProperties: false,
           },
         },
-        required: ['stage', 'form', 'note'],
-        additionalProperties: false,
+        mergePoint: {
+          type: 'object',
+          description: 'Where branches combine (for compound words)',
+          properties: {
+            form: { type: 'string', description: 'The combined form' },
+            note: { type: 'string', description: 'Context about the combination' },
+          },
+          required: ['form', 'note'],
+          additionalProperties: false,
+        },
+        postMerge: {
+          type: 'array',
+          items: ANCESTRY_STAGE_SCHEMA,
+          description: 'Evolution after merge (optional)',
+        },
       },
+      required: ['branches'],
+      additionalProperties: false,
     },
     lore: {
       type: 'string',
@@ -80,7 +112,7 @@ const ETYMOLOGY_SCHEMA = {
       description: 'List of sources used',
     },
   },
-  required: ['word', 'pronunciation', 'definition', 'roots', 'ancestryPath', 'lore', 'sources'],
+  required: ['word', 'pronunciation', 'definition', 'roots', 'ancestryGraph', 'lore', 'sources'],
   additionalProperties: false,
 } as const
 
