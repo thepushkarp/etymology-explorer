@@ -135,30 +135,31 @@ export function EtymologyCard({ result, onWordClick }: EtymologyCardProps) {
           className="
           pt-6
           border-t border-charcoal/10
-          flex items-center justify-between
-          flex-wrap gap-4
+          flex flex-col sm:flex-row sm:items-center sm:justify-between
+          gap-4
         "
         >
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <span
               className="
               font-serif text-xs uppercase
               text-charcoal-light/60 tracking-wider
+              shrink-0
             "
             >
               Sources
             </span>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {result.sources.map((source) => (
                 <SourceBadge key={source.name} source={source} />
               ))}
             </div>
           </div>
 
-          {/* Decorative flourish */}
+          {/* Decorative flourish - hidden on mobile */}
           <div
             className="
-            flex items-center gap-2
+            hidden sm:flex items-center gap-2
             text-charcoal/20
           "
           >
