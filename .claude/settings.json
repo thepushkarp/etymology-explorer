@@ -16,6 +16,7 @@
       "Bash(uv run ruff:*)",
       "Bash(mkdir:*)",
       "Bash(npx create-next-app@latest:*)",
+      "Bash(npx next build)",
       "Bash(npm run build:*)",
       "Bash(npm install:*)",
       "Bash(yarn install)",
@@ -27,6 +28,7 @@
       "Bash(yarn lint:fix:*)",
       "WebSearch",
       "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:arxiv.org)",
       "WebFetch(domain:huggingface.co)",
@@ -49,5 +51,17 @@
     "commit-commands@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "pr-review-toolkit@claude-plugins-official": true
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
   }
 }

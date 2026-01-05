@@ -70,6 +70,30 @@ All user data stays in **localStorage** (never server-stored):
 - **ESLint**: Next.js core Web Vitals + Prettier integration
 - **Tailwind CSS v4**: Custom cream/charcoal theme in `globals.css`
 
+## Design Philosophy
+
+This project follows a **distinctive, production-grade frontend aesthetic** that avoids generic AI-generated patterns. Every design choice should be intentional and memorable.
+
+### Core Principles
+
+- **Typography-first**: Etymology is about words—typography should be the hero. Use distinctive, characterful fonts (not Inter, Roboto, Arial). Pair a refined display font with a legible body font. The current theme uses a scholarly, editorial aesthetic.
+- **Cream/Charcoal palette**: Warm, paper-like backgrounds with high-contrast text. Avoid purple gradients, neon accents, or cookie-cutter color schemes.
+- **Spatial intention**: Generous whitespace for readability. Asymmetry and overlap where it serves the content. Grid-breaking elements for visual interest.
+- **Purposeful motion**: Staggered reveals on load, smooth transitions. CSS-first animations. High-impact moments over scattered micro-interactions.
+- **Atmospheric depth**: Subtle textures, layered shadows, and visual details that evoke old dictionaries and etymology books.
+
+### Anti-patterns to Avoid
+
+- Generic font stacks (system-ui, sans-serif defaults)
+- Overused component patterns (rounded cards with drop shadows everywhere)
+- Predictable layouts without personality
+- Timid, evenly-distributed color palettes
+- Effects that don't serve the scholarly/linguistic context
+
+### Guiding Question
+
+When adding UI: _"Would this feel at home in a beautifully typeset etymology dictionary?"_
+
 ## API Endpoints
 
 | Endpoint           | Method | Purpose                                           |
