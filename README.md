@@ -4,7 +4,6 @@ A beautiful, interactive web app that helps you discover the origins and roots o
 
 Try it out at [etymology.thepushkarp.com](https://etymology.thepushkarp.com)
 
-
 ## Features
 
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
