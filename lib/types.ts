@@ -12,11 +12,12 @@ export interface Root {
 }
 
 /**
- * A source reference with name and URL
+ * A source reference with name, URL, and the specific word looked up
  */
 export interface SourceReference {
   name: 'etymonline' | 'wiktionary' | 'synthesized'
   url?: string // URL of the actual page used (undefined for 'synthesized')
+  word?: string // The specific word/root that was looked up (undefined for 'synthesized')
 }
 
 /**

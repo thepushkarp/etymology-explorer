@@ -202,6 +202,8 @@ function SourceBadge({ source }: { source: SourceReference }) {
     ${colors[source.name] || 'bg-gray-50 text-gray-700 border-gray-200'}
   `
 
+  const sourceLabel = labels[source.name] || source.name
+
   if (source.url) {
     return (
       <a
@@ -210,7 +212,13 @@ function SourceBadge({ source }: { source: SourceReference }) {
         rel="noopener noreferrer"
         className={`${baseClasses} inline-flex items-center gap-1`}
       >
-        {labels[source.name] || source.name}
+        {sourceLabel}
+        {source.word && (
+          <>
+            <span className="opacity-50">:</span>
+            <span className="italic opacity-80">{source.word}</span>
+          </>
+        )}
         <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
             strokeLinecap="round"
@@ -223,5 +231,5 @@ function SourceBadge({ source }: { source: SourceReference }) {
     )
   }
 
-  return <span className={baseClasses}>{labels[source.name] || source.name}</span>
+  return <span className={baseClasses}>{sourceLabel}</span>
 }

@@ -222,13 +222,13 @@ export async function synthesizeEtymology(
   // Parse JSON response (should always be valid with structured outputs)
   const result = JSON.parse(responseText) as EtymologyResult
 
-  // Build sources array with URLs
+  // Build sources array with URLs and word info
   const sources: SourceReference[] = []
   if (sourceData.etymonline) {
-    sources.push({ name: 'etymonline', url: sourceData.etymonline.url })
+    sources.push({ name: 'etymonline', url: sourceData.etymonline.url, word })
   }
   if (sourceData.wiktionary) {
-    sources.push({ name: 'wiktionary', url: sourceData.wiktionary.url })
+    sources.push({ name: 'wiktionary', url: sourceData.wiktionary.url, word })
   }
   if (sources.length === 0) {
     sources.push({ name: 'synthesized' })
@@ -261,21 +261,30 @@ export async function synthesizeFromResearch(
   // Parse JSON response (should always be valid with structured outputs)
   const result = JSON.parse(responseText) as EtymologyResult
 
-  // Build sources array with URLs from research context
+  // Build sources array with URLs and word info from research context
   const sources: SourceReference[] = []
+  const mainWord = researchContext.mainWord.word
   if (researchContext.mainWord.etymonline) {
-    sources.push({ name: 'etymonline', url: researchContext.mainWord.etymonline.url })
+    sources.push({
+      name: 'etymonline',
+      url: researchContext.mainWord.etymonline.url,
+      word: mainWord,
+    })
   }
   if (researchContext.mainWord.wiktionary) {
-    sources.push({ name: 'wiktionary', url: researchContext.mainWord.wiktionary.url })
+    sources.push({
+      name: 'wiktionary',
+      url: researchContext.mainWord.wiktionary.url,
+      word: mainWord,
+    })
   }
-  // Add sources from root research
+  // Add sources from root research (each with its specific root word)
   for (const rootData of researchContext.rootResearch) {
     if (rootData.etymonlineData && !sources.some((s) => s.url === rootData.etymonlineData?.url)) {
-      sources.push({ name: 'etymonline', url: rootData.etymonlineData.url })
+      sources.push({ name: 'etymonline', url: rootData.etymonlineData.url, word: rootData.root })
     }
     if (rootData.wiktionaryData && !sources.some((s) => s.url === rootData.wiktionaryData?.url)) {
-      sources.push({ name: 'wiktionary', url: rootData.wiktionaryData.url })
+      sources.push({ name: 'wiktionary', url: rootData.wiktionaryData.url, word: rootData.root })
     }
   }
   if (sources.length === 0) {
