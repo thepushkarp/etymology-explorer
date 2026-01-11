@@ -62,7 +62,8 @@ suggestions: {
     synonyms: { type: "array", items: { type: "string" } },
     antonyms: { type: "array", items: { type: "string" } },
     homophones: { type: "array", items: { type: "string" } },
-    easilyConfusedWith: { type: "array", items: { type: "string" } }
+    easilyConfusedWith: { type: "array", items: { type: "string" } },
+    seeAlso: { type: "array", items: { type: "string" } }
   }
 }
 ```
