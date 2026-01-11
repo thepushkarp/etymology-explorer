@@ -33,17 +33,26 @@ Pre-commit hooks (Husky + lint-staged) automatically run ESLint and Prettier on 
 
 ```
 User Search → /api/etymology
-    ├── Parallel fetch: Etymonline (scrape) + Wiktionary (API)
+    ├── Agentic Research Pipeline (lib/research.ts):
+    │   ├── Phase 1: Parallel fetch main word from Etymonline + Wiktionary
+    │   ├── Phase 2: Quick LLM call to extract root morphemes
+    │   ├── Phase 3: Fetch data for each root (max 3 roots)
+    │   └── Phase 4: Fetch related terms (depth-limited, max 10 total fetches)
     ├── Typo check: Levenshtein distance against GRE word list
     ├── LLM synthesis: Anthropic SDK or OpenRouter API
     │   └── Structured outputs: Guaranteed JSON via constrained decoding
-    └── Response: EtymologyResult { word, pronunciation, definition, roots[], lore, sources[] }
+    └── Response: EtymologyResult { word, pronunciation, definition, roots[], ancestryGraph, lore, sources[] }
 ```
 
 ### Key Directories
 
 - **`app/api/`** - Serverless API routes (etymology synthesis, model listing, random word, suggestions)
-- **`lib/`** - Core business logic: LLM clients (`claude.ts`), scrapers (`etymonline.ts`, `wiktionary.ts`), prompts, types
+- **`lib/`** - Core business logic:
+  - `claude.ts` - LLM client for Anthropic and OpenRouter
+  - `research.ts` - Agentic multi-source research pipeline
+  - `etymonline.ts`, `wiktionary.ts` - Source scrapers
+  - `prompts.ts` - System prompts and JSON schema
+  - `types.ts` - All TypeScript interfaces
 - **`components/`** - React UI components (all client-side with `'use client'`)
 - **`data/gre-words.json`** - Curated ~500 word list for random selection and spell-check
 
@@ -107,8 +116,11 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 ## Important Files
 
+- **`lib/research.ts`** - Agentic research orchestrator (multi-phase source gathering)
 - **`lib/claude.ts`** - LLM client for both Anthropic and OpenRouter
 - **`lib/prompts.ts`** - System prompt and JSON schema for structured outputs
 - **`lib/etymonline.ts`** - HTML scraper with fallback patterns for different page structures
+- **`lib/types.ts`** - Core types: `EtymologyResult`, `Root`, `AncestryGraph`, `SourceReference`
 - **`app/page.tsx`** - Main UI with search flow, URL sync, and state management
 - **`components/SettingsModal.tsx`** - LLM provider/model configuration
+- **`components/AncestryTree.tsx`** - Visual ancestry graph with branch merging
