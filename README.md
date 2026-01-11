@@ -61,8 +61,8 @@ Your settings are stored locally in your browser and never sent to any server.
 
 ## Tech Stack
 
-- **Framework**: [Next.js 16](https://nextjs.org/) with App Router
-- **UI**: [React 19](https://react.dev/) + [Tailwind CSS v4](https://tailwindcss.com/)
+- **Framework**: [Next.js 16.1](https://nextjs.org/) with App Router
+- **UI**: [React 19.2](https://react.dev/) + [Tailwind CSS v4](https://tailwindcss.com/)
 - **LLM**: [Anthropic SDK](https://docs.anthropic.com/) with structured outputs
 - **Data Sources**: [Etymonline](https://www.etymonline.com/) + [Wiktionary](https://en.wiktionary.org/)
 - **Typography**: Libre Baskerville (serif)
@@ -80,6 +80,7 @@ etymology-explorer/
 │   ├── layout.tsx         # Root layout with fonts
 │   └── page.tsx           # Main page with search UI
 ├── components/
+│   ├── AncestryTree.tsx   # Visual etymology graph
 │   ├── EtymologyCard.tsx  # Main result display
 │   ├── HistorySidebar.tsx # Search history panel
 │   ├── RootChip.tsx       # Expandable root morpheme
@@ -87,6 +88,7 @@ etymology-explorer/
 │   ├── SettingsModal.tsx  # LLM configuration
 │   └── SurpriseButton.tsx # Random word button
 ├── lib/
+│   ├── research.ts        # Agentic multi-source research pipeline
 │   ├── claude.ts          # LLM synthesis with structured outputs
 │   ├── etymonline.ts      # Etymonline scraper
 │   ├── wiktionary.ts      # Wiktionary API client
@@ -108,10 +110,14 @@ etymology-explorer/
 
 ## How It Works
 
-1. **Data Fetching**: When you search a word, the app fetches data from Etymonline (web scraping) and Wiktionary (MediaWiki API) in parallel
-2. **LLM Synthesis**: The raw data is sent to your chosen LLM with a structured output schema
+1. **Agentic Research**: When you search a word, an agentic pipeline conducts multi-phase research:
+   - Phase 1: Fetch main word data from Etymonline and Wiktionary in parallel
+   - Phase 2: Quick LLM call extracts root morphemes (e.g., "telephone" → ["tele", "phone"])
+   - Phase 3: Fetch etymology data for each identified root
+   - Phase 4: Gather related terms for additional context (depth-limited)
+2. **LLM Synthesis**: The aggregated research context is sent to your chosen LLM with a structured output schema
 3. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
-4. **Rich Display**: The etymology is rendered with expandable roots, related words, and source attribution
+4. **Rich Display**: The etymology is rendered with expandable roots, ancestry graph, and source attribution
 
 ## Development
 
