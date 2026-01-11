@@ -43,8 +43,8 @@ const STRUCTURED_OUTPUT_SUPPORTED_MODELS = [
 
 // Filter models to only include those supporting structured outputs
 const filteredModels = models.filter((model) =>
-  STRUCTURED_OUTPUT_SUPPORTED_MODELS.some(
-    (supported) => model.id.includes(supported) || model.id.startsWith(supported)
+  STRUCTURED_OUTPUT_SUPPORTED_MODELS.some((supported) =>
+    model.id.startsWith(supported)
   )
 )
 ```
