@@ -80,7 +80,7 @@ For each POS, provide:
 - A brief definition specific to that POS
 - The pronunciation if it differs from the primary pronunciation
 
-Common POS to consider: noun, verb, adjective, adverb, preposition, interjection.
+Common POS to consider: noun, verb, adjective, adverb, preposition, conjunction, pronoun, interjection, determiner.
 `
 ```
 
