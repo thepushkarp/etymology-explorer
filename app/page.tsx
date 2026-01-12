@@ -2,16 +2,27 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { EtymologyResult, WordSuggestion, LLMConfig } from '@/lib/types'
 import { useHistory } from '@/lib/hooks/useHistory'
 import { useLocalStorage } from '@/lib/hooks/useLocalStorage'
 import { SearchBar } from '@/components/SearchBar'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { RelatedWordsList } from '@/components/RelatedWordsList'
-import { HistorySidebar } from '@/components/HistorySidebar'
-import { SettingsModal, SettingsButton } from '@/components/SettingsModal'
+import { SettingsButton } from '@/components/SettingsModal'
 import { SurpriseButton } from '@/components/SurpriseButton'
 import { ErrorState, EmptyState } from '@/components/ErrorState'
+
+// Dynamic imports for code splitting - these components load on-demand
+const HistorySidebar = dynamic(
+  () => import('@/components/HistorySidebar').then((mod) => ({ default: mod.HistorySidebar })),
+  { ssr: false }
+)
+
+const SettingsModal = dynamic(
+  () => import('@/components/SettingsModal').then((mod) => ({ default: mod.SettingsModal })),
+  { ssr: false }
+)
 
 type AppState = 'idle' | 'loading' | 'success' | 'error'
 type ErrorType = 'nonsense' | 'no-api-key' | 'network-error' | 'typo'

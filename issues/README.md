@@ -6,11 +6,9 @@ This folder contains local copies of all open GitHub issues for the Etymology Ex
 
 | #                                           | Title                                                       | Labels                       | Priority |
 | ------------------------------------------- | ----------------------------------------------------------- | ---------------------------- | -------- |
-| [12](./issue-12-ssr-ssg.md)                 | **[URGENT] Fix Client-Side Rendering - Implement SSR/SSG**  | `SEO`, `critical`            | Critical |
 | [25](./issue-25-pos-tags.md)                | Add POS (Part of Speech) tag words                          | `enhancement`                | Feature  |
 | [23](./issue-23-related-words.md)           | Add suggestions for related words, synonyms, antonyms, etc  | `enhancement`                | Feature  |
 | [21](./issue-21-educational-content.md)     | Add educational content pages for AI citation optimization  | `SEO`                        | SEO      |
-| [20](./issue-20-core-web-vitals.md)         | Optimize Core Web Vitals (LCP, FID, CLS)                    | `SEO`                        | SEO      |
 | [17](./issue-17-faq-schema.md)              | Add FAQ schema for common etymology questions               | `SEO`                        | SEO      |
 | [9](./issue-09-persist-db.md)               | Persist results in a DB                                     | `enhancement`, `help wanted` | Feature  |
 | [8](./issue-08-pronunciation-elevenlabs.md) | Add pronunciation examples using ElevenLabs                 | `enhancement`, `help wanted` | Feature  |
@@ -19,14 +17,9 @@ This folder contains local copies of all open GitHub issues for the Etymology Ex
 
 ## Categories
 
-### Critical (Blocking SEO)
-
-- **#12** - SSR/SSG implementation - crawlers see blank page
-
 ### SEO + AI Search Optimization
 
 - #17 FAQ schema (structured data)
-- #20 Core Web Vitals (performance)
 - #21 educational content (AI-focused)
 
 ### Bugs
@@ -42,6 +35,9 @@ This folder contains local copies of all open GitHub issues for the Etymology Ex
 - **#25** - Part of speech (POS) tags for words
 
 ## Recently Closed
+
+- ~~#12~~ - SSR/SSG (closed: architectural constraint - user API keys stored client-side)
+- ~~#20~~ - Core Web Vitals (closed: code splitting implemented, images/fonts already optimized)
 
 The following issues were completed in PR #27:
 
