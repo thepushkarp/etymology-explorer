@@ -22,11 +22,11 @@ The tool aggregates data from multiple etymological databases and presents word 
 - Historical evolution and semantic shifts
 - Related words sharing the same root
 
-## Example Queries
+## Example Searches
 
-- "What is the etymology of 'algorithm'?" -> Shows Persian/Arabic origins from al-Khwarizmi
-- "Where does 'nice' come from?" -> Shows semantic shift from Latin 'nescius' (ignorant)
-- "Proto-Indo-European roots" -> Explore ancient language connections
+- Search "algorithm" at https://etymology.thepushkarp.com/?q=algorithm -> Shows Persian/Arabic origins from al-Khwarizmi
+- Search "nice" at https://etymology.thepushkarp.com/?q=nice -> Shows semantic shift from Latin 'nescius' (ignorant)
+- Search "mother" at https://etymology.thepushkarp.com/?q=mother -> Explore Proto-Indo-European roots
 
 ## Technical Details
 
