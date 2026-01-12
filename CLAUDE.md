@@ -38,31 +38,42 @@ User Search → /api/etymology
     │   ├── Phase 2: Quick LLM call to extract root morphemes
     │   ├── Phase 3: Fetch data for each root (max 3 roots)
     │   └── Phase 4: Fetch related terms (depth-limited, max 10 total fetches)
-    ├── Typo check: Levenshtein distance against GRE word list
+    ├── Typo check: Levenshtein distance against GRE word list (lib/spellcheck.ts)
     ├── LLM synthesis: Anthropic SDK or OpenRouter API
     │   └── Structured outputs: Guaranteed JSON via constrained decoding
     └── Response: EtymologyResult { word, pronunciation, definition, roots[], ancestryGraph, lore, sources[] }
 ```
 
+### Research Pipeline Limits
+
+Defined in `lib/research.ts` to control API costs:
+
+- `MAX_ROOTS_TO_EXPLORE = 3` - Max root morphemes to research
+- `MAX_RELATED_WORDS_PER_ROOT = 2` - Related terms per root
+- `MAX_TOTAL_FETCHES = 10` - Hard cap on external API calls per search
+
 ### Key Directories
 
 - **`app/api/`** - Serverless API routes (etymology synthesis, model listing, random word, suggestions)
 - **`lib/`** - Core business logic:
-  - `claude.ts` - LLM client for Anthropic and OpenRouter
+  - `claude.ts` - LLM client for Anthropic and OpenRouter with JSON schema
   - `research.ts` - Agentic multi-source research pipeline
-  - `etymonline.ts`, `wiktionary.ts` - Source scrapers
-  - `prompts.ts` - System prompts and JSON schema
+  - `etymonline.ts`, `wiktionary.ts` - Source scrapers (HTML parsing + MediaWiki API)
+  - `prompts.ts` - System prompts and JSON schema template
+  - `spellcheck.ts` - Levenshtein-based typo detection and suggestions
   - `types.ts` - All TypeScript interfaces
 - **`components/`** - React UI components (all client-side with `'use client'`)
 - **`data/gre-words.json`** - Curated ~500 word list for random selection and spell-check
 
 ### LLM Integration
 
-The app uses **Anthropic's structured outputs API** (`beta: structured-outputs-2025-11-13`) for guaranteed valid JSON. For OpenRouter, it uses JSON schema strict mode. Both providers receive:
+The app uses **Anthropic's structured outputs API** for guaranteed valid JSON. For OpenRouter, it uses JSON schema strict mode. Both providers receive:
 
-1. Raw source data from Etymonline/Wiktionary
-2. A JSON schema defining `EtymologyResult`
+1. Raw source data from Etymonline/Wiktionary (aggregated by research pipeline)
+2. A JSON schema defining `EtymologyResult` (in `lib/claude.ts`)
 3. System prompt in `lib/prompts.ts`
+
+**Note**: Anthropic calls use `betas: ['structured-outputs-2025-11-13']` flag in `lib/claude.ts:180`.
 
 ### Client State
 

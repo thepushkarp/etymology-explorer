@@ -7,7 +7,7 @@ Try it out at [etymology.thepushkarp.com](https://etymology.thepushkarp.com)
 ## Features
 
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
-- **Memorable Lore**: Each word comes with a 2-3 sentence narrative that makes the etymology stick
+- **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
 - **Related Words**: Discover words that share the same roots
 - **Multiple LLM Providers**: Choose between Anthropic (Claude) or OpenRouter for flexibility
 - **Dynamic Model Selection**: Automatically fetches available models from Anthropic API
@@ -92,6 +92,7 @@ etymology-explorer/
 │   ├── claude.ts          # LLM synthesis with structured outputs
 │   ├── etymonline.ts      # Etymonline scraper
 │   ├── wiktionary.ts      # Wiktionary API client
+│   ├── spellcheck.ts      # Typo detection and suggestions
 │   ├── prompts.ts         # System prompts and schemas
 │   ├── types.ts           # TypeScript interfaces
 │   └── hooks/             # React hooks (localStorage, history)
@@ -118,6 +119,60 @@ etymology-explorer/
 2. **LLM Synthesis**: The aggregated research context is sent to your chosen LLM with a structured output schema
 3. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
 4. **Rich Display**: The etymology is rendered with expandable roots, ancestry graph, and source attribution
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              BROWSER (Client)                               │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐  ┌─────────────────┐   │
+│  │  SearchBar  │  │SettingsModal │  │HistorySidebar│  │  EtymologyCard  │   │
+│  └──────┬──────┘  └──────┬───────┘  └──────┬──────┘  └────────┬────────┘   │
+│         │                │                 │                   │            │
+│         │         localStorage             │                   │            │
+│         │      (API keys, history)         │                   │            │
+│         └────────────────┬─────────────────┴───────────────────┘            │
+└──────────────────────────┼──────────────────────────────────────────────────┘
+                           │ POST /api/etymology
+                           ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           NEXT.JS SERVER                                    │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                    AGENTIC RESEARCH PIPELINE                          │  │
+│  │                                                                       │  │
+│  │   Phase 1                    Phase 2                 Phase 3-4        │  │
+│  │  ┌──────────┐               ┌───────┐              ┌──────────────┐   │  │
+│  │  │Etymonline│──┐            │Quick  │              │ Root + Related│   │  │
+│  │  │ Scraper  │  ├──────────▶ │LLM    │ ──────────▶  │ Term Fetches │   │  │
+│  │  └──────────┘  │  parallel  │Call   │  roots[]     │ (max 10)     │   │  │
+│  │  ┌──────────┐  │            └───────┘              └──────────────┘   │  │
+│  │  │Wiktionary│──┘                                                      │  │
+│  │  │  API     │                                                         │  │
+│  │  └──────────┘                                                         │  │
+│  └─────────────────────────────────────┬─────────────────────────────────┘  │
+│                                        │                                    │
+│                                        ▼ ResearchContext                    │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                       LLM SYNTHESIS                                   │  │
+│  │                                                                       │  │
+│  │   ┌─────────────┐      ┌────────────────┐      ┌──────────────────┐   │  │
+│  │   │  Anthropic  │  OR  │   OpenRouter   │  ──▶ │ Structured JSON  │   │  │
+│  │   │    SDK      │      │     API        │      │ (EtymologyResult)│   │  │
+│  │   └─────────────┘      └────────────────┘      └──────────────────┘   │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          EXTERNAL SERVICES                                  │
+│                                                                             │
+│   ┌────────────────┐  ┌────────────────┐  ┌────────────────────────────┐    │
+│   │  etymonline.com│  │ en.wiktionary  │  │  Anthropic / OpenRouter    │    │
+│   │  (HTML scrape) │  │ (MediaWiki API)│  │  (LLM with JSON schema)    │    │
+│   └────────────────┘  └────────────────┘  └────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ## Development
 
