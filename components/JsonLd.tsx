@@ -36,10 +36,13 @@ export function JsonLd() {
   }
 
   // Safe: schema is static/hardcoded, not user input
+  // XSS sanitization: replace < with unicode equivalent per Next.js docs
   return (
     <script
       type="application/ld+json"
-      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      dangerouslySetInnerHTML={{
+        __html: JSON.stringify(schema).replace(/</g, '\\u003c'),
+      }}
     />
   )
 }

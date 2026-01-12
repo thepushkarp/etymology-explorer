@@ -76,10 +76,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
-        <JsonLd />
-      </head>
       <body className={`${libreBaskerville.variable} min-h-screen`}>
+        <JsonLd />
         {children}
         <Analytics />
       </body>
