@@ -1,0 +1,41 @@
+# Etymology Explorer
+
+> A visual tool for exploring word origins, etymological trees, and linguistic connections across languages.
+
+## About
+
+Etymology Explorer helps you understand where words come from. Enter any word to see its historical roots, language family connections, and semantic evolution over time.
+
+## Key Features
+
+- **Word Search**: Search etymology for any English word at https://etymology.thepushkarp.com/?q={word}
+- **Etymology Trees**: Visual representation of word derivations showing parent languages and cognates
+- **Language Families**: Explore Proto-Indo-European, Latin, Greek, and Germanic roots
+- **Historical Context**: See how word meanings evolved across centuries
+
+## How It Works
+
+The tool aggregates data from multiple etymological databases and presents word origins in an interactive visual format. Each word shows:
+
+- Language of origin (Latin, Greek, Old English, etc.)
+- Cognates in related languages
+- Historical evolution and semantic shifts
+- Related words sharing the same root
+
+## Example Queries
+
+- "What is the etymology of 'algorithm'?" -> Shows Persian/Arabic origins from al-Khwarizmi
+- "Where does 'nice' come from?" -> Shows semantic shift from Latin 'nescius' (ignorant)
+- "Proto-Indo-European roots" -> Explore ancient language connections
+
+## Technical Details
+
+- Free to use, no registration required
+- Works in any modern web browser
+- Data sourced from etymological databases and linguistic research
+
+## Contact
+
+- Creator: Pushkar Patel
+- Website: https://thepushkarp.com
+- GitHub: https://github.com/thepushkarp/etymology-explorer
