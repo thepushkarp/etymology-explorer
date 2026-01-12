@@ -14,6 +14,16 @@ interface AnthropicModelsResponse {
   last_id: string
 }
 
+// Models that support structured outputs (beta: structured-outputs-2025-11-13)
+// Using prefixes to auto-support future dated versions (e.g., claude-sonnet-4-5-20260101)
+// Reference: https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs
+const STRUCTURED_OUTPUT_MODEL_PREFIXES = [
+  'claude-sonnet-4-5',
+  'claude-opus-4-1',
+  'claude-opus-4-5',
+  'claude-haiku-4-5',
+]
+
 export async function POST(request: NextRequest) {
   try {
     const { apiKey } = await request.json()
@@ -43,9 +53,11 @@ export async function POST(request: NextRequest) {
 
     const data: AnthropicModelsResponse = await response.json()
 
-    // Filter to only include chat models (claude-*) and sort by created_at desc
+    // Filter to only include models supporting structured outputs, sorted by created_at desc
     const chatModels = data.data
-      .filter((model) => model.id.startsWith('claude-'))
+      .filter((model) =>
+        STRUCTURED_OUTPUT_MODEL_PREFIXES.some((prefix) => model.id.startsWith(prefix))
+      )
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
     return NextResponse.json({

@@ -3,14 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { LLMProvider, LLMConfig, AnthropicModelInfo } from '@/lib/types'
 
-// Fallback models if API fetch fails (sorted by recency)
+// Fallback models if API fetch fails (only models supporting structured outputs)
 const FALLBACK_MODELS: AnthropicModelInfo[] = [
   { id: 'claude-haiku-4-5-20251001', displayName: 'Claude Haiku 4.5' },
   { id: 'claude-sonnet-4-5-20250514', displayName: 'Claude Sonnet 4.5' },
-  { id: 'claude-sonnet-4-20250514', displayName: 'Claude Sonnet 4' },
-  { id: 'claude-3-7-sonnet-latest', displayName: 'Claude 3.7 Sonnet' },
-  { id: 'claude-3-5-haiku-latest', displayName: 'Claude 3.5 Haiku' },
-  { id: 'claude-3-5-sonnet-latest', displayName: 'Claude 3.5 Sonnet' },
+  { id: 'claude-opus-4-5-20250514', displayName: 'Claude Opus 4.5' },
 ]
 
 interface SettingsModalProps {
@@ -407,7 +404,7 @@ export function SettingsModal({ isOpen, onClose, llmConfig, onSaveConfig }: Sett
                     ))}
                   </select>
                   <p className="text-xs text-charcoal-light/50 mt-2 font-serif">
-                    Models are fetched from the Anthropic API
+                    Only models supporting structured outputs are shown.
                   </p>
                 </label>
               </div>
