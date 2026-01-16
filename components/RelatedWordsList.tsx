@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { Root } from '@/lib/types'
 
 interface RelatedWordsListProps {
@@ -7,7 +8,10 @@ interface RelatedWordsListProps {
   onWordClick: (word: string) => void
 }
 
-export function RelatedWordsList({ roots, onWordClick }: RelatedWordsListProps) {
+export const RelatedWordsList = memo(function RelatedWordsList({
+  roots,
+  onWordClick,
+}: RelatedWordsListProps) {
   return (
     <div className="grid gap-8 md:grid-cols-2">
       {roots.map((root, rootIndex) => (
@@ -82,4 +86,4 @@ export function RelatedWordsList({ roots, onWordClick }: RelatedWordsListProps) 
       ))}
     </div>
   )
-}
+})

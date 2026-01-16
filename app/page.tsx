@@ -16,16 +16,31 @@ import { ErrorState, EmptyState } from '@/components/ErrorState'
 // Dynamic imports for code splitting - these components load on-demand
 const HistorySidebar = dynamic(
   () => import('@/components/HistorySidebar').then((mod) => ({ default: mod.HistorySidebar })),
-  { ssr: false }
+  {
+    ssr: false,
+    loading: () => (
+      <div className="fixed left-0 top-0 h-full w-64 bg-cream-dark/50 animate-pulse" />
+    ),
+  }
 )
 
 const SettingsModal = dynamic(
   () => import('@/components/SettingsModal').then((mod) => ({ default: mod.SettingsModal })),
-  { ssr: false }
+  {
+    ssr: false,
+    loading: () => null, // Modal - no visible loading state needed
+  }
 )
 
 type AppState = 'idle' | 'loading' | 'success' | 'error'
 type ErrorType = 'nonsense' | 'no-api-key' | 'network-error' | 'typo'
+
+// Consolidated error state to reduce render thrashing
+interface ErrorInfo {
+  type: ErrorType
+  message: string
+  suggestions: WordSuggestion[]
+}
 
 const DEFAULT_LLM_CONFIG: LLMConfig = {
   provider: 'anthropic',
@@ -42,9 +57,7 @@ function HomeContent() {
   // State
   const [state, setState] = useState<AppState>('idle')
   const [result, setResult] = useState<EtymologyResult | null>(null)
-  const [errorType, setErrorType] = useState<ErrorType>('nonsense')
-  const [errorMessage, setErrorMessage] = useState<string>('')
-  const [suggestions, setSuggestions] = useState<WordSuggestion[]>([])
+  const [error, setError] = useState<ErrorInfo | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   // Hooks
@@ -68,18 +81,20 @@ function HomeContent() {
 
       if (!isConfigValid) {
         setState('error')
-        setErrorType('no-api-key')
-        setErrorMessage(
-          llmConfig.provider === 'anthropic'
-            ? "You'll need an Anthropic API key to explore etymologies."
-            : "You'll need to configure OpenRouter with an API key and model."
-        )
+        setError({
+          type: 'no-api-key',
+          message:
+            llmConfig.provider === 'anthropic'
+              ? "You'll need an Anthropic API key to explore etymologies."
+              : "You'll need to configure OpenRouter with an API key and model.",
+          suggestions: [],
+        })
         return
       }
 
       setState('loading')
       setResult(null)
-      setSuggestions([])
+      setError(null)
 
       try {
         const response = await fetch('/api/etymology', {
@@ -97,20 +112,28 @@ function HomeContent() {
         } else if (data.suggestions && data.suggestions.length > 0) {
           // Typo detected - show suggestions
           setState('error')
-          setErrorType('typo')
-          setErrorMessage(`We couldn't find "${trimmed}" in our lexicon.`)
-          setSuggestions(data.suggestions)
+          setError({
+            type: 'typo',
+            message: `We couldn't find "${trimmed}" in our lexicon.`,
+            suggestions: data.suggestions,
+          })
         } else {
           // Nonsense word
           setState('error')
-          setErrorType('nonsense')
-          setErrorMessage(data.error || "That doesn't appear to be a word we recognize.")
+          setError({
+            type: 'nonsense',
+            message: data.error || "That doesn't appear to be a word we recognize.",
+            suggestions: [],
+          })
         }
-      } catch (error) {
-        console.error('Search failed:', error)
+      } catch (err) {
+        console.error('Search failed:', err)
         setState('error')
-        setErrorType('network-error')
-        setErrorMessage('Something went awry in the ether...')
+        setError({
+          type: 'network-error',
+          message: 'Something went awry in the ether...',
+          suggestions: [],
+        })
       }
     },
     [llmConfig, addToHistory]
@@ -125,24 +148,8 @@ function HomeContent() {
     }
   }, [searchParams, searchWord])
 
-  // Handle word click (from related words, history, etc.)
-  const handleWordClick = useCallback(
-    (word: string) => {
-      router.push(`/?q=${encodeURIComponent(word)}`, { scroll: false })
-    },
-    [router]
-  )
-
-  // Handle surprise word
-  const handleSurpriseWord = useCallback(
-    (word: string) => {
-      router.push(`/?q=${encodeURIComponent(word)}`, { scroll: false })
-    },
-    [router]
-  )
-
-  // Handle suggestion click
-  const handleSuggestionClick = useCallback(
+  // Single callback for all word navigation (history, suggestions, related words, surprise)
+  const navigateToWord = useCallback(
     (word: string) => {
       router.push(`/?q=${encodeURIComponent(word)}`, { scroll: false })
     },
@@ -164,7 +171,7 @@ function HomeContent() {
       {/* History sidebar */}
       <HistorySidebar
         history={history}
-        onWordClick={handleWordClick}
+        onWordClick={navigateToWord}
         onClearHistory={clearHistory}
         onRemoveEntry={removeFromHistory}
       />
@@ -205,14 +212,14 @@ function HomeContent() {
         {/* Search bar */}
         <div className="mb-12">
           <SearchBar
-            onSearch={(word) => router.push(`/?q=${encodeURIComponent(word)}`, { scroll: false })}
+            onSearch={navigateToWord}
             isLoading={state === 'loading'}
             initialValue={searchParams.get('q') || ''}
           />
 
           {/* Surprise button */}
           <div className="flex justify-center mt-6">
-            <SurpriseButton onWordSelected={handleSurpriseWord} disabled={state === 'loading'} />
+            <SurpriseButton onWordSelected={navigateToWord} disabled={state === 'loading'} />
           </div>
         </div>
 
@@ -242,12 +249,12 @@ function HomeContent() {
           {state === 'idle' && <EmptyState />}
 
           {/* Error state */}
-          {state === 'error' && (
+          {state === 'error' && error && (
             <ErrorState
-              type={errorType}
-              message={errorMessage}
-              suggestions={suggestions}
-              onSuggestionClick={handleSuggestionClick}
+              type={error.type}
+              message={error.message}
+              suggestions={error.suggestions}
+              onSuggestionClick={navigateToWord}
               onOpenSettings={() => setIsSettingsOpen(true)}
             />
           )}
@@ -256,7 +263,7 @@ function HomeContent() {
           {state === 'success' && result && (
             <div className="space-y-12">
               {/* Main etymology card */}
-              <EtymologyCard result={result} onWordClick={handleWordClick} />
+              <EtymologyCard result={result} onWordClick={navigateToWord} />
 
               {/* Related words section */}
               {result.roots.length > 0 && (
@@ -274,7 +281,7 @@ function HomeContent() {
                     <span className="flex-1 h-px bg-charcoal/20" />
                   </h2>
 
-                  <RelatedWordsList roots={result.roots} onWordClick={handleWordClick} />
+                  <RelatedWordsList roots={result.roots} onWordClick={navigateToWord} />
                 </section>
               )}
             </div>

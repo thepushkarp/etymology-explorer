@@ -30,13 +30,17 @@ export function HistorySidebar({
   onRemoveEntry,
 }: HistorySidebarProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
+  // Initialize with current time to avoid hydration mismatch, update via interval
+  const [currentTime, setCurrentTime] = useState(() => Date.now())
 
-  // Update timestamp after mount and when history changes
+  // Update timestamps periodically (every 60 seconds) for relative time display
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCurrentTime(Date.now())
-  }, [history])
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 60000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <>

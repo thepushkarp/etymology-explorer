@@ -34,45 +34,46 @@ export function SettingsModal({ isOpen, onClose, llmConfig, onSaveConfig }: Sett
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Fetch models from Anthropic API
-  const fetchModels = useCallback(
-    async (apiKey: string) => {
-      if (!apiKey || apiKey.length < 10) {
-        setAvailableModels(FALLBACK_MODELS)
-        setModelsError(null)
-        return
-      }
-
-      setModelsLoading(true)
+  const fetchModels = useCallback(async (apiKey: string) => {
+    if (!apiKey || apiKey.length < 10) {
+      setAvailableModels(FALLBACK_MODELS)
       setModelsError(null)
+      return
+    }
 
-      try {
-        const response = await fetch('/api/models', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ apiKey }),
-        })
+    setModelsLoading(true)
+    setModelsError(null)
 
-        const data = await response.json()
+    try {
+      const response = await fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey }),
+      })
 
-        if (data.success && data.data?.length > 0) {
-          setAvailableModels(data.data)
-          // If current model not in list, select first available
-          if (!data.data.some((m: AnthropicModelInfo) => m.id === anthropicModel)) {
-            setAnthropicModel(data.data[0].id)
+      const data = await response.json()
+
+      if (data.success && data.data?.length > 0) {
+        setAvailableModels(data.data)
+        // If current model not in list, select first available
+        // Using functional update to avoid anthropicModel in deps
+        setAnthropicModel((currentModel) => {
+          if (!data.data.some((m: AnthropicModelInfo) => m.id === currentModel)) {
+            return data.data[0].id
           }
-        } else {
-          setModelsError(data.error || 'Failed to fetch models')
-          setAvailableModels(FALLBACK_MODELS)
-        }
-      } catch {
-        setModelsError('Failed to fetch models')
+          return currentModel
+        })
+      } else {
+        setModelsError(data.error || 'Failed to fetch models')
         setAvailableModels(FALLBACK_MODELS)
-      } finally {
-        setModelsLoading(false)
       }
-    },
-    [anthropicModel]
-  )
+    } catch {
+      setModelsError('Failed to fetch models')
+      setAvailableModels(FALLBACK_MODELS)
+    } finally {
+      setModelsLoading(false)
+    }
+  }, [])
 
   // Debounced fetch when API key changes
   useEffect(() => {
