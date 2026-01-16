@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 
 interface SearchBarProps {
   onSearch: (word: string) => void
@@ -12,7 +12,6 @@ interface SearchBarProps {
 export function SearchBar({ onSearch, isLoading, initialValue = '' }: SearchBarProps) {
   const [value, setValue] = useState(initialValue)
   const [isFocused, setIsFocused] = useState(false)
-  const router = useRouter()
   const searchParams = useSearchParams()
 
   // Sync with URL on mount - intentional URL → state sync pattern
@@ -29,11 +28,10 @@ export function SearchBar({ onSearch, isLoading, initialValue = '' }: SearchBarP
       e.preventDefault()
       const trimmed = value.trim()
       if (trimmed && !isLoading) {
-        router.push(`/?q=${encodeURIComponent(trimmed)}`, { scroll: false })
         onSearch(trimmed)
       }
     },
-    [value, isLoading, onSearch, router]
+    [value, isLoading, onSearch]
   )
 
   return (

@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { EtymologyResult, SourceReference } from '@/lib/types'
 import { RootChip } from './RootChip'
 import { AncestryTree } from './AncestryTree'
@@ -9,7 +10,10 @@ interface EtymologyCardProps {
   onWordClick: (word: string) => void
 }
 
-export function EtymologyCard({ result, onWordClick }: EtymologyCardProps) {
+export const EtymologyCard = memo(function EtymologyCard({
+  result,
+  onWordClick,
+}: EtymologyCardProps) {
   return (
     <article
       className="
@@ -177,7 +181,7 @@ export function EtymologyCard({ result, onWordClick }: EtymologyCardProps) {
       </div>
     </article>
   )
-}
+})
 
 function SourceBadge({ source }: { source: SourceReference }) {
   const labels: Record<string, string> = {

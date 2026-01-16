@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { AncestryGraph, AncestryStage, AncestryBranch } from '@/lib/types'
 
 interface AncestryTreeProps {
@@ -109,7 +110,7 @@ function BranchColumn({ branch, branchIndex }: { branch: AncestryBranch; branchI
   )
 }
 
-export function AncestryTree({ graph, word }: AncestryTreeProps) {
+export const AncestryTree = memo(function AncestryTree({ graph, word }: AncestryTreeProps) {
   if (!graph || !graph.branches || graph.branches.length === 0) return null
 
   const hasMerge = graph.mergePoint && graph.branches.length > 1
@@ -245,4 +246,4 @@ export function AncestryTree({ graph, word }: AncestryTreeProps) {
       </div>
     </section>
   )
-}
+})

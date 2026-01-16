@@ -16,20 +16,30 @@ export async function GET(request: NextRequest) {
     )
   }
 
+  const cacheHeaders = {
+    'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
+  }
+
   // If it's a known word, return it as the only suggestion
   if (isKnownWord(query)) {
-    return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>({
-      success: true,
-      data: {
-        suggestions: [{ word: query.toLowerCase(), distance: 0 }],
+    return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>(
+      {
+        success: true,
+        data: {
+          suggestions: [{ word: query.toLowerCase(), distance: 0 }],
+        },
       },
-    })
+      { headers: cacheHeaders }
+    )
   }
 
   const suggestions = getSuggestions(query)
 
-  return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>({
-    success: true,
-    data: { suggestions },
-  })
+  return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>(
+    {
+      success: true,
+      data: { suggestions },
+    },
+    { headers: cacheHeaders }
+  )
 }
