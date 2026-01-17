@@ -66,7 +66,7 @@ function FaqAccordionItem({ faq }: FaqItemProps) {
 
 export function FaqAccordion({ faqs }: FaqAccordionProps) {
   return (
-    <div className="divide-y divide-charcoal/10 border-t border-charcoal/10">
+    <div className="border-t border-charcoal/10">
       {faqs.map((faq) => (
         <FaqAccordionItem key={faq.question} faq={faq} />
       ))}
