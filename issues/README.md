@@ -8,19 +8,12 @@ This folder contains local copies of all open GitHub issues for the Etymology Ex
 | ------------------------------------------- | ----------------------------------------------------------- | ---------------------------- | -------- |
 | [25](./issue-25-pos-tags.md)                | Add POS (Part of Speech) tag words                          | `enhancement`                | Feature  |
 | [23](./issue-23-related-words.md)           | Add suggestions for related words, synonyms, antonyms, etc  | `enhancement`                | Feature  |
-| [21](./issue-21-educational-content.md)     | Add educational content pages for AI citation optimization  | `SEO`                        | SEO      |
-| [17](./issue-17-faq-schema.md)              | Add FAQ schema for common etymology questions               | `SEO`                        | SEO      |
 | [9](./issue-09-persist-db.md)               | Persist results in a DB                                     | `enhancement`, `help wanted` | Feature  |
 | [8](./issue-08-pronunciation-elevenlabs.md) | Add pronunciation examples using ElevenLabs                 | `enhancement`, `help wanted` | Feature  |
 | [7](./issue-07-convergent-roots.md)         | Improve linking of common roots and remove irrelevant roots | `bug`                        | Bug      |
 | [6](./issue-06-modern-slang.md)             | Add support for modern slangs                               | `enhancement`                | Feature  |
 
 ## Categories
-
-### SEO + AI Search Optimization
-
-- #17 FAQ schema (structured data)
-- #21 educational content (AI-focused)
 
 ### Bugs
 
@@ -36,6 +29,8 @@ This folder contains local copies of all open GitHub issues for the Etymology Ex
 
 ## Recently Closed
 
+- ~~#17~~ - FAQ schema (closed: implemented in PR #30)
+- ~~#21~~ - Educational content pages (closed: implemented in PR #30)
 - ~~#12~~ - SSR/SSG (closed: architectural constraint - user API keys stored client-side)
 - ~~#20~~ - Core Web Vitals (closed: code splitting implemented, images/fonts already optimized)
 
@@ -64,4 +59,4 @@ gh issue list --state open --json number,title,labels,state --limit 100
 
 ---
 
-_Last updated: 2026-01-13_
+_Last updated: 2026-01-17_

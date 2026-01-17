@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { EtymologyResult, WordSuggestion, LLMConfig } from '@/lib/types'
 import { useHistory } from '@/lib/hooks/useHistory'
@@ -188,6 +189,19 @@ function HomeContent() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <header className="text-center mb-12 md:mb-16">
+          {/* Navigation links */}
+          <nav className="flex justify-center gap-6 mb-8 text-sm font-serif">
+            <Link href="/faq" className="text-charcoal-light hover:text-charcoal transition-colors">
+              FAQ
+            </Link>
+            <Link
+              href="/learn/what-is-etymology"
+              className="text-charcoal-light hover:text-charcoal transition-colors"
+            >
+              Learn
+            </Link>
+          </nav>
+
           <h1
             className="
             font-serif text-4xl md:text-5xl
