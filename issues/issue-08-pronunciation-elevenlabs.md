@@ -155,3 +155,16 @@ ElevenLabs pricing (as of 2025):
 - Paid: ~$0.30 per 1,000 characters
 
 Average word = 7 characters → ~1,400 free pronunciations/month
+
+---
+
+## Contributing
+
+To work on this issue:
+
+1. Create branch: `git checkout -b feat/issue-8-pronunciation-elevenlabs`
+2. Implement changes per the context above
+3. Create PR with title: `feat: <description>`
+4. In PR description, add: `Closes #8`
+
+**Auto-close:** Include `Closes #8`, `Fixes #8`, or `Resolves #8` in the PR **description** (not title) to auto-close when merged.

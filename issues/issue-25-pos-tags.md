@@ -138,3 +138,16 @@ For the word **"record"**:
 **Etymology:**
 Both derive from Latin "recordari" (to remember), from "re-" (again) + "cor" (heart).
 The stress shift between noun and verb is a common English pattern.
+
+---
+
+## Contributing
+
+To work on this issue:
+
+1. Create branch: `git checkout -b feat/issue-25-pos-tags`
+2. Implement changes per the context above
+3. Create PR with title: `feat: <description>`
+4. In PR description, add: `Closes #25`
+
+**Auto-close:** Include `Closes #25`, `Fixes #25`, or `Resolves #25` in the PR **description** (not title) to auto-close when merged.

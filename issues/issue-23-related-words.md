@@ -105,3 +105,16 @@ For the word **"affect"**:
 - **Synonyms:** influence, impact, shape, alter
 - **Antonyms:** leave alone, ignore
 - **Easily Confused With:** effect (noun: result; verb: to bring about)
+
+---
+
+## Contributing
+
+To work on this issue:
+
+1. Create branch: `git checkout -b feat/issue-23-related-words`
+2. Implement changes per the context above
+3. Create PR with title: `feat: <description>`
+4. In PR description, add: `Closes #23`
+
+**Auto-close:** Include `Closes #23`, `Fixes #23`, or `Resolves #23` in the PR **description** (not title) to auto-close when merged.

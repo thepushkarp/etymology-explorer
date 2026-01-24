@@ -115,3 +115,16 @@ UPSTASH_REDIS_REST_TOKEN=AXxx...
 - `app/api/etymology/route.ts` - Add cache check/store
 - `package.json` - Add `@upstash/redis` dependency
 - `.env.example` - Document required env vars
+
+---
+
+## Contributing
+
+To work on this issue:
+
+1. Create branch: `git checkout -b feat/issue-9-persist-db`
+2. Implement changes per the context above
+3. Create PR with title: `feat: <description>`
+4. In PR description, add: `Closes #9`
+
+**Auto-close:** Include `Closes #9`, `Fixes #9`, or `Resolves #9` in the PR **description** (not title) to auto-close when merged.

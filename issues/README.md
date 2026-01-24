@@ -59,4 +59,4 @@ gh issue list --state open --json number,title,labels,state --limit 100
 
 ---
 
-_Last updated: 2026-01-17_
+_Last updated: 2026-01-24_

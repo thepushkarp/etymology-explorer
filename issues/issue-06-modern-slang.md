@@ -194,3 +194,16 @@ For the word **"slay"**:
 - **Popularized by:** LGBTQ+ drag culture, particularly RuPaul's Drag Race
 - **Contexts:** Social media, Gen Z slang, fashion
 - **Example:** "She absolutely slayed that presentation"
+
+---
+
+## Contributing
+
+To work on this issue:
+
+1. Create branch: `git checkout -b feat/issue-6-modern-slang`
+2. Implement changes per the context above
+3. Create PR with title: `feat: <description>`
+4. In PR description, add: `Closes #6`
+
+**Auto-close:** Include `Closes #6`, `Fixes #6`, or `Resolves #6` in the PR **description** (not title) to auto-close when merged.

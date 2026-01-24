@@ -171,3 +171,16 @@ lexicology
 ### Why This Matters
 
 Convergent etymology is linguistically fascinating - it shows when a word has "built-in redundancy" of meaning. "Lexicology" literally means "word-word-study" at the PIE level! Surfacing these connections makes the tool more educational and unique.
+
+---
+
+## Contributing
+
+To work on this issue:
+
+1. Create branch: `git checkout -b fix/issue-7-convergent-roots`
+2. Implement changes per the context above
+3. Create PR with title: `fix: <description>`
+4. In PR description, add: `Closes #7`
+
+**Auto-close:** Include `Closes #7`, `Fixes #7`, or `Resolves #7` in the PR **description** (not title) to auto-close when merged.
