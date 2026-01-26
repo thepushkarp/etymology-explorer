@@ -4,6 +4,7 @@ import { memo } from 'react'
 import { EtymologyResult, SourceReference } from '@/lib/types'
 import { RootChip } from './RootChip'
 import { AncestryTree } from './AncestryTree'
+import { PronunciationButton } from './PronunciationButton'
 
 interface EtymologyCardProps {
   result: EtymologyResult
@@ -50,14 +51,16 @@ export const EtymologyCard = memo(function EtymologyCard({
               {result.word}
             </h1>
 
-            {/* Pronunciation in IPA */}
+            {/* Pronunciation in IPA with audio button */}
             <span
               className="
+              inline-flex items-center gap-1
               font-serif text-lg
               text-charcoal-light italic
             "
             >
               {result.pronunciation}
+              <PronunciationButton word={result.word} />
             </span>
           </div>
 
@@ -160,8 +163,8 @@ export const EtymologyCard = memo(function EtymologyCard({
               Sources
             </span>
             <div className="flex flex-wrap gap-2">
-              {result.sources.map((source) => (
-                <SourceBadge key={source.name} source={source} />
+              {result.sources.map((source, index) => (
+                <SourceBadge key={`${source.name}-${source.word || index}`} source={source} />
               ))}
             </div>
           </div>
