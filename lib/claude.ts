@@ -82,6 +82,24 @@ const ETYMOLOGY_SCHEMA = {
             additionalProperties: false,
           },
         },
+        convergencePoints: {
+          type: 'array',
+          description: 'Where branches share deep PIE ancestors',
+          items: {
+            type: 'object',
+            properties: {
+              pieRoot: { type: 'string', description: 'The shared Proto-Indo-European root' },
+              meaning: { type: 'string', description: 'What the PIE root meant' },
+              branchIndices: {
+                type: 'array',
+                items: { type: 'integer' },
+                description: 'Which branches (by index) share this ancestor',
+              },
+            },
+            required: ['pieRoot', 'meaning', 'branchIndices'],
+            additionalProperties: false,
+          },
+        },
         mergePoint: {
           type: 'object',
           description: 'Where branches combine (for compound words)',
@@ -110,6 +128,90 @@ const ETYMOLOGY_SCHEMA = {
       type: 'array',
       items: { type: 'string' },
       description: 'List of sources used',
+    },
+    partsOfSpeech: {
+      type: 'array',
+      description: 'Definitions per grammatical category (noun, verb, etc.)',
+      items: {
+        type: 'object',
+        properties: {
+          pos: {
+            type: 'string',
+            enum: [
+              'noun',
+              'verb',
+              'adjective',
+              'adverb',
+              'preposition',
+              'conjunction',
+              'pronoun',
+              'interjection',
+              'determiner',
+            ],
+            description: 'Part of speech',
+          },
+          definition: { type: 'string', description: 'Definition for this POS' },
+          pronunciation: {
+            type: 'string',
+            description: 'IPA pronunciation if different per POS (e.g., REcord vs reCORD)',
+          },
+        },
+        required: ['pos', 'definition'],
+        additionalProperties: false,
+      },
+    },
+    suggestions: {
+      type: 'object',
+      description: 'Related words for vocabulary building',
+      properties: {
+        synonyms: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Words with similar meaning',
+        },
+        antonyms: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Words with opposite meaning',
+        },
+        homophones: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Words that sound alike',
+        },
+        easilyConfusedWith: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Commonly confused words (e.g., affect/effect)',
+        },
+        seeAlso: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Other interesting related words',
+        },
+      },
+      additionalProperties: false,
+    },
+    modernUsage: {
+      type: 'object',
+      description: 'Contemporary and slang usage context',
+      properties: {
+        hasSlangMeaning: { type: 'boolean', description: 'Whether word has modern slang meaning' },
+        slangDefinition: { type: 'string', description: 'The slang/contemporary definition' },
+        popularizedBy: { type: 'string', description: 'What popularized the modern usage' },
+        contexts: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Cultural contexts where slang is used',
+        },
+        notableReferences: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Famous uses in media/literature',
+        },
+      },
+      required: ['hasSlangMeaning'],
+      additionalProperties: false,
     },
   },
   required: ['word', 'pronunciation', 'definition', 'roots', 'ancestryGraph', 'lore', 'sources'],
