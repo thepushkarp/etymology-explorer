@@ -74,6 +74,28 @@ export const EtymologyCard = memo(function EtymologyCard({
           >
             {result.definition}
           </p>
+
+          {/* POS Tags - after definition */}
+          {result.partsOfSpeech && result.partsOfSpeech.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-4">
+              {result.partsOfSpeech.map(({ pos, definition, pronunciation }, idx) => (
+                <div
+                  key={`${pos}-${idx}`}
+                  className="group inline-flex items-center gap-2 px-3 py-1.5 bg-cream-dark/50 border border-charcoal/10 rounded-full"
+                  title={definition}
+                >
+                  <span className="text-xs font-serif uppercase tracking-wider text-charcoal/60">
+                    {pos}
+                  </span>
+                  {pronunciation && pronunciation !== result.pronunciation && (
+                    <span className="text-xs font-serif italic text-charcoal/50">
+                      {pronunciation}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </header>
 
         {/* Roots section */}
@@ -142,6 +164,92 @@ export const EtymologyCard = memo(function EtymologyCard({
             </p>
           </div>
         </section>
+
+        {/* Modern Usage - after lore, before related words */}
+        {result.modernUsage && result.modernUsage.hasSlangMeaning && (
+          <section className="mb-8">
+            <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-4">
+              Modern Usage
+            </h2>
+            <div className="relative pl-6 border-l-2 border-violet-200">
+              {result.modernUsage.slangDefinition && (
+                <p className="font-serif text-lg text-charcoal/80 leading-relaxed mb-3">
+                  {result.modernUsage.slangDefinition}
+                </p>
+              )}
+              {result.modernUsage.popularizedBy && (
+                <p className="text-sm text-charcoal/60 mb-2">
+                  <span className="font-medium">Popularized by:</span>{' '}
+                  {result.modernUsage.popularizedBy}
+                </p>
+              )}
+              {result.modernUsage.contexts && result.modernUsage.contexts.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {result.modernUsage.contexts.map((ctx) => (
+                    <span
+                      key={ctx}
+                      className="px-2 py-0.5 text-xs font-serif bg-violet-50 text-violet-700 border border-violet-200 rounded-full"
+                    >
+                      {ctx}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Related Words / Suggestions - after modern usage section */}
+        {result.suggestions && (
+          <section className="mb-8">
+            <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-4">
+              Related Words
+            </h2>
+            <div className="space-y-4">
+              {result.suggestions.synonyms && result.suggestions.synonyms.length > 0 && (
+                <SuggestionRow
+                  label="Synonyms"
+                  words={result.suggestions.synonyms}
+                  onWordClick={onWordClick}
+                  color="emerald"
+                />
+              )}
+              {result.suggestions.antonyms && result.suggestions.antonyms.length > 0 && (
+                <SuggestionRow
+                  label="Antonyms"
+                  words={result.suggestions.antonyms}
+                  onWordClick={onWordClick}
+                  color="rose"
+                />
+              )}
+              {result.suggestions.homophones && result.suggestions.homophones.length > 0 && (
+                <SuggestionRow
+                  label="Homophones"
+                  words={result.suggestions.homophones}
+                  onWordClick={onWordClick}
+                  color="amber"
+                />
+              )}
+              {result.suggestions.easilyConfusedWith &&
+                result.suggestions.easilyConfusedWith.length > 0 && (
+                  <SuggestionRow
+                    label="Often Confused With"
+                    words={result.suggestions.easilyConfusedWith}
+                    onWordClick={onWordClick}
+                    color="blue"
+                  />
+                )}
+              {result.suggestions.seeAlso && result.suggestions.seeAlso.length > 0 && (
+                <SuggestionRow
+                  label="See Also"
+                  words={result.suggestions.seeAlso}
+                  onWordClick={onWordClick}
+                  color="purple"
+                />
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Sources footer */}
         <footer
@@ -239,4 +347,45 @@ function SourceBadge({ source }: { source: SourceReference }) {
   }
 
   return <span className={baseClasses}>{sourceLabel}</span>
+}
+
+function SuggestionRow({
+  label,
+  words,
+  onWordClick,
+  color,
+}: {
+  label: string
+  words: string[]
+  onWordClick: (word: string) => void
+  color: 'emerald' | 'rose' | 'amber' | 'blue' | 'purple'
+}) {
+  const colorClasses = {
+    emerald: 'border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300',
+    rose: 'border-rose-200 hover:bg-rose-50 hover:border-rose-300',
+    amber: 'border-amber-200 hover:bg-amber-50 hover:border-amber-300',
+    blue: 'border-blue-200 hover:bg-blue-50 hover:border-blue-300',
+    purple: 'border-purple-200 hover:bg-purple-50 hover:border-purple-300',
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-serif uppercase tracking-wider text-charcoal/40 w-32 shrink-0">
+        {label}
+      </span>
+      {words.map((word) => (
+        <button
+          key={word}
+          onClick={() => onWordClick(word)}
+          className={`
+            px-2.5 py-1 text-sm font-serif text-charcoal/80
+            border rounded-md transition-colors cursor-pointer
+            ${colorClasses[color]}
+          `}
+        >
+          {word}
+        </button>
+      ))}
+    </div>
+  )
 }

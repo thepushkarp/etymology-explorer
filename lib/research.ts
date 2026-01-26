@@ -6,6 +6,8 @@
 
 import { fetchEtymonline } from './etymonline'
 import { fetchWiktionary } from './wiktionary'
+import { fetchWikipedia } from './wikipedia'
+import { fetchUrbanDictionary } from './urbanDictionary'
 import { ResearchContext, RootResearchData, LLMConfig } from './types'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -174,19 +176,29 @@ export async function conductAgenticResearch(
   let totalFetches = 0
   const normalizedWord = word.toLowerCase().trim()
 
-  // Phase 1: Initial fetch for main word
+  // Phase 1: Initial fetch for main word (4 sources in parallel)
   console.log(`[Research] Phase 1: Fetching main word "${normalizedWord}"`)
-  const [etymonlineData, wiktionaryData] = await Promise.all([
+  const [etymonlineData, wiktionaryData, wikipediaData, urbanDictData] = await Promise.all([
     fetchEtymonline(normalizedWord),
     fetchWiktionary(normalizedWord),
+    fetchWikipedia(normalizedWord).catch((err) => {
+      console.error(`[Research] Wikipedia fetch failed for "${normalizedWord}":`, err)
+      return null
+    }),
+    fetchUrbanDictionary(normalizedWord).catch((err) => {
+      console.error(`[Research] Urban Dictionary fetch failed for "${normalizedWord}":`, err)
+      return null
+    }),
   ])
-  totalFetches += 2
+  totalFetches += 4
 
   const context: ResearchContext = {
     mainWord: {
       word: normalizedWord,
       etymonline: etymonlineData,
       wiktionary: wiktionaryData,
+      wikipedia: wikipediaData,
+      urbanDictionary: urbanDictData,
     },
     identifiedRoots: [],
     rootResearch: [],
@@ -261,6 +273,14 @@ export function buildResearchPrompt(context: ResearchContext): string {
   }
   if (context.mainWord.wiktionary) {
     sections.push(`\n--- Wiktionary ---\n${context.mainWord.wiktionary.text}`)
+  }
+  if (context.mainWord.wikipedia) {
+    sections.push(`\n--- Wikipedia ---\n${context.mainWord.wikipedia.text}`)
+  }
+  if (context.mainWord.urbanDictionary) {
+    sections.push(
+      `\n--- Urban Dictionary (Modern Usage) ---\n${context.mainWord.urbanDictionary.text}`
+    )
   }
 
   // Identified roots
