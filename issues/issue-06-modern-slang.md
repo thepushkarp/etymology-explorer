@@ -1,6 +1,6 @@
 # Issue #6: Add support for modern slangs
 
-**Status:** Open (fetchers + UI remaining)
+**Status:** ✅ Closed (PR #32)
 **Labels:** `enhancement`
 **Created:** 2026-01-05
 **Author:** pushkar

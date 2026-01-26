@@ -4,12 +4,9 @@ This folder contains local copies of all open GitHub issues for the Etymology Ex
 
 ## Issue Summary
 
-| #                                   | Title                                                       | Labels        | Priority |
-| ----------------------------------- | ----------------------------------------------------------- | ------------- | -------- |
-| [25](./issue-25-pos-tags.md)        | Add POS (Part of Speech) tag words                          | `enhancement` | Feature  |
-| [23](./issue-23-related-words.md)   | Add suggestions for related words, synonyms, antonyms, etc  | `enhancement` | Feature  |
-| [7](./issue-07-convergent-roots.md) | Improve linking of common roots and remove irrelevant roots | `bug`         | Bug      |
-| [6](./issue-06-modern-slang.md)     | Add support for modern slangs                               | `enhancement` | Feature  |
+| #                                   | Title                                                       | Labels | Status |
+| ----------------------------------- | ----------------------------------------------------------- | ------ | ------ |
+| [7](./issue-07-convergent-roots.md) | Improve linking of common roots and remove irrelevant roots | `bug`  | Open   |
 
 ## Categories
 
@@ -17,15 +14,13 @@ This folder contains local copies of all open GitHub issues for the Etymology Ex
 
 - **#7** - Convergent etymology roots - multiple morphemes sharing same PIE ancestor
 
-### Feature Enhancements
-
-- **#6** - Modern slang support (Wikipedia + Urban Dictionary integration)
-- **#23** - Related words suggestions (synonyms, antonyms, homophones)
-- **#25** - Part of speech (POS) tags for words
-
-**Note:** Schema/backend for #6, #7, #23, #25 completed in PR #31. UI work pending.
-
 ## Recently Closed
+
+The following issues were completed in PR #32:
+
+- ~~#6~~ - Modern slang support (Wikipedia + Urban Dictionary integration)
+- ~~#23~~ - Related words suggestions (synonyms, antonyms, homophones)
+- ~~#25~~ - Part of speech (POS) tags for words
 
 The following issues were completed in PR #31:
 

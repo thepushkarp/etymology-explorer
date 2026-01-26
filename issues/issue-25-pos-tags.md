@@ -1,6 +1,6 @@
 # Issue #25: Add POS (Part of Speech) tag words
 
-**Status:** Open (UI remaining)
+**Status:** ✅ Closed (PR #32)
 **Labels:** `enhancement`
 **Created:** 2026-01-11
 **Author:** pushkar

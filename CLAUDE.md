@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Etymology Explorer is a Next.js web app that helps users discover word origins through an LLM-powered synthesis pipeline. Users search for a word, and the app fetches raw data from Etymonline (HTML scraping) and Wiktionary (MediaWiki API), then sends it to Claude or OpenRouter for structured synthesis into roots, lore, and related words.
+Etymology Explorer is a Next.js web app that helps users discover word origins through an LLM-powered synthesis pipeline. Users search for a word, and the app fetches raw data from 4 sources in parallel (Etymonline, Wiktionary, Wikipedia, and Urban Dictionary), then sends it to Claude or OpenRouter for structured synthesis into roots, lore, POS definitions, related words, and modern usage context.
 
 **Live**: https://etymology.thepushkarp.com
 
@@ -34,14 +34,14 @@ Pre-commit hooks (Husky + lint-staged) automatically run ESLint and Prettier on 
 ```
 User Search → /api/etymology
     ├── Agentic Research Pipeline (lib/research.ts):
-    │   ├── Phase 1: Parallel fetch main word from Etymonline + Wiktionary
+    │   ├── Phase 1: Parallel fetch from 4 sources (Etymonline + Wiktionary + Wikipedia + Urban Dictionary)
     │   ├── Phase 2: Quick LLM call to extract root morphemes
     │   ├── Phase 3: Fetch data for each root (max 3 roots)
     │   └── Phase 4: Fetch related terms (depth-limited, max 10 total fetches)
     ├── Typo check: Levenshtein distance against GRE word list (lib/spellcheck.ts)
     ├── LLM synthesis: Anthropic SDK or OpenRouter API
     │   └── Structured outputs: Guaranteed JSON via constrained decoding
-    └── Response: EtymologyResult { word, pronunciation, definition, roots[], ancestryGraph, lore, sources[] }
+    └── Response: EtymologyResult { word, pronunciation, definition, roots[], ancestryGraph, lore, partsOfSpeech[], suggestions, modernUsage, sources[] }
 ```
 
 ### Research Pipeline Limits
@@ -57,11 +57,14 @@ Defined in `lib/research.ts` to control API costs:
 - **`app/api/`** - Serverless API routes (etymology synthesis, model listing, random word, suggestions)
 - **`lib/`** - Core business logic:
   - `claude.ts` - LLM client for Anthropic and OpenRouter with JSON schema
-  - `research.ts` - Agentic multi-source research pipeline
-  - `etymonline.ts`, `wiktionary.ts` - Source scrapers (HTML parsing + MediaWiki API)
+  - `research.ts` - Agentic multi-source research pipeline (4 sources in Phase 1)
+  - `etymonline.ts`, `wiktionary.ts` - Traditional etymology sources (HTML parsing + MediaWiki API)
+  - `wikipedia.ts` - Wikipedia REST API for encyclopedic context
+  - `urbanDictionary.ts` - Urban Dictionary API with NSFW filtering for modern slang
+  - `elevenlabs.ts` - ElevenLabs TTS for pronunciation audio
   - `prompts.ts` - System prompts and JSON schema template
   - `spellcheck.ts` - Levenshtein-based typo detection and suggestions
-  - `types.ts` - All TypeScript interfaces
+  - `types.ts` - All TypeScript interfaces (including POSDefinition, WordSuggestions, ModernUsage)
 - **`components/`** - React UI components (all client-side with `'use client'`)
 - **`data/gre-words.json`** - Curated ~500 word list for random selection and spell-check
 
@@ -69,8 +72,8 @@ Defined in `lib/research.ts` to control API costs:
 
 The app uses **Anthropic's structured outputs API** for guaranteed valid JSON. For OpenRouter, it uses JSON schema strict mode. Both providers receive:
 
-1. Raw source data from Etymonline/Wiktionary (aggregated by research pipeline)
-2. A JSON schema defining `EtymologyResult` (in `lib/claude.ts`)
+1. Raw source data from all 4 sources (Etymonline, Wiktionary, Wikipedia, Urban Dictionary) aggregated by research pipeline
+2. A JSON schema defining `EtymologyResult` including `partsOfSpeech`, `suggestions`, and `modernUsage` (in `lib/claude.ts`)
 3. System prompt in `lib/prompts.ts`
 
 **Note**: Anthropic calls use `betas: ['structured-outputs-2025-11-13']` flag in `lib/claude.ts:180`.
@@ -127,11 +130,16 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 ## Important Files
 
-- **`lib/research.ts`** - Agentic research orchestrator (multi-phase source gathering)
+- **`lib/research.ts`** - Agentic research orchestrator (4-source parallel fetch in Phase 1)
 - **`lib/claude.ts`** - LLM client for both Anthropic and OpenRouter
 - **`lib/prompts.ts`** - System prompt and JSON schema for structured outputs
 - **`lib/etymonline.ts`** - HTML scraper with fallback patterns for different page structures
-- **`lib/types.ts`** - Core types: `EtymologyResult`, `Root`, `AncestryGraph`, `SourceReference`
+- **`lib/wikipedia.ts`** - Wikipedia REST API client for encyclopedic context
+- **`lib/urbanDictionary.ts`** - Urban Dictionary API with NSFW word filtering (100+ upvotes threshold)
+- **`lib/elevenlabs.ts`** - ElevenLabs TTS client for pronunciation audio
+- **`lib/types.ts`** - Core types: `EtymologyResult`, `Root`, `AncestryGraph`, `POSDefinition`, `WordSuggestions`, `ModernUsage`, `SourceReference`
 - **`app/page.tsx`** - Main UI with search flow, URL sync, and state management
 - **`components/SettingsModal.tsx`** - LLM provider/model configuration
 - **`components/AncestryTree.tsx`** - Visual ancestry graph with branch merging
+- **`components/EtymologyCard.tsx`** - Main result display with POS badges, Modern Usage section, and Related Words chips
+- **`components/PronunciationButton.tsx`** - Audio playback button with ElevenLabs integration

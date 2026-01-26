@@ -1,6 +1,6 @@
 # Issue #23: Add suggestions for related words, synonyms, antonyms, homophones, easily_confused_with etc
 
-**Status:** Open (UI remaining)
+**Status:** ✅ Closed (PR #32)
 **Labels:** `enhancement`
 **Created:** 2026-01-10
 **Author:** pushkar

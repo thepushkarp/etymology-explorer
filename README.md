@@ -7,8 +7,12 @@ Try it out at [etymology.thepushkarp.com](https://etymology.thepushkarp.com)
 ## Features
 
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
+- **Part of Speech Tags**: See grammatical categories (noun/verb/adjective) with alternate pronunciations for words like "record"
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
 - **Related Words**: Discover words that share the same roots
+- **Word Suggestions**: Explore synonyms, antonyms, homophones, easily-confused words, and see-also links with color-coded clickable chips
+- **Modern Usage**: Slang definitions and contemporary context from Wikipedia and Urban Dictionary
+- **Pronunciation Audio**: Listen to word pronunciations powered by ElevenLabs
 - **Multiple LLM Providers**: Choose between Anthropic (Claude) or OpenRouter for flexibility
 - **Dynamic Model Selection**: Automatically fetches available models from Anthropic API
 - **Search History**: Track your vocabulary exploration with a persistent sidebar
@@ -64,7 +68,12 @@ Your settings are stored locally in your browser and never sent to any server.
 - **Framework**: [Next.js 16.1](https://nextjs.org/) with App Router
 - **UI**: [React 19.2](https://react.dev/) + [Tailwind CSS v4](https://tailwindcss.com/)
 - **LLM**: [Anthropic SDK](https://docs.anthropic.com/) with structured outputs
-- **Data Sources**: [Etymonline](https://www.etymonline.com/) + [Wiktionary](https://en.wiktionary.org/)
+- **Data Sources**:
+  - [Etymonline](https://www.etymonline.com/) - Historical etymology
+  - [Wiktionary](https://en.wiktionary.org/) - Definitions and linguistic data
+  - [Wikipedia](https://en.wikipedia.org/) - Encyclopedic context
+  - [Urban Dictionary](https://www.urbandictionary.com/) - Modern slang (NSFW filtered)
+- **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
 - **Typography**: Libre Baskerville (serif)
 
 ## Project Structure
@@ -88,10 +97,13 @@ etymology-explorer/
 │   ├── SettingsModal.tsx  # LLM configuration
 │   └── SurpriseButton.tsx # Random word button
 ├── lib/
-│   ├── research.ts        # Agentic multi-source research pipeline
+│   ├── research.ts        # Agentic multi-source research pipeline (4 sources)
 │   ├── claude.ts          # LLM synthesis with structured outputs
-│   ├── etymonline.ts      # Etymonline scraper
-│   ├── wiktionary.ts      # Wiktionary API client
+│   ├── etymonline.ts      # Etymonline HTML scraper
+│   ├── wiktionary.ts      # Wiktionary MediaWiki API client
+│   ├── wikipedia.ts       # Wikipedia REST API client
+│   ├── urbanDictionary.ts # Urban Dictionary API with NSFW filtering
+│   ├── elevenlabs.ts      # ElevenLabs TTS for pronunciation audio
 │   ├── spellcheck.ts      # Typo detection and suggestions
 │   ├── prompts.ts         # System prompts and schemas
 │   ├── types.ts           # TypeScript interfaces
@@ -112,13 +124,13 @@ etymology-explorer/
 ## How It Works
 
 1. **Agentic Research**: When you search a word, an agentic pipeline conducts multi-phase research:
-   - Phase 1: Fetch main word data from Etymonline and Wiktionary in parallel
+   - Phase 1: Fetch main word data from 4 sources in parallel (Etymonline, Wiktionary, Wikipedia, Urban Dictionary)
    - Phase 2: Quick LLM call extracts root morphemes (e.g., "telephone" → ["tele", "phone"])
    - Phase 3: Fetch etymology data for each identified root
    - Phase 4: Gather related terms for additional context (depth-limited)
 2. **LLM Synthesis**: The aggregated research context is sent to your chosen LLM with a structured output schema
 3. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
-4. **Rich Display**: The etymology is rendered with expandable roots, ancestry graph, and source attribution
+4. **Rich Display**: The etymology is rendered with expandable roots, ancestry graph, POS badges, modern usage section, related word suggestions, and source attribution
 
 ### Architecture Diagram
 
@@ -141,14 +153,18 @@ etymology-explorer/
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │                    AGENTIC RESEARCH PIPELINE                          │  │
 │  │                                                                       │  │
-│  │   Phase 1                    Phase 2                 Phase 3-4        │  │
+│  │   Phase 1 (4 sources)        Phase 2                 Phase 3-4        │  │
 │  │  ┌──────────┐               ┌───────┐              ┌──────────────┐   │  │
 │  │  │Etymonline│──┐            │Quick  │              │ Root + Related│   │  │
-│  │  │ Scraper  │  ├──────────▶ │LLM    │ ──────────▶  │ Term Fetches │   │  │
-│  │  └──────────┘  │  parallel  │Call   │  roots[]     │ (max 10)     │   │  │
-│  │  ┌──────────┐  │            └───────┘              └──────────────┘   │  │
-│  │  │Wiktionary│──┘                                                      │  │
-│  │  │  API     │                                                         │  │
+│  │  └──────────┘  │            │LLM    │              │ Term Fetches │   │  │
+│  │  ┌──────────┐  │  parallel  │Call   │  roots[]     │ (max 10)     │   │  │
+│  │  │Wiktionary│  ├──────────▶ └───────┘ ──────────▶  └──────────────┘   │  │
+│  │  └──────────┘  │                                                      │  │
+│  │  ┌──────────┐  │                                                      │  │
+│  │  │Wikipedia │  │                                                      │  │
+│  │  └──────────┘  │                                                      │  │
+│  │  ┌──────────┐  │                                                      │  │
+│  │  │Urban Dict│──┘                                                      │  │
 │  │  └──────────┘                                                         │  │
 │  └─────────────────────────────────────┬─────────────────────────────────┘  │
 │                                        │                                    │
@@ -170,6 +186,10 @@ etymology-explorer/
 │   ┌────────────────┐  ┌────────────────┐  ┌────────────────────────────┐    │
 │   │  etymonline.com│  │ en.wiktionary  │  │  Anthropic / OpenRouter    │    │
 │   │  (HTML scrape) │  │ (MediaWiki API)│  │  (LLM with JSON schema)    │    │
+│   └────────────────┘  └────────────────┘  └────────────────────────────┘    │
+│   ┌────────────────┐  ┌────────────────┐  ┌────────────────────────────┐    │
+│   │  en.wikipedia  │  │ Urban Dict API │  │      ElevenLabs API        │    │
+│   │  (REST API)    │  │ (NSFW filtered)│  │  (pronunciation audio)     │    │
 │   └────────────────┘  └────────────────┘  └────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -203,4 +223,7 @@ MIT
 ## Acknowledgments
 
 - Etymology data from [Etymonline](https://www.etymonline.com/) and [Wiktionary](https://en.wiktionary.org/)
+- Encyclopedic context from [Wikipedia](https://en.wikipedia.org/)
+- Modern slang definitions from [Urban Dictionary](https://www.urbandictionary.com/)
+- Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)
 - Powered by [Claude](https://www.anthropic.com/claude) from Anthropic
