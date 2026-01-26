@@ -74,6 +74,28 @@ export const EtymologyCard = memo(function EtymologyCard({
           >
             {result.definition}
           </p>
+
+          {/* POS Tags - after definition */}
+          {result.partsOfSpeech && result.partsOfSpeech.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-4">
+              {result.partsOfSpeech.map(({ pos, definition, pronunciation }, idx) => (
+                <div
+                  key={`${pos}-${idx}`}
+                  className="group inline-flex items-center gap-2 px-3 py-1.5 bg-cream-dark/50 border border-charcoal/10 rounded-full"
+                  title={definition}
+                >
+                  <span className="text-xs font-serif uppercase tracking-wider text-charcoal/60">
+                    {pos}
+                  </span>
+                  {pronunciation && pronunciation !== result.pronunciation && (
+                    <span className="text-xs font-serif italic text-charcoal/50">
+                      {pronunciation}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </header>
 
         {/* Roots section */}
