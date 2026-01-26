@@ -1,10 +1,23 @@
 # Issue #25: Add POS (Part of Speech) tag words
 
-**Status:** Open
+**Status:** Open (UI remaining)
 **Labels:** `enhancement`
 **Created:** 2026-01-11
 **Author:** pushkar
 **URL:** https://github.com/thepushkarp/etymology-explorer/issues/25
+
+---
+
+## Progress (PR #31)
+
+✅ **Backend complete:**
+
+- `lib/types.ts` - Added `PartOfSpeech`, `POSDefinition` types
+- `lib/claude.ts` - Extended schema with `partsOfSpeech` property
+- `lib/prompts.ts` - Added POS extraction guidelines
+- `lib/schemas/etymology.ts` - Zod validation for POS
+
+⏳ **Remaining:** UI display in `components/EtymologyCard.tsx`
 
 ---
 

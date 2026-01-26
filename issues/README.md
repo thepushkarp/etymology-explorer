@@ -4,14 +4,12 @@ This folder contains local copies of all open GitHub issues for the Etymology Ex
 
 ## Issue Summary
 
-| #                                           | Title                                                       | Labels                       | Priority |
-| ------------------------------------------- | ----------------------------------------------------------- | ---------------------------- | -------- |
-| [25](./issue-25-pos-tags.md)                | Add POS (Part of Speech) tag words                          | `enhancement`                | Feature  |
-| [23](./issue-23-related-words.md)           | Add suggestions for related words, synonyms, antonyms, etc  | `enhancement`                | Feature  |
-| [9](./issue-09-persist-db.md)               | Persist results in a DB                                     | `enhancement`, `help wanted` | Feature  |
-| [8](./issue-08-pronunciation-elevenlabs.md) | Add pronunciation examples using ElevenLabs                 | `enhancement`, `help wanted` | Feature  |
-| [7](./issue-07-convergent-roots.md)         | Improve linking of common roots and remove irrelevant roots | `bug`                        | Bug      |
-| [6](./issue-06-modern-slang.md)             | Add support for modern slangs                               | `enhancement`                | Feature  |
+| #                                   | Title                                                       | Labels        | Priority |
+| ----------------------------------- | ----------------------------------------------------------- | ------------- | -------- |
+| [25](./issue-25-pos-tags.md)        | Add POS (Part of Speech) tag words                          | `enhancement` | Feature  |
+| [23](./issue-23-related-words.md)   | Add suggestions for related words, synonyms, antonyms, etc  | `enhancement` | Feature  |
+| [7](./issue-07-convergent-roots.md) | Improve linking of common roots and remove irrelevant roots | `bug`         | Bug      |
+| [6](./issue-06-modern-slang.md)     | Add support for modern slangs                               | `enhancement` | Feature  |
 
 ## Categories
 
@@ -22,12 +20,19 @@ This folder contains local copies of all open GitHub issues for the Etymology Ex
 ### Feature Enhancements
 
 - **#6** - Modern slang support (Wikipedia + Urban Dictionary integration)
-- **#8** - ElevenLabs pronunciation audio
-- **#9** - Database caching for etymology results
 - **#23** - Related words suggestions (synonyms, antonyms, homophones)
 - **#25** - Part of speech (POS) tags for words
 
+**Note:** Schema/backend for #6, #7, #23, #25 completed in PR #31. UI work pending.
+
 ## Recently Closed
+
+The following issues were completed in PR #31:
+
+- ~~#8~~ - ElevenLabs pronunciation audio
+- ~~#9~~ - Database caching (Upstash Redis)
+
+Earlier closed:
 
 - ~~#17~~ - FAQ schema (closed: implemented in PR #30)
 - ~~#21~~ - Educational content pages (closed: implemented in PR #30)
@@ -59,4 +64,4 @@ gh issue list --state open --json number,title,labels,state --limit 100
 
 ---
 
-_Last updated: 2026-01-24_
+_Last updated: 2026-01-26_

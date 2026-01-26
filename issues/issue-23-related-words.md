@@ -1,10 +1,23 @@
 # Issue #23: Add suggestions for related words, synonyms, antonyms, homophones, easily_confused_with etc
 
-**Status:** Open
+**Status:** Open (UI remaining)
 **Labels:** `enhancement`
 **Created:** 2026-01-10
 **Author:** pushkar
 **URL:** https://github.com/thepushkarp/etymology-explorer/issues/23
+
+---
+
+## Progress (PR #31)
+
+✅ **Backend complete:**
+
+- `lib/types.ts` - Added `WordSuggestions` interface
+- `lib/claude.ts` - Extended schema with `suggestions` property
+- `lib/prompts.ts` - Added suggestions guidelines
+- `lib/schemas/etymology.ts` - Zod validation for suggestions
+
+⏳ **Remaining:** UI display in `components/EtymologyCard.tsx` with clickable chips
 
 ---
 

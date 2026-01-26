@@ -1,10 +1,23 @@
 # Issue #7: Improve linking of common roots and remove irrelevant roots
 
-**Status:** Open
+**Status:** Open (visualization remaining)
 **Labels:** `bug`
 **Created:** 2026-01-05
 **Author:** pushkar
 **URL:** https://github.com/thepushkarp/etymology-explorer/issues/7
+
+---
+
+## Progress (PR #31)
+
+✅ **Backend complete:**
+
+- `lib/types.ts` - Added `ConvergencePoint` interface, `convergencePoints` to `AncestryGraph`
+- `lib/claude.ts` - Extended schema with `convergencePoints` property
+- `lib/prompts.ts` - Added convergent etymology guidelines
+- `lib/schemas/etymology.ts` - Zod validation for convergencePoints
+
+⏳ **Remaining:** `components/AncestryTree.tsx` - Visual update to show shared PIE ancestors
 
 ---
 

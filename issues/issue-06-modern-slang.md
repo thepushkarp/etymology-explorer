@@ -1,10 +1,28 @@
 # Issue #6: Add support for modern slangs
 
-**Status:** Open
+**Status:** Open (fetchers + UI remaining)
 **Labels:** `enhancement`
 **Created:** 2026-01-05
 **Author:** pushkar
 **URL:** https://github.com/thepushkarp/etymology-explorer/issues/6
+
+---
+
+## Progress (PR #31)
+
+✅ **Backend complete:**
+
+- `lib/types.ts` - Added `ModernUsage` interface
+- `lib/claude.ts` - Extended schema with `modernUsage` property
+- `lib/prompts.ts` - Added modern usage guidelines
+- `lib/schemas/etymology.ts` - Zod validation for modernUsage
+
+⏳ **Remaining:**
+
+- `lib/wikipedia.ts` - Wikipedia API fetcher
+- `lib/urbanDictionary.ts` - Urban Dictionary fetcher (with NSFW filter)
+- `lib/research.ts` - Integrate new sources into pipeline
+- `components/EtymologyCard.tsx` - UI for modern usage section
 
 ---
 
