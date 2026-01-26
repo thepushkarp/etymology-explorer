@@ -39,17 +39,75 @@ export interface AncestryBranch {
 }
 
 /**
+ * Convergence point where multiple branches share a common PIE ancestor
+ * Used to visualize how seemingly unrelated words connect at deep history
+ */
+export interface ConvergencePoint {
+  pieRoot: string // The shared Proto-Indo-European root
+  meaning: string // What the PIE root meant
+  branchIndices: number[] // Which branches (by index) share this ancestor
+}
+
+/**
  * Graph-based ancestry showing how roots evolved and merged
  * Supports: single roots, compound words with merging branches, post-merge evolution
  */
 export interface AncestryGraph {
   branches: AncestryBranch[] // Independent evolution paths for each root
+  convergencePoints?: ConvergencePoint[] // Where branches share deep PIE ancestors
   mergePoint?: {
     // Where branches combine (for compound words)
     form: string // The combined form
     note: string // Context about the combination
   }
   postMerge?: AncestryStage[] // Evolution after merge (optional)
+}
+
+/**
+ * Part of speech type for grammatical categorization
+ */
+export type PartOfSpeech =
+  | 'noun'
+  | 'verb'
+  | 'adjective'
+  | 'adverb'
+  | 'preposition'
+  | 'conjunction'
+  | 'pronoun'
+  | 'interjection'
+  | 'determiner'
+
+/**
+ * Definition for a specific part of speech
+ * Useful for words like "record" that have different pronunciations per POS
+ */
+export interface POSDefinition {
+  pos: PartOfSpeech
+  definition: string
+  pronunciation?: string // If different per POS (e.g., "REcord" vs "reCORD")
+}
+
+/**
+ * Related word suggestions for vocabulary building
+ */
+export interface WordSuggestions {
+  synonyms?: string[]
+  antonyms?: string[]
+  homophones?: string[]
+  easilyConfusedWith?: string[] // e.g., "affect" vs "effect"
+  seeAlso?: string[] // Related interesting words
+}
+
+/**
+ * Modern and slang usage context
+ * Captures contemporary meanings that may differ from etymological origins
+ */
+export interface ModernUsage {
+  hasSlangMeaning: boolean
+  slangDefinition?: string
+  popularizedBy?: string // e.g., "popularized by TikTok in 2020s"
+  contexts?: string[] // e.g., ["LGBTQ+ community", "internet culture"]
+  notableReferences?: string[] // Famous uses in media/literature
 }
 
 /**
@@ -63,6 +121,9 @@ export interface EtymologyResult {
   ancestryGraph: AncestryGraph // Graph showing how roots evolved and merged
   lore: string // 4-6 sentence revelationary narrative with "aha" moments
   sources: SourceReference[]
+  partsOfSpeech?: POSDefinition[] // Definitions per grammatical category
+  suggestions?: WordSuggestions // Related words for vocabulary building
+  modernUsage?: ModernUsage // Contemporary/slang meanings
 }
 
 /**
