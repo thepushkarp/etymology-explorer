@@ -5,6 +5,7 @@
 
 import { Redis } from '@upstash/redis'
 import { EtymologyResult } from './types'
+import { EtymologyResultSchema } from './schemas/etymology'
 
 // Initialize Redis from environment (lazy - only connects when used)
 const redis = new Redis({
@@ -13,7 +14,8 @@ const redis = new Redis({
 })
 
 // Version prefix - bump when EtymologyResult schema changes
-const CACHE_VERSION = 1
+// v2: Added partsOfSpeech, suggestions, modernUsage, convergencePoints
+const CACHE_VERSION = 2
 const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
 const ETYMOLOGY_TTL = 30 * 24 * 60 * 60 // 30 days
 
@@ -30,14 +32,28 @@ export function isCacheConfigured(): boolean {
 
 /**
  * Get cached etymology result
- * Returns null if not cached or on error (fail open)
+ * Returns null if not cached, invalid schema, or on error (fail open)
+ * Uses Zod validation to detect schema mismatches from old cache entries
  */
 export async function getCachedEtymology(word: string): Promise<EtymologyResult | null> {
   if (!isCacheConfigured()) return null
 
   const key = `${ETYMOLOGY_PREFIX}${word.toLowerCase().trim()}`
   try {
-    return await redis.get<EtymologyResult>(key)
+    const raw = await redis.get(key)
+    if (!raw) return null
+
+    // Validate against current schema - treats invalid data as cache miss
+    const parsed = EtymologyResultSchema.safeParse(raw)
+    if (!parsed.success) {
+      console.warn(
+        `[Cache] Schema mismatch for "${word}":`,
+        parsed.error.issues[0]?.message || 'Unknown validation error'
+      )
+      return null // Treat as cache miss, will re-fetch from LLM
+    }
+
+    return parsed.data as EtymologyResult
   } catch (error) {
     console.error('[Cache] Etymology get error:', error)
     return null // Fail open - continue without cache
