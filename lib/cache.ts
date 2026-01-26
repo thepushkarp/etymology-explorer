@@ -7,14 +7,12 @@ import { Redis } from '@upstash/redis'
 import { EtymologyResult } from './types'
 import { EtymologyResultSchema } from './schemas/etymology'
 
-// Initialize Redis from environment (lazy - only connects when used)
 const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || '',
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+  url: process.env.ETYMOLOGY_KV_REST_API_URL || '',
+  token: process.env.ETYMOLOGY_KV_REST_API_TOKEN || '',
 })
 
-// Version prefix - bump when EtymologyResult schema changes
-// v2: Added partsOfSpeech, suggestions, modernUsage, convergencePoints
+// Bump version when EtymologyResult schema changes
 const CACHE_VERSION = 2
 const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
 const ETYMOLOGY_TTL = 30 * 24 * 60 * 60 // 30 days
@@ -27,7 +25,7 @@ const AUDIO_TTL = 365 * 24 * 60 * 60 // 1 year
  * Check if Redis caching is configured
  */
 export function isCacheConfigured(): boolean {
-  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN)
+  return !!(process.env.ETYMOLOGY_KV_REST_API_URL && process.env.ETYMOLOGY_KV_REST_API_TOKEN)
 }
 
 /**

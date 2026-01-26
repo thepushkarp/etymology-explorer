@@ -55,14 +55,12 @@ const SourceReferenceSchema = z.object({
   word: z.string().optional(),
 })
 
-// POS definition schema (new field)
 const POSDefinitionSchema = z.object({
   pos: z.string(),
   definition: z.string(),
   pronunciation: z.string().optional(),
 })
 
-// Word suggestions schema (new field)
 const WordSuggestionsSchema = z
   .object({
     synonyms: z.array(z.string()).optional(),
@@ -73,7 +71,6 @@ const WordSuggestionsSchema = z
   })
   .passthrough()
 
-// Modern usage schema (new field)
 const ModernUsageSchema = z
   .object({
     hasSlangMeaning: z.boolean(),
@@ -101,7 +98,6 @@ export const EtymologyResultSchema = z
     // Optional fields
     ancestryGraph: AncestryGraphSchema.optional(),
 
-    // New optional fields (v2 schema)
     partsOfSpeech: z.array(POSDefinitionSchema).optional(),
     suggestions: WordSuggestionsSchema.optional(),
     modernUsage: ModernUsageSchema.optional(),
