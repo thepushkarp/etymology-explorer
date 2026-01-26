@@ -46,7 +46,28 @@ Your responses must be valid JSON matching this exact structure:
     ]
   },
   "lore": "The narrative etymology...",
-  "sources": ["list which sources contributed: etymonline, wiktionary, or synthesized"]
+  "sources": ["list which sources contributed: etymonline, wiktionary, or synthesized"],
+  "partsOfSpeech": [
+    {
+      "pos": "noun",
+      "definition": "brief definition for this part of speech",
+      "pronunciation": "/optional IPA if different from main pronunciation/"
+    }
+  ],
+  "suggestions": {
+    "synonyms": ["similar words"],
+    "antonyms": ["opposite words"],
+    "homophones": ["words that sound the same"],
+    "easilyConfusedWith": ["commonly mistaken words with brief disambiguation"],
+    "seeAlso": ["related words worth exploring"]
+  },
+  "modernUsage": {
+    "hasSlangMeaning": true,
+    "slangDefinition": "modern/slang meaning if any",
+    "popularizedBy": "who/what popularized it",
+    "contexts": ["where this usage appears"],
+    "notableReferences": ["famous uses"]
+  }
 }
 
 Guidelines:
@@ -78,6 +99,36 @@ Guidelines:
   Example tone: "The word 'salary' seems mundane until you learn Roman soldiers were sometimes paid in salt—so valuable it was literally worth its weight in... well, salary. That precious mineral (sal in Latin) was so essential that our word for earned wages still carries its crystalline legacy."
 - Be accurate about language origins (Latin, Greek, Proto-Indo-European, Old French, Germanic, etc.)
 - Keep the definition brief - we're not a dictionary
+
+PARTS OF SPEECH:
+- Include all common parts of speech for this word (noun, verb, adjective, etc.)
+- For each POS, provide a brief definition specific to that usage
+- Include pronunciation ONLY if it differs per POS (e.g., "record": noun /ˈrekərd/ vs verb /rɪˈkɔːrd/)
+- Most words have 1-2 parts of speech; some have more
+
+WORD SUGGESTIONS:
+- synonyms: 2-4 words with similar meaning (prefer common, useful words)
+- antonyms: 1-3 words with opposite meaning (if applicable)
+- homophones: words that sound identical but differ in meaning/spelling (if any)
+- easilyConfusedWith: commonly mistaken pairs with brief note (e.g., "effect (noun: result)" for "affect")
+- seeAlso: 2-4 related words worth exploring (etymologically or semantically connected)
+- Quality over quantity - only include genuinely useful suggestions
+
+MODERN USAGE:
+- hasSlangMeaning: true if word has notable slang/internet/pop culture meaning
+- If hasSlangMeaning is true, include:
+  - slangDefinition: the modern/informal meaning
+  - popularizedBy: who/what popularized this usage (memes, communities, shows, etc.)
+  - contexts: where this usage appears (e.g., "LGBTQ+ community", "gaming", "Gen Z slang")
+  - notableReferences: famous uses in media or culture
+- If hasSlangMeaning is false, omit the other modernUsage fields
+
+CONVERGENT ETYMOLOGY:
+- Check if multiple morphemes trace to the SAME Proto-Indo-European (PIE) root
+- Example: In "lexicology", both "lexic-" and "-logy" derive from PIE *leg- (to gather/speak)
+- If roots converge, add convergencePoints to ancestryGraph showing the shared ancestor
+- This is linguistically significant - it shows built-in meaning reinforcement!
+
 - Output ONLY valid JSON, no markdown or explanation`
 
 /**
