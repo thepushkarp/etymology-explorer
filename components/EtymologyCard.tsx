@@ -163,8 +163,8 @@ export const EtymologyCard = memo(function EtymologyCard({
               Sources
             </span>
             <div className="flex flex-wrap gap-2">
-              {result.sources.map((source) => (
-                <SourceBadge key={source.name} source={source} />
+              {result.sources.map((source, index) => (
+                <SourceBadge key={`${source.name}-${source.word || index}`} source={source} />
               ))}
             </div>
           </div>

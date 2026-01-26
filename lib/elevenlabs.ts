@@ -32,7 +32,7 @@ export async function generatePronunciation(word: string): Promise<ArrayBuffer> 
     },
     body: JSON.stringify({
       text: word,
-      model_id: 'eleven_monolingual_v1',
+      model_id: 'eleven_turbo_v2_5', // Updated: v1 models deprecated for free tier
       voice_settings: {
         stability: 0.75,
         similarity_boost: 0.75,
