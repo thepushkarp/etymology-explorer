@@ -217,6 +217,8 @@ export interface ResearchContext {
     word: string
     etymonline: SourceData | null
     wiktionary: SourceData | null
+    wikipedia?: SourceData | null
+    urbanDictionary?: SourceData | null
   }
   identifiedRoots: string[]
   rootResearch: RootResearchData[]

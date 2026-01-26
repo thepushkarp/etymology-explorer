@@ -165,7 +165,41 @@ export const EtymologyCard = memo(function EtymologyCard({
           </div>
         </section>
 
-        {/* Related Words / Suggestions - after lore section */}
+        {/* Modern Usage - after lore, before related words */}
+        {result.modernUsage && result.modernUsage.hasSlangMeaning && (
+          <section className="mb-8">
+            <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-4">
+              Modern Usage
+            </h2>
+            <div className="relative pl-6 border-l-2 border-violet-200">
+              {result.modernUsage.slangDefinition && (
+                <p className="font-serif text-lg text-charcoal/80 leading-relaxed mb-3">
+                  {result.modernUsage.slangDefinition}
+                </p>
+              )}
+              {result.modernUsage.popularizedBy && (
+                <p className="text-sm text-charcoal/60 mb-2">
+                  <span className="font-medium">Popularized by:</span>{' '}
+                  {result.modernUsage.popularizedBy}
+                </p>
+              )}
+              {result.modernUsage.contexts && result.modernUsage.contexts.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {result.modernUsage.contexts.map((ctx) => (
+                    <span
+                      key={ctx}
+                      className="px-2 py-0.5 text-xs font-serif bg-violet-50 text-violet-700 border border-violet-200 rounded-full"
+                    >
+                      {ctx}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Related Words / Suggestions - after modern usage section */}
         {result.suggestions && (
           <section className="mb-8">
             <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-4">
