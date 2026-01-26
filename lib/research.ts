@@ -181,8 +181,14 @@ export async function conductAgenticResearch(
   const [etymonlineData, wiktionaryData, wikipediaData, urbanDictData] = await Promise.all([
     fetchEtymonline(normalizedWord),
     fetchWiktionary(normalizedWord),
-    fetchWikipedia(normalizedWord).catch(() => null),
-    fetchUrbanDictionary(normalizedWord).catch(() => null),
+    fetchWikipedia(normalizedWord).catch((err) => {
+      console.error(`[Research] Wikipedia fetch failed for "${normalizedWord}":`, err)
+      return null
+    }),
+    fetchUrbanDictionary(normalizedWord).catch((err) => {
+      console.error(`[Research] Urban Dictionary fetch failed for "${normalizedWord}":`, err)
+      return null
+    }),
   ])
   totalFetches += 4
 
