@@ -5,6 +5,7 @@ import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
+import { getCachedEtymology, cacheEtymology } from '@/lib/cache'
 
 function isValidLLMConfig(config: LLMConfig): boolean {
   if (config.provider === 'anthropic') {
@@ -69,6 +70,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check cache first (if configured)
+    const cached = await getCachedEtymology(normalizedWord)
+    if (cached) {
+      console.log(`[Etymology API] Cache hit for "${normalizedWord}"`)
+      return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>({
+        success: true,
+        data: cached,
+        cached: true,
+      })
+    }
+
     // Conduct agentic research (fetches main word, extracts roots, explores related terms)
     console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
     const researchContext = await conductAgenticResearch(normalizedWord, llmConfig)
@@ -107,9 +119,15 @@ export async function POST(request: NextRequest) {
     // Synthesize with LLM using rich research context
     const result = await synthesizeFromResearch(researchContext, llmConfig)
 
-    return NextResponse.json<ApiResponse<EtymologyResult>>({
+    // Cache result for future lookups (non-blocking)
+    cacheEtymology(normalizedWord, result).catch((err) => {
+      console.error('[Etymology API] Cache store failed:', err)
+    })
+
+    return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>({
       success: true,
       data: result,
+      cached: false,
     })
   } catch (error) {
     console.error('Etymology API error:', error)

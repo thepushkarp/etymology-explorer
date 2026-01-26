@@ -1263,6 +1263,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@upstash/redis@npm:^1.36.1":
+  version: 1.36.1
+  resolution: "@upstash/redis@npm:1.36.1"
+  dependencies:
+    uncrypto: "npm:^0.1.3"
+  checksum: 10c0/deab614ee90940240988e8ffc4f06e5ac7953aa1e92473dcdede6667f52079919bae010037a295d242ce6c815fea8754f04d6b921be7a967747cabb52c61fb95
+  languageName: node
+  linkType: hard
+
 "@vercel/analytics@npm:^1.6.1":
   version: 1.6.1
   resolution: "@vercel/analytics@npm:1.6.1"
@@ -2329,6 +2338,7 @@ __metadata:
     "@types/node": "npm:^20"
     "@types/react": "npm:^19"
     "@types/react-dom": "npm:^19"
+    "@upstash/redis": "npm:^1.36.1"
     "@vercel/analytics": "npm:^1.6.1"
     eslint: "npm:^9"
     eslint-config-next: "npm:16.1.1"
@@ -4561,6 +4571,13 @@ __metadata:
     has-symbols: "npm:^1.1.0"
     which-boxed-primitive: "npm:^1.1.1"
   checksum: 10c0/7dbd35ab02b0e05fe07136c72cb9355091242455473ec15057c11430129bab38b7b3624019b8778d02a881c13de44d63cd02d122ee782fb519e1de7775b5b982
+  languageName: node
+  linkType: hard
+
+"uncrypto@npm:^0.1.3":
+  version: 0.1.3
+  resolution: "uncrypto@npm:0.1.3"
+  checksum: 10c0/74a29afefd76d5b77bedc983559ceb33f5bbc8dada84ff33755d1e3355da55a4e03a10e7ce717918c436b4dfafde1782e799ebaf2aadd775612b49f7b5b2998e
   languageName: node
   linkType: hard
 
