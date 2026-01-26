@@ -143,6 +143,58 @@ export const EtymologyCard = memo(function EtymologyCard({
           </div>
         </section>
 
+        {/* Related Words / Suggestions - after lore section */}
+        {result.suggestions && (
+          <section className="mb-8">
+            <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-4">
+              Related Words
+            </h2>
+            <div className="space-y-4">
+              {result.suggestions.synonyms && result.suggestions.synonyms.length > 0 && (
+                <SuggestionRow
+                  label="Synonyms"
+                  words={result.suggestions.synonyms}
+                  onWordClick={onWordClick}
+                  color="emerald"
+                />
+              )}
+              {result.suggestions.antonyms && result.suggestions.antonyms.length > 0 && (
+                <SuggestionRow
+                  label="Antonyms"
+                  words={result.suggestions.antonyms}
+                  onWordClick={onWordClick}
+                  color="rose"
+                />
+              )}
+              {result.suggestions.homophones && result.suggestions.homophones.length > 0 && (
+                <SuggestionRow
+                  label="Homophones"
+                  words={result.suggestions.homophones}
+                  onWordClick={onWordClick}
+                  color="amber"
+                />
+              )}
+              {result.suggestions.easilyConfusedWith &&
+                result.suggestions.easilyConfusedWith.length > 0 && (
+                  <SuggestionRow
+                    label="Often Confused With"
+                    words={result.suggestions.easilyConfusedWith}
+                    onWordClick={onWordClick}
+                    color="blue"
+                  />
+                )}
+              {result.suggestions.seeAlso && result.suggestions.seeAlso.length > 0 && (
+                <SuggestionRow
+                  label="See Also"
+                  words={result.suggestions.seeAlso}
+                  onWordClick={onWordClick}
+                  color="purple"
+                />
+              )}
+            </div>
+          </section>
+        )}
+
         {/* Sources footer */}
         <footer
           className="
@@ -239,4 +291,45 @@ function SourceBadge({ source }: { source: SourceReference }) {
   }
 
   return <span className={baseClasses}>{sourceLabel}</span>
+}
+
+function SuggestionRow({
+  label,
+  words,
+  onWordClick,
+  color,
+}: {
+  label: string
+  words: string[]
+  onWordClick: (word: string) => void
+  color: 'emerald' | 'rose' | 'amber' | 'blue' | 'purple'
+}) {
+  const colorClasses = {
+    emerald: 'border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300',
+    rose: 'border-rose-200 hover:bg-rose-50 hover:border-rose-300',
+    amber: 'border-amber-200 hover:bg-amber-50 hover:border-amber-300',
+    blue: 'border-blue-200 hover:bg-blue-50 hover:border-blue-300',
+    purple: 'border-purple-200 hover:bg-purple-50 hover:border-purple-300',
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-xs font-serif uppercase tracking-wider text-charcoal/40 w-32 shrink-0">
+        {label}
+      </span>
+      {words.map((word) => (
+        <button
+          key={word}
+          onClick={() => onWordClick(word)}
+          className={`
+            px-2.5 py-1 text-sm font-serif text-charcoal/80
+            border rounded-md transition-colors cursor-pointer
+            ${colorClasses[color]}
+          `}
+        >
+          {word}
+        </button>
+      ))}
+    </div>
+  )
 }
