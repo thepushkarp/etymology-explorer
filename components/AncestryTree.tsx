@@ -1,7 +1,7 @@
 'use client'
 
 import { memo } from 'react'
-import { AncestryGraph, AncestryStage, AncestryBranch } from '@/lib/types'
+import { AncestryGraph, AncestryStage, AncestryBranch, ConvergencePoint } from '@/lib/types'
 
 interface AncestryTreeProps {
   graph: AncestryGraph
@@ -81,12 +81,92 @@ function VerticalConnector({ color = 'bg-charcoal/20' }: { color?: string }) {
   )
 }
 
-function BranchColumn({ branch, branchIndex }: { branch: AncestryBranch; branchIndex: number }) {
+/**
+ * Scholarly callout showing shared PIE ancestry between branches
+ * Styled as dictionary marginalia / cross-reference note
+ */
+function ConvergenceCallout({
+  points,
+  branches,
+}: {
+  points: ConvergencePoint[]
+  branches: AncestryBranch[]
+}) {
+  return (
+    <aside
+      className="
+        mb-6 p-4 w-full max-w-lg
+        bg-stone-50/80
+        border-l-4 border-stone-400
+        rounded-r-lg
+      "
+      role="note"
+      aria-label="Shared etymology"
+    >
+      <h3
+        className="
+          text-[10px] font-semibold uppercase tracking-widest
+          text-stone-600 mb-2
+          flex items-center gap-2
+        "
+      >
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"
+          />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M10.172 13.828a4 4 0 015.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+          />
+        </svg>
+        Shared Ancestry
+      </h3>
+      {points.map((cp, i) => {
+        const branchNames = cp.branchIndices.map((idx) => branches[idx]?.root || '?')
+        return (
+          <p key={i} className="font-serif text-sm text-charcoal/80 leading-relaxed">
+            <span className="font-semibold">{branchNames.join(' and ')}</span> share
+            Proto-Indo-European <em className="text-stone-700">*{cp.pieRoot}</em>{' '}
+            <span className="text-stone-500">&ldquo;{cp.meaning}&rdquo;</span>
+          </p>
+        )
+      })}
+    </aside>
+  )
+}
+
+/**
+ * Extract grid column class to avoid recreating inline strings
+ */
+function gridColsClass(count: number): string {
+  if (count === 1) return 'grid-cols-1 max-w-xs mx-auto'
+  if (count === 2) return 'grid-cols-2 max-w-lg mx-auto'
+  return 'grid-cols-3 max-w-2xl mx-auto'
+}
+
+function BranchColumn({
+  branch,
+  branchIndex,
+  convergencePoints,
+}: {
+  branch: AncestryBranch
+  branchIndex: number
+  convergencePoints?: ConvergencePoint[]
+}) {
   const branchColor = branchColors[branchIndex % branchColors.length]
+
+  // Find convergences this branch participates in
+  const convergences =
+    convergencePoints?.filter((cp) => cp.branchIndices.includes(branchIndex)) || []
 
   return (
     <div className="flex flex-col items-center">
-      {/* Root label */}
+      {/* Root label with convergence badge */}
       <div
         className={`
           px-2 py-1 mb-1
@@ -94,9 +174,21 @@ function BranchColumn({ branch, branchIndex }: { branch: AncestryBranch; branchI
           text-charcoal bg-white
           border-2 ${branchColor.accent}
           rounded-full shadow-sm
+          flex items-center gap-1.5
         `}
       >
         {branch.root}
+        {convergences.length > 0 && (
+          <span
+            className="
+              w-2 h-2 rounded-full
+              bg-stone-400
+              ring-1 ring-stone-300
+            "
+            title={`Shares PIE *${convergences[0].pieRoot} "${convergences[0].meaning}"`}
+            aria-label={`Shared ancestry with PIE root ${convergences[0].pieRoot}`}
+          />
+        )}
       </div>
 
       {/* Stages */}
@@ -115,6 +207,7 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
 
   const hasMerge = graph.mergePoint && graph.branches.length > 1
   const hasPostMerge = graph.postMerge && graph.postMerge.length > 0
+  const hasConvergence = graph.convergencePoints && graph.convergencePoints.length > 0
 
   return (
     <section className="mb-8">
@@ -123,17 +216,20 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
       </h2>
 
       <div className="flex flex-col items-center">
-        {/* Branches side by side */}
-        <div
-          className={`
-            grid gap-4 w-full
-            ${graph.branches.length === 1 ? 'grid-cols-1 max-w-xs mx-auto' : ''}
-            ${graph.branches.length === 2 ? 'grid-cols-2 max-w-lg mx-auto' : ''}
-            ${graph.branches.length >= 3 ? 'grid-cols-3 max-w-2xl mx-auto' : ''}
-          `}
-        >
+        {/* Convergence callout - shared PIE ancestry */}
+        {hasConvergence && (
+          <ConvergenceCallout points={graph.convergencePoints!} branches={graph.branches} />
+        )}
+
+        {/* Branches side by side - items-end aligns at bottom for merge point */}
+        <div className={`grid items-end gap-4 w-full ${gridColsClass(graph.branches.length)}`}>
           {graph.branches.map((branch, idx) => (
-            <BranchColumn key={branch.root} branch={branch} branchIndex={idx} />
+            <BranchColumn
+              key={branch.root}
+              branch={branch}
+              branchIndex={idx}
+              convergencePoints={graph.convergencePoints}
+            />
           ))}
         </div>
 
