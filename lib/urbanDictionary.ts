@@ -20,7 +20,7 @@ const NSFW_WORDS = [
 
 function isClean(text: string): boolean {
   const lower = text.toLowerCase()
-  return !NSFW_WORDS.some((word) => lower.includes(word))
+  return !NSFW_WORDS.some((word) => new RegExp(`\\b${word}\\b`).test(lower))
 }
 
 export async function fetchUrbanDictionary(word: string): Promise<SourceData | null> {
