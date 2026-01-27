@@ -349,6 +349,14 @@ function SourceBadge({ source }: { source: SourceReference }) {
   return <span className={baseClasses}>{sourceLabel}</span>
 }
 
+function parseWordEntry(raw: string): { word: string; annotation?: string } {
+  const match = raw.match(/^([^(]+?)(?:\s*\((.+)\))?$/)
+  if (match) {
+    return { word: match[1].trim(), annotation: match[2]?.trim() }
+  }
+  return { word: raw.trim() }
+}
+
 function SuggestionRow({
   label,
   words,
@@ -373,19 +381,23 @@ function SuggestionRow({
       <span className="text-xs font-serif uppercase tracking-wider text-charcoal/40 w-32 shrink-0">
         {label}
       </span>
-      {words.map((word) => (
-        <button
-          key={word}
-          onClick={() => onWordClick(word)}
-          className={`
-            px-2.5 py-1 text-sm font-serif text-charcoal/80
-            border rounded-md transition-colors cursor-pointer
-            ${colorClasses[color]}
-          `}
-        >
-          {word}
-        </button>
-      ))}
+      {words.map((raw) => {
+        const { word, annotation } = parseWordEntry(raw)
+        return (
+          <button
+            key={raw}
+            onClick={() => onWordClick(word)}
+            title={annotation}
+            className={`
+              px-2.5 py-1 text-sm font-serif text-charcoal/80
+              border rounded-md transition-colors cursor-pointer
+              ${colorClasses[color]}
+            `}
+          >
+            {word}
+          </button>
+        )
+      })}
     </div>
   )
 }
