@@ -36,7 +36,7 @@ export const EtymologyCard = memo(function EtymologyCard({
       />
 
       {/* Main content */}
-      <div className="relative p-8 md:p-12">
+      <div className="relative p-5 sm:p-8 md:p-12">
         {/* Header: Word + Pronunciation */}
         <header className="mb-8 pb-6 border-b border-charcoal/10">
           <div className="flex items-baseline gap-4 flex-wrap">
@@ -256,8 +256,6 @@ export const EtymologyCard = memo(function EtymologyCard({
           className="
           pt-6
           border-t border-charcoal/10
-          flex flex-col sm:flex-row sm:items-center sm:justify-between
-          gap-4
         "
         >
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -270,25 +268,26 @@ export const EtymologyCard = memo(function EtymologyCard({
             >
               Sources
             </span>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1.5 sm:gap-2">
               {result.sources.map((source, index) => (
                 <SourceBadge key={`${source.name}-${source.word || index}`} source={source} />
               ))}
             </div>
           </div>
-
-          {/* Decorative flourish - hidden on mobile */}
-          <div
-            className="
-            hidden sm:flex items-center gap-2
-            text-charcoal/20
-          "
-          >
-            <span className="w-8 h-px bg-current" />
-            <span className="text-xs font-serif italic">§</span>
-            <span className="w-8 h-px bg-current" />
-          </div>
         </footer>
+
+        {/* Decorative flourish - centered card ending */}
+        <div
+          className="
+            flex items-center justify-center gap-2
+            mt-6 pt-2
+            text-charcoal/15
+          "
+        >
+          <span className="w-8 h-px bg-current" />
+          <span className="text-xs font-serif italic select-none">§</span>
+          <span className="w-8 h-px bg-current" />
+        </div>
       </div>
     </article>
   )
@@ -309,9 +308,9 @@ function SourceBadge({ source }: { source: SourceReference }) {
   }
 
   const baseClasses = `
-    px-2 py-0.5
-    text-xs font-serif
-    rounded
+    px-2.5 py-1
+    text-sm font-serif
+    rounded-md
     border
     transition-colors duration-200
     ${colors[source.name] || 'bg-gray-50 text-gray-700 border-gray-200'}
@@ -377,8 +376,8 @@ function SuggestionRow({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-xs font-serif uppercase tracking-wider text-charcoal/40 w-32 shrink-0">
+    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1.5 sm:gap-2">
+      <span className="text-xs font-serif uppercase tracking-wider text-charcoal/40 sm:w-32 sm:shrink-0">
         {label}
       </span>
       {words.map((raw) => {
