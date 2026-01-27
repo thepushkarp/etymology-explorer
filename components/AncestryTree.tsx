@@ -129,7 +129,10 @@ function ConvergenceCallout({
       {points.map((cp, i) => {
         const branchNames = cp.branchIndices.map((idx) => branches[idx]?.root || '?')
         return (
-          <p key={i} className="font-serif text-sm text-charcoal/80 leading-relaxed">
+          <p
+            key={`convergence-${cp.pieRoot}-${i}`}
+            className="font-serif text-sm text-charcoal/80 leading-relaxed"
+          >
             <span className="font-semibold">{branchNames.join(' and ')}</span> share
             Proto-Indo-European <em className="text-stone-700">*{cp.pieRoot}</em>{' '}
             <span className="text-stone-500">&ldquo;{cp.meaning}&rdquo;</span>
@@ -185,8 +188,8 @@ function BranchColumn({
               bg-stone-400
               ring-1 ring-stone-300
             "
-            title={`Shares PIE *${convergences[0].pieRoot} "${convergences[0].meaning}"`}
-            aria-label={`Shared ancestry with PIE root ${convergences[0].pieRoot}`}
+            title={convergences.map((c) => `Shares PIE *${c.pieRoot} "${c.meaning}"`).join('; ')}
+            aria-label={`Shared ancestry with PIE roots: ${convergences.map((c) => c.pieRoot).join(', ')}`}
           />
         )}
       </div>
