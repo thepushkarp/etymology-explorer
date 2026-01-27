@@ -317,7 +317,16 @@ function HomeContent() {
             text-charcoal-light/50
           "
           >
-            Built with curiosity and Claude
+            Built by{' '}
+            <a
+              href="https://thepushkarp.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-charcoal"
+            >
+              thepushkarp
+            </a>{' '}
+            with curiosity and Claude
           </p>
           <p
             className="
@@ -326,7 +335,7 @@ function HomeContent() {
             mt-2
           "
           >
-            Etymology data from Etymonline & Wiktionary
+            Etymology data from Etymonline, Wiktionary, Wikipedia, and Urban Dictionary
           </p>
         </footer>
       </div>
