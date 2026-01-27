@@ -84,14 +84,27 @@ etymology-explorer/
 │   ├── api/
 │   │   ├── etymology/     # Main etymology synthesis endpoint
 │   │   ├── models/        # Fetch available Anthropic models
+│   │   ├── pronunciation/ # TTS audio endpoint (ElevenLabs)
 │   │   ├── random-word/   # Random word selection
 │   │   └── suggestions/   # Typo correction suggestions
+│   ├── faq/               # FAQ page with structured data
+│   ├── learn/             # Educational content pages
+│   │   └── what-is-etymology/
+│   ├── og/                # Dynamic OG image generation
+│   ├── sitemap.ts         # Dynamic sitemap
+│   ├── robots.ts          # Robots.txt configuration
 │   ├── layout.tsx         # Root layout with fonts
 │   └── page.tsx           # Main page with search UI
 ├── components/
 │   ├── AncestryTree.tsx   # Visual etymology graph
+│   ├── ErrorState.tsx     # Error display with retry
 │   ├── EtymologyCard.tsx  # Main result display
+│   ├── FaqAccordion.tsx   # Accessible FAQ accordion
+│   ├── FaqSchema.tsx      # FAQPage JSON-LD schema
 │   ├── HistorySidebar.tsx # Search history panel
+│   ├── JsonLd.tsx         # WebApplication schema
+│   ├── PronunciationButton.tsx # Audio playback
+│   ├── RelatedWordsList.tsx # Related words chips
 │   ├── RootChip.tsx       # Expandable root morpheme
 │   ├── SearchBar.tsx      # Word input
 │   ├── SettingsModal.tsx  # LLM configuration
@@ -109,17 +122,19 @@ etymology-explorer/
 │   ├── types.ts           # TypeScript interfaces
 │   └── hooks/             # React hooks (localStorage, history)
 └── data/
+    ├── faq.ts             # FAQ content with FaqItem interface
     └── gre-words.json     # Vocabulary word list
 ```
 
 ## API Endpoints
 
-| Endpoint           | Method | Description                      |
-| ------------------ | ------ | -------------------------------- |
-| `/api/etymology`   | POST   | Synthesize etymology for a word  |
-| `/api/models`      | POST   | Fetch available Anthropic models |
-| `/api/suggestions` | GET    | Get typo correction suggestions  |
-| `/api/random-word` | GET    | Get a random word                |
+| Endpoint             | Method | Description                      |
+| -------------------- | ------ | -------------------------------- |
+| `/api/etymology`     | POST   | Synthesize etymology for a word  |
+| `/api/models`        | POST   | Fetch available Anthropic models |
+| `/api/pronunciation` | GET    | Get pronunciation audio          |
+| `/api/suggestions`   | GET    | Get typo correction suggestions  |
+| `/api/random-word`   | GET    | Get a random word                |
 
 ## How It Works
 

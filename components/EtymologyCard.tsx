@@ -118,7 +118,7 @@ export const EtymologyCard = memo(function EtymologyCard({
         </section>
 
         {/* Ancestry graph - visual journey showing root branches merging */}
-        {result.ancestryGraph && result.ancestryGraph.branches?.length > 0 && (
+        {result.ancestryGraph?.branches?.length > 0 && (
           <AncestryTree graph={result.ancestryGraph} word={result.word} />
         )}
 

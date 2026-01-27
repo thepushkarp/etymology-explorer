@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { EtymologyResult, WordSuggestion, LLMConfig } from '@/lib/types'
+import { LLMConfig } from '@/lib/types'
 import { useHistory } from '@/lib/hooks/useHistory'
 import { useLocalStorage } from '@/lib/hooks/useLocalStorage'
+import { useEtymologySearch } from '@/lib/hooks/useEtymologySearch'
 import { SearchBar } from '@/components/SearchBar'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { RelatedWordsList } from '@/components/RelatedWordsList'
@@ -33,16 +34,6 @@ const SettingsModal = dynamic(
   }
 )
 
-type AppState = 'idle' | 'loading' | 'success' | 'error'
-type ErrorType = 'nonsense' | 'no-api-key' | 'network-error' | 'typo'
-
-// Consolidated error state to reduce render thrashing
-interface ErrorInfo {
-  type: ErrorType
-  message: string
-  suggestions: WordSuggestion[]
-}
-
 const DEFAULT_LLM_CONFIG: LLMConfig = {
   provider: 'anthropic',
   anthropicApiKey: '',
@@ -56,9 +47,6 @@ function HomeContent() {
   const searchParams = useSearchParams()
 
   // State
-  const [state, setState] = useState<AppState>('idle')
-  const [result, setResult] = useState<EtymologyResult | null>(null)
-  const [error, setError] = useState<ErrorInfo | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   // Hooks
@@ -66,85 +54,13 @@ function HomeContent() {
     'etymology-llm-config',
     DEFAULT_LLM_CONFIG
   )
-  const { history, addToHistory, clearHistory, removeFromHistory } = useHistory()
-
-  // Search function
-  const searchWord = useCallback(
-    async (word: string) => {
-      const trimmed = word.trim().toLowerCase()
-      if (!trimmed) return
-
-      // Check for valid LLM config
-      const isConfigValid =
-        llmConfig.provider === 'anthropic'
-          ? llmConfig.anthropicApiKey.length > 0
-          : llmConfig.openrouterApiKey.length > 0 && llmConfig.openrouterModel.length > 0
-
-      if (!isConfigValid) {
-        setState('error')
-        setError({
-          type: 'no-api-key',
-          message:
-            llmConfig.provider === 'anthropic'
-              ? "You'll need an Anthropic API key to explore etymologies."
-              : "You'll need to configure OpenRouter with an API key and model.",
-          suggestions: [],
-        })
-        return
-      }
-
-      setState('loading')
-      setResult(null)
-      setError(null)
-
-      try {
-        const response = await fetch('/api/etymology', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ word: trimmed, llmConfig }),
-        })
-
-        const data = await response.json()
-
-        if (data.success && data.data) {
-          setState('success')
-          setResult(data.data)
-          addToHistory(trimmed)
-        } else if (data.suggestions && data.suggestions.length > 0) {
-          // Typo detected - show suggestions
-          setState('error')
-          setError({
-            type: 'typo',
-            message: `We couldn't find "${trimmed}" in our lexicon.`,
-            suggestions: data.suggestions,
-          })
-        } else {
-          // Nonsense word
-          setState('error')
-          setError({
-            type: 'nonsense',
-            message: data.error || "That doesn't appear to be a word we recognize.",
-            suggestions: [],
-          })
-        }
-      } catch (err) {
-        console.error('Search failed:', err)
-        setState('error')
-        setError({
-          type: 'network-error',
-          message: 'Something went awry in the ether...',
-          suggestions: [],
-        })
-      }
-    },
-    [llmConfig, addToHistory]
-  )
+  const { history, clearHistory, removeFromHistory } = useHistory()
+  const { state, result, error, searchWord } = useEtymologySearch(llmConfig)
 
   // Handle URL-based search on mount and param changes - intentional URL → action sync
   useEffect(() => {
     const q = searchParams.get('q')
     if (q) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       searchWord(q)
     }
   }, [searchParams, searchWord])
