@@ -229,29 +229,48 @@ export async function conductAgenticResearch(
     (root) => root !== normalizedWord && root.length > 1
   )
 
-  for (const root of rootsToResearch) {
-    if (totalFetches >= MAX_TOTAL_FETCHES) {
-      console.log('[Research] Reached fetch limit, stopping root research')
-      break
-    }
+  // Calculate budget for roots
+  // Each root fetch costs 2 calls
+  const remainingBudget = MAX_TOTAL_FETCHES - totalFetches
+  const maxRootsByBudget = Math.floor(remainingBudget / 2)
 
-    console.log(`[Research] Fetching root: "${root}"`)
-    const rootData = await fetchRootResearch(root)
-    context.rootResearch.push(rootData)
-    totalFetches += 2 // Each root fetch does 2 API calls
+  // Take only as many roots as we can afford, or the max limit
+  const rootsToFetch = rootsToResearch.slice(0, Math.min(maxRootsByBudget, MAX_ROOTS_TO_EXPLORE))
 
-    // Phase 4: Fetch a couple of related terms for depth
-    for (const relatedTerm of rootData.relatedTerms.slice(0, MAX_RELATED_WORDS_PER_ROOT)) {
-      if (totalFetches >= MAX_TOTAL_FETCHES) break
-      if (context.relatedWordsData[relatedTerm]) continue // Already fetched
+  if (rootsToFetch.length > 0) {
+    console.log(
+      `[Research] Fetching ${rootsToFetch.length} roots in parallel: ${rootsToFetch.join(', ')}`
+    )
 
-      console.log(`[Research] Fetching related term: "${relatedTerm}"`)
-      const relatedData = await fetchEtymonline(relatedTerm)
-      if (relatedData) {
-        context.relatedWordsData[relatedTerm] = relatedData
+    const rootResults = await Promise.allSettled(
+      rootsToFetch.map((root) => fetchRootResearch(root))
+    )
+
+    for (const result of rootResults) {
+      if (result.status === 'fulfilled') {
+        const rootData = result.value
+        context.rootResearch.push(rootData)
+        totalFetches += 2
+
+        // Phase 4: Fetch a couple of related terms for depth
+        // We do this sequentially to strictly respect the limit
+        for (const relatedTerm of rootData.relatedTerms.slice(0, MAX_RELATED_WORDS_PER_ROOT)) {
+          if (totalFetches >= MAX_TOTAL_FETCHES) break
+          if (context.relatedWordsData[relatedTerm]) continue // Already fetched
+
+          console.log(`[Research] Fetching related term: "${relatedTerm}"`)
+          const relatedData = await fetchEtymonline(relatedTerm)
+          if (relatedData) {
+            context.relatedWordsData[relatedTerm] = relatedData
+          }
+          totalFetches += 1
+        }
+      } else {
+        console.error('[Research] Root fetch failed:', result.reason)
       }
-      totalFetches += 1
     }
+  } else {
+    console.log('[Research] Skipping roots (budget or no roots found)')
   }
 
   context.totalSourcesFetched = totalFetches

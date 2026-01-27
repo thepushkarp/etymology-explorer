@@ -95,8 +95,8 @@ export const EtymologyResultSchema = z
     lore: z.string(),
     sources: z.array(SourceReferenceSchema),
 
-    // Optional fields
-    ancestryGraph: AncestryGraphSchema.optional(),
+    // Required graph (LLM schema requires this)
+    ancestryGraph: AncestryGraphSchema,
 
     partsOfSpeech: z.array(POSDefinitionSchema).optional(),
     suggestions: WordSuggestionsSchema.optional(),

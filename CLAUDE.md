@@ -54,7 +54,13 @@ Defined in `lib/research.ts` to control API costs:
 
 ### Key Directories
 
-- **`app/api/`** - Serverless API routes (etymology synthesis, model listing, random word, suggestions)
+- **`app/`** - Page routes and SEO:
+  - `faq/page.tsx` - FAQ page with FAQPage JSON-LD schema
+  - `learn/what-is-etymology/page.tsx` - Educational content for SEO
+  - `sitemap.ts` - Dynamic sitemap generator
+  - `robots.ts` - Robots.txt configuration
+  - `og/route.tsx` - Dynamic Open Graph image generation
+- **`app/api/`** - Serverless API routes (etymology synthesis, model listing, random word, suggestions, pronunciation)
 - **`lib/`** - Core business logic:
   - `claude.ts` - LLM client for Anthropic and OpenRouter with JSON schema
   - `research.ts` - Agentic multi-source research pipeline (4 sources in Phase 1)
@@ -65,8 +71,15 @@ Defined in `lib/research.ts` to control API costs:
   - `prompts.ts` - System prompts and JSON schema template
   - `spellcheck.ts` - Levenshtein-based typo detection and suggestions
   - `types.ts` - All TypeScript interfaces (including POSDefinition, WordSuggestions, ModernUsage)
-- **`components/`** - React UI components (all client-side with `'use client'`)
-- **`data/gre-words.json`** - Curated ~500 word list for random selection and spell-check
+- **`components/`** - React UI components (all client-side with `'use client'`):
+  - `JsonLd.tsx` - WebApplication schema with SearchAction for sitelinks
+  - `FaqSchema.tsx` - FAQPage JSON-LD schema generator
+  - `FaqAccordion.tsx` - Accessible FAQ using native details/summary
+  - `ErrorState.tsx` - Error display with retry functionality
+  - `RelatedWordsList.tsx` - Related words chip display
+- **`data/`** - Static content:
+  - `gre-words.json` - ~500 word list for random selection and spell-check
+  - `faq.ts` - FAQ content with FaqItem interface
 
 ### LLM Integration
 
@@ -119,12 +132,13 @@ When adding UI: _"Would this feel at home in a beautifully typeset etymology dic
 
 ## API Endpoints
 
-| Endpoint           | Method | Purpose                                           |
-| ------------------ | ------ | ------------------------------------------------- |
-| `/api/etymology`   | POST   | Main synthesis - requires `{ word, llmConfig }`   |
-| `/api/models`      | POST   | Fetch Anthropic models - requires API key in body |
-| `/api/suggestions` | GET    | Typo correction - `?q=word`                       |
-| `/api/random-word` | GET    | Random GRE word (crypto randomness)               |
+| Endpoint             | Method | Purpose                                           |
+| -------------------- | ------ | ------------------------------------------------- |
+| `/api/etymology`     | POST   | Main synthesis - requires `{ word, llmConfig }`   |
+| `/api/models`        | POST   | Fetch Anthropic models - requires API key in body |
+| `/api/suggestions`   | GET    | Typo correction - `?q=word`                       |
+| `/api/random-word`   | GET    | Random GRE word (crypto randomness)               |
+| `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs)             |
 
 All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
@@ -143,3 +157,10 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - **`components/AncestryTree.tsx`** - Visual ancestry graph with branch merging
 - **`components/EtymologyCard.tsx`** - Main result display with POS badges, Modern Usage section, and Related Words chips
 - **`components/PronunciationButton.tsx`** - Audio playback button with ElevenLabs integration
+- **`data/faq.ts`** - FAQ content (shared by UI and JSON-LD schema)
+- **`components/JsonLd.tsx`** - WebApplication schema with SearchAction
+- **`components/FaqSchema.tsx`** - FAQPage JSON-LD for Google rich results
+- **`components/FaqAccordion.tsx`** - Accessible FAQ with native details/summary
+- **`app/faq/page.tsx`** - FAQ page with metadata and structured data
+- **`app/learn/what-is-etymology/page.tsx`** - Long-form educational content (~1200 words)
+- **`app/sitemap.ts`** - Dynamic sitemap for all routes
