@@ -55,11 +55,11 @@ Your responses must be valid JSON matching this exact structure:
     }
   ],
   "suggestions": {
-    "synonyms": ["similar words"],
-    "antonyms": ["opposite words"],
-    "homophones": ["words that sound the same"],
-    "easilyConfusedWith": ["commonly mistaken words with brief disambiguation"],
-    "seeAlso": ["related words worth exploring"]
+    "synonyms": ["resilient", "steadfast"],
+    "antonyms": ["fragile", "vulnerable"],
+    "homophones": [],
+    "easilyConfusedWith": ["endure", "ensure"],
+    "seeAlso": ["habituate", "acclimate"]
   },
   "modernUsage": {
     "hasSlangMeaning": true,
@@ -89,14 +89,21 @@ Guidelines:
 
   Each branch should have 2-4 stages. Show the interesting transformations.
 
-- LORE: Write a revelationary narrative (4-6 sentences) that creates "aha!" moments:
-  * DON'T just list facts or trace paths mechanically
-  * DO reveal surprising connections that make the reader pause
-  * Start with an intriguing hook or unexpected angle
-  * Let meanings unfold naturally, building to insight
-  * End with a memorable realization that ties everything together
-  * The reader should feel they've discovered something, not been lectured
-  Example tone: "The word 'salary' seems mundane until you learn Roman soldiers were sometimes paid in salt—so valuable it was literally worth its weight in... well, salary. That precious mineral (sal in Latin) was so essential that our word for earned wages still carries its crystalline legacy."
+- LORE: Write a 4-6 sentence narrative that reads like a passage from Bill Bryson or John McWhorter — conversational, vivid, full of "wait, really?" moments.
+  VOICE & STYLE:
+  * Write like you're telling a friend something astonishing you just learned
+  * Use concrete imagery: people, places, objects, historical scenes — not abstract summaries
+  * Vary sentence length. Short punchy lines create rhythm alongside longer ones.
+  * NEVER start with "The word X..." or "Derived from..." — start with the surprising thing
+  * NEVER use filler phrases: "Interestingly," "Fascinatingly," "It's worth noting," "Remarkably"
+  CONTENT REQUIREMENTS:
+  * Connect the word's roots to UNEXPECTED cousin words (e.g., "perfidy" shares a root with "fidelity" and "fiancé" — all from Latin fidere, to trust)
+  * If the word has multiple roots, show how their collision creates meaning that neither root carries alone
+  * Ground at least one claim in a specific historical detail: a date, a person, a place, or an event
+  * End with something the reader will remember tomorrow, not a generic "and so the word came to mean..."
+  EXAMPLES:
+  "Roman soldiers weren't always paid in coins. Sometimes they received a handful of salt — sal in Latin — so precious it doubled as currency. That daily ration was their salarium, and two thousand years later every paycheck you deposit still carries a faint crystalline echo of those ancient salt roads."
+  "When you call someone 'perfidious,' you're literally saying they've destroyed trust — per (through, to destruction) + fides (faith). That same fides gave us 'fidelity,' 'fiancé,' and even 'federal' — all words built on the handshake. To be perfidious is to shatter what fidelity, engagement, and governance all depend on."
 - Be accurate about language origins (Latin, Greek, Proto-Indo-European, Old French, Germanic, etc.)
 - Keep the definition brief - we're not a dictionary
 
@@ -107,11 +114,14 @@ PARTS OF SPEECH:
 - Most words have 1-2 parts of speech; some have more
 
 WORD SUGGESTIONS:
-- synonyms: 2-4 words with similar meaning (prefer common, useful words)
-- antonyms: 1-3 words with opposite meaning (if applicable)
-- homophones: words that sound identical but differ in meaning/spelling (if any)
-- easilyConfusedWith: commonly mistaken pairs with brief note (e.g., "effect (noun: result)" for "affect")
-- seeAlso: 2-4 related words worth exploring (etymologically or semantically connected)
+FORMAT: Each array item must be ONLY the word itself. No definitions, no explanations, no parenthetical notes.
+  GOOD: ["endure", "ensure", "habituate"]
+  BAD: ["endure (to tolerate)", "ensure—to make certain", "habituate, meaning to accustom"]
+- synonyms: 2-4 words (just the word, no definitions)
+- antonyms: 1-3 words (just the word)
+- homophones: words that sound identical (just the word)
+- easilyConfusedWith: commonly mistaken words (just the word, e.g., ["affect", "effect"])
+- seeAlso: 2-4 related words worth exploring (just the word)
 - Quality over quantity - only include genuinely useful suggestions
 
 MODERN USAGE:
@@ -179,8 +189,9 @@ export function buildRichUserPrompt(word: string, researchData: string): string 
 1. Identify ALL constituent roots (1 to many based on the word's composition)
 2. Trace the etymological ancestry through language layers
 3. Connect related words and cognates mentioned in the research
-4. Write rich, memorable lore (4-6 sentences) that tells the word's full story
+4. For lore: tell a STORY, not a summary. Connect this word's roots to surprising cousin words. Ground it in a specific historical detail. Never start with "The word X..." — start with the most surprising thing.
 5. If pre-parsed etymology chains are provided above, use them as the backbone for your ancestryGraph — prefer their forms and language labels over your training data
+6. For suggestions: return ONLY bare words, never include definitions or annotations in the array items
 
 Follow the JSON schema in your instructions.`
 

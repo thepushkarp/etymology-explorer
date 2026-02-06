@@ -348,12 +348,57 @@ function SourceBadge({ source }: { source: SourceReference }) {
   return <span className={baseClasses}>{sourceLabel}</span>
 }
 
+/**
+ * Extract just the word from an LLM suggestion string.
+ * Handles various LLM output patterns:
+ *   "endure (to tolerate)" → { word: "endure", annotation: "to tolerate" }
+ *   "ensure (to make certain)—inure means..." → { word: "ensure", annotation: "to make certain" }
+ *   "habituate, meaning to accustom" → { word: "habituate" }
+ *   "ad hoc" → { word: "ad hoc" }
+ */
 function parseWordEntry(raw: string): { word: string; annotation?: string } {
-  const match = raw.match(/^([^(]+?)(?:\s*\((.+)\))?$/)
-  if (match) {
-    return { word: match[1].trim(), annotation: match[2]?.trim() }
+  let text = raw.trim()
+
+  // 1. If there's a parenthetical, extract word before it and annotation inside
+  const parenMatch = text.match(/^([^(]+?)\s*\(([^)]+)\)/)
+  if (parenMatch) {
+    return { word: parenMatch[1].trim(), annotation: parenMatch[2].trim() }
   }
-  return { word: raw.trim() }
+
+  // 2. Split on em-dash, en-dash, or " - " and take the first part
+  const dashParts = text.split(/\s*[—–]\s*|\s+-\s+/)
+  if (dashParts.length > 1) {
+    text = dashParts[0]
+  }
+
+  // 3. Split on comma followed by description-like text (not another word)
+  //    "habituate, meaning to accustom" → "habituate"
+  //    but "ice cream, gelato" should keep "ice cream"
+  const commaMatch = text.match(/^([^,]+),\s*(meaning|i\.e\.|which|to\b|that\b)/i)
+  if (commaMatch) {
+    text = commaMatch[1]
+  }
+
+  // 4. Split on colon followed by description
+  const colonMatch = text.match(/^([^:]+):\s*.{5,}/)
+  if (colonMatch) {
+    text = colonMatch[1]
+  }
+
+  // 5. If the result is unreasonably long (>40 chars), it's probably a sentence —
+  //    take just the first word-like chunk
+  text = text.trim()
+  if (text.length > 40) {
+    const firstWord = text.match(/^[\w\u00C0-\u024F]+(?:[\s-][\w\u00C0-\u024F]+)?/)
+    if (firstWord) {
+      text = firstWord[0]
+    }
+  }
+
+  // 6. Strip trailing punctuation
+  text = text.replace(/[.,;:!?]+$/, '').trim()
+
+  return { word: text || raw.trim() }
 }
 
 function SuggestionRow({
