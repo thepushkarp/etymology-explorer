@@ -129,6 +129,13 @@ CONVERGENT ETYMOLOGY:
 - If roots converge, add convergencePoints to ancestryGraph showing the shared ancestor
 - This is linguistically significant - it shows built-in meaning reinforcement!
 
+GROUNDED ANCESTRY:
+- When pre-parsed etymology chains are provided below the raw text, use them as the backbone of your ancestryGraph stages.
+- Prefer forms/spellings from the parsed chains over your training data.
+- Do NOT invent PIE roots that aren't in the parsed chains unless you have high confidence.
+- You may add intermediate stages the parser missed, but keep them minimal.
+- Match your stage language names to the parsed chain language names where possible.
+
 - Output ONLY valid JSON, no markdown or explanation`
 
 /**
@@ -173,6 +180,7 @@ export function buildRichUserPrompt(word: string, researchData: string): string 
 2. Trace the etymological ancestry through language layers
 3. Connect related words and cognates mentioned in the research
 4. Write rich, memorable lore (4-6 sentences) that tells the word's full story
+5. If pre-parsed etymology chains are provided above, use them as the backbone for your ancestryGraph — prefer their forms and language labels over your training data
 
 Follow the JSON schema in your instructions.`
 

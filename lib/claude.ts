@@ -8,6 +8,7 @@ import {
 } from './types'
 import { SYSTEM_PROMPT, buildUserPrompt, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
+import { enrichAncestryGraph } from './etymologyEnricher'
 import { ETYMOLOGY_SCHEMA } from '@/lib/schemas/llm-schema'
 
 /**
@@ -160,6 +161,11 @@ export async function synthesizeFromResearch(
 
   // Call provider
   const result = await generateEtymologyResponse(userPrompt, llmConfig)
+
+  // Enrich ancestry graph with source evidence and confidence levels
+  if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
+    enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
+  }
 
   // Build sources array with URLs and word info from research context
   const sources: SourceReference[] = []

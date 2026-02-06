@@ -1,3 +1,5 @@
+import type { ParsedEtymChain } from './etymologyParser'
+
 /**
  * A single etymological root component of a word
  * Words can have 1 to many roots (e.g., "cat" has 1, "telephone" has 2, "autobiography" has 3)
@@ -21,12 +23,31 @@ export interface SourceReference {
 }
 
 /**
+ * Evidence linking an ancestry stage to a parsed source snippet
+ */
+export interface StageEvidence {
+  source: 'etymonline' | 'wiktionary'
+  snippet: string // raw text excerpt (~120 chars max)
+}
+
+/**
+ * Confidence level for an ancestry stage, assigned programmatically by the enricher.
+ * - high: form found in 2+ source chains
+ * - medium: form found in 1 source chain
+ * - low: no match in any parsed chain (LLM-only)
+ */
+export type StageConfidence = 'high' | 'medium' | 'low'
+
+/**
  * A stage in a single branch of the word's etymological ancestry
  */
 export interface AncestryStage {
   stage: string // Language/period: "Proto-Indo-European", "Greek", "Latin", etc.
   form: string // The word form at this stage
   note: string // Brief annotation about meaning/context at this stage
+  isReconstructed?: boolean // true for PIE/*-prefixed forms
+  confidence?: StageConfidence // assigned by enricher post-LLM
+  evidence?: StageEvidence[] // source snippets supporting this stage
 }
 
 /**
@@ -224,4 +245,5 @@ export interface ResearchContext {
   rootResearch: RootResearchData[]
   relatedWordsData: Record<string, SourceData>
   totalSourcesFetched: number
+  parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
 }
