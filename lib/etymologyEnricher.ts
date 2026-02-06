@@ -49,22 +49,6 @@ function isFuzzyMatch(a: string, b: string): boolean {
   return false
 }
 
-/**
- * Check if a language name from a stage matches a parsed link's language.
- * Handles variations like "Latin" matching "Late Latin", "Vulgar Latin", etc.
- */
-function isLanguageMatch(stageLanguage: string, linkLanguage: string): boolean {
-  const sNorm = stageLanguage.toLowerCase()
-  const lNorm = linkLanguage.toLowerCase()
-
-  if (sNorm === lNorm) return true
-
-  // "Latin" should match "Late Latin", "Vulgar Latin", etc.
-  if (lNorm.includes(sNorm) || sNorm.includes(lNorm)) return true
-
-  return false
-}
-
 interface MatchResult {
   link: ParsedEtymLink
   source: 'etymonline' | 'wiktionary'
@@ -72,21 +56,17 @@ interface MatchResult {
 
 /**
  * Find all parsed links that match a given ancestry stage.
- * Matches by form (fuzzy) AND/OR language name.
+ * Primary matching is by form (fuzzy). Language is used as a tiebreaker
+ * to boost confidence when both match, but form-only matches are accepted
+ * because the LLM and sources often use different language labels
+ * (e.g., "Latin" vs "Late Latin").
  */
 function findMatches(stage: AncestryStage, chains: ParsedEtymChain[]): MatchResult[] {
   const matches: MatchResult[] = []
 
   for (const chain of chains) {
     for (const link of chain.links) {
-      const formMatch = isFuzzyMatch(stage.form, link.form)
-      const langMatch = isLanguageMatch(stage.stage, link.language)
-
-      // Require form match, or both language match + non-trivial overlap
-      if (
-        formMatch ||
-        (langMatch && stage.form && link.form && isFuzzyMatch(stage.form, link.form))
-      ) {
+      if (isFuzzyMatch(stage.form, link.form)) {
         matches.push({ link, source: chain.source })
       }
     }

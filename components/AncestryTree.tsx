@@ -411,16 +411,6 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
 
   return (
     <section className="mb-8">
-      <style>{`
-        @keyframes stageReveal {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-stage-reveal {
-          animation: stageReveal 0.4s ease-out;
-        }
-      `}</style>
-
       <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-5">
         Etymological Journey
       </h2>

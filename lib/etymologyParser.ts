@@ -148,10 +148,14 @@ function parseSegment(segment: string): ParsedEtymLink | null {
   if (!langMatch) return null
 
   const language = normalizeLanguageName(langMatch[1])
-  const afterLang = trimmed.slice(langMatch[0].length).trim()
+  let afterLang = trimmed.slice(langMatch[0].length).trim()
 
   // Check for PIE root marker
   const isPIERoot = /PIE root\b/i.test(segment) || language === 'Proto-Indo-European'
+
+  // Skip the literal "root" token when it precedes a *-prefixed form
+  // e.g., "PIE root *bheid-" → afterLang was "root *bheid-", skip "root" to get "*bheid-"
+  afterLang = afterLang.replace(/^root\s+(?=\*)/, '')
 
   // Extract form from the text after the language name
   const form = extractForm(afterLang)
@@ -219,11 +223,14 @@ function splitFromSegments(text: string): string[] {
 }
 
 /**
- * Parse Etymonline text into a structured etymology chain.
- * Etymonline follows patterns like:
- *   "from Latin perfidia 'faithlessness, falsehood, treachery,' from perfidus 'faithless'"
+ * Shared parsing logic for both Etymonline and Wiktionary text.
+ * Both sources use similar "from X, from Y" chain patterns.
  */
-export function parseEtymonlineText(text: string, word: string): ParsedEtymChain {
+function parseSourceText(
+  text: string,
+  word: string,
+  source: 'etymonline' | 'wiktionary'
+): ParsedEtymChain {
   const dateAttested = extractDate(text)
   const segments = splitFromSegments(text)
 
@@ -235,12 +242,16 @@ export function parseEtymonlineText(text: string, word: string): ParsedEtymChain
     }
   }
 
-  return {
-    source: 'etymonline',
-    word,
-    links,
-    dateAttested,
-  }
+  return { source, word, links, dateAttested }
+}
+
+/**
+ * Parse Etymonline text into a structured etymology chain.
+ * Etymonline follows patterns like:
+ *   "from Latin perfidia 'faithlessness, falsehood, treachery,' from perfidus 'faithless'"
+ */
+export function parseEtymonlineText(text: string, word: string): ParsedEtymChain {
+  return parseSourceText(text, word, 'etymonline')
 }
 
 /**
@@ -249,23 +260,7 @@ export function parseEtymonlineText(text: string, word: string): ParsedEtymChain
  *   "Borrowed from French X, from Latin Y" and parenthesized meanings.
  */
 export function parseWiktionaryText(text: string, word: string): ParsedEtymChain {
-  const dateAttested = extractDate(text)
-  const segments = splitFromSegments(text)
-
-  const links: ParsedEtymLink[] = []
-  for (const segment of segments) {
-    const link = parseSegment(segment)
-    if (link) {
-      links.push(link)
-    }
-  }
-
-  return {
-    source: 'wiktionary',
-    word,
-    links,
-    dateAttested,
-  }
+  return parseSourceText(text, word, 'wiktionary')
 }
 
 /**
