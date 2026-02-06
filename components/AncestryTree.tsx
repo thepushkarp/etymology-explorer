@@ -235,7 +235,11 @@ function BranchColumn({
   )
 }
 
-export const AncestryTree = memo(function AncestryTree({ graph, word }: AncestryTreeProps) {
+export const AncestryTree = memo(function AncestryTree({
+  graph,
+  word,
+  sources,
+}: AncestryTreeProps) {
   if (!graph || !graph.branches || graph.branches.length === 0) return null
 
   const hasMerge = graph.mergePoint && graph.branches.length > 1
