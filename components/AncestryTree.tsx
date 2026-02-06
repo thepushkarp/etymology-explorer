@@ -1,11 +1,18 @@
 'use client'
 
 import { memo } from 'react'
-import { AncestryGraph, AncestryStage, AncestryBranch, ConvergencePoint } from '@/lib/types'
+import {
+  AncestryGraph,
+  AncestryStage,
+  AncestryBranch,
+  ConvergencePoint,
+  SourceReference,
+} from '@/lib/types'
 
 interface AncestryTreeProps {
   graph: AncestryGraph
   word: string
+  sources: SourceReference[]
 }
 
 /**
@@ -47,18 +54,41 @@ function getStageColors(stage: string) {
   return defaultColors
 }
 
+function isReconstructedStage(stage: AncestryStage) {
+  const stageLower = stage.stage.toLowerCase()
+  return stageLower.includes('proto') || stageLower.includes('pie') || stage.form.startsWith('*')
+}
+
 function StageNode({ stage, isLast }: { stage: AncestryStage; isLast?: boolean }) {
   const colors = getStageColors(stage.stage)
+  const reconstructed = isReconstructedStage(stage)
   return (
     <div
       className={`
         px-3 py-2 rounded-lg border-2
         ${colors.bg} ${colors.border}
         text-center shadow-sm
+        ${reconstructed ? 'border-dashed' : 'border-solid'}
       `}
     >
-      <div className={`text-[10px] font-semibold uppercase tracking-wider ${colors.text} mb-0.5`}>
-        {stage.stage}
+      <div className="flex items-center justify-center gap-2 mb-0.5">
+        <div className={`text-[10px] font-semibold uppercase tracking-wider ${colors.text}`}>
+          {stage.stage}
+        </div>
+        <span
+          className={`
+            text-[9px] uppercase tracking-widest
+            px-1.5 py-0.5 rounded-full border
+            ${reconstructed ? 'border-stone-300 text-stone-500 bg-white' : 'border-emerald-200 text-emerald-700 bg-emerald-50'}
+          `}
+          title={
+            reconstructed
+              ? 'Reconstructed form (not directly attested in surviving texts)'
+              : 'Attested in historical sources'
+          }
+        >
+          {reconstructed ? 'Reconstructed' : 'Attested'}
+        </span>
       </div>
       <div
         className={`font-serif text-sm ${isLast ? 'font-semibold text-charcoal' : 'text-charcoal/90'}`}
@@ -214,9 +244,33 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
 
   return (
     <section className="mb-8">
-      <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-5">
-        Etymological Journey
-      </h2>
+      <div className="flex flex-col gap-3 mb-5">
+        <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest">
+          Evidence-First Timeline
+        </h2>
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-charcoal/60">
+          <span className="uppercase tracking-widest text-charcoal-light/70">Sources</span>
+          {sources.map((source, index) => (
+            <span
+              key={`${source.name}-${source.word || index}`}
+              className="inline-flex items-center gap-1 rounded-full border border-charcoal/10 bg-white px-2 py-0.5"
+            >
+              <span className="font-medium capitalize">{source.name}</span>
+              {source.word && <span className="italic text-charcoal/50">{source.word}</span>}
+            </span>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-widest text-charcoal/40">
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-4 border-2 border-emerald-200 bg-emerald-50" />
+            Attested
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span className="h-2 w-4 border-2 border-dashed border-stone-300 bg-white" />
+            Reconstructed
+          </span>
+        </div>
+      </div>
 
       <div className="flex flex-col items-center">
         {/* Convergence callout - shared PIE ancestry */}

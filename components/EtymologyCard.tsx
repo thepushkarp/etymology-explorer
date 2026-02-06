@@ -119,7 +119,7 @@ export const EtymologyCard = memo(function EtymologyCard({
 
         {/* Ancestry graph - visual journey showing root branches merging */}
         {result.ancestryGraph?.branches?.length > 0 && (
-          <AncestryTree graph={result.ancestryGraph} word={result.word} />
+          <AncestryTree graph={result.ancestryGraph} word={result.word} sources={result.sources} />
         )}
 
         {/* Lore section - the memorable narrative */}
