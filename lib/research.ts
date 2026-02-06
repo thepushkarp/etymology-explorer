@@ -9,6 +9,7 @@ import { fetchWiktionary } from './wiktionary'
 import { fetchWikipedia } from './wikipedia'
 import { fetchUrbanDictionary } from './urbanDictionary'
 import { ResearchContext, RootResearchData, LLMConfig } from './types'
+import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
 import Anthropic from '@anthropic-ai/sdk'
 
 // Limits to control API costs
@@ -206,6 +207,18 @@ export async function conductAgenticResearch(
     totalSourcesFetched: totalFetches,
   }
 
+  // Phase 1.5: Pre-parse etymology chains from source text (CPU-only, no API calls)
+  console.log('[Research] Phase 1.5: Pre-parsing etymology chains')
+  const parsedChains = parseSourceTexts(
+    normalizedWord,
+    etymonlineData?.text ?? null,
+    wiktionaryData?.text ?? null
+  )
+  context.parsedChains = parsedChains
+  console.log(
+    `[Research] Parsed ${parsedChains.length} chain(s) with ${parsedChains.reduce((sum, c) => sum + c.links.length, 0)} total links`
+  )
+
   // If no data found at all, return early
   if (!etymonlineData && !wiktionaryData) {
     console.log('[Research] No source data found for main word')
@@ -327,6 +340,14 @@ export function buildResearchPrompt(context: ResearchContext): string {
     sections.push(`\n=== Related Words Research ===`)
     for (const [term, data] of relatedEntries) {
       sections.push(`\n--- ${term} ---\n${data.text}`)
+    }
+  }
+
+  // Append pre-parsed etymology chains if available
+  if (context.parsedChains && context.parsedChains.length > 0) {
+    const chainsText = formatParsedChainsForPrompt(context.parsedChains)
+    if (chainsText) {
+      sections.push('\n' + chainsText)
     }
   }
 

@@ -15,11 +15,21 @@ const RootSchema = z.object({
   descendantWords: z.array(z.string()).optional(),
 })
 
-// Ancestry stage schema
+// Ancestry stage schema (includes optional enrichment fields added post-LLM)
 const AncestryStageSchema = z.object({
   stage: z.string(),
   form: z.string(),
   note: z.string().optional(),
+  isReconstructed: z.boolean().optional(),
+  confidence: z.enum(['high', 'medium', 'low']).optional(),
+  evidence: z
+    .array(
+      z.object({
+        source: z.string(),
+        snippet: z.string(),
+      })
+    )
+    .optional(),
 })
 
 // Ancestry branch schema

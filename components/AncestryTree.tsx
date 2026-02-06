@@ -1,7 +1,13 @@
 'use client'
 
-import { memo } from 'react'
-import { AncestryGraph, AncestryStage, AncestryBranch, ConvergencePoint } from '@/lib/types'
+import { memo, useState, useCallback, useRef, useEffect } from 'react'
+import {
+  AncestryGraph,
+  AncestryStage,
+  AncestryBranch,
+  ConvergencePoint,
+  StageConfidence,
+} from '@/lib/types'
 
 interface AncestryTreeProps {
   graph: AncestryGraph
@@ -39,6 +45,19 @@ const branchColors = [
   { accent: 'border-amber-400', line: 'bg-amber-300' },
 ]
 
+/** Confidence indicator config */
+const confidenceConfig: Record<StageConfidence, { color: string; label: string }> = {
+  high: { color: 'bg-emerald-400', label: 'Verified' },
+  medium: { color: 'bg-amber-400', label: 'Single source' },
+  low: { color: 'bg-stone-300', label: 'AI-inferred' },
+}
+
+/** Source pill colors */
+const sourcePillColors: Record<string, string> = {
+  etymonline: 'bg-amber-100 text-amber-700 border-amber-200',
+  wiktionary: 'bg-blue-100 text-blue-700 border-blue-200',
+}
+
 function getStageColors(stage: string) {
   if (stageColors[stage]) return stageColors[stage]
   for (const [key, colors] of Object.entries(stageColors)) {
@@ -47,25 +66,192 @@ function getStageColors(stage: string) {
   return defaultColors
 }
 
-function StageNode({ stage, isLast }: { stage: AncestryStage; isLast?: boolean }) {
-  const colors = getStageColors(stage.stage)
+/**
+ * Evidence panel shown when a stage is clicked.
+ * On desktop: popover tooltip. On mobile: inline accordion.
+ */
+function EvidencePanel({ stage }: { stage: AncestryStage }) {
+  if (!stage.evidence || stage.evidence.length === 0) return null
+
   return (
     <div
-      className={`
-        px-3 py-2 rounded-lg border-2
-        ${colors.bg} ${colors.border}
-        text-center shadow-sm
-      `}
+      className="
+        mt-2 w-full
+        border-l-4 border-stone-300
+        bg-stone-50/80 rounded-r-md
+        px-3 py-2
+      "
     >
-      <div className={`text-[10px] font-semibold uppercase tracking-wider ${colors.text} mb-0.5`}>
-        {stage.stage}
+      {stage.evidence.map((ev, i) => (
+        <div key={`${ev.source}-${i}`} className="mb-1 last:mb-0">
+          <span
+            className={`
+              inline-block text-[9px] font-semibold uppercase tracking-wider
+              px-1.5 py-0.5 rounded border mb-1
+              ${sourcePillColors[ev.source] || 'bg-purple-100 text-purple-700 border-purple-200'}
+            `}
+          >
+            {ev.source}
+          </span>
+          <p className="font-serif text-[11px] italic text-charcoal/70 leading-snug">
+            {ev.snippet}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Confidence dot indicator for a stage
+ */
+function ConfidenceDot({ confidence }: { confidence?: StageConfidence }) {
+  if (!confidence) return null
+
+  const config = confidenceConfig[confidence]
+  return (
+    <span
+      className={`
+        inline-block w-1.5 h-1.5 rounded-full ${config.color}
+        ring-1 ring-white
+      `}
+      title={config.label}
+      aria-label={config.label}
+    />
+  )
+}
+
+/**
+ * Source attribution pills shown below stage note
+ */
+function SourcePills({ stage }: { stage: AncestryStage }) {
+  if (!stage.confidence) return null
+
+  // If we have evidence, show source pills; otherwise show "AI" pill
+  if (stage.evidence && stage.evidence.length > 0) {
+    const sources = [...new Set(stage.evidence.map((e) => e.source))]
+    return (
+      <div className="flex items-center justify-center gap-1 mt-1">
+        {sources.map((source) => (
+          <span
+            key={source}
+            className={`
+              text-[8px] font-semibold uppercase tracking-wider
+              px-1.5 py-0.5 rounded border leading-none
+              ${sourcePillColors[source] || 'bg-purple-100 text-purple-700 border-purple-200'}
+            `}
+          >
+            {source}
+          </span>
+        ))}
       </div>
+    )
+  }
+
+  // Low confidence with no evidence = AI-inferred
+  if (stage.confidence === 'low') {
+    return (
+      <div className="flex items-center justify-center mt-1">
+        <span className="text-[8px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-purple-50 text-purple-600 border-purple-200 leading-none">
+          AI
+        </span>
+      </div>
+    )
+  }
+
+  return null
+}
+
+function StageNode({
+  stage,
+  isLast,
+  animationDelay,
+}: {
+  stage: AncestryStage
+  isLast?: boolean
+  animationDelay?: number
+}) {
+  const [showEvidence, setShowEvidence] = useState(false)
+  const nodeRef = useRef<HTMLDivElement>(null)
+  const colors = getStageColors(stage.stage)
+  const isReconstructed = stage.isReconstructed
+  const hasEvidence = stage.evidence && stage.evidence.length > 0
+
+  // Close evidence panel on outside click
+  useEffect(() => {
+    if (!showEvidence) return
+    function handleClick(e: MouseEvent) {
+      if (nodeRef.current && !nodeRef.current.contains(e.target as Node)) {
+        setShowEvidence(false)
+      }
+    }
+    document.addEventListener('click', handleClick)
+    return () => document.removeEventListener('click', handleClick)
+  }, [showEvidence])
+
+  const handleToggle = useCallback(() => {
+    if (hasEvidence) setShowEvidence((prev) => !prev)
+  }, [hasEvidence])
+
+  return (
+    <div
+      ref={nodeRef}
+      className="flex flex-col items-center w-full animate-stage-reveal"
+      style={
+        animationDelay !== undefined
+          ? { animationDelay: `${animationDelay}ms`, animationFillMode: 'backwards' }
+          : undefined
+      }
+    >
       <div
-        className={`font-serif text-sm ${isLast ? 'font-semibold text-charcoal' : 'text-charcoal/90'}`}
+        onClick={handleToggle}
+        className={`
+          px-3 py-2 rounded-lg w-full
+          ${isReconstructed ? 'border-2 border-dashed' : 'border-2'}
+          ${isReconstructed ? 'bg-stone-50/60 border-stone-300' : `${colors.bg} ${colors.border}`}
+          text-center shadow-sm
+          ${hasEvidence ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}
+        `}
       >
-        {stage.form}
+        {/* Header row: language label + confidence dot */}
+        <div className="flex items-center justify-center gap-1.5 mb-0.5">
+          <div
+            className={`text-[10px] font-semibold uppercase tracking-wider ${
+              isReconstructed ? 'text-stone-500' : colors.text
+            }`}
+          >
+            {stage.stage}
+          </div>
+          <ConfidenceDot confidence={stage.confidence} />
+        </div>
+
+        {/* Form */}
+        <div
+          className={`
+            font-serif text-sm
+            ${isReconstructed ? 'italic text-stone-600' : ''}
+            ${isLast ? 'font-semibold text-charcoal' : 'text-charcoal/90'}
+          `}
+        >
+          {stage.form}
+        </div>
+
+        {/* Reconstructed label */}
+        {isReconstructed && (
+          <div className="text-[8px] uppercase tracking-widest text-stone-400 mt-0.5">
+            reconstructed
+          </div>
+        )}
+
+        {/* Note */}
+        <div className="mt-0.5 text-[10px] text-charcoal-light leading-tight">{stage.note}</div>
+
+        {/* Source pills */}
+        <SourcePills stage={stage} />
       </div>
-      <div className="mt-0.5 text-[10px] text-charcoal-light leading-tight">{stage.note}</div>
+
+      {/* Evidence panel (accordion on mobile) */}
+      {showEvidence && <EvidencePanel stage={stage} />}
     </div>
   )
 }
@@ -156,10 +342,12 @@ function BranchColumn({
   branch,
   branchIndex,
   convergencePoints,
+  baseDelay,
 }: {
   branch: AncestryBranch
   branchIndex: number
   convergencePoints?: ConvergencePoint[]
+  baseDelay: number
 }) {
   const branchColor = branchColors[branchIndex % branchColors.length]
 
@@ -178,7 +366,9 @@ function BranchColumn({
           border-2 ${branchColor.accent}
           rounded-full shadow-sm
           flex items-center gap-1.5
+          animate-stage-reveal
         `}
+        style={{ animationDelay: `${baseDelay}ms`, animationFillMode: 'backwards' }}
       >
         {branch.root}
         {convergences.length > 0 && (
@@ -196,9 +386,13 @@ function BranchColumn({
 
       {/* Stages */}
       {branch.stages.map((stage, idx) => (
-        <div key={`${stage.stage}-${idx}`} className="flex flex-col items-center">
+        <div key={`${stage.stage}-${idx}`} className="flex flex-col items-center w-full">
           {idx > 0 && <VerticalConnector color={branchColor.line} />}
-          <StageNode stage={stage} isLast={idx === branch.stages.length - 1} />
+          <StageNode
+            stage={stage}
+            isLast={idx === branch.stages.length - 1}
+            animationDelay={baseDelay + (idx + 1) * 100}
+          />
         </div>
       ))}
     </div>
@@ -211,6 +405,9 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
   const hasMerge = graph.mergePoint && graph.branches.length > 1
   const hasPostMerge = graph.postMerge && graph.postMerge.length > 0
   const hasConvergence = graph.convergencePoints && graph.convergencePoints.length > 0
+
+  // Calculate the max stages across all branches for delay calculation
+  const maxStages = Math.max(...graph.branches.map((b) => b.stages.length))
 
   return (
     <section className="mb-8">
@@ -232,6 +429,7 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
               branch={branch}
               branchIndex={idx}
               convergencePoints={graph.convergencePoints}
+              baseDelay={idx * 50}
             />
           ))}
         </div>
@@ -239,7 +437,7 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
         {/* Merge point (if multiple branches) */}
         {hasMerge && (
           <>
-            {/* Merge lines converging */}
+            {/* Merge lines converging — smooth bezier curves */}
             <div className="relative w-full max-w-lg h-8 mt-2">
               <svg
                 className="w-full h-full"
@@ -250,13 +448,13 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
                 {graph.branches.length === 2 && (
                   <>
                     <path
-                      d="M25 0 L50 18"
+                      d="M25 0 C25 12, 50 12, 50 18"
                       stroke="currentColor"
                       strokeWidth="1"
                       className="text-charcoal/20"
                     />
                     <path
-                      d="M75 0 L50 18"
+                      d="M75 0 C75 12, 50 12, 50 18"
                       stroke="currentColor"
                       strokeWidth="1"
                       className="text-charcoal/20"
@@ -266,7 +464,7 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
                 {graph.branches.length === 3 && (
                   <>
                     <path
-                      d="M17 0 L50 18"
+                      d="M17 0 C17 12, 50 12, 50 18"
                       stroke="currentColor"
                       strokeWidth="1"
                       className="text-charcoal/20"
@@ -278,7 +476,7 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
                       className="text-charcoal/20"
                     />
                     <path
-                      d="M83 0 L50 18"
+                      d="M83 0 C83 12, 50 12, 50 18"
                       stroke="currentColor"
                       strokeWidth="1"
                       className="text-charcoal/20"
@@ -296,7 +494,12 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
                 border-violet-400
                 text-center shadow-md
                 max-w-sm
+                animate-stage-reveal
               "
+              style={{
+                animationDelay: `${(maxStages + 1) * 100}ms`,
+                animationFillMode: 'backwards',
+              }}
             >
               <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 mb-0.5">
                 Combined
@@ -313,9 +516,13 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
         {hasPostMerge && (
           <div className="flex flex-col items-center">
             {graph.postMerge!.map((stage, idx) => (
-              <div key={`post-${idx}`} className="flex flex-col items-center">
+              <div key={`post-${idx}`} className="flex flex-col items-center w-full max-w-xs">
                 <VerticalConnector color="bg-violet-300" />
-                <StageNode stage={stage} isLast={idx === graph.postMerge!.length - 1} />
+                <StageNode
+                  stage={stage}
+                  isLast={idx === graph.postMerge!.length - 1}
+                  animationDelay={(maxStages + 2 + idx) * 100}
+                />
               </div>
             ))}
           </div>
@@ -335,7 +542,12 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
             rounded-lg border-2
             bg-violet-100 border-violet-500
             shadow-md
+            animate-stage-reveal
           "
+          style={{
+            animationDelay: `${(maxStages + 3 + (graph.postMerge?.length || 0)) * 100}ms`,
+            animationFillMode: 'backwards',
+          }}
         >
           <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 mb-1">
             Modern English

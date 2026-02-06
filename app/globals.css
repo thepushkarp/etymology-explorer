@@ -42,6 +42,21 @@ body {
   animation: fadeIn 0.3s ease-out;
 }
 
+@keyframes stageReveal {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-stage-reveal {
+  animation: stageReveal 0.4s ease-out;
+}
+
 /* Custom max-width for content */
 .max-w-content {
   max-width: 42rem;

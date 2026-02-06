@@ -160,27 +160,29 @@ export const ETYMOLOGY_SCHEMA = {
         synonyms: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Words with similar meaning',
+          description:
+            'Just the word, no definitions (e.g., "resilient" not "resilient (able to recover)")',
         },
         antonyms: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Words with opposite meaning',
+          description: 'Just the word, no definitions',
         },
         homophones: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Words that sound alike',
+          description: 'Just the word, no definitions',
         },
         easilyConfusedWith: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Commonly confused words (e.g., affect/effect)',
+          description:
+            'Just the word, no definitions (e.g., "affect" not "affect (verb: to influence)")',
         },
         seeAlso: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Other interesting related words',
+          description: 'Just the word, no definitions',
         },
       },
       additionalProperties: false,

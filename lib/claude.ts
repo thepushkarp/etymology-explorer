@@ -8,6 +8,7 @@ import {
 } from './types'
 import { SYSTEM_PROMPT, buildUserPrompt, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
+import { enrichAncestryGraph } from './etymologyEnricher'
 import { ETYMOLOGY_SCHEMA } from '@/lib/schemas/llm-schema'
 
 /**
@@ -93,6 +94,52 @@ async function callAnthropic(userPrompt: string, config: LLMConfig): Promise<str
 }
 
 /**
+ * Sanitize a suggestion word: strip parenthetical annotations, descriptions,
+ * em-dashes, and other noise the LLM may include despite instructions.
+ * Returns just the word itself.
+ */
+function sanitizeSuggestionWord(raw: string): string {
+  let text = raw.trim()
+
+  // Strip parenthetical annotations: "affect (verb: to influence)" → "affect"
+  text = text.replace(/\s*\([^)]*\).*$/, '')
+
+  // Strip em-dash/en-dash trailing descriptions: "ensure—to make certain" → "ensure"
+  text = text.replace(/\s*[—–].*$/, '')
+  text = text.replace(/\s+-\s+.*$/, '')
+
+  // Strip colon descriptions: "effect: noun meaning result" → "effect"
+  text = text.replace(/:\s*.{5,}$/, '')
+
+  // Strip trailing punctuation
+  text = text.replace(/[.,;:!?]+$/, '').trim()
+
+  // If still unreasonably long, take first word-like chunk
+  if (text.length > 40) {
+    const match = text.match(/^[\w\u00C0-\u024F]+(?:[\s-][\w\u00C0-\u024F]+)?/)
+    if (match) text = match[0]
+  }
+
+  return text || raw.trim()
+}
+
+/**
+ * Sanitize all suggestion arrays in an EtymologyResult.
+ */
+function sanitizeSuggestions(result: EtymologyResult): void {
+  if (!result.suggestions) return
+
+  const fields = ['synonyms', 'antonyms', 'homophones', 'easilyConfusedWith', 'seeAlso'] as const
+
+  for (const field of fields) {
+    const arr = result.suggestions[field]
+    if (arr) {
+      result.suggestions[field] = arr.map(sanitizeSuggestionWord).filter((w) => w.length > 0)
+    }
+  }
+}
+
+/**
  * Helper to generate etymology response using configured provider
  */
 async function generateEtymologyResponse(
@@ -107,7 +154,9 @@ async function generateEtymologyResponse(
   }
 
   try {
-    return JSON.parse(responseText) as EtymologyResult
+    const result = JSON.parse(responseText) as EtymologyResult
+    sanitizeSuggestions(result)
+    return result
   } catch (e) {
     const preview = responseText.slice(0, 200)
     throw new Error(`Failed to parse LLM response as JSON: ${e}. Response preview: ${preview}`)
@@ -160,6 +209,11 @@ export async function synthesizeFromResearch(
 
   // Call provider
   const result = await generateEtymologyResponse(userPrompt, llmConfig)
+
+  // Enrich ancestry graph with source evidence and confidence levels
+  if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
+    enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
+  }
 
   // Build sources array with URLs and word info from research context
   const sources: SourceReference[] = []
