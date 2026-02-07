@@ -1,10 +1,44 @@
 import { RISK_POLICY } from '@/lib/config/guardrails'
 import { getRedisClient } from '@/lib/server/redis'
 
-const memoryUniqueWords = new Map<string, Set<string>>()
+interface MemoryWordBucket {
+  words: Set<string>
+  expiresAt: number
+}
+
+const memoryUniqueWords = new Map<string, MemoryWordBucket>()
+let lastMemoryCleanupAt = 0
 
 function currentMinuteBucket(): string {
   return new Date().toISOString().slice(0, 16)
+}
+
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000)
+}
+
+function pruneMemoryBuckets(currentTime: number): void {
+  const shouldCleanupForSize = memoryUniqueWords.size > RISK_POLICY.memoryMaxBuckets
+  const shouldCleanupForTime =
+    currentTime - lastMemoryCleanupAt >= RISK_POLICY.memoryCleanupIntervalSeconds
+
+  if (!shouldCleanupForSize && !shouldCleanupForTime) {
+    return
+  }
+
+  lastMemoryCleanupAt = currentTime
+
+  for (const [key, bucket] of memoryUniqueWords) {
+    if (bucket.expiresAt <= currentTime) {
+      memoryUniqueWords.delete(key)
+    }
+  }
+
+  while (memoryUniqueWords.size > RISK_POLICY.memoryMaxBuckets) {
+    const oldestKey = memoryUniqueWords.keys().next().value as string | undefined
+    if (!oldestKey) break
+    memoryUniqueWords.delete(oldestKey)
+  }
 }
 
 async function recordUniqueWordAndGetCount(identityKey: string, word: string): Promise<number> {
@@ -15,16 +49,30 @@ async function recordUniqueWordAndGetCount(identityKey: string, word: string): P
 
     if (redis) {
       await redis.sadd(key, word)
-      await redis.expire(key, 60)
+      await redis.expire(key, RISK_POLICY.memoryBucketTtlSeconds)
       const count = await redis.scard(key)
       return Number(count)
     }
 
+    const currentTime = nowSeconds()
+    pruneMemoryBuckets(currentTime)
+
     const memoryKey = `${identityKey}:${bucket}`
-    const set = memoryUniqueWords.get(memoryKey) || new Set<string>()
-    set.add(word)
-    memoryUniqueWords.set(memoryKey, set)
-    return set.size
+    const existing = memoryUniqueWords.get(memoryKey)
+
+    if (!existing || existing.expiresAt <= currentTime) {
+      const words = new Set<string>([word])
+      memoryUniqueWords.set(memoryKey, {
+        words,
+        expiresAt: currentTime + RISK_POLICY.memoryBucketTtlSeconds,
+      })
+      return words.size
+    }
+
+    existing.words.add(word)
+    memoryUniqueWords.set(memoryKey, existing)
+    pruneMemoryBuckets(currentTime)
+    return existing.words.size
   } catch {
     return 0
   }

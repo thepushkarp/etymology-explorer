@@ -4,6 +4,10 @@ interface TurnstileResponse {
   success: boolean
 }
 
+export function isChallengeConfigured(): boolean {
+  return Boolean(getServerEnv().turnstileSecretKey)
+}
+
 export async function verifyChallengeToken(token: string, ip: string): Promise<boolean> {
   const env = getServerEnv()
   if (!env.turnstileSecretKey) {

@@ -9,12 +9,12 @@ import Anthropic from '@anthropic-ai/sdk'
 import { LLM_POLICY, RESEARCH_POLICY, TIMEOUT_POLICY } from '@/lib/config/guardrails'
 import { ensureAnthropicConfigured } from '@/lib/server/env'
 import { wrapUntrustedSource } from '@/lib/security/prompt-defense'
-import { fetchEtymonline } from './etymonline'
-import { fetchWiktionary } from './wiktionary'
+import { fetchEtymonline, fetchEtymonlineWithStatus } from './etymonline'
+import { fetchWiktionary, fetchWiktionaryWithStatus } from './wiktionary'
 import { fetchWikipedia } from './wikipedia'
 import { fetchUrbanDictionary } from './urbanDictionary'
 import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
-import { ResearchContext, RootResearchData } from './types'
+import { ResearchContext, RootResearchData, SourceData } from './types'
 
 interface ResearchOptions {
   includeWikipedia?: boolean
@@ -170,14 +170,17 @@ export async function conductAgenticResearch(
   let totalFetches = 0
   const normalizedWord = word.toLowerCase().trim()
 
-  const mainFetches = [
-    fetchEtymonline(normalizedWord),
-    fetchWiktionary(normalizedWord),
-    includeWikipedia ? fetchWikipedia(normalizedWord) : Promise.resolve(null),
-    includeUrbanDictionary ? fetchUrbanDictionary(normalizedWord) : Promise.resolve(null),
-  ]
-
-  const [etymonlineData, wiktionaryData, wikipediaData, urbanDictData] = await Promise.all(mainFetches)
+  const [etymonlineResult, wiktionaryResult, wikipediaData, urbanDictData] =
+    await Promise.all([
+      fetchEtymonlineWithStatus(normalizedWord),
+      fetchWiktionaryWithStatus(normalizedWord),
+      includeWikipedia ? fetchWikipedia(normalizedWord) : Promise.resolve<SourceData | null>(null),
+      includeUrbanDictionary
+        ? fetchUrbanDictionary(normalizedWord)
+        : Promise.resolve<SourceData | null>(null),
+    ])
+  const etymonlineData = etymonlineResult.data
+  const wiktionaryData = wiktionaryResult.data
   totalFetches += 4
 
   const context: ResearchContext = {
@@ -185,6 +188,8 @@ export async function conductAgenticResearch(
       word: normalizedWord,
       etymonline: etymonlineData,
       wiktionary: wiktionaryData,
+      etymonlineStatus: etymonlineResult.status,
+      wiktionaryStatus: wiktionaryResult.status,
       wikipedia: wikipediaData,
       urbanDictionary: urbanDictData,
     },

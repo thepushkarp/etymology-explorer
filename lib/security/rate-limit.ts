@@ -7,9 +7,34 @@ interface MemoryCounter {
 }
 
 const memoryCounters = new Map<string, MemoryCounter>()
+let lastMemoryCleanupAt = 0
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000)
+}
+
+function pruneMemoryCounters(currentTime: number): void {
+  const shouldCleanupForSize = memoryCounters.size > RATE_LIMIT_POLICY.memoryMaxEntries
+  const shouldCleanupForTime =
+    currentTime - lastMemoryCleanupAt >= RATE_LIMIT_POLICY.memoryCleanupIntervalSeconds
+
+  if (!shouldCleanupForSize && !shouldCleanupForTime) {
+    return
+  }
+
+  lastMemoryCleanupAt = currentTime
+
+  for (const [entryKey, counter] of memoryCounters) {
+    if (counter.expiresAt <= currentTime) {
+      memoryCounters.delete(entryKey)
+    }
+  }
+
+  while (memoryCounters.size > RATE_LIMIT_POLICY.memoryMaxEntries) {
+    const oldestKey = memoryCounters.keys().next().value as string | undefined
+    if (!oldestKey) break
+    memoryCounters.delete(oldestKey)
+  }
 }
 
 async function incrementWithTtl(key: string, ttlSeconds: number): Promise<number> {
@@ -27,6 +52,7 @@ async function incrementWithTtl(key: string, ttlSeconds: number): Promise<number
   }
 
   const currentTime = nowSeconds()
+  pruneMemoryCounters(currentTime)
   const existing = memoryCounters.get(key)
 
   if (!existing || existing.expiresAt <= currentTime) {
@@ -36,6 +62,7 @@ async function incrementWithTtl(key: string, ttlSeconds: number): Promise<number
 
   existing.count += 1
   memoryCounters.set(key, existing)
+  pruneMemoryCounters(currentTime)
   return existing.count
 }
 

@@ -6,22 +6,31 @@
 
 import { cacheSource, getCachedSource } from '@/lib/cache'
 import { TIMEOUT_POLICY } from '@/lib/config/guardrails'
+import type { SourceFetchStatus } from '@/lib/types'
 
 export interface EtymonlineResult {
   text: string
   url: string
 }
 
+export interface EtymonlineFetchResult {
+  status: SourceFetchStatus
+  data: EtymonlineResult | null
+}
+
 /**
  * Fetch etymology text from Etymonline
  * @param word - The word to look up
- * @returns Object with text and URL, or null if not found/failed
+ * @returns fetch result with status and data payload
  */
-export async function fetchEtymonline(word: string): Promise<EtymonlineResult | null> {
+export async function fetchEtymonlineWithStatus(word: string): Promise<EtymonlineFetchResult> {
   const normalizedWord = word.toLowerCase().trim().replace(/\s+/g, '-')
   const cached = await getCachedSource('etymonline', normalizedWord)
   if (cached) {
-    return cached
+    return {
+      status: 'ok',
+      data: cached,
+    }
   }
 
   const url = `https://www.etymonline.com/word/${encodeURIComponent(normalizedWord)}`
@@ -36,16 +45,25 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
 
     if (!response.ok) {
       if (response.status === 404) {
-        return null // Word not found
+        return {
+          status: 'not_found',
+          data: null,
+        }
       }
-      return null
+      return {
+        status: 'error',
+        data: null,
+      }
     }
 
     const html = await response.text()
 
     // Check if this is a 404 page (Etymonline returns 200 with fallback content)
     if (html.includes('NEXT_HTTP_ERROR_FALLBACK;404')) {
-      return null
+      return {
+        status: 'not_found',
+        data: null,
+      }
     }
 
     // Extract the etymology text from the page
@@ -66,7 +84,10 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
         if (/\d{4}s?|Latin|Greek|French|Old English|German/i.test(text)) {
           const result = { text, url }
           await cacheSource('etymonline', normalizedWord, result)
-          return result
+          return {
+            status: 'ok',
+            data: result,
+          }
         }
       }
     }
@@ -83,15 +104,29 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
         if (datePattern.test(content) && /\bfrom\b/i.test(content)) {
           const result = { text: content, url }
           await cacheSource('etymonline', normalizedWord, result)
-          return result
+          return {
+            status: 'ok',
+            data: result,
+          }
         }
       }
     }
 
-    return null
+    return {
+      status: 'error',
+      data: null,
+    }
   } catch {
-    return null
+    return {
+      status: 'error',
+      data: null,
+    }
   }
+}
+
+export async function fetchEtymonline(word: string): Promise<EtymonlineResult | null> {
+  const result = await fetchEtymonlineWithStatus(word)
+  return result.data
 }
 
 /**

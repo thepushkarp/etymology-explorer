@@ -4,7 +4,7 @@ import { cacheAudio, getCachedAudio } from '@/lib/cache'
 import { RATE_LIMIT_POLICY, getTierForRequest } from '@/lib/config/guardrails'
 import { generatePronunciation, isElevenLabsConfigured } from '@/lib/elevenlabs'
 import { PronunciationQuerySchema } from '@/lib/schemas/api'
-import { verifyChallengeToken } from '@/lib/security/challenge'
+import { isChallengeConfigured, verifyChallengeToken } from '@/lib/security/challenge'
 import { getCostMode } from '@/lib/security/cost-guard'
 import { applyRateLimit } from '@/lib/security/rate-limit'
 import { getRequestIdentity } from '@/lib/security/request-meta'
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
   const { word, challengeToken } = queryParse.data
   const normalized = word.toLowerCase().trim()
 
-  const tier = getTierForRequest(identity.sessionKey.startsWith('user:') ? identity.sessionKey : null)
+  const tier = getTierForRequest(identity.isAuthenticated ? identity.sessionKey : null)
   const rateDecision = await applyRateLimit({
     route: 'pronunciation',
     tier,
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     isAuthenticated: tier === 'authenticated',
   })
 
-  if (risk.requiresChallenge) {
+  if (risk.requiresChallenge && isChallengeConfigured()) {
     if (!challengeToken) {
       return NextResponse.json(
         { success: false, error: 'Challenge required for this request' },

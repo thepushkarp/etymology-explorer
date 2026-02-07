@@ -9,11 +9,36 @@ import { EtymologyResultSchema } from '@/lib/schemas/etymology'
 import { getRedisClient, isRedisConfigured } from '@/lib/server/redis'
 
 const memoryCache = new Map<string, { value: unknown; expiresAt: number }>()
+let lastMemoryCleanupAt = 0
 
 type SourceName = 'etymonline' | 'wiktionary' | 'wikipedia' | 'urban'
 
 function nowSeconds(): number {
   return Math.floor(Date.now() / 1000)
+}
+
+function pruneMemoryCache(currentTime: number): void {
+  const shouldCleanupForSize = memoryCache.size > CACHE_POLICY.memoryMaxEntries
+  const shouldCleanupForTime =
+    currentTime - lastMemoryCleanupAt >= CACHE_POLICY.memoryCleanupIntervalSeconds
+
+  if (!shouldCleanupForSize && !shouldCleanupForTime) {
+    return
+  }
+
+  lastMemoryCleanupAt = currentTime
+
+  for (const [key, entry] of memoryCache) {
+    if (entry.expiresAt <= currentTime) {
+      memoryCache.delete(key)
+    }
+  }
+
+  while (memoryCache.size > CACHE_POLICY.memoryMaxEntries) {
+    const oldestKey = memoryCache.keys().next().value as string | undefined
+    if (!oldestKey) break
+    memoryCache.delete(oldestKey)
+  }
 }
 
 function getFromMemory<T>(key: string): T | null {
@@ -27,10 +52,15 @@ function getFromMemory<T>(key: string): T | null {
 }
 
 function setInMemory(key: string, value: unknown, ttlSeconds: number): void {
+  const currentTime = nowSeconds()
+  pruneMemoryCache(currentTime)
+
   memoryCache.set(key, {
     value,
-    expiresAt: nowSeconds() + ttlSeconds,
+    expiresAt: currentTime + ttlSeconds,
   })
+
+  pruneMemoryCache(currentTime)
 }
 
 async function getValue<T>(redis: Redis | null, key: string): Promise<T | null> {

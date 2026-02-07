@@ -29,7 +29,7 @@ import { getRequestIdentity } from '@/lib/security/request-meta'
 import { safeErrorMessage } from '@/lib/security/redact'
 import { assessRisk } from '@/lib/security/risk'
 import { getServerEnv } from '@/lib/server/env'
-import { verifyChallengeToken } from '@/lib/security/challenge'
+import { isChallengeConfigured, verifyChallengeToken } from '@/lib/security/challenge'
 
 type EtymologyResponse = ApiResponse<EtymologyResult> & {
   cached: boolean
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const tier = getTierForRequest(identity.sessionKey.startsWith('user:') ? identity.sessionKey : null)
+    const tier = getTierForRequest(identity.isAuthenticated ? identity.sessionKey : null)
 
     const rateDecision = await applyRateLimit({
       route: 'etymology',
@@ -153,7 +153,9 @@ export async function POST(request: NextRequest) {
       isAuthenticated: tier === 'authenticated',
     })
 
-    if (risk.requiresChallenge) {
+    const challengeConfigured = isChallengeConfigured()
+
+    if (risk.requiresChallenge && challengeConfigured) {
       if (!challengeToken) {
         return jsonWithHeaders(
           {
@@ -286,7 +288,13 @@ export async function POST(request: NextRequest) {
     })
 
     if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
-      await cacheNegative(normalizedWord, model)
+      const shouldNegativeCache =
+        researchContext.mainWord.etymonlineStatus === 'not_found' &&
+        researchContext.mainWord.wiktionaryStatus === 'not_found'
+
+      if (shouldNegativeCache) {
+        await cacheNegative(normalizedWord, model)
+      }
 
       if (isLikelyTypo(normalizedWord)) {
         const suggestions = getSuggestions(normalizedWord)

@@ -11,13 +11,14 @@ Do not tune limits by editing route handlers directly.
 ## Guardrail Groups
 
 - `LLM_POLICY`: provider lock, allowed model family, token budgets, pricing constants
-- `RATE_LIMIT_POLICY`: per-route short-window/day quotas for anonymous and authenticated users
+- `RATE_LIMIT_POLICY`: per-route short-window/day quotas plus in-memory fallback bounds/cleanup
 - `RISK_POLICY`: challenge trigger thresholds and suspicious traffic heuristics
 - `COST_POLICY`: daily/monthly caps and degrade/cache-only thresholds
-- `CACHE_POLICY`: TTLs, negative-cache TTL, singleflight lock and polling windows
+- `CACHE_POLICY`: TTLs, negative-cache TTL, singleflight lock and polling windows, memory fallback bounds
 - `TIMEOUT_POLICY`: external fetch and LLM timeout budgets
 - `INPUT_POLICY`: payload and input length limits
 - `RESEARCH_POLICY`: source fan-out and root exploration limits
+- `IDENTITY_POLICY`: signed cookie names used for authenticated-tier verification
 - `FEATURE_FLAGS`: operator toggles (`publicSearchEnabled`, `forceCacheOnly`, `disablePronunciation`, `cspReportOnly`)
 
 ## Environment Validation
@@ -30,6 +31,7 @@ Key expectations:
 
 - `ANTHROPIC_API_KEY` must be present for etymology generation
 - `ANTHROPIC_MODEL` must remain in `claude-haiku-4-5*` family
+- `REQUEST_IDENTITY_SIGNING_SECRET` enables verified authenticated quota tier
 - Redis is optional but strongly recommended for real guardrail effectiveness
 
 ## Incident Procedures

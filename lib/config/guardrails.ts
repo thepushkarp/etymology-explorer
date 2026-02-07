@@ -19,6 +19,8 @@ export const RATE_LIMIT_POLICY = {
   keyPrefix: 'ratelimit:v1',
   shortWindowSeconds: 10 * 60,
   dayWindowSeconds: 24 * 60 * 60,
+  memoryMaxEntries: 20_000,
+  memoryCleanupIntervalSeconds: 60,
   routes: {
     etymology: {
       anonymous: {
@@ -48,6 +50,9 @@ export const RISK_POLICY = {
   challengeUsageThreshold: 0.7,
   suspiciousUniqueWordsPerMinute: 12,
   challengeScoreThreshold: 0.8,
+  memoryBucketTtlSeconds: 2 * 60,
+  memoryMaxBuckets: 10_000,
+  memoryCleanupIntervalSeconds: 60,
   suspiciousUserAgentPattern:
     /bot|crawler|spider|curl|wget|python|httpclient|go-http-client|scrapy|headless/i,
   missingUserAgentScore: 0.35,
@@ -67,6 +72,8 @@ export const COST_POLICY = {
 
 export const CACHE_POLICY = {
   keyPrefix: 'cache:v3',
+  memoryMaxEntries: 50_000,
+  memoryCleanupIntervalSeconds: 60,
   etymologyTtlSeconds: 45 * 24 * 60 * 60,
   negativeTtlSeconds: 6 * 60 * 60,
   sourceTtlSeconds: 7 * 24 * 60 * 60,
@@ -101,6 +108,11 @@ export const FEATURE_FLAGS = {
   forceCacheOnly: false,
   disablePronunciation: false,
   cspReportOnly: true,
+} as const
+
+export const IDENTITY_POLICY = {
+  signedUserIdCookieName: 'user-id',
+  signedUserIdSignatureCookieName: 'user-id-sig',
 } as const
 
 export function getTierForRequest(identityKey?: string | null): RequestTier {

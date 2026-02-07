@@ -12,6 +12,7 @@ const envSchema = z
     ETYMOLOGY_KV_REST_API_TOKEN: z.string().trim().optional(),
 
     TURNSTILE_SECRET_KEY: z.string().trim().optional(),
+    REQUEST_IDENTITY_SIGNING_SECRET: z.string().trim().min(16).optional(),
 
     PUBLIC_SEARCH_ENABLED: z.enum(['true', 'false']).optional(),
     FORCE_CACHE_ONLY: z.enum(['true', 'false']).optional(),
@@ -38,6 +39,7 @@ const envSchema = z
       hasRedis,
 
       turnstileSecretKey: raw.TURNSTILE_SECRET_KEY,
+      requestIdentitySigningSecret: raw.REQUEST_IDENTITY_SIGNING_SECRET,
 
       featureFlags: {
         publicSearchEnabled:

@@ -5,6 +5,7 @@
 
 import { cacheSource, getCachedSource } from '@/lib/cache'
 import { TIMEOUT_POLICY } from '@/lib/config/guardrails'
+import type { SourceFetchStatus } from '@/lib/types'
 
 interface WiktionaryResponse {
   query?: {
@@ -22,16 +23,24 @@ export interface WiktionaryResult {
   url: string
 }
 
+export interface WiktionaryFetchResult {
+  status: SourceFetchStatus
+  data: WiktionaryResult | null
+}
+
 /**
  * Fetch raw etymology text from Wiktionary
  * @param word - The word to look up
- * @returns Object with text and URL, or null if not found
+ * @returns fetch result with status and data payload
  */
-export async function fetchWiktionary(word: string): Promise<WiktionaryResult | null> {
+export async function fetchWiktionaryWithStatus(word: string): Promise<WiktionaryFetchResult> {
   const normalizedWord = word.toLowerCase().trim()
   const cached = await getCachedSource('wiktionary', normalizedWord)
   if (cached) {
-    return cached
+    return {
+      status: 'ok',
+      data: cached,
+    }
   }
 
   const pageUrl = `https://en.wiktionary.org/wiki/${encodeURIComponent(normalizedWord)}`
@@ -54,20 +63,38 @@ export async function fetchWiktionary(word: string): Promise<WiktionaryResult | 
     })
 
     if (!response.ok) {
-      return null
+      if (response.status === 404) {
+        return {
+          status: 'not_found',
+          data: null,
+        }
+      }
+
+      return {
+        status: 'error',
+        data: null,
+      }
     }
 
     const data: WiktionaryResponse = await response.json()
     const pages = data.query?.pages
 
-    if (!pages) return null
+    if (!pages) {
+      return {
+        status: 'error',
+        data: null,
+      }
+    }
 
     // Get the first (and usually only) page
     const pageId = Object.keys(pages)[0]
     const page = pages[pageId]
 
     if (page.missing || !page.extract) {
-      return null
+      return {
+        status: 'not_found',
+        data: null,
+      }
     }
 
     // Extract just the etymology section if present
@@ -77,8 +104,19 @@ export async function fetchWiktionary(word: string): Promise<WiktionaryResult | 
 
     const result = { text, url: pageUrl }
     await cacheSource('wiktionary', normalizedWord, result)
-    return result
+    return {
+      status: 'ok',
+      data: result,
+    }
   } catch {
-    return null
+    return {
+      status: 'error',
+      data: null,
+    }
   }
+}
+
+export async function fetchWiktionary(word: string): Promise<WiktionaryResult | null> {
+  const result = await fetchWiktionaryWithStatus(word)
+  return result.data
 }

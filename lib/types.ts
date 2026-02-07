@@ -188,6 +188,8 @@ export interface SourceData {
   url: string
 }
 
+export type SourceFetchStatus = 'ok' | 'not_found' | 'error'
+
 /**
  * Raw data fetched from external sources before Claude synthesis
  */
@@ -214,6 +216,8 @@ export interface ResearchContext {
     word: string
     etymonline: SourceData | null
     wiktionary: SourceData | null
+    etymonlineStatus?: SourceFetchStatus
+    wiktionaryStatus?: SourceFetchStatus
     wikipedia?: SourceData | null
     urbanDictionary?: SourceData | null
   }

@@ -44,6 +44,7 @@ This module defines:
 - Input schema validation on API routes
 - Legacy `llmConfig` request payloads rejected
 - Per-route rate limiting for anonymous/authenticated tiers
+- Authenticated tier only when signed identity cookies are verified server-side
 - Risk scoring and challenge verification for suspicious traffic
 - Cost mode enforcement (`normal` / `degraded` / `cache_only` / `blocked`)
 - Cache stampede control via singleflight locks
@@ -75,6 +76,7 @@ Copy `.env.example` and fill values:
 - `ANTHROPIC_MODEL` (optional override, must be Haiku 4.5 family)
 - `ETYMOLOGY_KV_REST_API_URL` / `ETYMOLOGY_KV_REST_API_TOKEN` (recommended)
 - `TURNSTILE_SECRET_KEY` (optional, enables challenge verification)
+- `REQUEST_IDENTITY_SIGNING_SECRET` (optional, enables verified authenticated tier)
 - `ELEVENLABS_API_KEY` (optional pronunciation)
 - feature flags: `PUBLIC_SEARCH_ENABLED`, `FORCE_CACHE_ONLY`, `DISABLE_PRONUNCIATION`, `CSP_REPORT_ONLY`
 
