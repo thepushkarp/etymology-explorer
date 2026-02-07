@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSuggestions, isKnownWord } from '@/lib/spellcheck'
 import { ApiResponse, WordSuggestion } from '@/lib/types'
+import { CONFIG } from '@/lib/config'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -12,6 +13,13 @@ export async function GET(request: NextRequest) {
         success: false,
         error: 'Query parameter "q" is required',
       },
+      { status: 400 }
+    )
+  }
+
+  if (query.length > CONFIG.maxWordLength) {
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: 'Query too long' },
       { status: 400 }
     )
   }

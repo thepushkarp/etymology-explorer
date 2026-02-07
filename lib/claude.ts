@@ -1,77 +1,25 @@
 import Anthropic from '@anthropic-ai/sdk'
-import {
-  EtymologyResult,
-  RawSourceData,
-  SourceReference,
-  LLMConfig,
-  ResearchContext,
-} from './types'
-import { SYSTEM_PROMPT, buildUserPrompt, buildRichUserPrompt } from './prompts'
+import { EtymologyResult, SourceReference, ResearchContext } from './types'
+import { SYSTEM_PROMPT, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph } from './etymologyEnricher'
 import { ETYMOLOGY_SCHEMA } from '@/lib/schemas/llm-schema'
+import { CONFIG } from './config'
 
 /**
- * Call OpenRouter API with structured output
+ * Call Anthropic API with structured output using server-side key
  */
-async function callOpenRouter(userPrompt: string, config: LLMConfig): Promise<string> {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.openrouterApiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://etymology-explorer.vercel.app',
-      'X-Title': 'Etymology Explorer',
-    },
-    body: JSON.stringify({
-      model: config.openrouterModel,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-      max_tokens: 2048,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'etymology_result',
-          strict: true,
-          schema: ETYMOLOGY_SCHEMA,
-        },
-      },
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await response.text()
-    if (response.status === 401) {
-      throw new Error('401: Invalid OpenRouter API key')
-    }
-    if (response.status === 429) {
-      throw new Error('429: Rate limit exceeded')
-    }
-    throw new Error(`OpenRouter API error: ${error}`)
+async function callAnthropic(userPrompt: string): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY environment variable is not set')
   }
 
-  const data = await response.json()
-  const content = data.choices?.[0]?.message?.content
-  if (!content) {
-    throw new Error('No response from OpenRouter')
-  }
-  return content
-}
+  const client = new Anthropic({ apiKey })
 
-/**
- * Call Anthropic API with structured output
- */
-async function callAnthropic(userPrompt: string, config: LLMConfig): Promise<string> {
-  const client = new Anthropic({
-    apiKey: config.anthropicApiKey,
-  })
-
-  // Use the beta API for structured outputs
   const response = await client.beta.messages.create({
-    model: config.anthropicModel,
-    max_tokens: 2048,
+    model: CONFIG.model,
+    max_tokens: CONFIG.synthesisMaxTokens,
     betas: ['structured-outputs-2025-11-13'],
     system: SYSTEM_PROMPT,
     messages: [
@@ -140,18 +88,10 @@ function sanitizeSuggestions(result: EtymologyResult): void {
 }
 
 /**
- * Helper to generate etymology response using configured provider
+ * Generate etymology response via Anthropic structured output
  */
-async function generateEtymologyResponse(
-  userPrompt: string,
-  config: LLMConfig
-): Promise<EtymologyResult> {
-  let responseText: string
-  if (config.provider === 'openrouter') {
-    responseText = await callOpenRouter(userPrompt, config)
-  } else {
-    responseText = await callAnthropic(userPrompt, config)
-  }
+async function generateEtymologyResponse(userPrompt: string): Promise<EtymologyResult> {
+  const responseText = await callAnthropic(userPrompt)
 
   try {
     const result = JSON.parse(responseText) as EtymologyResult
@@ -164,51 +104,16 @@ async function generateEtymologyResponse(
 }
 
 /**
- * Synthesize etymology from source data using configured LLM provider
- */
-export async function synthesizeEtymology(
-  word: string,
-  sourceData: RawSourceData,
-  llmConfig: LLMConfig
-): Promise<EtymologyResult> {
-  // Extract text for the prompt
-  const etymonlineText = sourceData.etymonline?.text ?? null
-  const wiktionaryText = sourceData.wiktionary?.text ?? null
-  const userPrompt = buildUserPrompt(word, etymonlineText, wiktionaryText)
-
-  // Call provider
-  const result = await generateEtymologyResponse(userPrompt, llmConfig)
-
-  // Build sources array with URLs and word info
-  const sources: SourceReference[] = []
-  if (sourceData.etymonline) {
-    sources.push({ name: 'etymonline', url: sourceData.etymonline.url, word })
-  }
-  if (sourceData.wiktionary) {
-    sources.push({ name: 'wiktionary', url: sourceData.wiktionary.url, word })
-  }
-  if (sources.length === 0) {
-    sources.push({ name: 'synthesized' })
-  }
-  result.sources = sources
-
-  return result
-}
-
-/**
  * Synthesize etymology from rich research context (agentic mode)
  * Uses aggregated data from multiple sources and root exploration
  */
 export async function synthesizeFromResearch(
-  researchContext: ResearchContext,
-  llmConfig: LLMConfig
+  researchContext: ResearchContext
 ): Promise<EtymologyResult> {
-  // Build rich prompt from research context
   const researchData = buildResearchPrompt(researchContext)
   const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
 
-  // Call provider
-  const result = await generateEtymologyResponse(userPrompt, llmConfig)
+  const result = await generateEtymologyResponse(userPrompt)
 
   // Enrich ancestry graph with source evidence and confidence levels
   if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
@@ -232,7 +137,6 @@ export async function synthesizeFromResearch(
       word: mainWord,
     })
   }
-  // Add sources from root research (each with its specific root word)
   for (const rootData of researchContext.rootResearch) {
     if (rootData.etymonlineData && !sources.some((s) => s.url === rootData.etymonlineData?.url)) {
       sources.push({ name: 'etymonline', url: rootData.etymonlineData.url, word: rootData.root })

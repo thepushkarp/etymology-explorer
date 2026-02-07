@@ -8,29 +8,23 @@ import { fetchEtymonline } from './etymonline'
 import { fetchWiktionary } from './wiktionary'
 import { fetchWikipedia } from './wikipedia'
 import { fetchUrbanDictionary } from './urbanDictionary'
-import { ResearchContext, RootResearchData, LLMConfig } from './types'
+import { ResearchContext, RootResearchData } from './types'
 import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
 import Anthropic from '@anthropic-ai/sdk'
-
-// Limits to control API costs
-const MAX_ROOTS_TO_EXPLORE = 3
-const MAX_RELATED_WORDS_PER_ROOT = 2
-const MAX_TOTAL_FETCHES = 10
+import { CONFIG } from './config'
 
 /**
  * Extract probable roots from initial source data using a quick LLM call.
- * Uses a small, fast model to minimize cost.
+ * Uses the server-side API key with the configured model.
  */
 export async function extractRootsQuick(
   word: string,
   etymonlineText: string | null,
-  wiktionaryText: string | null,
-  llmConfig: LLMConfig
+  wiktionaryText: string | null
 ): Promise<string[]> {
   const sourceText = [etymonlineText, wiktionaryText].filter(Boolean).join('\n\n')
 
   if (!sourceText) {
-    // No source data - return empty, we'll let the main synthesis handle it
     return []
   }
 
@@ -49,40 +43,19 @@ Examples:
 Return the JSON array only, no explanation:`
 
   try {
-    if (llmConfig.provider === 'openrouter') {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${llmConfig.openrouterApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: llmConfig.openrouterModel,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 100,
-        }),
-      })
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    if (!apiKey) return []
 
-      if (!response.ok) {
-        console.error('Root extraction failed:', await response.text())
-        return []
-      }
+    const client = new Anthropic({ apiKey })
+    const response = await client.messages.create({
+      model: CONFIG.model,
+      max_tokens: CONFIG.rootExtractionMaxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    })
 
-      const data = await response.json()
-      const content = data.choices?.[0]?.message?.content || '[]'
-      return parseRootsArray(content)
-    } else {
-      const client = new Anthropic({ apiKey: llmConfig.anthropicApiKey })
-      const response = await client.messages.create({
-        model: llmConfig.anthropicModel,
-        max_tokens: 100,
-        messages: [{ role: 'user', content: prompt }],
-      })
-
-      const textContent = response.content.find((block) => block.type === 'text')
-      if (!textContent || textContent.type !== 'text') return []
-      return parseRootsArray(textContent.text)
-    }
+    const textContent = response.content.find((block) => block.type === 'text')
+    if (!textContent || textContent.type !== 'text') return []
+    return parseRootsArray(textContent.text)
   } catch (error) {
     console.error('Root extraction error:', error)
     return []
@@ -94,7 +67,6 @@ Return the JSON array only, no explanation:`
  */
 function parseRootsArray(text: string): string[] {
   try {
-    // Extract JSON array from response (handle markdown code blocks)
     const jsonMatch = text.match(/\[[\s\S]*?\]/)
     if (!jsonMatch) return []
 
@@ -104,7 +76,7 @@ function parseRootsArray(text: string): string[] {
     return parsed
       .filter((item): item is string => typeof item === 'string')
       .map((s) => s.toLowerCase().trim())
-      .slice(0, MAX_ROOTS_TO_EXPLORE)
+      .slice(0, CONFIG.maxRootsToExplore)
   } catch {
     return []
   }
@@ -114,14 +86,13 @@ function parseRootsArray(text: string): string[] {
  * Extract related terms mentioned in source text
  */
 function extractRelatedTerms(text: string, excludeWord: string): string[] {
-  // Look for patterns like "related to X", "from X", "see also X", "cognate with X"
   const patterns = [
     /related to (\w+)/gi,
     /cognate with (\w+)/gi,
     /see also (\w+)/gi,
     /compare (\w+)/gi,
     /akin to (\w+)/gi,
-    /from (\w+) ["'](\w+)["']/gi, // "from Latin 'word'"
+    /from (\w+) ["'](\w+)["']/gi,
   ]
 
   const terms = new Set<string>()
@@ -131,14 +102,13 @@ function extractRelatedTerms(text: string, excludeWord: string): string[] {
     let match
     while ((match = pattern.exec(text)) !== null) {
       const term = (match[2] || match[1]).toLowerCase().trim()
-      // Filter out common non-word matches and the original word
       if (term.length > 2 && term !== excludeLower && !/^(the|and|for|from|with)$/.test(term)) {
         terms.add(term)
       }
     }
   }
 
-  return Array.from(terms).slice(0, MAX_RELATED_WORDS_PER_ROOT)
+  return Array.from(terms).slice(0, CONFIG.maxRelatedWordsPerRoot)
 }
 
 /**
@@ -150,7 +120,6 @@ async function fetchRootResearch(root: string): Promise<RootResearchData> {
     fetchWiktionary(root),
   ])
 
-  // Extract related terms from whatever data we got
   const combinedText = [etymonlineData?.text, wiktionaryData?.text].filter(Boolean).join(' ')
   const relatedTerms = extractRelatedTerms(combinedText, root)
 
@@ -170,10 +139,7 @@ async function fetchRootResearch(root: string): Promise<RootResearchData> {
  * 3. Fetches context for each root
  * 4. Fetches related words (depth-limited)
  */
-export async function conductAgenticResearch(
-  word: string,
-  llmConfig: LLMConfig
-): Promise<ResearchContext> {
+export async function conductAgenticResearch(word: string): Promise<ResearchContext> {
   let totalFetches = 0
   const normalizedWord = word.toLowerCase().trim()
 
@@ -230,8 +196,7 @@ export async function conductAgenticResearch(
   const identifiedRoots = await extractRootsQuick(
     normalizedWord,
     etymonlineData?.text ?? null,
-    wiktionaryData?.text ?? null,
-    llmConfig
+    wiktionaryData?.text ?? null
   )
   context.identifiedRoots = identifiedRoots
   console.log(`[Research] Identified roots: ${identifiedRoots.join(', ') || 'none'}`)
@@ -242,13 +207,12 @@ export async function conductAgenticResearch(
     (root) => root !== normalizedWord && root.length > 1
   )
 
-  // Calculate budget for roots
-  // Each root fetch costs 2 calls
-  const remainingBudget = MAX_TOTAL_FETCHES - totalFetches
+  const remainingBudget = CONFIG.maxTotalFetches - totalFetches
   const maxRootsByBudget = Math.floor(remainingBudget / 2)
-
-  // Take only as many roots as we can afford, or the max limit
-  const rootsToFetch = rootsToResearch.slice(0, Math.min(maxRootsByBudget, MAX_ROOTS_TO_EXPLORE))
+  const rootsToFetch = rootsToResearch.slice(
+    0,
+    Math.min(maxRootsByBudget, CONFIG.maxRootsToExplore)
+  )
 
   if (rootsToFetch.length > 0) {
     console.log(
@@ -266,10 +230,9 @@ export async function conductAgenticResearch(
         totalFetches += 2
 
         // Phase 4: Fetch a couple of related terms for depth
-        // We do this sequentially to strictly respect the limit
-        for (const relatedTerm of rootData.relatedTerms.slice(0, MAX_RELATED_WORDS_PER_ROOT)) {
-          if (totalFetches >= MAX_TOTAL_FETCHES) break
-          if (context.relatedWordsData[relatedTerm]) continue // Already fetched
+        for (const relatedTerm of rootData.relatedTerms.slice(0, CONFIG.maxRelatedWordsPerRoot)) {
+          if (totalFetches >= CONFIG.maxTotalFetches) break
+          if (context.relatedWordsData[relatedTerm]) continue
 
           console.log(`[Research] Fetching related term: "${relatedTerm}"`)
           const relatedData = await fetchEtymonline(relatedTerm)
@@ -293,25 +256,34 @@ export async function conductAgenticResearch(
 }
 
 /**
- * Build a rich prompt from research context for final synthesis
+ * Build a rich prompt from research context for final synthesis.
+ * Source data is wrapped in <source_data> XML tags for prompt injection defense
+ * and truncated to CONFIG.maxSourceTextChars.
  */
 export function buildResearchPrompt(context: ResearchContext): string {
   const sections: string[] = []
+  const maxChars = CONFIG.maxSourceTextChars
 
   // Main word section
   sections.push(`=== Main Word: "${context.mainWord.word}" ===`)
   if (context.mainWord.etymonline) {
-    sections.push(`\n--- Etymonline ---\n${context.mainWord.etymonline.text}`)
+    sections.push(
+      `\n<source_data name="etymonline">\n${context.mainWord.etymonline.text.slice(0, maxChars)}\n</source_data>`
+    )
   }
   if (context.mainWord.wiktionary) {
-    sections.push(`\n--- Wiktionary ---\n${context.mainWord.wiktionary.text}`)
+    sections.push(
+      `\n<source_data name="wiktionary">\n${context.mainWord.wiktionary.text.slice(0, maxChars)}\n</source_data>`
+    )
   }
   if (context.mainWord.wikipedia) {
-    sections.push(`\n--- Wikipedia ---\n${context.mainWord.wikipedia.text}`)
+    sections.push(
+      `\n<source_data name="wikipedia">\n${context.mainWord.wikipedia.text.slice(0, maxChars)}\n</source_data>`
+    )
   }
   if (context.mainWord.urbanDictionary) {
     sections.push(
-      `\n--- Urban Dictionary (Modern Usage) ---\n${context.mainWord.urbanDictionary.text}`
+      `\n<source_data name="urban_dictionary">\n${context.mainWord.urbanDictionary.text.slice(0, maxChars)}\n</source_data>`
     )
   }
 
@@ -324,10 +296,14 @@ export function buildResearchPrompt(context: ResearchContext): string {
   for (const rootData of context.rootResearch) {
     sections.push(`\n=== Root: "${rootData.root}" ===`)
     if (rootData.etymonlineData) {
-      sections.push(`--- Etymonline ---\n${rootData.etymonlineData.text}`)
+      sections.push(
+        `<source_data name="etymonline">\n${rootData.etymonlineData.text.slice(0, maxChars)}\n</source_data>`
+      )
     }
     if (rootData.wiktionaryData) {
-      sections.push(`--- Wiktionary ---\n${rootData.wiktionaryData.text}`)
+      sections.push(
+        `<source_data name="wiktionary">\n${rootData.wiktionaryData.text.slice(0, maxChars)}\n</source_data>`
+      )
     }
     if (rootData.relatedTerms.length > 0) {
       sections.push(`Related terms found: ${rootData.relatedTerms.join(', ')}`)
@@ -339,7 +315,9 @@ export function buildResearchPrompt(context: ResearchContext): string {
   if (relatedEntries.length > 0) {
     sections.push(`\n=== Related Words Research ===`)
     for (const [term, data] of relatedEntries) {
-      sections.push(`\n--- ${term} ---\n${data.text}`)
+      sections.push(
+        `\n<source_data name="${term}">\n${data.text.slice(0, maxChars)}\n</source_data>`
+      )
     }
   }
 

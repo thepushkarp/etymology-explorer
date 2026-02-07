@@ -6,6 +6,7 @@
 import { Redis } from '@upstash/redis'
 import { EtymologyResult } from './types'
 import { EtymologyResultSchema } from './schemas/etymology'
+import { CONFIG } from './config'
 
 const redis = new Redis({
   url: process.env.ETYMOLOGY_KV_REST_API_URL || '',
@@ -15,11 +16,11 @@ const redis = new Redis({
 // Bump version when EtymologyResult schema changes
 const CACHE_VERSION = 2
 const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
-const ETYMOLOGY_TTL = 30 * 24 * 60 * 60 // 30 days
+const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
 
 // Audio cache (longer TTL - pronunciations don't change)
 const AUDIO_PREFIX = `audio:v1:`
-const AUDIO_TTL = 365 * 24 * 60 * 60 // 1 year
+const AUDIO_TTL = CONFIG.audioCacheTTL
 
 /**
  * Check if Redis caching is configured
