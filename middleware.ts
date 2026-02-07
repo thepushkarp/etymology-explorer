@@ -70,6 +70,10 @@ function getGeneralLimiter(): Ratelimit | null {
 }
 
 function getClientIp(request: NextRequest): string {
+  // On Vercel, x-forwarded-for and x-real-ip are overwritten by the trusted
+  // edge proxy and cannot be spoofed by clients. For non-Vercel deployments,
+  // place a reverse proxy (e.g. nginx, Cloudflare) in front that overwrites
+  // these headers — otherwise clients can rotate IPs to bypass rate limits.
   return (
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     request.headers.get('x-real-ip') ||
