@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Ratelimit } from '@upstash/ratelimit'
-import { Redis } from '@upstash/redis'
 import { CONFIG } from '@/lib/config'
-
-function getRedis(): Redis | null {
-  if (!process.env.ETYMOLOGY_KV_REST_API_URL || !process.env.ETYMOLOGY_KV_REST_API_TOKEN) {
-    return null
-  }
-  return new Redis({
-    url: process.env.ETYMOLOGY_KV_REST_API_URL,
-    token: process.env.ETYMOLOGY_KV_REST_API_TOKEN,
-  })
-}
+import { getRedis } from '@/lib/redis'
 
 // Lazily initialized rate limiters (only created if Redis is configured)
 let etymologyLimiter: Ratelimit | null = null

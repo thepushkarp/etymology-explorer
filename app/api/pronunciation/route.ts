@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generatePronunciation, isElevenLabsConfigured } from '@/lib/elevenlabs'
 import { getCachedAudio, cacheAudio } from '@/lib/cache'
 import { isValidWord } from '@/lib/validation'
-import { checkPronunciationBudget, incrementPronunciationBudget } from '@/lib/costGuard'
+import { reservePronunciationBudget } from '@/lib/costGuard'
 
 /**
  * GET /api/pronunciation?word=example
@@ -47,8 +47,8 @@ export async function GET(request: NextRequest) {
     console.error('[Pronunciation] Cache read error:', error)
   }
 
-  // Check daily budget (only for uncached requests)
-  const budgetOk = await checkPronunciationBudget()
+  // Atomically reserve a budget slot (INCR then compare — no TOCTOU race)
+  const budgetOk = await reservePronunciationBudget()
   if (!budgetOk) {
     return NextResponse.json(
       { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
@@ -60,11 +60,6 @@ export async function GET(request: NextRequest) {
   try {
     const audioBuffer = await generatePronunciation(normalized)
     const base64 = Buffer.from(audioBuffer).toString('base64')
-
-    // Increment budget counter (non-blocking)
-    incrementPronunciationBudget().catch((err) => {
-      console.error('[Pronunciation] Budget increment failed:', err)
-    })
 
     // Cache for future use (non-blocking)
     cacheAudio(normalized, base64).catch((err) => {

@@ -1,20 +1,14 @@
 /**
- * Global daily budget caps via Redis INCR.
+ * Global daily budget caps via atomic Redis INCR.
  * Prevents runaway costs from distributed abuse.
+ *
+ * Budget check is atomic: INCR first, then compare. If over budget,
+ * the count is slightly inflated but never allows overspend under
+ * concurrent load (no TOCTOU race).
  */
 
-import { Redis } from '@upstash/redis'
 import { CONFIG } from './config'
-
-function getRedis(): Redis | null {
-  if (!process.env.ETYMOLOGY_KV_REST_API_URL || !process.env.ETYMOLOGY_KV_REST_API_TOKEN) {
-    return null
-  }
-  return new Redis({
-    url: process.env.ETYMOLOGY_KV_REST_API_URL,
-    token: process.env.ETYMOLOGY_KV_REST_API_TOKEN,
-  })
-}
+import { getRedis } from './redis'
 
 function todayKey(type: 'etymology' | 'pronunciation'): string {
   const date = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
@@ -22,69 +16,48 @@ function todayKey(type: 'etymology' | 'pronunciation'): string {
 }
 
 /**
- * Check if etymology budget allows another request.
+ * Atomically reserve one etymology request against the daily budget.
  * Returns true if under limit or if Redis is unavailable (fail open).
+ *
+ * Uses INCR as the gate: the increment is the reservation, so concurrent
+ * requests cannot overshoot the cap.
  */
-export async function checkEtymologyBudget(): Promise<boolean> {
+export async function reserveEtymologyBudget(): Promise<boolean> {
   const redis = getRedis()
   if (!redis) return true
 
   try {
-    const count = await redis.get<number>(todayKey('etymology'))
-    return (count ?? 0) < CONFIG.dailyBudget.etymology
+    const key = todayKey('etymology')
+    const count = await redis.incr(key)
+    // Set TTL on first increment so keys auto-expire (25h covers timezone drift)
+    if (count === 1) {
+      await redis.expire(key, 25 * 60 * 60)
+    }
+    return count <= CONFIG.dailyBudget.etymology
   } catch (error) {
-    console.error('[CostGuard] Etymology budget check failed:', error)
+    console.error('[CostGuard] Etymology budget reserve failed:', error)
     return true // Fail open
   }
 }
 
 /**
- * Increment etymology budget counter after a successful LLM call.
- */
-export async function incrementEtymologyBudget(): Promise<void> {
-  const redis = getRedis()
-  if (!redis) return
-
-  try {
-    const key = todayKey('etymology')
-    await redis.incr(key)
-    // Set TTL of 25 hours so keys auto-expire (covers timezone drift)
-    await redis.expire(key, 25 * 60 * 60)
-  } catch (error) {
-    console.error('[CostGuard] Etymology budget increment failed:', error)
-  }
-}
-
-/**
- * Check if pronunciation budget allows another request.
+ * Atomically reserve one pronunciation request against the daily budget.
  * Returns true if under limit or if Redis is unavailable (fail open).
  */
-export async function checkPronunciationBudget(): Promise<boolean> {
+export async function reservePronunciationBudget(): Promise<boolean> {
   const redis = getRedis()
   if (!redis) return true
 
   try {
-    const count = await redis.get<number>(todayKey('pronunciation'))
-    return (count ?? 0) < CONFIG.dailyBudget.pronunciation
-  } catch (error) {
-    console.error('[CostGuard] Pronunciation budget check failed:', error)
-    return true
-  }
-}
-
-/**
- * Increment pronunciation budget counter after a successful TTS call.
- */
-export async function incrementPronunciationBudget(): Promise<void> {
-  const redis = getRedis()
-  if (!redis) return
-
-  try {
     const key = todayKey('pronunciation')
-    await redis.incr(key)
-    await redis.expire(key, 25 * 60 * 60)
+    const count = await redis.incr(key)
+    if (count === 1) {
+      await redis.expire(key, 25 * 60 * 60)
+    }
+    return count <= CONFIG.dailyBudget.pronunciation
   } catch (error) {
-    console.error('[CostGuard] Pronunciation budget increment failed:', error)
+    console.error('[CostGuard] Pronunciation budget reserve failed:', error)
+    return true
   }
 }
 

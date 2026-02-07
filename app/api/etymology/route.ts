@@ -7,7 +7,7 @@ import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
 import { getCachedEtymology, cacheEtymology } from '@/lib/cache'
 import { isValidWord } from '@/lib/validation'
-import { checkEtymologyBudget, incrementEtymologyBudget } from '@/lib/costGuard'
+import { reserveEtymologyBudget } from '@/lib/costGuard'
 
 export async function GET(request: NextRequest) {
   try {
@@ -57,8 +57,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Check daily budget (only for uncached requests)
-    const budgetOk = await checkEtymologyBudget()
+    // Atomically reserve a budget slot (INCR then compare — no TOCTOU race)
+    const budgetOk = await reserveEtymologyBudget()
     if (!budgetOk) {
       return NextResponse.json<ApiResponse<null>>(
         { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
@@ -102,11 +102,6 @@ export async function GET(request: NextRequest) {
 
     // Synthesize with LLM
     const result = await synthesizeFromResearch(researchContext)
-
-    // Increment budget counter (non-blocking)
-    incrementEtymologyBudget().catch((err) => {
-      console.error('[Etymology API] Budget increment failed:', err)
-    })
 
     // Cache result for future lookups (non-blocking)
     cacheEtymology(normalizedWord, result).catch((err) => {

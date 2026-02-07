@@ -256,6 +256,14 @@ export async function conductAgenticResearch(word: string): Promise<ResearchCont
 }
 
 /**
+ * Sanitize source text for safe embedding inside <source_data> XML tags.
+ * Strips any occurrences of the closing tag to prevent breakout injection.
+ */
+function sanitizeSourceText(text: string, maxChars: number): string {
+  return text.slice(0, maxChars).replaceAll('</source_data>', '')
+}
+
+/**
  * Build a rich prompt from research context for final synthesis.
  * Source data is wrapped in <source_data> XML tags for prompt injection defense
  * and truncated to CONFIG.maxSourceTextChars.
@@ -268,22 +276,22 @@ export function buildResearchPrompt(context: ResearchContext): string {
   sections.push(`=== Main Word: "${context.mainWord.word}" ===`)
   if (context.mainWord.etymonline) {
     sections.push(
-      `\n<source_data name="etymonline">\n${context.mainWord.etymonline.text.slice(0, maxChars)}\n</source_data>`
+      `\n<source_data name="etymonline">\n${sanitizeSourceText(context.mainWord.etymonline.text, maxChars)}\n</source_data>`
     )
   }
   if (context.mainWord.wiktionary) {
     sections.push(
-      `\n<source_data name="wiktionary">\n${context.mainWord.wiktionary.text.slice(0, maxChars)}\n</source_data>`
+      `\n<source_data name="wiktionary">\n${sanitizeSourceText(context.mainWord.wiktionary.text, maxChars)}\n</source_data>`
     )
   }
   if (context.mainWord.wikipedia) {
     sections.push(
-      `\n<source_data name="wikipedia">\n${context.mainWord.wikipedia.text.slice(0, maxChars)}\n</source_data>`
+      `\n<source_data name="wikipedia">\n${sanitizeSourceText(context.mainWord.wikipedia.text, maxChars)}\n</source_data>`
     )
   }
   if (context.mainWord.urbanDictionary) {
     sections.push(
-      `\n<source_data name="urban_dictionary">\n${context.mainWord.urbanDictionary.text.slice(0, maxChars)}\n</source_data>`
+      `\n<source_data name="urban_dictionary">\n${sanitizeSourceText(context.mainWord.urbanDictionary.text, maxChars)}\n</source_data>`
     )
   }
 
@@ -297,12 +305,12 @@ export function buildResearchPrompt(context: ResearchContext): string {
     sections.push(`\n=== Root: "${rootData.root}" ===`)
     if (rootData.etymonlineData) {
       sections.push(
-        `<source_data name="etymonline">\n${rootData.etymonlineData.text.slice(0, maxChars)}\n</source_data>`
+        `<source_data name="etymonline">\n${sanitizeSourceText(rootData.etymonlineData.text, maxChars)}\n</source_data>`
       )
     }
     if (rootData.wiktionaryData) {
       sections.push(
-        `<source_data name="wiktionary">\n${rootData.wiktionaryData.text.slice(0, maxChars)}\n</source_data>`
+        `<source_data name="wiktionary">\n${sanitizeSourceText(rootData.wiktionaryData.text, maxChars)}\n</source_data>`
       )
     }
     if (rootData.relatedTerms.length > 0) {
@@ -316,7 +324,7 @@ export function buildResearchPrompt(context: ResearchContext): string {
     sections.push(`\n=== Related Words Research ===`)
     for (const [term, data] of relatedEntries) {
       sections.push(
-        `\n<source_data name="${term}">\n${data.text.slice(0, maxChars)}\n</source_data>`
+        `\n<source_data name="${term}">\n${sanitizeSourceText(data.text, maxChars)}\n</source_data>`
       )
     }
   }
