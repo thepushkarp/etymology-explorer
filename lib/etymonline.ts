@@ -4,6 +4,9 @@
  * Always implement graceful fallback.
  */
 
+import { cacheSource, getCachedSource } from '@/lib/cache'
+import { TIMEOUT_POLICY } from '@/lib/config/guardrails'
+
 export interface EtymonlineResult {
   text: string
   url: string
@@ -16,6 +19,11 @@ export interface EtymonlineResult {
  */
 export async function fetchEtymonline(word: string): Promise<EtymonlineResult | null> {
   const normalizedWord = word.toLowerCase().trim().replace(/\s+/g, '-')
+  const cached = await getCachedSource('etymonline', normalizedWord)
+  if (cached) {
+    return cached
+  }
+
   const url = `https://www.etymonline.com/word/${encodeURIComponent(normalizedWord)}`
 
   try {
@@ -23,13 +31,13 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
       headers: {
         'User-Agent': 'EtymologyExplorer/1.0 (educational project)',
       },
+      signal: AbortSignal.timeout(TIMEOUT_POLICY.externalFetchMs),
     })
 
     if (!response.ok) {
       if (response.status === 404) {
         return null // Word not found
       }
-      console.error(`Etymonline error: ${response.status}`)
       return null
     }
 
@@ -56,7 +64,9 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
         const text = stripHtml(match[1])
         // Verify this looks like etymology content (has date or language reference)
         if (/\d{4}s?|Latin|Greek|French|Old English|German/i.test(text)) {
-          return { text, url }
+          const result = { text, url }
+          await cacheSource('etymonline', normalizedWord, result)
+          return result
         }
       }
     }
@@ -71,14 +81,15 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
         const content = stripHtml(p)
         // Must have a date and "from" to be etymology content
         if (datePattern.test(content) && /\bfrom\b/i.test(content)) {
-          return { text: content, url }
+          const result = { text: content, url }
+          await cacheSource('etymonline', normalizedWord, result)
+          return result
         }
       }
     }
 
     return null
-  } catch (error) {
-    console.error('Etymonline fetch error:', error)
+  } catch {
     return null
   }
 }

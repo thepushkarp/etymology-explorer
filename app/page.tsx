@@ -1,17 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { LLMConfig } from '@/lib/types'
 import { useHistory } from '@/lib/hooks/useHistory'
-import { useLocalStorage } from '@/lib/hooks/useLocalStorage'
 import { useEtymologySearch } from '@/lib/hooks/useEtymologySearch'
 import { SearchBar } from '@/components/SearchBar'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { RelatedWordsList } from '@/components/RelatedWordsList'
-import { SettingsButton } from '@/components/SettingsModal'
 import { SurpriseButton } from '@/components/SurpriseButton'
 import { ErrorState, EmptyState } from '@/components/ErrorState'
 
@@ -26,36 +23,13 @@ const HistorySidebar = dynamic(
   }
 )
 
-const SettingsModal = dynamic(
-  () => import('@/components/SettingsModal').then((mod) => ({ default: mod.SettingsModal })),
-  {
-    ssr: false,
-    loading: () => null, // Modal - no visible loading state needed
-  }
-)
-
-const DEFAULT_LLM_CONFIG: LLMConfig = {
-  provider: 'anthropic',
-  anthropicApiKey: '',
-  anthropicModel: 'claude-haiku-4-5-20251001',
-  openrouterApiKey: '',
-  openrouterModel: '',
-}
-
 function HomeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // State
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-
   // Hooks
-  const [llmConfig, setLlmConfig] = useLocalStorage<LLMConfig>(
-    'etymology-llm-config',
-    DEFAULT_LLM_CONFIG
-  )
   const { history, clearHistory, removeFromHistory } = useHistory()
-  const { state, result, error, searchWord } = useEtymologySearch(llmConfig)
+  const { state, result, error, searchWord } = useEtymologySearch()
 
   // Handle URL-based search on mount and param changes - intentional URL → action sync
   useEffect(() => {
@@ -82,23 +56,12 @@ function HomeContent() {
       px-4
     "
     >
-      {/* Settings button */}
-      <SettingsButton onClick={() => setIsSettingsOpen(true)} />
-
       {/* History sidebar */}
       <HistorySidebar
         history={history}
         onWordClick={navigateToWord}
         onClearHistory={clearHistory}
         onRemoveEntry={removeFromHistory}
-      />
-
-      {/* Settings modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        llmConfig={llmConfig}
-        onSaveConfig={setLlmConfig}
       />
 
       {/* Main content */}
@@ -185,7 +148,6 @@ function HomeContent() {
               message={error.message}
               suggestions={error.suggestions}
               onSuggestionClick={navigateToWord}
-              onOpenSettings={() => setIsSettingsOpen(true)}
             />
           )}
 

@@ -1,105 +1,225 @@
 /**
- * Upstash Redis caching for etymology results.
- * Reduces API costs by caching LLM synthesis results.
+ * Shared caching helpers for etymology, source fetches, and pronunciation audio.
  */
 
 import { Redis } from '@upstash/redis'
-import { EtymologyResult } from './types'
-import { EtymologyResultSchema } from './schemas/etymology'
+import { CACHE_POLICY, buildWordKey } from '@/lib/config/guardrails'
+import { EtymologyResult, SourceData } from '@/lib/types'
+import { EtymologyResultSchema } from '@/lib/schemas/etymology'
+import { getRedisClient, isRedisConfigured } from '@/lib/server/redis'
 
-const redis = new Redis({
-  url: process.env.ETYMOLOGY_KV_REST_API_URL || '',
-  token: process.env.ETYMOLOGY_KV_REST_API_TOKEN || '',
-})
+const memoryCache = new Map<string, { value: unknown; expiresAt: number }>()
 
-// Bump version when EtymologyResult schema changes
-const CACHE_VERSION = 2
-const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
-const ETYMOLOGY_TTL = 30 * 24 * 60 * 60 // 30 days
+type SourceName = 'etymonline' | 'wiktionary' | 'wikipedia' | 'urban'
 
-// Audio cache (longer TTL - pronunciations don't change)
-const AUDIO_PREFIX = `audio:v1:`
-const AUDIO_TTL = 365 * 24 * 60 * 60 // 1 year
-
-/**
- * Check if Redis caching is configured
- */
-export function isCacheConfigured(): boolean {
-  return !!(process.env.ETYMOLOGY_KV_REST_API_URL && process.env.ETYMOLOGY_KV_REST_API_TOKEN)
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000)
 }
 
-/**
- * Get cached etymology result
- * Returns null if not cached, invalid schema, or on error (fail open)
- * Uses Zod validation to detect schema mismatches from old cache entries
- */
-export async function getCachedEtymology(word: string): Promise<EtymologyResult | null> {
-  if (!isCacheConfigured()) return null
+function getFromMemory<T>(key: string): T | null {
+  const entry = memoryCache.get(key)
+  if (!entry) return null
+  if (entry.expiresAt <= nowSeconds()) {
+    memoryCache.delete(key)
+    return null
+  }
+  return entry.value as T
+}
 
-  const key = `${ETYMOLOGY_PREFIX}${word.toLowerCase().trim()}`
+function setInMemory(key: string, value: unknown, ttlSeconds: number): void {
+  memoryCache.set(key, {
+    value,
+    expiresAt: nowSeconds() + ttlSeconds,
+  })
+}
+
+async function getValue<T>(redis: Redis | null, key: string): Promise<T | null> {
+  if (redis) {
+    return (await redis.get<T>(key)) || null
+  }
+  return getFromMemory<T>(key)
+}
+
+async function setValue(redis: Redis | null, key: string, value: unknown, ttlSeconds: number): Promise<void> {
+  if (redis) {
+    await redis.set(key, value, { ex: ttlSeconds })
+    return
+  }
+  setInMemory(key, value, ttlSeconds)
+}
+
+function etymologyKey(word: string, model: string): string {
+  return `${CACHE_POLICY.keyPrefix}:etymology:${model}:${buildWordKey(word)}`
+}
+
+function negativeKey(word: string, model: string): string {
+  return `${CACHE_POLICY.keyPrefix}:negative:${model}:${buildWordKey(word)}`
+}
+
+function lockKey(word: string, model: string): string {
+  return `${CACHE_POLICY.keyPrefix}:lock:${model}:${buildWordKey(word)}`
+}
+
+function sourceKey(source: SourceName, word: string): string {
+  return `${CACHE_POLICY.keyPrefix}:source:${source}:${buildWordKey(word)}`
+}
+
+function audioKey(word: string): string {
+  return `${CACHE_POLICY.keyPrefix}:audio:${buildWordKey(word)}`
+}
+
+export function isCacheConfigured(): boolean {
+  return isRedisConfigured()
+}
+
+export async function getCachedEtymology(word: string, model: string): Promise<EtymologyResult | null> {
+  const redis = getRedisClient()
+  const key = etymologyKey(word, model)
+
   try {
-    const raw = await redis.get(key)
+    const raw = await getValue<unknown>(redis, key)
     if (!raw) return null
 
-    // Validate against current schema - treats invalid data as cache miss
     const parsed = EtymologyResultSchema.safeParse(raw)
     if (!parsed.success) {
-      console.warn(
-        `[Cache] Schema mismatch for "${word}":`,
-        parsed.error.issues[0]?.message || 'Unknown validation error'
-      )
-      return null // Treat as cache miss, will re-fetch from LLM
+      return null
     }
 
     return parsed.data as EtymologyResult
-  } catch (error) {
-    console.error('[Cache] Etymology get error:', error)
-    return null // Fail open - continue without cache
-  }
-}
-
-/**
- * Cache etymology result for future lookups
- */
-export async function cacheEtymology(word: string, result: EtymologyResult): Promise<void> {
-  if (!isCacheConfigured()) return
-
-  const key = `${ETYMOLOGY_PREFIX}${word.toLowerCase().trim()}`
-  try {
-    await redis.set(key, result, { ex: ETYMOLOGY_TTL })
-    console.log(`[Cache] Stored etymology for "${word}"`)
-  } catch (error) {
-    console.error('[Cache] Etymology set error:', error)
-    // Fail silently - result was already returned to user
-  }
-}
-
-/**
- * Get cached audio (as base64 string)
- */
-export async function getCachedAudio(word: string): Promise<string | null> {
-  if (!isCacheConfigured()) return null
-
-  const key = `${AUDIO_PREFIX}${word.toLowerCase().trim()}`
-  try {
-    return await redis.get<string>(key)
-  } catch (error) {
-    console.error('[Cache] Audio get error:', error)
+  } catch {
     return null
   }
 }
 
-/**
- * Cache audio (as base64 string)
- */
-export async function cacheAudio(word: string, audioBase64: string): Promise<void> {
-  if (!isCacheConfigured()) return
-
-  const key = `${AUDIO_PREFIX}${word.toLowerCase().trim()}`
+export async function cacheEtymology(word: string, model: string, result: EtymologyResult): Promise<void> {
   try {
-    await redis.set(key, audioBase64, { ex: AUDIO_TTL })
-    console.log(`[Cache] Stored audio for "${word}"`)
-  } catch (error) {
-    console.error('[Cache] Audio set error:', error)
+    const redis = getRedisClient()
+    const key = etymologyKey(word, model)
+    await setValue(redis, key, result, CACHE_POLICY.etymologyTtlSeconds)
+  } catch {
+    // Cache write failures should not fail request handling.
+  }
+}
+
+export async function getNegativeCache(word: string, model: string): Promise<boolean> {
+  try {
+    const redis = getRedisClient()
+    const key = negativeKey(word, model)
+    const value = await getValue<string>(redis, key)
+    return value === '1'
+  } catch {
+    return false
+  }
+}
+
+export async function cacheNegative(word: string, model: string): Promise<void> {
+  try {
+    const redis = getRedisClient()
+    const key = negativeKey(word, model)
+    await setValue(redis, key, '1', CACHE_POLICY.negativeTtlSeconds)
+  } catch {
+    // Negative cache write failures are non-fatal.
+  }
+}
+
+export async function acquireSingleflightLock(
+  word: string,
+  model: string,
+  owner: string
+): Promise<boolean> {
+  try {
+    const redis = getRedisClient()
+    const key = lockKey(word, model)
+
+    if (redis) {
+      const result = await redis.set(key, owner, {
+        nx: true,
+        ex: CACHE_POLICY.singleflightLockTtlSeconds,
+      })
+      return result === 'OK'
+    }
+
+    const existing = getFromMemory<string>(key)
+    if (existing) {
+      return false
+    }
+
+    setInMemory(key, owner, CACHE_POLICY.singleflightLockTtlSeconds)
+    return true
+  } catch {
+    // Fail-open on lock acquisition issues to avoid total outage.
+    return true
+  }
+}
+
+export async function releaseSingleflightLock(word: string, model: string): Promise<void> {
+  try {
+    const redis = getRedisClient()
+    const key = lockKey(word, model)
+
+    if (redis) {
+      await redis.del(key)
+      return
+    }
+
+    memoryCache.delete(key)
+  } catch {
+    // Lock release failures should not bubble up.
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export async function waitForCachedEtymology(word: string, model: string): Promise<EtymologyResult | null> {
+  for (let i = 0; i < CACHE_POLICY.singleflightPollCount; i += 1) {
+    const cached = await getCachedEtymology(word, model)
+    if (cached) {
+      return cached
+    }
+    await sleep(CACHE_POLICY.singleflightPollDelayMs)
+  }
+
+  return null
+}
+
+export async function getCachedSource(source: SourceName, word: string): Promise<SourceData | null> {
+  try {
+    const redis = getRedisClient()
+    const key = sourceKey(source, word)
+    return await getValue<SourceData>(redis, key)
+  } catch {
+    return null
+  }
+}
+
+export async function cacheSource(source: SourceName, word: string, data: SourceData): Promise<void> {
+  try {
+    const redis = getRedisClient()
+    const key = sourceKey(source, word)
+    await setValue(redis, key, data, CACHE_POLICY.sourceTtlSeconds)
+  } catch {
+    // Source cache write failures are non-fatal.
+  }
+}
+
+export async function getCachedAudio(word: string): Promise<string | null> {
+  try {
+    const redis = getRedisClient()
+    const key = audioKey(word)
+    return await getValue<string>(redis, key)
+  } catch {
+    return null
+  }
+}
+
+export async function cacheAudio(word: string, audioBase64: string): Promise<void> {
+  try {
+    const redis = getRedisClient()
+    const key = audioKey(word)
+    await setValue(redis, key, audioBase64, CACHE_POLICY.audioTtlSeconds)
+  } catch {
+    // Audio cache write failures are non-fatal.
   }
 }

@@ -3,6 +3,9 @@
  * Uses the MediaWiki API to get page content.
  */
 
+import { cacheSource, getCachedSource } from '@/lib/cache'
+import { TIMEOUT_POLICY } from '@/lib/config/guardrails'
+
 interface WiktionaryResponse {
   query?: {
     pages?: {
@@ -26,6 +29,11 @@ export interface WiktionaryResult {
  */
 export async function fetchWiktionary(word: string): Promise<WiktionaryResult | null> {
   const normalizedWord = word.toLowerCase().trim()
+  const cached = await getCachedSource('wiktionary', normalizedWord)
+  if (cached) {
+    return cached
+  }
+
   const pageUrl = `https://en.wiktionary.org/wiki/${encodeURIComponent(normalizedWord)}`
 
   // Wiktionary API endpoint - get plain text extract
@@ -42,10 +50,10 @@ export async function fetchWiktionary(word: string): Promise<WiktionaryResult | 
       headers: {
         'User-Agent': 'EtymologyExplorer/1.0 (educational project)',
       },
+      signal: AbortSignal.timeout(TIMEOUT_POLICY.externalFetchMs),
     })
 
     if (!response.ok) {
-      console.error(`Wiktionary API error: ${response.status}`)
       return null
     }
 
@@ -67,9 +75,10 @@ export async function fetchWiktionary(word: string): Promise<WiktionaryResult | 
     const etymologyMatch = extract.match(/Etymology[\s\S]*?(?=\n\n[A-Z]|\n\nPronunciation|$)/i)
     const text = etymologyMatch ? etymologyMatch[0].trim() : extract.slice(0, 1000)
 
-    return { text, url: pageUrl }
-  } catch (error) {
-    console.error('Wiktionary fetch error:', error)
+    const result = { text, url: pageUrl }
+    await cacheSource('wiktionary', normalizedWord, result)
+    return result
+  } catch {
     return null
   }
 }

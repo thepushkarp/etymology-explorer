@@ -1,3 +1,5 @@
+import { cacheSource, getCachedSource } from '@/lib/cache'
+import { RESEARCH_POLICY, TIMEOUT_POLICY } from '@/lib/config/guardrails'
 import { SourceData } from './types'
 
 const URBAN_DICTIONARY_API = 'https://api.urbandictionary.com/v0/define'
@@ -40,8 +42,16 @@ function isClean(text: string): boolean {
 }
 
 export async function fetchUrbanDictionary(word: string): Promise<SourceData | null> {
+  const normalizedWord = word.toLowerCase().trim()
+  const cached = await getCachedSource('urban', normalizedWord)
+  if (cached) {
+    return cached
+  }
+
   try {
-    const response = await fetch(`${URBAN_DICTIONARY_API}?term=${encodeURIComponent(word)}`)
+    const response = await fetch(`${URBAN_DICTIONARY_API}?term=${encodeURIComponent(normalizedWord)}`, {
+      signal: AbortSignal.timeout(TIMEOUT_POLICY.externalFetchMs),
+    })
 
     if (!response.ok) return null
 
@@ -50,7 +60,7 @@ export async function fetchUrbanDictionary(word: string): Promise<SourceData | n
     // Filter to clean definitions with decent votes
     const entries = (data.list || []) as UrbanDictionaryEntry[]
     const filtered = entries
-      .filter((d) => d.thumbs_up > 100)
+      .filter((d) => d.thumbs_up > RESEARCH_POLICY.urbanMinThumbsUp)
       .filter((d) => isClean(d.definition) && isClean(d.example || ''))
       .slice(0, 2)
 
@@ -58,10 +68,13 @@ export async function fetchUrbanDictionary(word: string): Promise<SourceData | n
 
     const text = filtered.map((d) => d.definition.replace(/\[|\]/g, '')).join('\n\n')
 
-    return {
+    const result = {
       text,
-      url: `https://www.urbandictionary.com/define.php?term=${encodeURIComponent(word)}`,
+      url: `https://www.urbandictionary.com/define.php?term=${encodeURIComponent(normalizedWord)}`,
     }
+
+    await cacheSource('urban', normalizedWord, result)
+    return result
   } catch {
     return null
   }

@@ -2,6 +2,7 @@
  * ElevenLabs TTS client for pronunciation audio generation.
  * Generates natural-sounding word pronunciations on demand.
  */
+import { TIMEOUT_POLICY } from '@/lib/config/guardrails'
 
 const ELEVENLABS_API = 'https://api.elevenlabs.io/v1'
 
@@ -38,6 +39,7 @@ export async function generatePronunciation(word: string): Promise<ArrayBuffer> 
         similarity_boost: 0.75,
       },
     }),
+    signal: AbortSignal.timeout(TIMEOUT_POLICY.ttsMs),
   })
 
   if (!response.ok) {
