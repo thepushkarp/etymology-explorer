@@ -23,20 +23,25 @@ function getMonthStamp(): string {
   return new Date().toISOString().slice(0, 7)
 }
 
+function syncMemorySpendStamps(dayStamp: string, monthStamp: string): void {
+  if (memorySpend.dayStamp !== dayStamp) {
+    memorySpend.dayStamp = dayStamp
+    memorySpend.day = 0
+  }
+
+  if (memorySpend.monthStamp !== monthStamp) {
+    memorySpend.monthStamp = monthStamp
+    memorySpend.month = 0
+  }
+}
+
 async function readSpend(): Promise<{ dayUsd: number; monthUsd: number }> {
   const dayStamp = getDayStamp()
   const monthStamp = getMonthStamp()
   const redis = getRedisClient()
 
   if (!redis) {
-    if (memorySpend.dayStamp !== dayStamp) {
-      memorySpend.dayStamp = dayStamp
-      memorySpend.day = 0
-    }
-    if (memorySpend.monthStamp !== monthStamp) {
-      memorySpend.monthStamp = monthStamp
-      memorySpend.month = 0
-    }
+    syncMemorySpendStamps(dayStamp, monthStamp)
     return {
       dayUsd: memorySpend.day,
       monthUsd: memorySpend.month,
@@ -54,6 +59,7 @@ async function readSpend(): Promise<{ dayUsd: number; monthUsd: number }> {
       monthUsd: Number(monthValue || 0),
     }
   } catch {
+    syncMemorySpendStamps(dayStamp, monthStamp)
     return {
       dayUsd: memorySpend.day,
       monthUsd: memorySpend.month,
@@ -69,14 +75,7 @@ export async function recordSpend(usd: number): Promise<void> {
   const redis = getRedisClient()
 
   if (!redis) {
-    if (memorySpend.dayStamp !== dayStamp) {
-      memorySpend.dayStamp = dayStamp
-      memorySpend.day = 0
-    }
-    if (memorySpend.monthStamp !== monthStamp) {
-      memorySpend.monthStamp = monthStamp
-      memorySpend.month = 0
-    }
+    syncMemorySpendStamps(dayStamp, monthStamp)
     memorySpend.day += usd
     memorySpend.month += usd
     return
@@ -93,6 +92,7 @@ export async function recordSpend(usd: number): Promise<void> {
       redis.expire(monthKey, 45 * 24 * 60 * 60),
     ])
   } catch {
+    syncMemorySpendStamps(dayStamp, monthStamp)
     memorySpend.day += usd
     memorySpend.month += usd
   }
