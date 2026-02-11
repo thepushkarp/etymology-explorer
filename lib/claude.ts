@@ -24,10 +24,9 @@ async function callAnthropic(
 
   const client = new Anthropic({ apiKey, timeout: CONFIG.timeouts.llm })
 
-  const response = await client.beta.messages.create({
+  const response = await client.messages.create({
     model: CONFIG.model,
     max_tokens: CONFIG.synthesisMaxTokens,
-    betas: ['structured-outputs-2025-11-13'],
     system: SYSTEM_PROMPT,
     messages: [
       {
@@ -35,9 +34,11 @@ async function callAnthropic(
         content: userPrompt,
       },
     ],
-    output_format: {
-      type: 'json_schema',
-      schema: ETYMOLOGY_SCHEMA,
+    output_config: {
+      format: {
+        type: 'json_schema',
+        schema: ETYMOLOGY_SCHEMA,
+      },
     },
   })
 
