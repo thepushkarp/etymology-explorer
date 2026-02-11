@@ -19,17 +19,17 @@ Users search for a word, and the app:
 
 ```bash
 # Development
-yarn dev              # Start dev server on localhost:3000
+bun dev              # Start dev server on localhost:3000
 
 # Code quality
-yarn lint             # ESLint check
-yarn lint:fix         # Auto-fix lint issues
-yarn format           # Prettier format all files
-yarn format:check     # Verify formatting
+bun run lint             # ESLint check
+bun run lint:fix         # Auto-fix lint issues
+bun run format           # Prettier format all files
+bun run format:check     # Verify formatting
 
 # Production
-yarn build            # Build for production
-yarn start            # Start production server
+bun run build            # Build for production
+bun run start            # Start production server
 ```
 
 Pre-commit hooks (Husky + lint-staged) automatically run ESLint and Prettier on staged files.

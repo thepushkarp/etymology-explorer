@@ -39,13 +39,13 @@ git clone https://github.com/thepushkarp/etymology-explorer.git
 cd etymology-explorer
 
 # Install dependencies
-yarn install
+bun install
 
 # Set up environment variables (see Environment Configuration section)
 cp .env.example .env.local
 
 # Start the development server
-yarn dev
+bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
@@ -279,16 +279,16 @@ etymology-explorer/
 
 ```bash
 # Run development server
-yarn dev
+bun dev
 
 # Lint code
-yarn lint
+bun run lint
 
 # Format code
-yarn format
+bun run format
 
 # Build for production
-yarn build
+bun run build
 ```
 
 ## Deployment
