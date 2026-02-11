@@ -18,6 +18,8 @@ Do not tune limits by editing route handlers directly.
 - `TIMEOUT_POLICY`: external fetch and LLM timeout budgets
 - `INPUT_POLICY`: payload and input length limits
 - `RESEARCH_POLICY`: source fan-out and root exploration limits
+- `SECURITY_POLICY`: request trust model defaults
+- `ADMIN_POLICY`: operator endpoint authentication header names
 - `IDENTITY_POLICY`: signed cookie names used for authenticated-tier verification
 - `FEATURE_FLAGS`: operator toggles (`publicSearchEnabled`, `forceCacheOnly`, `disablePronunciation`, `cspReportOnly`)
 
@@ -32,7 +34,27 @@ Key expectations:
 - `ANTHROPIC_API_KEY` must be present for etymology generation
 - `ANTHROPIC_MODEL` must remain in `claude-haiku-4-5*` family
 - `REQUEST_IDENTITY_SIGNING_SECRET` enables verified authenticated quota tier
+- `TRUST_PROXY_HEADERS=false` is safest by default; set to `true` only behind a trusted edge/proxy that overwrites client-IP headers
+- `ADMIN_SECRET` enables authenticated access to `GET /api/admin/stats`
 - Redis is optional but strongly recommended for real guardrail effectiveness
+
+## Trust Model
+
+- Default behavior (`TRUST_PROXY_HEADERS=false`): treat upstream IP headers as untrusted and do not use them for identity/risk decisions.
+- Trusted-edge behavior (`TRUST_PROXY_HEADERS=true`): accept canonical proxy headers (`cf-connecting-ip`, `x-forwarded-for`) for request identity.
+- Only enable trusted-edge behavior when every hop before app runtime is controlled and strips/spoofs client-provided forwarding headers.
+
+## Admin Stats Endpoint
+
+- Endpoint: `GET /api/admin/stats`
+- Auth header name: `x-admin-secret` (from `ADMIN_POLICY.headerName`)
+- Secret source: `ADMIN_SECRET`
+- Auth check uses timing-safe comparison and returns `401` on mismatch.
+- Returns read-only operational stats:
+  - Current cost mode and spend (`dayUsd`, `monthUsd`)
+  - Cost guard thresholds (`degrade`, `cache_only`, hard limits)
+  - Daily request budget limits and usage/remaining when a budget usage reader is available
+  - If a usage reader is unavailable, `usage`/`remaining` fields are `null`
 
 ## Incident Procedures
 
@@ -63,6 +85,8 @@ After guardrail changes, verify:
 - Rate-limited requests return `429` with `Retry-After`
 - Suspicious traffic receives challenge-required responses
 - Cost modes transition correctly (`normal` → `degraded` → `cache_only`/`blocked`)
+- Admin stats endpoint returns `401` without valid `x-admin-secret`
+- Admin stats endpoint returns spend/mode data with valid `x-admin-secret`
 - Security headers are present in responses
 - No API credentials appear in browser storage/network payloads
 

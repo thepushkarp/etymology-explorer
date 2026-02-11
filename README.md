@@ -42,13 +42,16 @@ This module defines:
 ### Runtime Enforcement
 
 - Input schema validation on API routes
+- Query schema validation for `/api/suggestions` (`SuggestionsQuerySchema`)
 - Legacy `llmConfig` request payloads rejected
 - Per-route rate limiting for anonymous/authenticated tiers
 - Authenticated tier only when signed identity cookies are verified server-side
+- Proxy-derived client IPs are used only when `TRUST_PROXY_HEADERS=true`
 - Risk scoring and challenge verification for suspicious traffic
 - Cost mode enforcement (`normal` / `degraded` / `cache_only` / `blocked`)
 - Cache stampede control via singleflight locks
 - Security headers from `middleware.ts`
+- Read-only operator stats endpoint gated by timing-safe admin secret comparison
 
 ## API Endpoints
 
@@ -58,6 +61,9 @@ This module defines:
 - `GET /api/random-word`
 - `GET /api/suggestions?q=...`
 - `POST /api/challenge/verify`
+- `GET /api/admin/stats`
+  - Requires header: `x-admin-secret: <ADMIN_SECRET>`
+  - Returns read-only spend/cost-mode and daily request budget stats
 
 ## Local Development
 
@@ -77,6 +83,8 @@ Copy `.env.example` and fill values:
 - `ETYMOLOGY_KV_REST_API_URL` / `ETYMOLOGY_KV_REST_API_TOKEN` (recommended)
 - `TURNSTILE_SECRET_KEY` (optional, enables challenge verification)
 - `REQUEST_IDENTITY_SIGNING_SECRET` (optional, enables verified authenticated tier)
+- `TRUST_PROXY_HEADERS` (default `false`; set `true` only behind trusted proxy headers)
+- `ADMIN_SECRET` (optional; if set, enables authenticated `/api/admin/stats`)
 - `ELEVENLABS_API_KEY` (optional pronunciation)
 - feature flags: `PUBLIC_SEARCH_ENABLED`, `FORCE_CACHE_ONLY`, `DISABLE_PRONUNCIATION`, `CSP_REPORT_ONLY`
 
