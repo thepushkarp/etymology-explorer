@@ -47,6 +47,7 @@ This module defines:
 - Per-route rate limiting for anonymous/authenticated tiers
 - Authenticated tier only when signed identity cookies are verified server-side
 - Proxy-derived client IPs are used only when `TRUST_PROXY_HEADERS=true`
+- If no trusted IP source exists, anonymous traffic is pooled under one conservative key (`anon:untrusted-network`) to prevent header-spoof bypasses
 - Risk scoring and challenge verification for suspicious traffic
 - Cost mode enforcement (`normal` / `degraded` / `cache_only` / `blocked`)
 - Cache stampede control via singleflight locks

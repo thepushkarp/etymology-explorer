@@ -58,13 +58,25 @@ function getTrustedProxyIp(request: NextRequest): string | null {
   return firstHop || null
 }
 
+function getDirectRuntimeIp(request: NextRequest): string | null {
+  const maybeWithIp = request as NextRequest & { ip?: string }
+  const runtimeIp = maybeWithIp.ip?.trim()
+  return runtimeIp || null
+}
+
 export function getRequestIdentity(request: NextRequest): RequestIdentity {
   const env = getServerEnv()
-  const ip = env.securityPolicy.trustProxyHeaders ? getTrustedProxyIp(request) || 'unknown' : 'unknown'
+  const directIp = getDirectRuntimeIp(request)
+  const trustedProxyIp = env.securityPolicy.trustProxyHeaders ? getTrustedProxyIp(request) : null
+  const ip = directIp || trustedProxyIp || 'unknown'
   const userAgent = request.headers.get('user-agent') || ''
   const userId = verifySignedUserId(request)
 
-  const sessionKey = userId ? `user:${hash(userId)}` : `ip:${hash(`${ip}:${userAgent}`)}`
+  const sessionKey = userId
+    ? `user:${hash(userId)}`
+    : ip !== 'unknown'
+      ? `ip:${hash(`${ip}:${userAgent}`)}`
+      : 'anon:untrusted-network'
 
   return {
     ip,

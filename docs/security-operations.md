@@ -41,6 +41,7 @@ Key expectations:
 ## Trust Model
 
 - Default behavior (`TRUST_PROXY_HEADERS=false`): treat upstream IP headers as untrusted and do not use them for identity/risk decisions.
+- When no direct runtime IP is available in that mode, anonymous traffic is intentionally grouped into a single conservative session bucket (`anon:untrusted-network`) to prevent spoofable header rotation bypasses.
 - Trusted-edge behavior (`TRUST_PROXY_HEADERS=true`): accept canonical proxy headers (`cf-connecting-ip`, `x-forwarded-for`) for request identity.
 - Only enable trusted-edge behavior when every hop before app runtime is controlled and strips/spoofs client-provided forwarding headers.
 

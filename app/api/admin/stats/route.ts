@@ -2,16 +2,12 @@ import { timingSafeEqual } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { ADMIN_POLICY, COST_POLICY } from '@/lib/config/guardrails'
-import * as costGuard from '@/lib/security/cost-guard'
+import { getCostMode, getTodayDailyRequestBudgetUsageCounts } from '@/lib/security/cost-guard'
 import { getServerEnv } from '@/lib/server/env'
 
 type DailyRequestBudgetUsage = {
   etymology: number
   pronunciation: number
-}
-
-type CostGuardWithDailyBudgetReader = typeof costGuard & {
-  readDailyRequestBudgetUsage?: () => Promise<DailyRequestBudgetUsage>
 }
 
 function safeCompareSecret(candidate: string | null, expected: string): boolean {
@@ -29,13 +25,8 @@ function safeCompareSecret(candidate: string | null, expected: string): boolean 
 }
 
 async function readDailyRequestBudgetUsage(): Promise<DailyRequestBudgetUsage | null> {
-  const reader = (costGuard as CostGuardWithDailyBudgetReader).readDailyRequestBudgetUsage
-  if (typeof reader !== 'function') {
-    return null
-  }
-
   try {
-    return await reader()
+    return await getTodayDailyRequestBudgetUsageCounts()
   } catch {
     return null
   }
@@ -66,10 +57,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const [costState, budgetUsage] = await Promise.all([
-    costGuard.getCostMode(),
-    readDailyRequestBudgetUsage(),
-  ])
+  const [costState, budgetUsage] = await Promise.all([getCostMode(), readDailyRequestBudgetUsage()])
 
   const dailyBudgetLimits = COST_POLICY.dailyRequestBudget
   const dailyBudgetRemaining = budgetUsage
