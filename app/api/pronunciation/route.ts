@@ -5,12 +5,26 @@ import { RATE_LIMIT_POLICY, getTierForRequest } from '@/lib/config/guardrails'
 import { generatePronunciation, isElevenLabsConfigured } from '@/lib/elevenlabs'
 import { PronunciationQuerySchema } from '@/lib/schemas/api'
 import { isChallengeConfigured, verifyChallengeToken } from '@/lib/security/challenge'
-import { getCostMode } from '@/lib/security/cost-guard'
+import { getCostMode, reserveDailyRequestBudget } from '@/lib/security/cost-guard'
 import { applyRateLimit } from '@/lib/security/rate-limit'
 import { getRequestIdentity } from '@/lib/security/request-meta'
 import { safeErrorMessage } from '@/lib/security/redact'
 import { assessRisk } from '@/lib/security/risk'
 import { getServerEnv } from '@/lib/server/env'
+
+function secondsUntilNextUtcDay(): number {
+  const now = new Date()
+  const nextUtcMidnightMs = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+    0,
+    0,
+    0,
+    0
+  )
+  return Math.max(1, Math.ceil((nextUtcMidnightMs - now.getTime()) / 1000))
+}
 
 /**
  * GET /api/pronunciation?word=example
@@ -126,6 +140,23 @@ export async function GET(request: NextRequest) {
           ...rateDecision.headers,
           'Retry-After': '900',
           'X-Cost-Mode': mode,
+        },
+      }
+    )
+  }
+
+  const budgetDecision = await reserveDailyRequestBudget('pronunciation')
+  if (!budgetDecision.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Pronunciation is temporarily unavailable due to daily request budget limits',
+      },
+      {
+        status: 503,
+        headers: {
+          ...rateDecision.headers,
+          'Retry-After': String(secondsUntilNextUtcDay()),
         },
       }
     )

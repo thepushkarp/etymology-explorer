@@ -23,7 +23,7 @@ import {
   estimateUsdFromTokens,
   getTierForRequest,
 } from '@/lib/config/guardrails'
-import { getCostMode, recordSpend } from '@/lib/security/cost-guard'
+import { getCostMode, recordSpend, reserveDailyRequestBudget } from '@/lib/security/cost-guard'
 import { applyRateLimit } from '@/lib/security/rate-limit'
 import { getRequestIdentity } from '@/lib/security/request-meta'
 import { safeErrorMessage } from '@/lib/security/redact'
@@ -41,6 +41,20 @@ function jsonWithHeaders(body: unknown, status: number, headers: Record<string, 
     status,
     headers,
   })
+}
+
+function secondsUntilNextUtcDay(): number {
+  const now = new Date()
+  const nextUtcMidnightMs = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() + 1,
+    0,
+    0,
+    0,
+    0
+  )
+  return Math.max(1, Math.ceil((nextUtcMidnightMs - now.getTime()) / 1000))
 }
 
 export async function POST(request: NextRequest) {
@@ -277,6 +291,21 @@ export async function POST(request: NextRequest) {
           ...rateDecision.headers,
           'Retry-After': '2',
           'X-Singleflight': 'BUSY',
+        }
+      )
+    }
+
+    const budgetDecision = await reserveDailyRequestBudget('etymology')
+    if (!budgetDecision.allowed) {
+      return jsonWithHeaders(
+        {
+          success: false,
+          error: 'Search is temporarily unavailable due to daily request budget limits',
+        },
+        503,
+        {
+          ...rateDecision.headers,
+          'Retry-After': String(secondsUntilNextUtcDay()),
         }
       )
     }
