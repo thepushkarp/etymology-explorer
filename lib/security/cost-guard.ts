@@ -1,11 +1,18 @@
 import { COST_POLICY, CostMode } from '@/lib/config/guardrails'
 import { getRedisClient } from '@/lib/server/redis'
 
+export type DailyBudgetRoute = 'etymology' | 'pronunciation'
+
 interface MemorySpend {
   day: number
   month: number
   dayStamp: string
   monthStamp: string
+}
+
+interface MemoryDailyRequestUsage {
+  dayStamp: string
+  counts: Record<DailyBudgetRoute, number>
 }
 
 const memorySpend: MemorySpend = {
@@ -14,6 +21,37 @@ const memorySpend: MemorySpend = {
   dayStamp: '',
   monthStamp: '',
 }
+
+const memoryDailyRequestUsage: MemoryDailyRequestUsage = {
+  dayStamp: '',
+  counts: {
+    etymology: 0,
+    pronunciation: 0,
+  },
+}
+
+const DAILY_REQUEST_BUDGET_TTL_SECONDS = 2 * 24 * 60 * 60
+const DAILY_BUDGET_ROUTES: readonly DailyBudgetRoute[] = ['etymology', 'pronunciation']
+
+const RESERVE_DAILY_REQUEST_BUDGET_SCRIPT = `
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local ttlSeconds = tonumber(ARGV[2])
+
+local used = redis.call("INCR", key)
+
+if used == 1 then
+  redis.call("EXPIRE", key, ttlSeconds)
+end
+
+if used > limit then
+  redis.call("DECR", key)
+  local rolledBack = redis.call("GET", key)
+  return {0, tonumber(rolledBack) or 0}
+end
+
+return {1, used}
+`
 
 function getDayStamp(): string {
   return new Date().toISOString().slice(0, 10)
@@ -32,6 +70,97 @@ function syncMemorySpendStamps(dayStamp: string, monthStamp: string): void {
   if (memorySpend.monthStamp !== monthStamp) {
     memorySpend.monthStamp = monthStamp
     memorySpend.month = 0
+  }
+}
+
+function syncMemoryDailyUsageStamp(dayStamp: string): void {
+  if (memoryDailyRequestUsage.dayStamp === dayStamp) {
+    return
+  }
+
+  memoryDailyRequestUsage.dayStamp = dayStamp
+  memoryDailyRequestUsage.counts.etymology = 0
+  memoryDailyRequestUsage.counts.pronunciation = 0
+}
+
+function getDailyBudgetLimit(route: DailyBudgetRoute): number {
+  return COST_POLICY.dailyRequestBudget[route]
+}
+
+function getDailyBudgetKey(route: DailyBudgetRoute, dayStamp: string): string {
+  return `${COST_POLICY.keyPrefix}:daily_request:${route}:${dayStamp}`
+}
+
+function reserveDailyRequestBudgetInMemory(
+  route: DailyBudgetRoute,
+  dayStamp: string
+): { allowed: boolean; used: number; limit: number } {
+  syncMemoryDailyUsageStamp(dayStamp)
+
+  const limit = getDailyBudgetLimit(route)
+  const used = memoryDailyRequestUsage.counts[route]
+
+  if (used >= limit) {
+    return { allowed: false, used, limit }
+  }
+
+  const nextUsed = used + 1
+  memoryDailyRequestUsage.counts[route] = nextUsed
+  return { allowed: true, used: nextUsed, limit }
+}
+
+export async function reserveDailyRequestBudget(
+  route: DailyBudgetRoute
+): Promise<{ allowed: boolean; used: number; limit: number }> {
+  const dayStamp = getDayStamp()
+  const limit = getDailyBudgetLimit(route)
+  const redis = getRedisClient()
+
+  if (!redis) {
+    return reserveDailyRequestBudgetInMemory(route, dayStamp)
+  }
+
+  try {
+    const key = getDailyBudgetKey(route, dayStamp)
+    const reserveScript = redis.createScript<[number, number]>(RESERVE_DAILY_REQUEST_BUDGET_SCRIPT)
+    const [allowedRaw, usedRaw] = await reserveScript.exec(
+      [key],
+      [String(limit), String(DAILY_REQUEST_BUDGET_TTL_SECONDS)]
+    )
+
+    return {
+      allowed: Number(allowedRaw) === 1,
+      used: Number(usedRaw || 0),
+      limit,
+    }
+  } catch {
+    return reserveDailyRequestBudgetInMemory(route, dayStamp)
+  }
+}
+
+export async function getTodayDailyRequestBudgetUsageCounts(): Promise<Record<DailyBudgetRoute, number>> {
+  const dayStamp = getDayStamp()
+  const redis = getRedisClient()
+  const [etymologyRoute, pronunciationRoute] = DAILY_BUDGET_ROUTES
+
+  if (!redis) {
+    syncMemoryDailyUsageStamp(dayStamp)
+    return { ...memoryDailyRequestUsage.counts }
+  }
+
+  try {
+    const [etymologyUsed, pronunciationUsed] = await Promise.all([
+      redis.get<number>(getDailyBudgetKey(etymologyRoute, dayStamp)),
+      redis.get<number>(getDailyBudgetKey(pronunciationRoute, dayStamp)),
+    ])
+
+    return {
+      etymology: Number(etymologyUsed || 0),
+      pronunciation: Number(pronunciationUsed || 0),
+    }
+  } catch {
+    syncMemoryDailyUsageStamp(dayStamp)
+    return { ...memoryDailyRequestUsage.counts }
   }
 }
 
