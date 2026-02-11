@@ -102,7 +102,11 @@ function sanitizeSuggestions(result: EtymologyResult): void {
 
 /**
  * Generate etymology response via Anthropic structured output.
- * Returns both the parsed result and token usage for cost tracking.
+ * Returns the parsed (but not yet enriched) result and token usage.
+ *
+ * Note: Zod validation happens later in synthesizeFromResearch(), after
+ * source enrichment overwrites the LLM's string[] sources with proper
+ * SourceReference[] objects.
  */
 async function generateEtymologyResponse(
   userPrompt: string
@@ -110,28 +114,16 @@ async function generateEtymologyResponse(
   const { text, usage } = await callAnthropic(userPrompt)
 
   try {
-    let raw: unknown = JSON.parse(text)
-    // Handle double-encoded JSON from structured outputs beta
-    if (typeof raw === 'string') {
-      raw = JSON.parse(raw)
+    const raw = JSON.parse(text)
+    if (typeof raw !== 'object' || raw === null) {
+      throw new Error(`Expected JSON object, got ${typeof raw}`)
     }
-    const parsed = EtymologyResultSchema.safeParse(raw)
-    if (!parsed.success) {
-      console.error(
-        '[Claude] LLM output schema validation failed:',
-        parsed.error.issues[0]?.message
-      )
-      throw new Error(`LLM output schema validation failed: ${parsed.error.issues[0]?.message}`)
-    }
-    const result = parsed.data as EtymologyResult
+    const result = raw as EtymologyResult
     sanitizeSuggestions(result)
     return { result, usage }
   } catch (e) {
-    if (e instanceof Error && e.message.startsWith('LLM output schema validation failed')) {
-      throw e
-    }
     const preview = text.slice(0, 200)
-    throw new Error(`Failed to parse LLM response as JSON: ${e}. Response preview: ${preview}`)
+    throw new Error(`Failed to parse LLM response: ${e}. Preview: ${preview}`)
   }
 }
 
@@ -182,5 +174,16 @@ export async function synthesizeFromResearch(
   }
   result.sources = sources
 
-  return { result, usage }
+  // Validate the fully enriched result (sources, confidence, evidence all populated)
+  const validated = EtymologyResultSchema.safeParse(result)
+  if (!validated.success) {
+    const issue = validated.error.issues[0]
+    console.error(
+      '[Claude] Schema validation failed after enrichment:',
+      JSON.stringify({ message: issue?.message, path: issue?.path, code: issue?.code })
+    )
+    throw new Error(`Schema validation failed: ${issue?.message} at ${issue?.path?.join('.')}`)
+  }
+
+  return { result: validated.data as EtymologyResult, usage }
 }
