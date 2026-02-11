@@ -68,6 +68,10 @@ export const COST_POLICY = {
   monthHardLimitUsd: 400,
   degradeAtUsd: 12,
   cacheOnlyAtUsd: 18,
+  dailyRequestBudget: {
+    etymology: RATE_LIMIT_POLICY.routes.etymology.anonymous.dayLimit,
+    pronunciation: RATE_LIMIT_POLICY.routes.pronunciation.anonymous.dayLimit,
+  },
 } as const
 
 export const CACHE_POLICY = {
@@ -93,6 +97,8 @@ export const INPUT_POLICY = {
   maxRequestBodyBytes: 1024,
   wordMinLength: 2,
   wordMaxLength: 48,
+  suggestionQueryMaxLength: 48,
+  suggestionQueryPattern: /^[a-zA-Z'-]+$/,
   challengeTokenMaxLength: 2048,
 } as const
 
@@ -108,6 +114,14 @@ export const FEATURE_FLAGS = {
   forceCacheOnly: false,
   disablePronunciation: false,
   cspReportOnly: true,
+} as const
+
+export const SECURITY_POLICY = {
+  trustProxyHeaders: false,
+} as const
+
+export const ADMIN_POLICY = {
+  headerName: 'x-admin-secret',
 } as const
 
 export const IDENTITY_POLICY = {

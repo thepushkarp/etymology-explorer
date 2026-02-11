@@ -29,5 +29,20 @@ export const PronunciationQuerySchema = z
   })
   .strict()
 
+export const SuggestionsQuerySchema = z
+  .object({
+    q: z
+      .string()
+      .trim()
+      .min(1, 'Query is required')
+      .max(
+        INPUT_POLICY.suggestionQueryMaxLength,
+        `Query must be at most ${INPUT_POLICY.suggestionQueryMaxLength} characters`
+      )
+      .regex(INPUT_POLICY.suggestionQueryPattern, 'Query contains unsupported characters'),
+  })
+  .strict()
+
 export type EtymologyRequestInput = z.infer<typeof EtymologyRequestSchema>
 export type PronunciationQueryInput = z.infer<typeof PronunciationQuerySchema>
+export type SuggestionsQueryInput = z.infer<typeof SuggestionsQuerySchema>

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { z } from 'zod'
-import { FEATURE_FLAGS, LLM_POLICY } from '@/lib/config/guardrails'
+import { FEATURE_FLAGS, LLM_POLICY, SECURITY_POLICY } from '@/lib/config/guardrails'
 
 const envSchema = z
   .object({
@@ -13,6 +13,8 @@ const envSchema = z
 
     TURNSTILE_SECRET_KEY: z.string().trim().optional(),
     REQUEST_IDENTITY_SIGNING_SECRET: z.string().trim().min(16).optional(),
+    TRUST_PROXY_HEADERS: z.enum(['true', 'false']).optional(),
+    ADMIN_SECRET: z.string().trim().min(16).optional(),
 
     PUBLIC_SEARCH_ENABLED: z.enum(['true', 'false']).optional(),
     FORCE_CACHE_ONLY: z.enum(['true', 'false']).optional(),
@@ -40,6 +42,12 @@ const envSchema = z
 
       turnstileSecretKey: raw.TURNSTILE_SECRET_KEY,
       requestIdentitySigningSecret: raw.REQUEST_IDENTITY_SIGNING_SECRET,
+      adminSecret: raw.ADMIN_SECRET,
+      securityPolicy: {
+        trustProxyHeaders: raw.TRUST_PROXY_HEADERS
+          ? raw.TRUST_PROXY_HEADERS === 'true'
+          : SECURITY_POLICY.trustProxyHeaders,
+      },
 
       featureFlags: {
         publicSearchEnabled:
