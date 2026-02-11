@@ -10,6 +10,8 @@
 import { CONFIG } from './config'
 import { getRedis } from './redis'
 import { safeError } from './errorUtils'
+import { emitSecurityEvent } from './telemetry'
+import type { ProtectionMode } from './types'
 
 function todayKey(type: 'etymology' | 'pronunciation'): string {
   const date = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
@@ -89,7 +91,7 @@ export async function getBudgetStats(): Promise<{
 
 // --- USD-based cost tracking ---
 
-export type CostMode = 'normal' | 'degraded' | 'cache_only' | 'blocked'
+export type CostMode = ProtectionMode
 
 const {
   pricingPerMillionTokens: pricing,
@@ -140,10 +142,21 @@ export async function getCostMode(): Promise<CostMode> {
     const raw = await redis.get<number>(costKey())
     const spent = raw ?? 0
 
-    if (spent >= dailyLimitUSD) return 'blocked'
-    if (spent >= dailyLimitUSD * cacheOnlyAtPercent) return 'cache_only'
-    if (spent >= dailyLimitUSD * degradedAtPercent) return 'degraded'
-    return 'normal'
+    let mode: CostMode
+    if (spent >= dailyLimitUSD) mode = 'blocked'
+    else if (spent >= dailyLimitUSD * cacheOnlyAtPercent) mode = 'cache_only'
+    else if (spent >= dailyLimitUSD * degradedAtPercent) mode = 'protected_503'
+    else mode = 'normal'
+
+    if (mode !== 'normal') {
+      emitSecurityEvent({
+        type: 'protection_mode_change',
+        timestamp: Date.now(),
+        detail: { mode, spentUSD: spent, limitUSD: dailyLimitUSD },
+      })
+    }
+
+    return mode
   } catch (error) {
     console.error('[CostGuard] getCostMode failed:', safeError(error))
     return 'normal'

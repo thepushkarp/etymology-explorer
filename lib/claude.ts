@@ -4,6 +4,7 @@ import { SYSTEM_PROMPT, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph } from './etymologyEnricher'
 import { ETYMOLOGY_SCHEMA } from '@/lib/schemas/llm-schema'
+import { EtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
 import { getEnv } from './env'
 
@@ -109,10 +110,22 @@ async function generateEtymologyResponse(
   const { text, usage } = await callAnthropic(userPrompt)
 
   try {
-    const result = JSON.parse(text) as EtymologyResult
+    const raw = JSON.parse(text)
+    const parsed = EtymologyResultSchema.safeParse(raw)
+    if (!parsed.success) {
+      console.error(
+        '[Claude] LLM output schema validation failed:',
+        parsed.error.issues[0]?.message
+      )
+      throw new Error(`LLM output schema validation failed: ${parsed.error.issues[0]?.message}`)
+    }
+    const result = parsed.data as EtymologyResult
     sanitizeSuggestions(result)
     return { result, usage }
   } catch (e) {
+    if (e instanceof Error && e.message.startsWith('LLM output schema validation failed')) {
+      throw e
+    }
     const preview = text.slice(0, 200)
     throw new Error(`Failed to parse LLM response as JSON: ${e}. Response preview: ${preview}`)
   }

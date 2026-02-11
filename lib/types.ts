@@ -215,3 +215,20 @@ export interface ResearchContext {
   totalSourcesFetched: number
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
 }
+
+/** Protection states for cost guard — extends the budget degradation ladder */
+export type ProtectionMode = 'normal' | 'degraded' | 'cache_only' | 'protected_503' | 'blocked'
+
+/** Security telemetry event emitted at key decision points */
+export interface SecurityTelemetryEvent {
+  type:
+    | 'rate_limit'
+    | 'budget_check'
+    | 'cache_hit'
+    | 'cache_miss'
+    | 'schema_validation_fail'
+    | 'protection_mode_change'
+    | 'redis_health'
+  timestamp: number
+  detail: Record<string, unknown>
+}

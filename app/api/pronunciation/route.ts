@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generatePronunciation, isElevenLabsConfigured } from '@/lib/elevenlabs'
 import { getCachedAudio, cacheAudio } from '@/lib/cache'
-import { isValidWord } from '@/lib/validation'
-import { reservePronunciationBudget } from '@/lib/costGuard'
+import { isValidWord, canonicalizeWord } from '@/lib/validation'
+import { reservePronunciationBudget, getCostMode } from '@/lib/costGuard'
 import { tryAcquireLock, releaseLock, pollForResult } from '@/lib/singleflight'
 import { safeError } from '@/lib/errorUtils'
 import { CONFIG } from '@/lib/config'
@@ -28,7 +28,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Word parameter required' }, { status: 400 })
   }
 
-  if (!isValidWord(word)) {
+  const normalized = canonicalizeWord(word)
+
+  if (!normalized || !isValidWord(normalized)) {
     return NextResponse.json({ success: false, error: 'Invalid word' }, { status: 400 })
   }
 
@@ -38,8 +40,6 @@ export async function GET(request: NextRequest) {
       { status: 503 }
     )
   }
-
-  const normalized = word.toLowerCase().trim()
 
   // Check cache first (cache hits are free — no budget cost)
   try {
@@ -84,6 +84,15 @@ export async function GET(request: NextRequest) {
 
   // We hold the lock — reserve budget only for the winner (not waiters)
   try {
+    // Check cost mode — reject uncached expensive requests when budget is pressured
+    const costMode = await getCostMode()
+    if (costMode === 'blocked' || costMode === 'cache_only' || costMode === 'protected_503') {
+      return NextResponse.json(
+        { success: false, error: 'Service temporarily unavailable' },
+        { status: 503, headers: { 'X-Protection-Mode': costMode } }
+      )
+    }
+
     const budgetOk = await reservePronunciationBudget()
     if (!budgetOk) {
       return NextResponse.json(

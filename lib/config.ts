@@ -10,8 +10,8 @@ export const CONFIG = {
   rootExtractionMaxTokens: 100,
 
   // Input validation
-  maxWordLength: 45,
-  wordPattern: /^[a-zA-Z]+$/,
+  maxWordLength: 35,
+  wordPattern: /^[\p{L}][\p{L}'\-]*[\p{L}]$|^[\p{L}]$/u, // Unicode letters + internal '/-
   maxRequestBodyBytes: 1024,
 
   // Rate limits (per IP)
@@ -68,6 +68,24 @@ export const CONFIG = {
     publicSearchEnabled: process.env.PUBLIC_SEARCH_ENABLED !== 'false',
     pronunciationEnabled: process.env.PRONUNCIATION_ENABLED !== 'false',
     forceCacheOnly: process.env.FORCE_CACHE_ONLY === 'true',
+  },
+
+  // Cloudflare proxy trust
+  cloudflare: {
+    trustProxy: process.env.CLOUDFLARE_PROXY === 'true',
+    // Site is on Vercel with domain on Cloudflare — when enabled, trusts cf-connecting-ip
+  },
+
+  // Protection model (budget-based degradation ladder)
+  protection: {
+    protected503AtPercent: 0.7, // 503 for uncached expensive requests at 70%
+    cooldownWindowMs: 5 * 60_000, // 5 min hysteresis before stepping down
+  },
+
+  // Cache hardening
+  cache: {
+    ttlJitterPercent: 0.1, // ±10% jitter on TTLs
+    negativeCacheAdmitOnly: ['no_sources', 'invalid_word'] as readonly string[],
   },
 
   // Redis prefixes
