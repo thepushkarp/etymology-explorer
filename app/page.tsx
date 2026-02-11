@@ -204,7 +204,7 @@ function HomeContent() {
             >
               thepushkarp
             </a>{' '}
-            with curiosity and Claude
+            with Curiosity, Claude, Codex and Cursor
           </p>
           <p
             className="
