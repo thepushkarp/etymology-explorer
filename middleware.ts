@@ -116,7 +116,17 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next()
+  const response = NextResponse.next()
+
+  // CSP in report-only mode — switch to enforcing after confirming no breakage
+  response.headers.set(
+    'Content-Security-Policy-Report-Only',
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com; " +
+      "style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; " +
+      "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  )
+
+  return response
 }
 
 export const config = {

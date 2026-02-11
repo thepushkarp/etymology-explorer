@@ -5,17 +5,23 @@ import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph } from './etymologyEnricher'
 import { ETYMOLOGY_SCHEMA } from '@/lib/schemas/llm-schema'
 import { CONFIG } from './config'
+import { getEnv } from './env'
+
+export interface SynthesisResult {
+  result: EtymologyResult
+  usage: { inputTokens: number; outputTokens: number }
+}
 
 /**
- * Call Anthropic API with structured output using server-side key
+ * Call Anthropic API with structured output using server-side key.
+ * Returns the response text and token usage for cost tracking.
  */
-async function callAnthropic(userPrompt: string): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY environment variable is not set')
-  }
+async function callAnthropic(
+  userPrompt: string
+): Promise<{ text: string; usage: { inputTokens: number; outputTokens: number } }> {
+  const apiKey = getEnv().ANTHROPIC_API_KEY
 
-  const client = new Anthropic({ apiKey })
+  const client = new Anthropic({ apiKey, timeout: CONFIG.timeouts.llm })
 
   const response = await client.beta.messages.create({
     model: CONFIG.model,
@@ -38,7 +44,13 @@ async function callAnthropic(userPrompt: string): Promise<string> {
   if (!textContent || textContent.type !== 'text') {
     throw new Error('No text response from Claude')
   }
-  return textContent.text
+  return {
+    text: textContent.text,
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    },
+  }
 }
 
 /**
@@ -88,32 +100,35 @@ function sanitizeSuggestions(result: EtymologyResult): void {
 }
 
 /**
- * Generate etymology response via Anthropic structured output
+ * Generate etymology response via Anthropic structured output.
+ * Returns both the parsed result and token usage for cost tracking.
  */
-async function generateEtymologyResponse(userPrompt: string): Promise<EtymologyResult> {
-  const responseText = await callAnthropic(userPrompt)
+async function generateEtymologyResponse(
+  userPrompt: string
+): Promise<{ result: EtymologyResult; usage: { inputTokens: number; outputTokens: number } }> {
+  const { text, usage } = await callAnthropic(userPrompt)
 
   try {
-    const result = JSON.parse(responseText) as EtymologyResult
+    const result = JSON.parse(text) as EtymologyResult
     sanitizeSuggestions(result)
-    return result
+    return { result, usage }
   } catch (e) {
-    const preview = responseText.slice(0, 200)
+    const preview = text.slice(0, 200)
     throw new Error(`Failed to parse LLM response as JSON: ${e}. Response preview: ${preview}`)
   }
 }
 
 /**
- * Synthesize etymology from rich research context (agentic mode)
- * Uses aggregated data from multiple sources and root exploration
+ * Synthesize etymology from rich research context (agentic mode).
+ * Returns both the enriched result and token usage for cost tracking.
  */
 export async function synthesizeFromResearch(
   researchContext: ResearchContext
-): Promise<EtymologyResult> {
+): Promise<SynthesisResult> {
   const researchData = buildResearchPrompt(researchContext)
   const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
 
-  const result = await generateEtymologyResponse(userPrompt)
+  const { result, usage } = await generateEtymologyResponse(userPrompt)
 
   // Enrich ancestry graph with source evidence and confidence levels
   if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
@@ -150,5 +165,5 @@ export async function synthesizeFromResearch(
   }
   result.sources = sources
 
-  return result
+  return { result, usage }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
-import { getBudgetStats } from '@/lib/costGuard'
+import { getBudgetStats, getSpendStats } from '@/lib/costGuard'
 
 export async function GET(request: NextRequest) {
   const secret = request.headers.get('x-admin-secret')
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
 
-  const stats = await getBudgetStats()
+  const [stats, spend] = await Promise.all([getBudgetStats(), getSpendStats()])
 
   if (!stats) {
     return NextResponse.json(
@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     data: {
       date: new Date().toISOString().slice(0, 10),
       ...stats,
+      ...(spend && { spend }),
     },
   })
 }

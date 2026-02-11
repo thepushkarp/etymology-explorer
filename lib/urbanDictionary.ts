@@ -1,4 +1,6 @@
 import { SourceData } from './types'
+import { fetchWithTimeout } from './fetchUtils'
+import { CONFIG } from './config'
 
 const URBAN_DICTIONARY_API = 'https://api.urbandictionary.com/v0/define'
 
@@ -41,7 +43,11 @@ function isClean(text: string): boolean {
 
 export async function fetchUrbanDictionary(word: string): Promise<SourceData | null> {
   try {
-    const response = await fetch(`${URBAN_DICTIONARY_API}?term=${encodeURIComponent(word)}`)
+    const response = await fetchWithTimeout(
+      `${URBAN_DICTIONARY_API}?term=${encodeURIComponent(word)}`,
+      {},
+      CONFIG.timeouts.source
+    )
 
     if (!response.ok) return null
 

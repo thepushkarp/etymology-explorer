@@ -9,6 +9,7 @@
 
 import { CONFIG } from './config'
 import { getRedis } from './redis'
+import { safeError } from './errorUtils'
 
 function todayKey(type: 'etymology' | 'pronunciation'): string {
   const date = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
@@ -35,7 +36,7 @@ export async function reserveEtymologyBudget(): Promise<boolean> {
     }
     return count <= CONFIG.dailyBudget.etymology
   } catch (error) {
-    console.error('[CostGuard] Etymology budget reserve failed:', error)
+    console.error('[CostGuard] Etymology budget reserve failed:', safeError(error))
     return true // Fail open
   }
 }
@@ -56,7 +57,7 @@ export async function reservePronunciationBudget(): Promise<boolean> {
     }
     return count <= CONFIG.dailyBudget.pronunciation
   } catch (error) {
-    console.error('[CostGuard] Pronunciation budget reserve failed:', error)
+    console.error('[CostGuard] Pronunciation budget reserve failed:', safeError(error))
     return true
   }
 }
@@ -81,7 +82,92 @@ export async function getBudgetStats(): Promise<{
       pronunciation: { used: pronCount ?? 0, limit: CONFIG.dailyBudget.pronunciation },
     }
   } catch (error) {
-    console.error('[CostGuard] Stats fetch failed:', error)
+    console.error('[CostGuard] Stats fetch failed:', safeError(error))
+    return null
+  }
+}
+
+// --- USD-based cost tracking ---
+
+export type CostMode = 'normal' | 'degraded' | 'cache_only' | 'blocked'
+
+const {
+  pricingPerMillionTokens: pricing,
+  dailyLimitUSD,
+  degradedAtPercent,
+  cacheOnlyAtPercent,
+} = CONFIG.costTracking
+
+function costKey(): string {
+  const date = new Date().toISOString().slice(0, 10)
+  return `cost:usd:${date}`
+}
+
+/**
+ * Record actual USD spend from token usage.
+ * Uses INCRBYFLOAT for atomic accumulation. Sets 25h TTL on first call.
+ */
+export async function recordSpend(usage: {
+  inputTokens: number
+  outputTokens: number
+}): Promise<void> {
+  const redis = getRedis()
+  if (!redis) return
+
+  const usd = (usage.inputTokens * pricing.input + usage.outputTokens * pricing.output) / 1_000_000
+
+  try {
+    const key = costKey()
+    const result = await redis.incrbyfloat(key, usd)
+    // First increment: result ≈ usd (within floating-point tolerance)
+    if (Math.abs(result - usd) < 0.0001) {
+      await redis.expire(key, 25 * 60 * 60)
+    }
+  } catch (error) {
+    console.error('[CostGuard] recordSpend failed:', safeError(error))
+  }
+}
+
+/**
+ * Determine the current cost mode based on daily spend.
+ * Fails open (returns 'normal' if Redis unavailable).
+ */
+export async function getCostMode(): Promise<CostMode> {
+  const redis = getRedis()
+  if (!redis) return 'normal'
+
+  try {
+    const raw = await redis.get<number>(costKey())
+    const spent = raw ?? 0
+
+    if (spent >= dailyLimitUSD) return 'blocked'
+    if (spent >= dailyLimitUSD * cacheOnlyAtPercent) return 'cache_only'
+    if (spent >= dailyLimitUSD * degradedAtPercent) return 'degraded'
+    return 'normal'
+  } catch (error) {
+    console.error('[CostGuard] getCostMode failed:', safeError(error))
+    return 'normal'
+  }
+}
+
+/**
+ * Get current spend stats for admin endpoint.
+ */
+export async function getSpendStats(): Promise<{
+  spentUSD: number
+  limitUSD: number
+  mode: CostMode
+} | null> {
+  const redis = getRedis()
+  if (!redis) return null
+
+  try {
+    const raw = await redis.get<number>(costKey())
+    const spentUSD = raw ?? 0
+    const mode = await getCostMode()
+    return { spentUSD, limitUSD: dailyLimitUSD, mode }
+  } catch (error) {
+    console.error('[CostGuard] getSpendStats failed:', safeError(error))
     return null
   }
 }

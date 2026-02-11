@@ -12,6 +12,7 @@ import { ResearchContext, RootResearchData } from './types'
 import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
 import Anthropic from '@anthropic-ai/sdk'
 import { CONFIG } from './config'
+import { safeError } from './errorUtils'
 
 /**
  * Extract probable roots from initial source data using a quick LLM call.
@@ -57,7 +58,7 @@ Return the JSON array only, no explanation:`
     if (!textContent || textContent.type !== 'text') return []
     return parseRootsArray(textContent.text)
   } catch (error) {
-    console.error('Root extraction error:', error)
+    console.error('Root extraction error:', safeError(error))
     return []
   }
 }
@@ -139,25 +140,41 @@ async function fetchRootResearch(root: string): Promise<RootResearchData> {
  * 3. Fetches context for each root
  * 4. Fetches related words (depth-limited)
  */
-export async function conductAgenticResearch(word: string): Promise<ResearchContext> {
+export async function conductAgenticResearch(
+  word: string,
+  options?: { skipOptionalSources?: boolean }
+): Promise<ResearchContext> {
   let totalFetches = 0
   const normalizedWord = word.toLowerCase().trim()
+  const skipOptional = options?.skipOptionalSources ?? false
 
-  // Phase 1: Initial fetch for main word (4 sources in parallel)
-  console.log(`[Research] Phase 1: Fetching main word "${normalizedWord}"`)
+  // Phase 1: Initial fetch for main word
+  console.log(
+    `[Research] Phase 1: Fetching main word "${normalizedWord}"${skipOptional ? ' (skip optional sources)' : ''}`
+  )
   const [etymonlineData, wiktionaryData, wikipediaData, urbanDictData] = await Promise.all([
     fetchEtymonline(normalizedWord),
     fetchWiktionary(normalizedWord),
-    fetchWikipedia(normalizedWord).catch((err) => {
-      console.error(`[Research] Wikipedia fetch failed for "${normalizedWord}":`, err)
-      return null
-    }),
-    fetchUrbanDictionary(normalizedWord).catch((err) => {
-      console.error(`[Research] Urban Dictionary fetch failed for "${normalizedWord}":`, err)
-      return null
-    }),
+    skipOptional
+      ? null
+      : fetchWikipedia(normalizedWord).catch((err) => {
+          console.error(
+            `[Research] Wikipedia fetch failed for "${normalizedWord}":`,
+            safeError(err)
+          )
+          return null
+        }),
+    skipOptional
+      ? null
+      : fetchUrbanDictionary(normalizedWord).catch((err) => {
+          console.error(
+            `[Research] Urban Dictionary fetch failed for "${normalizedWord}":`,
+            safeError(err)
+          )
+          return null
+        }),
   ])
-  totalFetches += 4
+  totalFetches += skipOptional ? 2 : 4
 
   const context: ResearchContext = {
     mainWord: {
@@ -242,7 +259,7 @@ export async function conductAgenticResearch(word: string): Promise<ResearchCont
           totalFetches += 1
         }
       } else {
-        console.error('[Research] Root fetch failed:', result.reason)
+        console.error('[Research] Root fetch failed:', safeError(result.reason))
       }
     }
   } else {
