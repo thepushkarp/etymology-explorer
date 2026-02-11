@@ -47,11 +47,20 @@ function verifySignedUserId(request: NextRequest): string | null {
   }
 }
 
+function getTrustedProxyIp(request: NextRequest): string | null {
+  const cfConnectingIp = request.headers.get('cf-connecting-ip')?.trim()
+  if (cfConnectingIp) {
+    return cfConnectingIp
+  }
+
+  const forwardedFor = request.headers.get('x-forwarded-for')
+  const firstHop = forwardedFor?.split(',')[0]?.trim()
+  return firstHop || null
+}
+
 export function getRequestIdentity(request: NextRequest): RequestIdentity {
-  const ip =
-    request.headers.get('cf-connecting-ip') ||
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    'unknown'
+  const env = getServerEnv()
+  const ip = env.securityPolicy.trustProxyHeaders ? getTrustedProxyIp(request) || 'unknown' : 'unknown'
   const userAgent = request.headers.get('user-agent') || ''
   const userId = verifySignedUserId(request)
 
