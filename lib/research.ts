@@ -274,10 +274,29 @@ export async function conductAgenticResearch(
 
 /**
  * Sanitize source text for safe embedding inside <source_data> XML tags.
- * Strips any occurrences of the closing tag to prevent breakout injection.
+ * Strips XML tags, control characters, and Unicode directional overrides
+ * to prevent prompt injection via source data.
  */
 function sanitizeSourceText(text: string, maxChars: number): string {
-  return text.slice(0, maxChars).replaceAll('</source_data>', '')
+  let sanitized = text
+  // Strip ALL XML-like tags
+  sanitized = sanitized.replace(/<\/?[a-zA-Z][^>]*>/g, '')
+  // Neutralize control characters (U+0000–U+001F except \n \t)
+  sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+  // Neutralize Unicode directional overrides
+  sanitized = sanitized.replace(/[\u200E\u200F\u202A-\u202E]/g, '')
+  return sanitized.slice(0, maxChars)
+}
+
+/**
+ * Escape a string for safe use inside an XML attribute value.
+ * Prevents attribute injection in <source_data name="..."> tags.
+ */
+function escapeAttr(s: string): string {
+  return s.replace(
+    /[&<>"']/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c
+  )
 }
 
 /**
@@ -341,7 +360,7 @@ export function buildResearchPrompt(context: ResearchContext): string {
     sections.push(`\n=== Related Words Research ===`)
     for (const [term, data] of relatedEntries) {
       sections.push(
-        `\n<source_data name="${term}">\n${sanitizeSourceText(data.text, maxChars)}\n</source_data>`
+        `\n<source_data name="${escapeAttr(term)}">\n${sanitizeSourceText(data.text, maxChars)}\n</source_data>`
       )
     }
   }

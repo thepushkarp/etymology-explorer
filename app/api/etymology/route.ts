@@ -6,12 +6,13 @@ import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
 import { getCachedEtymology, cacheEtymology, getNegativeCache, cacheNegative } from '@/lib/cache'
-import { isValidWord } from '@/lib/validation'
+import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { reserveEtymologyBudget, getCostMode, recordSpend } from '@/lib/costGuard'
 import { tryAcquireLock, releaseLock, pollForResult } from '@/lib/singleflight'
 import { safeError } from '@/lib/errorUtils'
 import { getEnv } from '@/lib/env'
 import { CONFIG } from '@/lib/config'
+import { emitSecurityEvent } from '@/lib/telemetry'
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,7 +43,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const normalizedWord = word.toLowerCase().trim()
+    const normalizedWord = canonicalizeWord(word)
 
     if (!normalizedWord) {
       return NextResponse.json<ApiResponse<null>>(
@@ -58,15 +59,24 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Check cache first (cache hits are free — no budget cost)
+    // Read cost mode early — needed for X-Protection-Mode header on all responses
+    const costMode = await getCostMode()
+
+    // Check cache first (cache hits are free — served regardless of cost mode)
     const cached = await getCachedEtymology(normalizedWord)
     if (cached) {
       console.log(`[Etymology API] Cache hit for "${normalizedWord}"`)
+      emitSecurityEvent({
+        type: 'cache_hit',
+        timestamp: Date.now(),
+        detail: { word: normalizedWord },
+      })
       return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
         { success: true, data: cached, cached: true },
         {
           headers: {
             'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+            'X-Protection-Mode': costMode,
           },
         }
       )
@@ -87,18 +97,22 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Check cost mode for gradual degradation (read-only, cheap)
-    const costMode = await getCostMode()
+    // Reject uncached expensive requests when budget is pressured
     if (costMode === 'blocked') {
       return NextResponse.json<ApiResponse<null>>(
         { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
-        { status: 503 }
+        { status: 503, headers: { 'X-Protection-Mode': costMode } }
       )
     }
-    if (costMode === 'cache_only') {
+    if (costMode === 'cache_only' || costMode === 'protected_503') {
+      emitSecurityEvent({
+        type: 'budget_check',
+        timestamp: Date.now(),
+        detail: { word: normalizedWord, mode: costMode, action: 'rejected' },
+      })
       return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Service is in cache-only mode. Please try again later.' },
-        { status: 503 }
+        { success: false, error: 'Service temporarily unavailable' },
+        { status: 503, headers: { 'X-Protection-Mode': costMode } }
       )
     }
 
@@ -139,15 +153,12 @@ export async function GET(request: NextRequest) {
 
       // Conduct agentic research
       console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
-      const researchContext = await conductAgenticResearch(
-        normalizedWord,
-        costMode === 'degraded' ? { skipOptionalSources: true } : undefined
-      )
+      const researchContext = await conductAgenticResearch(normalizedWord)
 
       // If no source data found, check if it's a typo
       if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
         // Cache as negative so gibberish doesn't trigger source fetches again
-        cacheNegative(normalizedWord).catch((err) => {
+        cacheNegative(normalizedWord, 'no_sources').catch((err) => {
           console.error('[Etymology API] Negative cache store failed:', safeError(err))
         })
 
@@ -192,11 +203,18 @@ export async function GET(request: NextRequest) {
         console.error('[Etymology API] Cache store failed:', safeError(err))
       })
 
+      emitSecurityEvent({
+        type: 'cache_miss',
+        timestamp: Date.now(),
+        detail: { word: normalizedWord, sources: researchContext.totalSourcesFetched },
+      })
+
       return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
         { success: true, data: result, cached: false },
         {
           headers: {
             'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+            'X-Protection-Mode': costMode,
           },
         }
       )

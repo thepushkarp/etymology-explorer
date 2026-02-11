@@ -70,10 +70,9 @@ function getGeneralLimiter(): Ratelimit | null {
 }
 
 function getClientIp(request: NextRequest): string {
-  // On Vercel, x-forwarded-for and x-real-ip are overwritten by the trusted
-  // edge proxy and cannot be spoofed by clients. For non-Vercel deployments,
-  // place a reverse proxy (e.g. nginx, Cloudflare) in front that overwrites
-  // these headers — otherwise clients can rotate IPs to bypass rate limits.
+  // Trust Vercel's x-forwarded-for — Vercel's edge proxy overwrites this header,
+  // so it's reliable whether or not Cloudflare is in the path.
+  // Do NOT trust cf-connecting-ip: it can be forged if the origin is hit directly.
   return (
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     request.headers.get('x-real-ip') ||
@@ -81,7 +80,7 @@ function getClientIp(request: NextRequest): string {
   )
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const ip = getClientIp(request)
 
@@ -118,9 +117,9 @@ export async function middleware(request: NextRequest) {
 
   const response = NextResponse.next()
 
-  // CSP in report-only mode — switch to enforcing after confirming no breakage
+  // CSP enforced
   response.headers.set(
-    'Content-Security-Policy-Report-Only',
+    'Content-Security-Policy',
     "default-src 'self'; script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com; " +
       "style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; " +
       "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"

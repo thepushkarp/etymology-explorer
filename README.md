@@ -39,13 +39,13 @@ git clone https://github.com/thepushkarp/etymology-explorer.git
 cd etymology-explorer
 
 # Install dependencies
-yarn install
+bun install
 
 # Set up environment variables (see Environment Configuration section)
 cp .env.example .env.local
 
 # Start the development server
-yarn dev
+bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
@@ -114,7 +114,7 @@ etymology-explorer/
 │   ├── robots.ts           # Robots.txt configuration
 │   ├── layout.tsx          # Root layout with fonts
 │   └── page.tsx            # Main page with search UI
-├── middleware.ts           # Rate limiting + CSP headers
+├── proxy.ts               # Rate limiting + CSP headers
 ├── components/
 │   ├── AncestryTree.tsx    # Visual etymology graph
 │   ├── ErrorState.tsx      # Error display with retry
@@ -279,16 +279,16 @@ etymology-explorer/
 
 ```bash
 # Run development server
-yarn dev
+bun dev
 
 # Lint code
-yarn lint
+bun run lint
 
 # Format code
-yarn format
+bun run format
 
 # Build for production
-yarn build
+bun run build
 ```
 
 ## Deployment

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSuggestions, isKnownWord } from '@/lib/spellcheck'
 import { ApiResponse, WordSuggestion } from '@/lib/types'
-import { CONFIG } from '@/lib/config'
+import { isValidWord, canonicalizeWord } from '@/lib/validation'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -17,9 +17,11 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  if (query.length > CONFIG.maxWordLength) {
+  const normalized = canonicalizeWord(query)
+
+  if (!normalized || !isValidWord(normalized)) {
     return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: 'Query too long' },
+      { success: false, error: 'Invalid query' },
       { status: 400 }
     )
   }
@@ -29,19 +31,19 @@ export async function GET(request: NextRequest) {
   }
 
   // If it's a known word, return it as the only suggestion
-  if (isKnownWord(query)) {
+  if (isKnownWord(normalized)) {
     return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>(
       {
         success: true,
         data: {
-          suggestions: [{ word: query.toLowerCase(), distance: 0 }],
+          suggestions: [{ word: normalized, distance: 0 }],
         },
       },
       { headers: cacheHeaders }
     )
   }
 
-  const suggestions = getSuggestions(query)
+  const suggestions = getSuggestions(normalized)
 
   return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>(
     {

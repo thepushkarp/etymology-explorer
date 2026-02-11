@@ -10,8 +10,8 @@ export const CONFIG = {
   rootExtractionMaxTokens: 100,
 
   // Input validation
-  maxWordLength: 45,
-  wordPattern: /^[a-zA-Z]+$/,
+  maxWordLength: 35,
+  wordPattern: /^[\p{L}][\p{L}'\-]*[\p{L}]$|^[\p{L}]$/u, // Unicode letters + internal '/-
   maxRequestBodyBytes: 1024,
 
   // Rate limits (per IP)
@@ -59,7 +59,6 @@ export const CONFIG = {
   costTracking: {
     pricingPerMillionTokens: { input: 1.0, output: 5.0 }, // Haiku 4.5
     dailyLimitUSD: 15.0,
-    degradedAtPercent: 0.7, // skip Wikipedia + UrbanDictionary at 70%
     cacheOnlyAtPercent: 0.9, // serve only cached results at 90%
   },
 
@@ -68,6 +67,18 @@ export const CONFIG = {
     publicSearchEnabled: process.env.PUBLIC_SEARCH_ENABLED !== 'false',
     pronunciationEnabled: process.env.PRONUNCIATION_ENABLED !== 'false',
     forceCacheOnly: process.env.FORCE_CACHE_ONLY === 'true',
+  },
+
+  // Protection model (budget-based degradation ladder)
+  protection: {
+    protected503AtPercent: 0.7, // 503 for uncached expensive requests at 70%
+    cooldownWindowMs: 5 * 60_000, // 5 min hysteresis before stepping down
+  },
+
+  // Cache hardening
+  cache: {
+    ttlJitterPercent: 0.1, // ±10% jitter on TTLs
+    negativeCacheAdmitOnly: ['no_sources', 'invalid_word'] as readonly string[],
   },
 
   // Redis prefixes

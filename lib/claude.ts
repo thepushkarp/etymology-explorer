@@ -4,6 +4,7 @@ import { SYSTEM_PROMPT, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph } from './etymologyEnricher'
 import { ETYMOLOGY_SCHEMA } from '@/lib/schemas/llm-schema'
+import { EtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
 import { getEnv } from './env'
 
@@ -23,10 +24,9 @@ async function callAnthropic(
 
   const client = new Anthropic({ apiKey, timeout: CONFIG.timeouts.llm })
 
-  const response = await client.beta.messages.create({
+  const response = await client.messages.create({
     model: CONFIG.model,
     max_tokens: CONFIG.synthesisMaxTokens,
-    betas: ['structured-outputs-2025-11-13'],
     system: SYSTEM_PROMPT,
     messages: [
       {
@@ -34,9 +34,11 @@ async function callAnthropic(
         content: userPrompt,
       },
     ],
-    output_format: {
-      type: 'json_schema',
-      schema: ETYMOLOGY_SCHEMA,
+    output_config: {
+      format: {
+        type: 'json_schema',
+        schema: ETYMOLOGY_SCHEMA,
+      },
     },
   })
 
@@ -101,7 +103,11 @@ function sanitizeSuggestions(result: EtymologyResult): void {
 
 /**
  * Generate etymology response via Anthropic structured output.
- * Returns both the parsed result and token usage for cost tracking.
+ * Returns the parsed (but not yet enriched) result and token usage.
+ *
+ * Note: Zod validation happens later in synthesizeFromResearch(), after
+ * source enrichment overwrites the LLM's string[] sources with proper
+ * SourceReference[] objects.
  */
 async function generateEtymologyResponse(
   userPrompt: string
@@ -109,12 +115,16 @@ async function generateEtymologyResponse(
   const { text, usage } = await callAnthropic(userPrompt)
 
   try {
-    const result = JSON.parse(text) as EtymologyResult
+    const raw = JSON.parse(text)
+    if (typeof raw !== 'object' || raw === null) {
+      throw new Error(`Expected JSON object, got ${typeof raw}`)
+    }
+    const result = raw as EtymologyResult
     sanitizeSuggestions(result)
     return { result, usage }
   } catch (e) {
     const preview = text.slice(0, 200)
-    throw new Error(`Failed to parse LLM response as JSON: ${e}. Response preview: ${preview}`)
+    throw new Error(`Failed to parse LLM response: ${e}. Preview: ${preview}`)
   }
 }
 
@@ -165,5 +175,16 @@ export async function synthesizeFromResearch(
   }
   result.sources = sources
 
-  return { result, usage }
+  // Validate the fully enriched result (sources, confidence, evidence all populated)
+  const validated = EtymologyResultSchema.safeParse(result)
+  if (!validated.success) {
+    const issue = validated.error.issues[0]
+    console.error(
+      '[Claude] Schema validation failed after enrichment:',
+      JSON.stringify({ message: issue?.message, path: issue?.path, code: issue?.code })
+    )
+    throw new Error(`Schema validation failed: ${issue?.message} at ${issue?.path?.join('.')}`)
+  }
+
+  return { result: validated.data as EtymologyResult, usage }
 }

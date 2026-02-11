@@ -292,6 +292,14 @@ export function parseSourceTexts(
 }
 
 /**
+ * Escape XML special characters in interpolated values to prevent injection
+ * in the formatted chain output sent to the LLM prompt.
+ */
+function escapeXml(s: string): string {
+  return s.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c] ?? c)
+}
+
+/**
  * Format parsed chains into a human-readable string for the LLM prompt.
  * This gets appended to the research data so the LLM can use parsed chains
  * as ground truth for ancestry stages.
@@ -306,15 +314,15 @@ export function formatParsedChainsForPrompt(chains: ParsedEtymChain[]): string {
   ]
 
   for (const chain of chains) {
-    sections.push(`--- Chain from ${chain.source} ---`)
+    sections.push(`--- Chain from ${escapeXml(chain.source)} ---`)
     if (chain.dateAttested) {
       sections.push(`First attested: ${chain.dateAttested}`)
     }
 
     for (const link of chain.links) {
-      let line = `  ${link.language}: ${link.form}`
+      let line = `  ${escapeXml(link.language)}: ${escapeXml(link.form)}`
       if (link.meaning) {
-        line += ` "${link.meaning}"`
+        line += ` "${escapeXml(link.meaning)}"`
       }
       if (link.isReconstructed) {
         line += ' [RECONSTRUCTED]'
