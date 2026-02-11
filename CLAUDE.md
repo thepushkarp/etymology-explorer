@@ -39,7 +39,7 @@ Pre-commit hooks (Husky + lint-staged) automatically run ESLint and Prettier on 
 ### Data Flow
 
 ```
-User Search → middleware.ts (rate limit, CSP headers)
+User Search → proxy.ts (rate limit, CSP headers)
     ↓
 GET /api/etymology?word=X
     ├── Input validation (lib/validation.ts)
@@ -64,7 +64,7 @@ GET /api/etymology?word=X
 
 The app operates in **public mode** with server-side cost controls (added in PR #41):
 
-- **`middleware.ts`** - Rate limiting via @upstash/ratelimit:
+- **`proxy.ts`** - Rate limiting via @upstash/ratelimit:
   - Etymology: 10 req/min + 100 req/day per IP
   - Pronunciation: 20 req/min per IP
   - General: 60 req/min per IP
@@ -215,7 +215,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 **Public Mode Infrastructure:**
 
-- `middleware.ts` - Rate limiting, CSP headers
+- `proxy.ts` - Rate limiting, CSP headers
 - `lib/config.ts` - Centralized config (budgets, timeouts, limits)
 - `lib/env.ts` - Zod env validation
 - `lib/costGuard.ts` - Daily budget enforcement with degradation modes

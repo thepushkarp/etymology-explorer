@@ -114,7 +114,7 @@ etymology-explorer/
 │   ├── robots.ts           # Robots.txt configuration
 │   ├── layout.tsx          # Root layout with fonts
 │   └── page.tsx            # Main page with search UI
-├── middleware.ts           # Rate limiting + CSP headers
+├── proxy.ts               # Rate limiting + CSP headers
 ├── components/
 │   ├── AncestryTree.tsx    # Visual etymology graph
 │   ├── ErrorState.tsx      # Error display with retry
