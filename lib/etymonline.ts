@@ -4,6 +4,10 @@
  * Always implement graceful fallback.
  */
 
+import { fetchWithTimeout } from './fetchUtils'
+import { safeError } from './errorUtils'
+import { CONFIG } from './config'
+
 export interface EtymonlineResult {
   text: string
   url: string
@@ -19,11 +23,15 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
   const url = `https://www.etymonline.com/word/${encodeURIComponent(normalizedWord)}`
 
   try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'EtymologyExplorer/1.0 (educational project)',
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          'User-Agent': 'EtymologyExplorer/1.0 (educational project)',
+        },
       },
-    })
+      CONFIG.timeouts.source
+    )
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -78,7 +86,7 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
 
     return null
   } catch (error) {
-    console.error('Etymonline fetch error:', error)
+    console.error('Etymonline fetch error:', safeError(error))
     return null
   }
 }

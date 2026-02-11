@@ -1,9 +1,9 @@
 import { useState, useCallback } from 'react'
-import { EtymologyResult, WordSuggestion, LLMConfig } from '@/lib/types'
+import { EtymologyResult, WordSuggestion } from '@/lib/types'
 import { useHistory } from '@/lib/hooks/useHistory'
 
 export type AppState = 'idle' | 'loading' | 'success' | 'error'
-export type ErrorType = 'nonsense' | 'no-api-key' | 'network-error' | 'typo'
+export type ErrorType = 'nonsense' | 'network-error' | 'typo'
 
 export interface ErrorInfo {
   type: ErrorType
@@ -11,7 +11,7 @@ export interface ErrorInfo {
   suggestions: WordSuggestion[]
 }
 
-export function useEtymologySearch(llmConfig: LLMConfig) {
+export function useEtymologySearch() {
   const [state, setState] = useState<AppState>('idle')
   const [result, setResult] = useState<EtymologyResult | null>(null)
   const [error, setError] = useState<ErrorInfo | null>(null)
@@ -23,35 +23,12 @@ export function useEtymologySearch(llmConfig: LLMConfig) {
       const trimmed = word.trim().toLowerCase()
       if (!trimmed) return
 
-      // Check for valid LLM config
-      const isConfigValid =
-        llmConfig.provider === 'anthropic'
-          ? llmConfig.anthropicApiKey.length > 0
-          : llmConfig.openrouterApiKey.length > 0 && llmConfig.openrouterModel.length > 0
-
-      if (!isConfigValid) {
-        setState('error')
-        setError({
-          type: 'no-api-key',
-          message:
-            llmConfig.provider === 'anthropic'
-              ? "You'll need an Anthropic API key to explore etymologies."
-              : "You'll need to configure OpenRouter with an API key and model.",
-          suggestions: [],
-        })
-        return
-      }
-
       setState('loading')
       setResult(null)
       setError(null)
 
       try {
-        const response = await fetch('/api/etymology', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ word: trimmed, llmConfig }),
-        })
+        const response = await fetch(`/api/etymology?word=${encodeURIComponent(trimmed)}`)
 
         const data = await response.json()
 
@@ -60,7 +37,6 @@ export function useEtymologySearch(llmConfig: LLMConfig) {
           setResult(data.data)
           addToHistory(trimmed)
         } else if (data.suggestions && data.suggestions.length > 0) {
-          // Typo detected - show suggestions
           setState('error')
           setError({
             type: 'typo',
@@ -68,7 +44,6 @@ export function useEtymologySearch(llmConfig: LLMConfig) {
             suggestions: data.suggestions,
           })
         } else {
-          // Nonsense word
           setState('error')
           setError({
             type: 'nonsense',
@@ -86,7 +61,7 @@ export function useEtymologySearch(llmConfig: LLMConfig) {
         })
       }
     },
-    [llmConfig, addToHistory]
+    [addToHistory]
   )
 
   return {

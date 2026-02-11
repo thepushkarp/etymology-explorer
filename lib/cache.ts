@@ -6,6 +6,8 @@
 import { Redis } from '@upstash/redis'
 import { EtymologyResult } from './types'
 import { EtymologyResultSchema } from './schemas/etymology'
+import { CONFIG } from './config'
+import { safeError } from './errorUtils'
 
 const redis = new Redis({
   url: process.env.ETYMOLOGY_KV_REST_API_URL || '',
@@ -15,11 +17,11 @@ const redis = new Redis({
 // Bump version when EtymologyResult schema changes
 const CACHE_VERSION = 2
 const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
-const ETYMOLOGY_TTL = 30 * 24 * 60 * 60 // 30 days
+const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
 
 // Audio cache (longer TTL - pronunciations don't change)
 const AUDIO_PREFIX = `audio:v1:`
-const AUDIO_TTL = 365 * 24 * 60 * 60 // 1 year
+const AUDIO_TTL = CONFIG.audioCacheTTL
 
 /**
  * Check if Redis caching is configured
@@ -53,7 +55,7 @@ export async function getCachedEtymology(word: string): Promise<EtymologyResult 
 
     return parsed.data as EtymologyResult
   } catch (error) {
-    console.error('[Cache] Etymology get error:', error)
+    console.error('[Cache] Etymology get error:', safeError(error))
     return null // Fail open - continue without cache
   }
 }
@@ -69,7 +71,7 @@ export async function cacheEtymology(word: string, result: EtymologyResult): Pro
     await redis.set(key, result, { ex: ETYMOLOGY_TTL })
     console.log(`[Cache] Stored etymology for "${word}"`)
   } catch (error) {
-    console.error('[Cache] Etymology set error:', error)
+    console.error('[Cache] Etymology set error:', safeError(error))
     // Fail silently - result was already returned to user
   }
 }
@@ -84,7 +86,7 @@ export async function getCachedAudio(word: string): Promise<string | null> {
   try {
     return await redis.get<string>(key)
   } catch (error) {
-    console.error('[Cache] Audio get error:', error)
+    console.error('[Cache] Audio get error:', safeError(error))
     return null
   }
 }
@@ -100,6 +102,38 @@ export async function cacheAudio(word: string, audioBase64: string): Promise<voi
     await redis.set(key, audioBase64, { ex: AUDIO_TTL })
     console.log(`[Cache] Stored audio for "${word}"`)
   } catch (error) {
-    console.error('[Cache] Audio set error:', error)
+    console.error('[Cache] Audio set error:', safeError(error))
+  }
+}
+
+/**
+ * Check if a word is in the negative cache (known bad/gibberish words).
+ * Returns false on error (fail open).
+ */
+export async function getNegativeCache(word: string): Promise<boolean> {
+  if (!isCacheConfigured()) return false
+
+  const key = `neg:v1:${word.toLowerCase().trim()}`
+  try {
+    const exists = await redis.exists(key)
+    return exists === 1
+  } catch (error) {
+    console.error('[Cache] Negative cache get error:', safeError(error))
+    return false
+  }
+}
+
+/**
+ * Mark a word in the negative cache to prevent repeated fetches for gibberish.
+ * Fails silently.
+ */
+export async function cacheNegative(word: string): Promise<void> {
+  if (!isCacheConfigured()) return
+
+  const key = `neg:v1:${word.toLowerCase().trim()}`
+  try {
+    await redis.set(key, '1', { ex: CONFIG.negativeCacheTTL })
+  } catch (error) {
+    console.error('[Cache] Negative cache set error:', safeError(error))
   }
 }

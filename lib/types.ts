@@ -148,14 +148,6 @@ export interface EtymologyResult {
 }
 
 /**
- * API request body for /api/etymology
- */
-export interface EtymologyRequest {
-  word: string
-  llmConfig: LLMConfig
-}
-
-/**
  * API response wrapper
  */
 export interface ApiResponse<T> {
@@ -178,30 +170,6 @@ export interface WordSuggestion {
 export interface HistoryEntry {
   word: string
   timestamp: number
-}
-
-/**
- * LLM provider type
- */
-export type LLMProvider = 'anthropic' | 'openrouter'
-
-/**
- * LLM configuration for API calls
- */
-export interface LLMConfig {
-  provider: LLMProvider
-  anthropicApiKey: string
-  anthropicModel: string // Dynamic model ID from API
-  openrouterApiKey: string
-  openrouterModel: string // User-specified model like "anthropic/claude-3.5-sonnet"
-}
-
-/**
- * Anthropic model info from the models API
- */
-export interface AnthropicModelInfo {
-  id: string
-  displayName: string
 }
 
 /**

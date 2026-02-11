@@ -3,6 +3,10 @@
  * Uses the MediaWiki API to get page content.
  */
 
+import { fetchWithTimeout } from './fetchUtils'
+import { safeError } from './errorUtils'
+import { CONFIG } from './config'
+
 interface WiktionaryResponse {
   query?: {
     pages?: {
@@ -38,11 +42,15 @@ export async function fetchWiktionary(word: string): Promise<WiktionaryResult | 
   url.searchParams.set('origin', '*') // CORS
 
   try {
-    const response = await fetch(url.toString(), {
-      headers: {
-        'User-Agent': 'EtymologyExplorer/1.0 (educational project)',
+    const response = await fetchWithTimeout(
+      url.toString(),
+      {
+        headers: {
+          'User-Agent': 'EtymologyExplorer/1.0 (educational project)',
+        },
       },
-    })
+      CONFIG.timeouts.source
+    )
 
     if (!response.ok) {
       console.error(`Wiktionary API error: ${response.status}`)
@@ -69,7 +77,7 @@ export async function fetchWiktionary(word: string): Promise<WiktionaryResult | 
 
     return { text, url: pageUrl }
   } catch (error) {
-    console.error('Wiktionary fetch error:', error)
+    console.error('Wiktionary fetch error:', safeError(error))
     return null
   }
 }

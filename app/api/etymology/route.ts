@@ -1,187 +1,234 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { EtymologyRequest, EtymologyResult, ApiResponse, LLMConfig } from '@/lib/types'
+import { EtymologyResult, ApiResponse } from '@/lib/types'
 import { synthesizeFromResearch } from '@/lib/claude'
 import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
-import { getCachedEtymology, cacheEtymology } from '@/lib/cache'
+import { getCachedEtymology, cacheEtymology, getNegativeCache, cacheNegative } from '@/lib/cache'
+import { isValidWord } from '@/lib/validation'
+import { reserveEtymologyBudget, getCostMode, recordSpend } from '@/lib/costGuard'
+import { tryAcquireLock, releaseLock, pollForResult } from '@/lib/singleflight'
+import { safeError } from '@/lib/errorUtils'
+import { getEnv } from '@/lib/env'
+import { CONFIG } from '@/lib/config'
 
-function isValidLLMConfig(config: LLMConfig): boolean {
-  if (config.provider === 'anthropic') {
-    return typeof config.anthropicApiKey === 'string' && config.anthropicApiKey.length > 0
-  }
-  return (
-    typeof config.openrouterApiKey === 'string' &&
-    config.openrouterApiKey.length > 0 &&
-    typeof config.openrouterModel === 'string' &&
-    config.openrouterModel.length > 0
-  )
-}
-
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const body: EtymologyRequest = await request.json()
-    const { word, llmConfig } = body
-
-    // Validate inputs
-    if (!word || typeof word !== 'string') {
+    // Validate environment (lazy, cached after first call)
+    try {
+      getEnv()
+    } catch {
       return NextResponse.json<ApiResponse<null>>(
-        {
-          success: false,
-          error: 'Word is required',
-        },
-        { status: 400 }
+        { success: false, error: 'Service configuration error' },
+        { status: 503 }
       )
     }
 
-    if (!llmConfig || !isValidLLMConfig(llmConfig)) {
+    // Feature flags
+    if (!CONFIG.features.publicSearchEnabled || CONFIG.features.forceCacheOnly) {
       return NextResponse.json<ApiResponse<null>>(
-        {
-          success: false,
-          error: 'Valid LLM configuration is required',
-        },
+        { success: false, error: 'Service temporarily unavailable' },
+        { status: 503 }
+      )
+    }
+
+    const word = request.nextUrl.searchParams.get('word')
+
+    if (!word || typeof word !== 'string') {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Word is required' },
         { status: 400 }
       )
     }
 
     const normalizedWord = word.toLowerCase().trim()
 
-    // Check if it's empty
     if (!normalizedWord) {
       return NextResponse.json<ApiResponse<null>>(
-        {
-          success: false,
-          error: getQuirkyMessage('empty'),
-        },
+        { success: false, error: getQuirkyMessage('empty') },
         { status: 400 }
       )
     }
 
-    // Check if it looks like nonsense or a typo
-    const looksLikeWord = /^[a-zA-Z]+$/.test(normalizedWord)
-    if (!looksLikeWord) {
+    if (!isValidWord(normalizedWord)) {
       return NextResponse.json<ApiResponse<null>>(
-        {
-          success: false,
-          error: getQuirkyMessage('nonsense'),
-        },
+        { success: false, error: getQuirkyMessage('nonsense') },
         { status: 400 }
       )
     }
 
-    // Check cache first (if configured)
+    // Check cache first (cache hits are free — no budget cost)
     const cached = await getCachedEtymology(normalizedWord)
     if (cached) {
       console.log(`[Etymology API] Cache hit for "${normalizedWord}"`)
-      return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>({
-        success: true,
-        data: cached,
-        cached: true,
-      })
+      return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
+        { success: true, data: cached, cached: true },
+        {
+          headers: {
+            'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+          },
+        }
+      )
     }
 
-    // Conduct agentic research (fetches main word, extracts roots, explores related terms)
-    console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
-    const researchContext = await conductAgenticResearch(normalizedWord, llmConfig)
+    // Negative cache — skip source fetches for known gibberish
+    const isNegCached = await getNegativeCache(normalizedWord)
+    if (isNegCached) {
+      console.log(`[Etymology API] Negative cache hit for "${normalizedWord}"`)
+      const suggestion = getRandomWord()
+      return NextResponse.json<ApiResponse<{ suggestion: string }>>(
+        {
+          success: false,
+          error: getQuirkyMessage('nonsense'),
+          data: { suggestion },
+        },
+        { status: 404 }
+      )
+    }
 
-    // If no source data found, check if it's a typo
-    if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
-      if (isLikelyTypo(normalizedWord)) {
-        const suggestions = getSuggestions(normalizedWord)
-        return NextResponse.json<ApiResponse<{ suggestions: string[] }>>(
+    // Check cost mode for gradual degradation (read-only, cheap)
+    const costMode = await getCostMode()
+    if (costMode === 'blocked') {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
+        { status: 503 }
+      )
+    }
+    if (costMode === 'cache_only') {
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Service is in cache-only mode. Please try again later.' },
+        { status: 503 }
+      )
+    }
+
+    // Singleflight: prevent duplicate LLM calls for the same word
+    const lockKey = `lock:etymology:${normalizedWord}`
+    const acquiredLock = await tryAcquireLock(lockKey)
+
+    if (!acquiredLock) {
+      // Another request is already processing this word — poll for its result
+      console.log(`[Etymology API] Waiting for in-flight result for "${normalizedWord}"`)
+      const result = await pollForResult(() => getCachedEtymology(normalizedWord))
+      if (result) {
+        return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
+          { success: true, data: result, cached: true },
           {
-            success: false,
-            error: `Hmm, we couldn't find "${word}". Did you mean:`,
-            data: { suggestions: suggestions.map((s) => s.word) },
-          },
-          { status: 404 }
-        )
-      } else {
-        // True nonsense - suggest a random word
-        const suggestion = getRandomWord()
-        return NextResponse.json<ApiResponse<{ suggestion: string }>>(
-          {
-            success: false,
-            error: getQuirkyMessage('nonsense'),
-            data: { suggestion },
-          },
-          { status: 404 }
+            headers: {
+              'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+            },
+          }
         )
       }
+      // Timed out waiting — tell client to retry
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: 'Request in progress, please retry in a few seconds.' },
+        { status: 429, headers: { 'Retry-After': '2' } }
+      )
     }
 
-    console.log(
-      `[Etymology API] Research complete. Fetched ${researchContext.totalSourcesFetched} sources, ` +
-        `identified ${researchContext.identifiedRoots.length} roots`
-    )
+    // We hold the lock — reserve budget only for the winner (not waiters)
+    try {
+      const budgetOk = await reserveEtymologyBudget()
+      if (!budgetOk) {
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
+          { status: 503 }
+        )
+      }
 
-    // Synthesize with LLM using rich research context
-    const result = await synthesizeFromResearch(researchContext, llmConfig)
+      // Conduct agentic research
+      console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
+      const researchContext = await conductAgenticResearch(
+        normalizedWord,
+        costMode === 'degraded' ? { skipOptionalSources: true } : undefined
+      )
 
-    // Cache result for future lookups (non-blocking)
-    cacheEtymology(normalizedWord, result).catch((err) => {
-      console.error('[Etymology API] Cache store failed:', err)
-    })
+      // If no source data found, check if it's a typo
+      if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
+        // Cache as negative so gibberish doesn't trigger source fetches again
+        cacheNegative(normalizedWord).catch((err) => {
+          console.error('[Etymology API] Negative cache store failed:', safeError(err))
+        })
 
-    return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>({
-      success: true,
-      data: result,
-      cached: false,
-    })
+        if (isLikelyTypo(normalizedWord)) {
+          const suggestions = getSuggestions(normalizedWord)
+          return NextResponse.json<ApiResponse<{ suggestions: string[] }>>(
+            {
+              success: false,
+              error: `Hmm, we couldn't find "${word}". Did you mean:`,
+              data: { suggestions: suggestions.map((s) => s.word) },
+            },
+            { status: 404 }
+          )
+        } else {
+          const suggestion = getRandomWord()
+          return NextResponse.json<ApiResponse<{ suggestion: string }>>(
+            {
+              success: false,
+              error: getQuirkyMessage('nonsense'),
+              data: { suggestion },
+            },
+            { status: 404 }
+          )
+        }
+      }
+
+      console.log(
+        `[Etymology API] Research complete. Fetched ${researchContext.totalSourcesFetched} sources, ` +
+          `identified ${researchContext.identifiedRoots.length} roots`
+      )
+
+      // Synthesize with LLM
+      const { result, usage } = await synthesizeFromResearch(researchContext)
+
+      // Record actual USD spend
+      recordSpend(usage).catch((err) => {
+        console.error('[Etymology API] Spend recording failed:', safeError(err))
+      })
+
+      // Cache result for future lookups (non-blocking)
+      cacheEtymology(normalizedWord, result).catch((err) => {
+        console.error('[Etymology API] Cache store failed:', safeError(err))
+      })
+
+      return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
+        { success: true, data: result, cached: false },
+        {
+          headers: {
+            'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+          },
+        }
+      )
+    } finally {
+      // Always release the lock so other requests aren't stuck waiting
+      releaseLock(lockKey).catch(() => {})
+    }
   } catch (error) {
-    console.error('Etymology API error:', error)
+    console.error('Etymology API error:', safeError(error))
 
-    // Check for LLM API errors
+    // Sanitized error responses — never expose raw error messages
     if (error instanceof Error) {
-      // Check for authentication errors (be specific to avoid false positives)
       if (
         error.message.includes('401') ||
         error.message.includes('invalid_api_key') ||
-        error.message.includes('Invalid API key') ||
         error.message.includes('authentication_error')
       ) {
         return NextResponse.json<ApiResponse<null>>(
-          {
-            success: false,
-            error: 'Invalid API key. Please check your API key in settings.',
-          },
-          { status: 401 }
+          { success: false, error: 'Service temporarily unavailable' },
+          { status: 503 }
         )
       }
       if (error.message.includes('429')) {
         return NextResponse.json<ApiResponse<null>>(
-          {
-            success: false,
-            error: 'Rate limit exceeded. Please wait a moment and try again.',
-          },
+          { success: false, error: 'Service is busy, please try again shortly' },
           { status: 429 }
         )
       }
-      if (error.message.includes('OpenRouter')) {
-        return NextResponse.json<ApiResponse<null>>(
-          {
-            success: false,
-            error: error.message,
-          },
-          { status: 500 }
-        )
-      }
-      // Return the actual error message for debugging
-      return NextResponse.json<ApiResponse<null>>(
-        {
-          success: false,
-          error: error.message,
-        },
-        { status: 500 }
-      )
     }
 
     return NextResponse.json<ApiResponse<null>>(
-      {
-        success: false,
-        error: 'An unexpected error occurred. Please try again.',
-      },
+      { success: false, error: 'An unexpected error occurred. Please try again.' },
       { status: 500 }
     )
   }

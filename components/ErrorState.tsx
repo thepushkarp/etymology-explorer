@@ -3,20 +3,13 @@
 import { WordSuggestion } from '@/lib/types'
 
 interface ErrorStateProps {
-  type: 'nonsense' | 'no-api-key' | 'network-error' | 'typo'
+  type: 'nonsense' | 'network-error' | 'typo'
   message?: string
   suggestions?: WordSuggestion[]
   onSuggestionClick?: (word: string) => void
-  onOpenSettings?: () => void
 }
 
-export function ErrorState({
-  type,
-  message,
-  suggestions,
-  onSuggestionClick,
-  onOpenSettings,
-}: ErrorStateProps) {
+export function ErrorState({ type, message, suggestions, onSuggestionClick }: ErrorStateProps) {
   return (
     <div
       className="
@@ -107,43 +100,6 @@ export function ErrorState({
           </div>
         )}
 
-        {/* No API key - show settings prompt */}
-        {type === 'no-api-key' && onOpenSettings && (
-          <button
-            onClick={onOpenSettings}
-            className="
-              mt-4
-              inline-flex items-center gap-2
-              px-5 py-2.5
-              font-serif text-sm
-              bg-charcoal text-cream
-              rounded-lg
-              hover:bg-charcoal-light
-              transition-colors
-            "
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-            Configure API Key
-          </button>
-        )}
-
         {/* Network error - retry hint */}
         {type === 'network-error' && (
           <p
@@ -195,22 +151,6 @@ function ErrorIcon({ type }: { type: string }) {
           />
         </svg>
       )
-    case 'no-api-key':
-      return (
-        <svg
-          className={iconClass}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth="1.5"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"
-          />
-        </svg>
-      )
     case 'network-error':
       return (
         <svg
@@ -252,8 +192,6 @@ function getDefaultMessage(type: string): string {
   switch (type) {
     case 'nonsense':
       return "That's not a word — though it does have a certain Proto-Keyboard charm."
-    case 'no-api-key':
-      return "You'll need an API key to explore etymologies."
     case 'network-error':
       return 'Something went awry in the ether...'
     case 'typo':
