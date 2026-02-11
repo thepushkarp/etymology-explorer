@@ -70,11 +70,9 @@ function getGeneralLimiter(): Ratelimit | null {
 }
 
 function getClientIp(request: NextRequest): string {
-  if (CONFIG.cloudflare.trustProxy) {
-    // Cloudflare sets cf-connecting-ip to the real client IP
-    return request.headers.get('cf-connecting-ip') || request.headers.get('x-real-ip') || 'unknown'
-  }
-  // Default: trust Vercel's x-forwarded-for (overwritten by edge proxy)
+  // Trust Vercel's x-forwarded-for — Vercel's edge proxy overwrites this header,
+  // so it's reliable whether or not Cloudflare is in the path.
+  // Do NOT trust cf-connecting-ip: it can be forged if the origin is hit directly.
   return (
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     request.headers.get('x-real-ip') ||

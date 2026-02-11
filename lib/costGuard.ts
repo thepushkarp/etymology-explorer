@@ -93,12 +93,7 @@ export async function getBudgetStats(): Promise<{
 
 export type CostMode = ProtectionMode
 
-const {
-  pricingPerMillionTokens: pricing,
-  dailyLimitUSD,
-  degradedAtPercent,
-  cacheOnlyAtPercent,
-} = CONFIG.costTracking
+const { pricingPerMillionTokens: pricing, dailyLimitUSD, cacheOnlyAtPercent } = CONFIG.costTracking
 
 function costKey(): string {
   const date = new Date().toISOString().slice(0, 10)
@@ -145,7 +140,8 @@ export async function getCostMode(): Promise<CostMode> {
     let mode: CostMode
     if (spent >= dailyLimitUSD) mode = 'blocked'
     else if (spent >= dailyLimitUSD * cacheOnlyAtPercent) mode = 'cache_only'
-    else if (spent >= dailyLimitUSD * degradedAtPercent) mode = 'protected_503'
+    else if (spent >= dailyLimitUSD * CONFIG.protection.protected503AtPercent)
+      mode = 'protected_503'
     else mode = 'normal'
 
     if (mode !== 'normal') {

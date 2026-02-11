@@ -59,7 +59,6 @@ export const CONFIG = {
   costTracking: {
     pricingPerMillionTokens: { input: 1.0, output: 5.0 }, // Haiku 4.5
     dailyLimitUSD: 15.0,
-    degradedAtPercent: 0.7, // skip Wikipedia + UrbanDictionary at 70%
     cacheOnlyAtPercent: 0.9, // serve only cached results at 90%
   },
 
@@ -68,12 +67,6 @@ export const CONFIG = {
     publicSearchEnabled: process.env.PUBLIC_SEARCH_ENABLED !== 'false',
     pronunciationEnabled: process.env.PRONUNCIATION_ENABLED !== 'false',
     forceCacheOnly: process.env.FORCE_CACHE_ONLY === 'true',
-  },
-
-  // Cloudflare proxy trust
-  cloudflare: {
-    trustProxy: process.env.CLOUDFLARE_PROXY === 'true',
-    // Site is on Vercel with domain on Cloudflare — when enabled, trusts cf-connecting-ip
   },
 
   // Protection model (budget-based degradation ladder)
