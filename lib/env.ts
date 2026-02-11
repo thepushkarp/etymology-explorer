@@ -5,13 +5,17 @@
 
 import { z } from 'zod'
 
+// Treat empty strings as undefined so copying .env.example with blank
+// optional vars doesn't fail validation (process.env gives "" not undefined).
+const emptyToUndefined = z.preprocess((val) => (val === '' ? undefined : val), z.string())
+
 const ServerEnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
-  ADMIN_SECRET: z.string().min(16).optional(),
-  ETYMOLOGY_KV_REST_API_URL: z.string().url().optional(),
-  ETYMOLOGY_KV_REST_API_TOKEN: z.string().min(1).optional(),
-  ELEVENLABS_API_KEY: z.string().optional(),
-  ELEVENLABS_VOICE_ID: z.string().optional(),
+  ADMIN_SECRET: emptyToUndefined.pipe(z.string().min(16)).optional(),
+  ETYMOLOGY_KV_REST_API_URL: emptyToUndefined.pipe(z.string().url()).optional(),
+  ETYMOLOGY_KV_REST_API_TOKEN: emptyToUndefined.pipe(z.string().min(1)).optional(),
+  ELEVENLABS_API_KEY: emptyToUndefined.optional(),
+  ELEVENLABS_VOICE_ID: emptyToUndefined.optional(),
 })
 
 type ServerEnv = z.infer<typeof ServerEnvSchema>

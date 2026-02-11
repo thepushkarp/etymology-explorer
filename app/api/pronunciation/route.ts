@@ -58,15 +58,6 @@ export async function GET(request: NextRequest) {
     console.error('[Pronunciation] Cache read error:', safeError(error))
   }
 
-  // Atomically reserve a budget slot (INCR then compare — no TOCTOU race)
-  const budgetOk = await reservePronunciationBudget()
-  if (!budgetOk) {
-    return NextResponse.json(
-      { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
-      { status: 503 }
-    )
-  }
-
   // Singleflight: prevent duplicate TTS calls for the same word
   const lockKey = `lock:audio:${normalized}`
   const acquiredLock = await tryAcquireLock(lockKey)
@@ -91,8 +82,16 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // We hold the lock — generate pronunciation
+  // We hold the lock — reserve budget only for the winner (not waiters)
   try {
+    const budgetOk = await reservePronunciationBudget()
+    if (!budgetOk) {
+      return NextResponse.json(
+        { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
+        { status: 503 }
+      )
+    }
+
     const audioBuffer = await generatePronunciation(normalized)
     const base64 = Buffer.from(audioBuffer).toString('base64')
 

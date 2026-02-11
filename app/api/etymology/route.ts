@@ -87,16 +87,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Atomically reserve a budget slot (INCR then compare — no TOCTOU race)
-    const budgetOk = await reserveEtymologyBudget()
-    if (!budgetOk) {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
-        { status: 503 }
-      )
-    }
-
-    // Check cost mode for gradual degradation
+    // Check cost mode for gradual degradation (read-only, cheap)
     const costMode = await getCostMode()
     if (costMode === 'blocked') {
       return NextResponse.json<ApiResponse<null>>(
@@ -136,8 +127,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // We hold the lock — do the actual work
+    // We hold the lock — reserve budget only for the winner (not waiters)
     try {
+      const budgetOk = await reserveEtymologyBudget()
+      if (!budgetOk) {
+        return NextResponse.json<ApiResponse<null>>(
+          { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
+          { status: 503 }
+        )
+      }
+
       // Conduct agentic research
       console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
       const researchContext = await conductAgenticResearch(
