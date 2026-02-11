@@ -110,7 +110,11 @@ async function generateEtymologyResponse(
   const { text, usage } = await callAnthropic(userPrompt)
 
   try {
-    const raw = JSON.parse(text)
+    let raw: unknown = JSON.parse(text)
+    // Handle double-encoded JSON from structured outputs beta
+    if (typeof raw === 'string') {
+      raw = JSON.parse(raw)
+    }
     const parsed = EtymologyResultSchema.safeParse(raw)
     if (!parsed.success) {
       console.error(
