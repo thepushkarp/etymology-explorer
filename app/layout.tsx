@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Libre_Baskerville } from 'next/font/google'
+import Script from 'next/script'
 import { Analytics } from '@vercel/analytics/next'
 import { JsonLd } from '@/components/JsonLd'
 import './globals.css'
@@ -74,10 +75,18 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim()
+
   return (
     <html lang="en">
       <body className={`${libreBaskerville.variable} min-h-screen`}>
         <JsonLd />
+        {turnstileSiteKey ? (
+          <Script
+            src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+            strategy="afterInteractive"
+          />
+        ) : null}
         {children}
         <Analytics />
       </body>

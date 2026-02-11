@@ -5,12 +5,13 @@ interface TurnstileResponse {
 }
 
 export function isChallengeConfigured(): boolean {
-  return Boolean(getServerEnv().turnstileSecretKey)
+  const env = getServerEnv()
+  return Boolean(env.turnstileSecretKey && env.turnstileSiteKey)
 }
 
 export async function verifyChallengeToken(token: string, ip: string): Promise<boolean> {
   const env = getServerEnv()
-  if (!env.turnstileSecretKey) {
+  if (!env.turnstileSecretKey || !env.turnstileSiteKey) {
     return false
   }
 

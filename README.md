@@ -82,7 +82,7 @@ Copy `.env.example` and fill values:
 - `ANTHROPIC_API_KEY` (required for `/api/etymology`)
 - `ANTHROPIC_MODEL` (optional override, must be Haiku 4.5 family)
 - `ETYMOLOGY_KV_REST_API_URL` / `ETYMOLOGY_KV_REST_API_TOKEN` (recommended)
-- `TURNSTILE_SECRET_KEY` (optional, enables challenge verification)
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY` (optional pair; both required to enable challenge verification)
 - `REQUEST_IDENTITY_SIGNING_SECRET` (optional, enables verified authenticated tier)
 - `TRUST_PROXY_HEADERS` (default `false`; set `true` only behind trusted proxy headers)
 - `ADMIN_SECRET` (optional; if set, enables authenticated `/api/admin/stats`)

@@ -33,6 +33,7 @@ Key expectations:
 
 - `ANTHROPIC_API_KEY` must be present for etymology generation
 - `ANTHROPIC_MODEL` must remain in `claude-haiku-4-5*` family
+- Turnstile challenge mode requires both `TURNSTILE_SECRET_KEY` and `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
 - `REQUEST_IDENTITY_SIGNING_SECRET` enables verified authenticated quota tier
 - `TRUST_PROXY_HEADERS=false` is safest by default; set to `true` only behind a trusted edge/proxy that overwrites client-IP headers
 - `ADMIN_SECRET` enables authenticated access to `GET /api/admin/stats`
@@ -71,7 +72,7 @@ Key expectations:
 1. Tighten `RATE_LIMIT_POLICY` for anonymous tier
 2. Lower `RISK_POLICY.challengeScoreThreshold`
 3. Lower `RISK_POLICY.challengeUsageThreshold`
-4. Confirm `/api/challenge/verify` is healthy and `TURNSTILE_SECRET_KEY` is configured
+4. Confirm `/api/challenge/verify` is healthy and both Turnstile keys are configured
 
 ### Third-party source instability
 

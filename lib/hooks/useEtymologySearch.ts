@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { EtymologyResult, WordSuggestion } from '@/lib/types'
 import { useHistory } from '@/lib/hooks/useHistory'
+import { getChallengeToken, isTurnstileClientConfigured } from '@/lib/challenge-client'
 
 export type AppState = 'idle' | 'loading' | 'success' | 'error'
 export type ErrorType = 'nonsense' | 'network-error' | 'typo' | 'rate-limit'
@@ -9,6 +10,56 @@ export interface ErrorInfo {
   type: ErrorType
   message: string
   suggestions: WordSuggestion[]
+}
+
+interface SearchErrorData {
+  suggestions?: string[]
+  errorCode?: string
+}
+
+interface SearchResponseBody {
+  success?: boolean
+  data?: EtymologyResult | SearchErrorData
+  error?: string
+}
+
+async function parseResponseBody(response: Response): Promise<SearchResponseBody> {
+  try {
+    return (await response.json()) as SearchResponseBody
+  } catch {
+    return {}
+  }
+}
+
+async function requestEtymology(
+  word: string,
+  challengeToken?: string
+): Promise<{ response: Response; data: SearchResponseBody }> {
+  const body: { word: string; challengeToken?: string } = { word }
+  if (challengeToken) {
+    body.challengeToken = challengeToken
+  }
+
+  const response = await fetch('/api/etymology', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  const data = await parseResponseBody(response)
+  return { response, data }
+}
+
+function extractSuggestions(data: SearchResponseBody): WordSuggestion[] {
+  const maybeSuggestions = (data.data as SearchErrorData | undefined)?.suggestions
+  if (!Array.isArray(maybeSuggestions)) {
+    return []
+  }
+
+  return maybeSuggestions.map((wordSuggestion) => ({
+    word: wordSuggestion,
+    distance: 0,
+  }))
 }
 
 export function useEtymologySearch() {
@@ -28,28 +79,26 @@ export function useEtymologySearch() {
       setError(null)
 
       try {
-        const response = await fetch('/api/etymology', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ word: trimmed }),
-        })
+        let { response, data } = await requestEtymology(trimmed)
 
-        const data = await response.json()
+        const errorCode = (data.data as SearchErrorData | undefined)?.errorCode
+        if (response.status === 403 && errorCode === 'challenge_required' && isTurnstileClientConfigured()) {
+          const challengeToken = await getChallengeToken()
+          if (challengeToken) {
+            const retried = await requestEtymology(trimmed, challengeToken)
+            response = retried.response
+            data = retried.data
+          }
+        }
 
         if (data.success && data.data) {
           setState('success')
-          setResult(data.data)
+          setResult(data.data as EtymologyResult)
           addToHistory(trimmed)
           return
         }
 
-        const suggestions =
-          data?.data?.suggestions && Array.isArray(data.data.suggestions)
-            ? (data.data.suggestions as string[]).map((wordSuggestion) => ({
-                word: wordSuggestion,
-                distance: 0,
-              }))
-            : []
+        const suggestions = extractSuggestions(data)
 
         setState('error')
         setError({

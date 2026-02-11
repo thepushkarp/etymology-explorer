@@ -68,6 +68,9 @@ export const COST_POLICY = {
   monthHardLimitUsd: 400,
   degradeAtUsd: 12,
   cacheOnlyAtUsd: 18,
+  daySpendTtlSeconds: 2 * 24 * 60 * 60,
+  monthSpendTtlSeconds: 45 * 24 * 60 * 60,
+  dailyRequestBudgetTtlSeconds: 2 * 24 * 60 * 60,
   dailyRequestBudget: {
     etymology: RATE_LIMIT_POLICY.routes.etymology.anonymous.dayLimit,
     pronunciation: RATE_LIMIT_POLICY.routes.pronunciation.anonymous.dayLimit,

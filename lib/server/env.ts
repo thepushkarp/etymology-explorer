@@ -12,6 +12,7 @@ const envSchema = z
     ETYMOLOGY_KV_REST_API_TOKEN: z.string().trim().optional(),
 
     TURNSTILE_SECRET_KEY: z.string().trim().optional(),
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().trim().optional(),
     REQUEST_IDENTITY_SIGNING_SECRET: z.string().trim().min(16).optional(),
     TRUST_PROXY_HEADERS: z.enum(['true', 'false']).optional(),
     ADMIN_SECRET: z.string().trim().min(16).optional(),
@@ -30,6 +31,15 @@ const envSchema = z
       )
     }
 
+    const hasTurnstileSecret = Boolean(raw.TURNSTILE_SECRET_KEY)
+    const hasTurnstileSiteKey = Boolean(raw.NEXT_PUBLIC_TURNSTILE_SITE_KEY)
+
+    if (hasTurnstileSecret !== hasTurnstileSiteKey) {
+      throw new Error(
+        'TURNSTILE_SECRET_KEY and NEXT_PUBLIC_TURNSTILE_SITE_KEY must either both be set or both be omitted'
+      )
+    }
+
     const hasRedis = !!(raw.ETYMOLOGY_KV_REST_API_URL && raw.ETYMOLOGY_KV_REST_API_TOKEN)
 
     return {
@@ -41,6 +51,7 @@ const envSchema = z
       hasRedis,
 
       turnstileSecretKey: raw.TURNSTILE_SECRET_KEY,
+      turnstileSiteKey: raw.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
       requestIdentitySigningSecret: raw.REQUEST_IDENTITY_SIGNING_SECRET,
       adminSecret: raw.ADMIN_SECRET,
       securityPolicy: {

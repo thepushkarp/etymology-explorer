@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
   let locked = false
   let normalizedWord = ''
   let modelForLock = ''
+  let lockOwner = ''
 
   try {
     const env = getServerEnv()
@@ -261,7 +262,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    locked = await acquireSingleflightLock(normalizedWord, model, identity.sessionKey)
+    lockOwner = `${identity.sessionKey}:${crypto.randomUUID()}`
+    locked = await acquireSingleflightLock(normalizedWord, model, lockOwner)
     if (!locked) {
       const waited = await waitForCachedEtymology(normalizedWord, model)
       if (waited) {
@@ -392,8 +394,8 @@ export async function POST(request: NextRequest) {
       500
     )
   } finally {
-    if (locked && normalizedWord && modelForLock) {
-      releaseSingleflightLock(normalizedWord, modelForLock).catch(() => {
+    if (locked && normalizedWord && modelForLock && lockOwner) {
+      releaseSingleflightLock(normalizedWord, modelForLock, lockOwner).catch(() => {
         // lock release failure should never fail the request lifecycle
       })
     }

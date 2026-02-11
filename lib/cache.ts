@@ -90,6 +90,17 @@ function lockKey(word: string, model: string): string {
   return `${CACHE_POLICY.keyPrefix}:lock:${model}:${buildWordKey(word)}`
 }
 
+const RELEASE_SINGLEFLIGHT_LOCK_SCRIPT = `
+local key = KEYS[1]
+local owner = ARGV[1]
+
+if redis.call("GET", key) == owner then
+  return redis.call("DEL", key)
+end
+
+return 0
+`
+
 function sourceKey(source: SourceName, word: string): string {
   return `${CACHE_POLICY.keyPrefix}:source:${source}:${buildWordKey(word)}`
 }
@@ -182,17 +193,21 @@ export async function acquireSingleflightLock(
   }
 }
 
-export async function releaseSingleflightLock(word: string, model: string): Promise<void> {
+export async function releaseSingleflightLock(word: string, model: string, owner: string): Promise<void> {
   try {
     const redis = getRedisClient()
     const key = lockKey(word, model)
 
     if (redis) {
-      await redis.del(key)
+      const releaseScript = redis.createScript<number>(RELEASE_SINGLEFLIGHT_LOCK_SCRIPT)
+      await releaseScript.exec([key], [owner])
       return
     }
 
-    memoryCache.delete(key)
+    const existingOwner = getFromMemory<string>(key)
+    if (existingOwner === owner) {
+      memoryCache.delete(key)
+    }
   } catch {
     // Lock release failures should not bubble up.
   }

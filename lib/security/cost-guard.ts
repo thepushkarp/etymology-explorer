@@ -30,7 +30,6 @@ const memoryDailyRequestUsage: MemoryDailyRequestUsage = {
   },
 }
 
-const DAILY_REQUEST_BUDGET_TTL_SECONDS = 2 * 24 * 60 * 60
 const DAILY_BUDGET_ROUTES: readonly DailyBudgetRoute[] = ['etymology', 'pronunciation']
 
 const RESERVE_DAILY_REQUEST_BUDGET_SCRIPT = `
@@ -51,6 +50,26 @@ if used > limit then
 end
 
 return {1, used}
+`
+
+const RECORD_SPEND_SCRIPT = `
+local dayKey = KEYS[1]
+local monthKey = KEYS[2]
+local usd = tonumber(ARGV[1])
+local dayTtlSeconds = tonumber(ARGV[2])
+local monthTtlSeconds = tonumber(ARGV[3])
+
+redis.call("INCRBYFLOAT", dayKey, usd)
+if redis.call("TTL", dayKey) < 0 then
+  redis.call("EXPIRE", dayKey, dayTtlSeconds)
+end
+
+redis.call("INCRBYFLOAT", monthKey, usd)
+if redis.call("TTL", monthKey) < 0 then
+  redis.call("EXPIRE", monthKey, monthTtlSeconds)
+end
+
+return 1
 `
 
 function getDayStamp(): string {
@@ -125,7 +144,7 @@ export async function reserveDailyRequestBudget(
     const reserveScript = redis.createScript<[number, number]>(RESERVE_DAILY_REQUEST_BUDGET_SCRIPT)
     const [allowedRaw, usedRaw] = await reserveScript.exec(
       [key],
-      [String(limit), String(DAILY_REQUEST_BUDGET_TTL_SECONDS)]
+      [String(limit), String(COST_POLICY.dailyRequestBudgetTtlSeconds)]
     )
 
     return {
@@ -214,12 +233,15 @@ export async function recordSpend(usd: number): Promise<void> {
   const monthKey = `${COST_POLICY.keyPrefix}:month:${monthStamp}`
 
   try {
-    await Promise.all([
-      redis.incrbyfloat(dayKey, usd),
-      redis.expire(dayKey, 2 * 24 * 60 * 60),
-      redis.incrbyfloat(monthKey, usd),
-      redis.expire(monthKey, 45 * 24 * 60 * 60),
-    ])
+    const recordSpendScript = redis.createScript<number>(RECORD_SPEND_SCRIPT)
+    await recordSpendScript.exec(
+      [dayKey, monthKey],
+      [
+        String(usd),
+        String(COST_POLICY.daySpendTtlSeconds),
+        String(COST_POLICY.monthSpendTtlSeconds),
+      ]
+    )
   } catch {
     syncMemorySpendStamps(dayStamp, monthStamp)
     memorySpend.day += usd

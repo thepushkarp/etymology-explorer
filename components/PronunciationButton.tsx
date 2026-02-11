@@ -1,10 +1,18 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { getChallengeToken, isTurnstileClientConfigured } from '@/lib/challenge-client'
 
 interface PronunciationButtonProps {
   word: string
   className?: string
+}
+
+interface PronunciationErrorBody {
+  error?: string
+  data?: {
+    errorCode?: string
+  }
 }
 
 /**
@@ -36,10 +44,27 @@ export function PronunciationButton({ word, className = '' }: PronunciationButto
     // Fetch and play
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/pronunciation?word=${encodeURIComponent(word)}`)
+      const fetchPronunciation = async (challengeToken?: string): Promise<Response> => {
+        const params = new URLSearchParams({ word })
+        if (challengeToken) {
+          params.set('challengeToken', challengeToken)
+        }
+        return fetch(`/api/pronunciation?${params.toString()}`)
+      }
+
+      let response = await fetchPronunciation()
+      if (response.status === 403 && isTurnstileClientConfigured()) {
+        const body = (await response.clone().json().catch(() => ({}))) as PronunciationErrorBody
+        if (body.data?.errorCode === 'challenge_required') {
+          const challengeToken = await getChallengeToken()
+          if (challengeToken) {
+            response = await fetchPronunciation(challengeToken)
+          }
+        }
+      }
 
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
+        const data = (await response.json().catch(() => ({}))) as PronunciationErrorBody
         throw new Error(data.error || `HTTP ${response.status}`)
       }
 
