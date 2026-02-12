@@ -5,6 +5,7 @@ import { EtymologyResult, SourceReference } from '@/lib/types'
 import { RootChip } from './RootChip'
 import { AncestryTree } from './AncestryTree'
 import { PronunciationButton } from './PronunciationButton'
+import HistoricalContext from './HistoricalContext'
 
 interface EtymologyCardProps {
   result: EtymologyResult
@@ -165,6 +166,11 @@ export const EtymologyCard = memo(function EtymologyCard({
           </div>
         </section>
 
+        {/* Historical Context - Wikipedia extract */}
+        {result.rawSources?.wikipedia && (
+          <HistoricalContext wikipediaExtract={result.rawSources.wikipedia} />
+        )}
+
         {/* Modern Usage - after lore, before related words */}
         {result.modernUsage && result.modernUsage.hasSlangMeaning && (
           <section className="mb-8">
@@ -195,6 +201,22 @@ export const EtymologyCard = memo(function EtymologyCard({
                   ))}
                 </div>
               )}
+
+              {result.rawSources?.urbanDictionary &&
+                result.rawSources.urbanDictionary.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-violet-100">
+                    <p className="text-xs font-serif uppercase tracking-wider text-charcoal/50 mb-2">
+                      Urban Dictionary
+                    </p>
+                    <div className="space-y-2">
+                      {result.rawSources.urbanDictionary.slice(0, 3).map((def, idx) => (
+                        <p key={idx} className="text-sm text-charcoal/70 leading-relaxed">
+                          {idx + 1}. {def}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
             </div>
           </section>
         )}
