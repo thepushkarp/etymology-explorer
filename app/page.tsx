@@ -5,12 +5,13 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useHistory } from '@/lib/hooks/useHistory'
-import { useEtymologySearch } from '@/lib/hooks/useEtymologySearch'
+import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { SearchBar } from '@/components/SearchBar'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { RelatedWordsList } from '@/components/RelatedWordsList'
 import { SurpriseButton } from '@/components/SurpriseButton'
 import { ErrorState, EmptyState } from '@/components/ErrorState'
+import ResearchProgress from '@/components/ResearchProgress'
 
 // Dynamic imports for code splitting - these components load on-demand
 const HistorySidebar = dynamic(
@@ -29,15 +30,15 @@ function HomeContent() {
 
   // Hooks
   const { history, clearHistory, removeFromHistory } = useHistory()
-  const { state, result, error, searchWord } = useEtymologySearch()
+  const { state, events, partialResult, error, search } = useStreamingEtymology()
 
   // Handle URL-based search on mount and param changes - intentional URL → action sync
   useEffect(() => {
     const q = searchParams.get('q')
     if (q) {
-      searchWord(q)
+      search(q)
     }
-  }, [searchParams, searchWord])
+  }, [searchParams, search])
 
   // Single callback for all word navigation (history, suggestions, related words, surprise)
   const navigateToWord = useCallback(
@@ -118,23 +119,10 @@ function HomeContent() {
 
         {/* Results area */}
         <div className="min-h-[400px]">
-          {/* Loading state */}
+          {/* Loading state - show research progress */}
           {state === 'loading' && (
-            <div className="flex justify-center py-16">
-              <div className="text-center">
-                <div
-                  className="
-                  w-12 h-12 mx-auto mb-4
-                  border-2 border-charcoal/20
-                  border-t-charcoal
-                  rounded-full
-                  animate-spin
-                "
-                />
-                <p className="font-serif text-charcoal-light italic">
-                  Tracing etymological roots...
-                </p>
-              </div>
+            <div className="py-8">
+              <ResearchProgress events={events} isStreaming={true} />
             </div>
           )}
 
@@ -144,21 +132,21 @@ function HomeContent() {
           {/* Error state */}
           {state === 'error' && error && (
             <ErrorState
-              type={error.type}
-              message={error.message}
-              suggestions={error.suggestions}
+              type="network-error"
+              message={error}
+              suggestions={[]}
               onSuggestionClick={navigateToWord}
             />
           )}
 
           {/* Success state */}
-          {state === 'success' && result && (
+          {state === 'success' && partialResult && (
             <div className="space-y-12">
               {/* Main etymology card */}
-              <EtymologyCard result={result} onWordClick={navigateToWord} />
+              <EtymologyCard result={partialResult} onWordClick={navigateToWord} />
 
               {/* Related words section */}
-              {result.roots.length > 0 && (
+              {partialResult.roots.length > 0 && (
                 <section>
                   <h2
                     className="
@@ -173,7 +161,7 @@ function HomeContent() {
                     <span className="flex-1 h-px bg-charcoal/20" />
                   </h2>
 
-                  <RelatedWordsList roots={result.roots} onWordClick={navigateToWord} />
+                  <RelatedWordsList roots={partialResult.roots} onWordClick={navigateToWord} />
                 </section>
               )}
             </div>
