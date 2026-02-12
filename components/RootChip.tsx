@@ -78,39 +78,116 @@ export function RootChip({ root, onWordClick }: RootChipProps) {
             <span className="not-italic font-medium text-charcoal">Meaning:</span> {root.meaning}
           </p>
 
+          {/* Ancestor Roots section */}
+          {root.ancestorRoots && root.ancestorRoots.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs font-medium text-charcoal mb-2 uppercase tracking-wide">
+                Ancestor Roots
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {root.ancestorRoots.map((ancestorRoot, index) => (
+                  <span
+                    key={ancestorRoot}
+                    className="
+                      px-3 py-1.5
+                      text-sm font-serif
+                      bg-charcoal/10
+                      rounded
+                      text-charcoal-light
+                      border border-charcoal/20
+                    "
+                    style={{
+                      animationDelay: `${index * 50}ms`,
+                    }}
+                  >
+                    {ancestorRoot}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Related words - styled like a scholarly index */}
-          <div className="flex flex-wrap gap-2">
-            {root.relatedWords.map((word, index) => (
-              <button
-                key={word}
-                onClick={() => onWordClick(word)}
-                className="
-                  group/word
-                  relative
-                  px-3 py-1.5
-                  text-sm font-serif
-                  bg-cream-dark/60
-                  rounded
-                  hover:bg-charcoal hover:text-cream
-                  transition-all duration-200
-                "
-                style={{
-                  animationDelay: `${index * 50}ms`,
-                }}
-              >
-                {/* Decorative bullet */}
-                <span
+          <div className="mb-4">
+            <p className="text-xs font-medium text-charcoal mb-2 uppercase tracking-wide">
+              Related Words
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {root.relatedWords.map((word, index) => (
+                <button
+                  key={word}
+                  onClick={() => onWordClick(word)}
                   className="
-                  absolute left-1 top-1/2 -translate-y-1/2
-                  w-1 h-1 rounded-full
-                  bg-charcoal/30 group-hover/word:bg-cream/50
-                  transition-colors duration-200
-                "
-                />
-                <span className="pl-2">{word}</span>
-              </button>
-            ))}
+                    group/word
+                    relative
+                    px-3 py-1.5
+                    text-sm font-serif
+                    bg-cream-dark/60
+                    rounded
+                    hover:bg-charcoal hover:text-cream
+                    transition-all duration-200
+                  "
+                  style={{
+                    animationDelay: `${index * 50}ms`,
+                  }}
+                >
+                  {/* Decorative bullet */}
+                  <span
+                    className="
+                    absolute left-1 top-1/2 -translate-y-1/2
+                    w-1 h-1 rounded-full
+                    bg-charcoal/30 group-hover/word:bg-cream/50
+                    transition-colors duration-200
+                  "
+                  />
+                  <span className="pl-2">{word}</span>
+                </button>
+              ))}
+            </div>
           </div>
+
+          {/* Descendant Words section */}
+          {root.descendantWords && root.descendantWords.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-charcoal mb-2 uppercase tracking-wide">
+                Descendant Words
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {root.descendantWords.map((descendantWord, index) => (
+                  <button
+                    key={descendantWord}
+                    onClick={() => onWordClick(descendantWord)}
+                    className="
+                      group/desc
+                      relative
+                      px-3 py-1.5
+                      text-sm font-serif
+                      bg-cream-dark/40
+                      rounded
+                      text-charcoal-light
+                      hover:bg-charcoal hover:text-cream
+                      transition-all duration-200
+                      border border-charcoal/10
+                    "
+                    style={{
+                      animationDelay: `${index * 50}ms`,
+                    }}
+                  >
+                    {/* Decorative bullet */}
+                    <span
+                      className="
+                      absolute left-1 top-1/2 -translate-y-1/2
+                      w-1 h-1 rounded-full
+                      bg-charcoal/30 group-hover/desc:bg-cream/50
+                      transition-colors duration-200
+                    "
+                    />
+                    <span className="pl-2">{descendantWord}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
