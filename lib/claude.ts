@@ -188,3 +188,124 @@ export async function synthesizeFromResearch(
 
   return { result: validated.data as EtymologyResult, usage }
 }
+
+/**
+ * Stream etymology synthesis from research context, emitting tokens via callback.
+ * Accumulates the full response and returns enriched result with token usage.
+ * Reuses enrichment logic from synthesizeFromResearch().
+ */
+export async function streamSynthesis(
+  researchContext: ResearchContext,
+  onToken: (token: string) => void
+): Promise<SynthesisResult> {
+  const apiKey = getEnv().ANTHROPIC_API_KEY
+  const client = new Anthropic({ apiKey, timeout: CONFIG.timeouts.llm })
+
+  const researchData = buildResearchPrompt(researchContext)
+  const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
+
+  let fullText = ''
+  let inputTokens = 0
+  let outputTokens = 0
+
+  try {
+    const stream = await client.messages.stream({
+      model: CONFIG.model,
+      max_tokens: CONFIG.synthesisMaxTokens,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: userPrompt,
+        },
+      ],
+      output_config: {
+        format: {
+          type: 'json_schema',
+          schema: ETYMOLOGY_SCHEMA,
+        },
+      },
+    })
+
+    // Accumulate tokens and emit via callback
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        const token = event.delta.text
+        fullText += token
+        onToken(token)
+      } else if (event.type === 'message_start' && event.message.usage) {
+        inputTokens = event.message.usage.input_tokens
+      } else if (event.type === 'message_delta' && event.usage) {
+        outputTokens = event.usage.output_tokens
+      }
+    }
+  } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : String(e)
+    throw new Error(`Streaming failed: ${errorMsg}`)
+  }
+
+  // Parse accumulated response
+  let result: EtymologyResult
+  try {
+    const raw = JSON.parse(fullText)
+    if (typeof raw !== 'object' || raw === null) {
+      throw new Error(`Expected JSON object, got ${typeof raw}`)
+    }
+    result = raw as EtymologyResult
+    sanitizeSuggestions(result)
+  } catch (e) {
+    const preview = fullText.slice(0, 200)
+    throw new Error(`Failed to parse streamed LLM response: ${e}. Preview: ${preview}`)
+  }
+
+  // Enrich ancestry graph with source evidence and confidence levels
+  if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
+    enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
+  }
+
+  // Build sources array with URLs and word info from research context
+  const sources: SourceReference[] = []
+  const mainWord = researchContext.mainWord.word
+  if (researchContext.mainWord.etymonline) {
+    sources.push({
+      name: 'etymonline',
+      url: researchContext.mainWord.etymonline.url,
+      word: mainWord,
+    })
+  }
+  if (researchContext.mainWord.wiktionary) {
+    sources.push({
+      name: 'wiktionary',
+      url: researchContext.mainWord.wiktionary.url,
+      word: mainWord,
+    })
+  }
+  for (const rootData of researchContext.rootResearch) {
+    if (rootData.etymonlineData && !sources.some((s) => s.url === rootData.etymonlineData?.url)) {
+      sources.push({ name: 'etymonline', url: rootData.etymonlineData.url, word: rootData.root })
+    }
+    if (rootData.wiktionaryData && !sources.some((s) => s.url === rootData.wiktionaryData?.url)) {
+      sources.push({ name: 'wiktionary', url: rootData.wiktionaryData.url, word: rootData.root })
+    }
+  }
+  if (sources.length === 0) {
+    sources.push({ name: 'synthesized' })
+  }
+  result.sources = sources
+
+  // Validate the fully enriched result
+  const validated = EtymologyResultSchema.safeParse(result)
+  if (!validated.success) {
+    const issue = validated.error.issues[0]
+    console.error(
+      '[Claude] Schema validation failed after streaming enrichment:',
+      JSON.stringify({ message: issue?.message, path: issue?.path, code: issue?.code })
+    )
+    throw new Error(`Schema validation failed: ${issue?.message} at ${issue?.path?.join('.')}`)
+  }
+
+  return {
+    result: validated.data as EtymologyResult,
+    usage: { inputTokens, outputTokens },
+  }
+}

@@ -145,6 +145,7 @@ export interface EtymologyResult {
   partsOfSpeech?: POSDefinition[] // Definitions per grammatical category
   suggestions?: WordSuggestions // Related words for vocabulary building
   modernUsage?: ModernUsage // Contemporary/slang meanings
+  rawSources?: { wikipedia?: string; urbanDictionary?: string[] } // Raw source data for display
 }
 
 /**
@@ -232,3 +233,33 @@ export interface SecurityTelemetryEvent {
   timestamp: number
   detail: Record<string, unknown>
 }
+
+/**
+ * Server-sent event shapes for streaming etymology synthesis
+ * Emitted during the research and synthesis pipeline to provide real-time progress
+ */
+export type StreamEvent =
+  | { type: 'source_started'; source: string }
+  | {
+      type: 'source_complete'
+      source: string
+      timing: number
+      preview?: string
+    }
+  | { type: 'source_failed'; source: string; error: string }
+  | { type: 'parsing_complete'; chainCount: number; dateAttested?: string }
+  | { type: 'roots_identified'; roots: string[] }
+  | { type: 'root_research'; root: string; source: string; status: string }
+  | { type: 'synthesis_started' }
+  | { type: 'synthesis_token'; token: string }
+  | {
+      type: 'enrichment_done'
+      highConfidence: number
+      mediumConfidence: number
+    }
+  | { type: 'result'; data: EtymologyResult }
+  | {
+      type: 'error'
+      message: string
+      errorType: 'rate_limit' | 'budget' | 'network' | 'unknown'
+    }
