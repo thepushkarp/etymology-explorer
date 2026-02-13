@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback, useRef, Suspense } from 'react'
+import { useEffect, useCallback, useRef, Suspense, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -15,6 +15,7 @@ import { ErrorState } from '@/components/ErrorState'
 import ResearchProgress from '@/components/ResearchProgress'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { ShareMenu } from '@/components/ShareMenu'
+import type { ApiResponse, NgramResult } from '@/lib/types'
 
 const CURATED_IDLE_WORDS = [
   { word: 'algorithm', teaser: "from a Persian mathematician's name" },
@@ -51,6 +52,7 @@ function HomeContent() {
   const { isSimple, toggleSimple } = useSimpleMode()
   const { state, events, partialResult, error, search } = useStreamingEtymology()
   const currentWord = searchParams.get('q')?.toLowerCase() ?? null
+  const [ngramData, setNgramData] = useState<NgramResult | null>(null)
 
   // Handle URL-based search on mount and param changes - intentional URL → action sync
   useEffect(() => {
@@ -59,6 +61,40 @@ function HomeContent() {
       search(q)
     }
   }, [searchParams, search])
+
+  useEffect(() => {
+    const word = partialResult?.word?.trim()
+    if (!word) {
+      return
+    }
+
+    const controller = new AbortController()
+
+    fetch(`/api/ngram?word=${encodeURIComponent(word)}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) return null
+        return response.json() as Promise<ApiResponse<NgramResult>>
+      })
+      .then((payload) => {
+        if (payload?.success && payload.data) {
+          setNgramData(payload.data)
+        }
+      })
+      .catch((fetchError) => {
+        if ((fetchError as Error).name !== 'AbortError') {
+          console.error('Failed to fetch ngram data:', fetchError)
+        }
+      })
+
+    return () => controller.abort()
+  }, [partialResult?.word])
+
+  const resultWithNgram = partialResult
+    ? {
+        ...partialResult,
+        ngram: ngramData ?? undefined,
+      }
+    : null
 
   // Single callback for all word navigation (history, suggestions, related words, surprise)
   const navigateToWord = useCallback(
@@ -240,25 +276,25 @@ function HomeContent() {
           )}
 
           {/* Success state */}
-          {state === 'success' && partialResult && (
+          {state === 'success' && resultWithNgram && (
             <div className="space-y-12">
               {/* Main etymology card */}
               <EtymologyCard
-                result={partialResult}
+                result={resultWithNgram}
                 onWordClick={navigateToWord}
                 isSimple={isSimple}
                 ancestryTreeRef={ancestryTreeRef}
                 headerActions={
                   <ShareMenu
-                    word={partialResult.word}
-                    result={partialResult}
+                    word={resultWithNgram.word}
+                    result={resultWithNgram}
                     ancestryTreeRef={ancestryTreeRef}
                   />
                 }
               />
 
               {/* Related words section */}
-              {partialResult.roots.length > 0 && (
+              {resultWithNgram.roots.length > 0 && (
                 <section>
                   <h2
                     className="
@@ -273,7 +309,7 @@ function HomeContent() {
                     <span className="flex-1 h-px bg-charcoal/20" />
                   </h2>
 
-                  <RelatedWordsList roots={partialResult.roots} onWordClick={navigateToWord} />
+                  <RelatedWordsList roots={resultWithNgram.roots} onWordClick={navigateToWord} />
                 </section>
               )}
             </div>

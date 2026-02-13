@@ -213,3 +213,13 @@ export async function streamSynthesis(
 - `streamSynthesis()` in lib/claude.ts - accepts onToken callback
 - `conductAgenticResearch(..., onProgress)` in lib/research.ts - accepts progress callback
 - StreamEvent type in lib/types.ts - defines all event shapes
+
+## Google Ngrams Usage Timeline Integration
+
+- Added server utility `lib/ngrams.ts` with `fetchNgram()` using Google Books ngram JSON endpoint and `fetchWithTimeout()`.
+- Added new API route `app/api/ngram/route.ts` to avoid browser CORS issues; returns `ApiResponse` and sets long-lived cache headers (`s-maxage` + `stale-while-revalidate`).
+- Added `components/UsageTimeline.tsx` as a custom SVG sparkline (no chart libraries), including area fill, line path, ARIA label, and optional year labels.
+- Extended `EtymologyResult` with optional `ngram?: NgramResult` in `lib/types.ts` for UI composition without breaking existing server payloads.
+- Updated `components/EtymologyCard.tsx` to render a "Usage over time" section when `result.ngram` exists.
+- Updated `app/page.tsx` to fetch `/api/ngram?word=...` after streaming result completion, clear stale timeline data between words, and abort in-flight ngram requests on cleanup.
+- Verification: LSP diagnostics clean on all changed files and `bun run build` passes; existing unrelated warning about missing `html2canvas` dynamic import remains.

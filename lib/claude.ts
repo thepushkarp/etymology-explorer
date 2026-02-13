@@ -162,6 +162,13 @@ export async function synthesizeFromResearch(
       word: mainWord,
     })
   }
+  if (researchContext.mainWord.freeDictionary) {
+    sources.push({
+      name: 'freeDictionary',
+      url: `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(mainWord)}`,
+      word: mainWord,
+    })
+  }
   for (const rootData of researchContext.rootResearch) {
     if (rootData.etymonlineData && !sources.some((s) => s.url === rootData.etymonlineData?.url)) {
       sources.push({ name: 'etymonline', url: rootData.etymonlineData.url, word: rootData.root })
@@ -277,6 +284,13 @@ export async function streamSynthesis(
     sources.push({
       name: 'wiktionary',
       url: researchContext.mainWord.wiktionary.url,
+      word: mainWord,
+    })
+  }
+  if (researchContext.mainWord.freeDictionary) {
+    sources.push({
+      name: 'freeDictionary',
+      url: `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(mainWord)}`,
       word: mainWord,
     })
   }

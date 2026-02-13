@@ -6,6 +6,7 @@ import { RootChip } from './RootChip'
 import { AncestryTree } from './AncestryTree'
 import { PronunciationButton } from './PronunciationButton'
 import HistoricalContext from './HistoricalContext'
+import UsageTimeline from './UsageTimeline'
 
 interface EtymologyCardProps {
   result: EtymologyResult
@@ -113,6 +114,15 @@ export const EtymologyCard = memo(function EtymologyCard({
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {result.ngram && result.ngram.data.length > 0 && (
+            <div className="mt-4 border-t border-charcoal/10 pt-3">
+              <h4 className="mb-2 font-serif text-xs uppercase tracking-wider text-charcoal/55">
+                Usage over time
+              </h4>
+              <UsageTimeline data={result.ngram.data} word={result.ngram.word} showYearLabels />
             </div>
           )}
         </header>

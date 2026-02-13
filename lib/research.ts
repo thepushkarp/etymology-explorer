@@ -8,6 +8,7 @@ import { fetchEtymonline } from './etymonline'
 import { fetchWiktionary } from './wiktionary'
 import { fetchWikipedia } from './wikipedia'
 import { fetchUrbanDictionary } from './urbanDictionary'
+import { fetchFreeDictionary } from './freeDictionary'
 import { ResearchContext, RootResearchData, StreamEvent } from './types'
 import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
 import Anthropic from '@anthropic-ai/sdk'
@@ -169,105 +170,130 @@ export async function conductAgenticResearch(
   // Emit source_started events
   emitProgress(onProgress, { type: 'source_started', source: 'etymonline' })
   emitProgress(onProgress, { type: 'source_started', source: 'wiktionary' })
+  emitProgress(onProgress, { type: 'source_started', source: 'freeDictionary' })
   if (!skipOptional) {
     emitProgress(onProgress, { type: 'source_started', source: 'wikipedia' })
     emitProgress(onProgress, { type: 'source_started', source: 'urbanDictionary' })
   }
 
   const startTime = Date.now()
-  const [etymonlineData, wiktionaryData, wikipediaData, urbanDictData] = await Promise.all([
-    fetchEtymonline(normalizedWord)
-      .then((data) => {
-        emitProgress(onProgress, {
-          type: 'source_complete',
-          source: 'etymonline',
-          timing: Date.now() - startTime,
-          preview: data?.text.slice(0, 100),
-        })
-        return data
-      })
-      .catch((err) => {
-        emitProgress(onProgress, {
-          type: 'source_failed',
-          source: 'etymonline',
-          error: safeError(err),
-        })
-        throw err
-      }),
-    fetchWiktionary(normalizedWord)
-      .then((data) => {
-        emitProgress(onProgress, {
-          type: 'source_complete',
-          source: 'wiktionary',
-          timing: Date.now() - startTime,
-          preview: data?.text.slice(0, 100),
-        })
-        return data
-      })
-      .catch((err) => {
-        emitProgress(onProgress, {
-          type: 'source_failed',
-          source: 'wiktionary',
-          error: safeError(err),
-        })
-        throw err
-      }),
-    skipOptional
-      ? null
-      : fetchWikipedia(normalizedWord)
-          .then((data) => {
-            emitProgress(onProgress, {
-              type: 'source_complete',
-              source: 'wikipedia',
-              timing: Date.now() - startTime,
-              preview: data?.text.slice(0, 100),
-            })
-            return data
+  const [etymonlineData, wiktionaryData, freeDictionaryData, wikipediaData, urbanDictData] =
+    await Promise.all([
+      fetchEtymonline(normalizedWord)
+        .then((data) => {
+          emitProgress(onProgress, {
+            type: 'source_complete',
+            source: 'etymonline',
+            timing: Date.now() - startTime,
+            preview: data?.text.slice(0, 100),
           })
-          .catch((err) => {
-            console.error(
-              `[Research] Wikipedia fetch failed for "${normalizedWord}":`,
-              safeError(err)
-            )
-            emitProgress(onProgress, {
-              type: 'source_failed',
-              source: 'wikipedia',
-              error: safeError(err),
-            })
-            return null
-          }),
-    skipOptional
-      ? null
-      : fetchUrbanDictionary(normalizedWord)
-          .then((data) => {
-            emitProgress(onProgress, {
-              type: 'source_complete',
-              source: 'urbanDictionary',
-              timing: Date.now() - startTime,
-              preview: data?.text.slice(0, 100),
-            })
-            return data
+          return data
+        })
+        .catch((err) => {
+          emitProgress(onProgress, {
+            type: 'source_failed',
+            source: 'etymonline',
+            error: safeError(err),
           })
-          .catch((err) => {
-            console.error(
-              `[Research] Urban Dictionary fetch failed for "${normalizedWord}":`,
-              safeError(err)
-            )
-            emitProgress(onProgress, {
-              type: 'source_failed',
-              source: 'urbanDictionary',
-              error: safeError(err),
+          throw err
+        }),
+      fetchWiktionary(normalizedWord)
+        .then((data) => {
+          emitProgress(onProgress, {
+            type: 'source_complete',
+            source: 'wiktionary',
+            timing: Date.now() - startTime,
+            preview: data?.text.slice(0, 100),
+          })
+          return data
+        })
+        .catch((err) => {
+          emitProgress(onProgress, {
+            type: 'source_failed',
+            source: 'wiktionary',
+            error: safeError(err),
+          })
+          throw err
+        }),
+      fetchFreeDictionary(normalizedWord)
+        .then((data) => {
+          emitProgress(onProgress, {
+            type: 'source_complete',
+            source: 'freeDictionary',
+            timing: Date.now() - startTime,
+            preview: data?.origin?.slice(0, 100),
+          })
+          return data
+        })
+        .catch((err) => {
+          console.error(
+            `[Research] Free Dictionary fetch failed for "${normalizedWord}":`,
+            safeError(err)
+          )
+          emitProgress(onProgress, {
+            type: 'source_failed',
+            source: 'freeDictionary',
+            error: safeError(err),
+          })
+          return null
+        }),
+      skipOptional
+        ? null
+        : fetchWikipedia(normalizedWord)
+            .then((data) => {
+              emitProgress(onProgress, {
+                type: 'source_complete',
+                source: 'wikipedia',
+                timing: Date.now() - startTime,
+                preview: data?.text.slice(0, 100),
+              })
+              return data
             })
-            return null
-          }),
-  ])
-  totalFetches += skipOptional ? 2 : 4
+            .catch((err) => {
+              console.error(
+                `[Research] Wikipedia fetch failed for "${normalizedWord}":`,
+                safeError(err)
+              )
+              emitProgress(onProgress, {
+                type: 'source_failed',
+                source: 'wikipedia',
+                error: safeError(err),
+              })
+              return null
+            }),
+      skipOptional
+        ? null
+        : fetchUrbanDictionary(normalizedWord)
+            .then((data) => {
+              emitProgress(onProgress, {
+                type: 'source_complete',
+                source: 'urbanDictionary',
+                timing: Date.now() - startTime,
+                preview: data?.text.slice(0, 100),
+              })
+              return data
+            })
+            .catch((err) => {
+              console.error(
+                `[Research] Urban Dictionary fetch failed for "${normalizedWord}":`,
+                safeError(err)
+              )
+              emitProgress(onProgress, {
+                type: 'source_failed',
+                source: 'urbanDictionary',
+                error: safeError(err),
+              })
+              return null
+            }),
+    ])
+  totalFetches += skipOptional ? 3 : 5
 
   const context: ResearchContext = {
     mainWord: {
       word: normalizedWord,
       etymonline: etymonlineData,
       wiktionary: wiktionaryData,
+      freeDictionary: freeDictionaryData,
       wikipedia: wikipediaData,
       urbanDictionary: urbanDictData,
     },
@@ -450,6 +476,11 @@ export function buildResearchPrompt(context: ResearchContext): string {
   if (context.mainWord.urbanDictionary) {
     sections.push(
       `\n<source_data name="urban_dictionary">\n${sanitizeSourceText(context.mainWord.urbanDictionary.text, maxChars)}\n</source_data>`
+    )
+  }
+  if (context.mainWord.freeDictionary) {
+    sections.push(
+      `\n<source_data name="free_dictionary">\n${sanitizeSourceText(JSON.stringify(context.mainWord.freeDictionary), maxChars)}\n</source_data>`
     )
   }
 

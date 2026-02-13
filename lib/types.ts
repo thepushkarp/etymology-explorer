@@ -1,4 +1,5 @@
 import type { ParsedEtymChain } from './etymologyParser'
+import type { FreeDictionaryEntry } from './freeDictionary'
 
 /**
  * A single etymological root component of a word
@@ -17,7 +18,7 @@ export interface Root {
  * A source reference with name, URL, and the specific word looked up
  */
 export interface SourceReference {
-  name: 'etymonline' | 'wiktionary' | 'synthesized'
+  name: 'etymonline' | 'wiktionary' | 'freeDictionary' | 'synthesized'
   url?: string // URL of the actual page used (undefined for 'synthesized')
   word?: string // The specific word/root that was looked up (undefined for 'synthesized')
 }
@@ -131,6 +132,12 @@ export interface ModernUsage {
   notableReferences?: string[] // Famous uses in media/literature
 }
 
+export interface NgramResult {
+  word: string
+  data: Array<{ year: number; count: number; matchCount?: number }>
+  corpus: string
+}
+
 /**
  * Complete etymology result for a word
  */
@@ -145,6 +152,7 @@ export interface EtymologyResult {
   partsOfSpeech?: POSDefinition[] // Definitions per grammatical category
   suggestions?: WordSuggestions // Related words for vocabulary building
   modernUsage?: ModernUsage // Contemporary/slang meanings
+  ngram?: NgramResult
   rawSources?: {
     wikipedia?: string
     urbanDictionary?: string[]
@@ -211,6 +219,7 @@ export interface ResearchContext {
     word: string
     etymonline: SourceData | null
     wiktionary: SourceData | null
+    freeDictionary?: FreeDictionaryEntry | null
     wikipedia?: SourceData | null
     urbanDictionary?: SourceData | null
   }
