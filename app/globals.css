@@ -7,6 +7,13 @@
   --charcoal-light: #4a4a4a;
 }
 
+.dark {
+  --cream: #1a1a2e;
+  --cream-dark: #16162a;
+  --charcoal: #e8dcc8;
+  --charcoal-light: #c4b8a4;
+}
+
 @theme inline {
   --color-cream: var(--cream);
   --color-cream-dark: var(--cream-dark);
@@ -18,6 +25,9 @@
 html {
   background: var(--cream);
   color: var(--charcoal);
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
 body {
