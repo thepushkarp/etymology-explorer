@@ -40,6 +40,7 @@ next-env.d.ts
 
 # worktrees
 .worktrees/
+.sisyphus/
 
 # docs
 docs/brainstorms/
