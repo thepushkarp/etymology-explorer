@@ -1,16 +1,30 @@
 'use client'
 
-import { useEffect, useCallback, Suspense } from 'react'
+import { useEffect, useCallback, useRef, Suspense, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useHistory } from '@/lib/hooks/useHistory'
-import { useEtymologySearch } from '@/lib/hooks/useEtymologySearch'
+import { useSimpleMode } from '@/lib/hooks/useSimpleMode'
+import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { SearchBar } from '@/components/SearchBar'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { RelatedWordsList } from '@/components/RelatedWordsList'
 import { SurpriseButton } from '@/components/SurpriseButton'
-import { ErrorState, EmptyState } from '@/components/ErrorState'
+import { ErrorState } from '@/components/ErrorState'
+import CostModeIndicator from '@/components/CostModeIndicator'
+import ResearchProgress from '@/components/ResearchProgress'
+import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
+import { ShareMenu } from '@/components/ShareMenu'
+import ThemeToggle from '@/components/ThemeToggle'
+import type { ApiResponse, NgramResult } from '@/lib/types'
+
+const CURATED_IDLE_WORDS = [
+  { word: 'nice', teaser: "once meant 'foolish'" },
+  { word: 'villain', teaser: 'used to mean farmworker' },
+  { word: 'muscle', teaser: "Latin for 'little mouse'" },
+  { word: 'window', teaser: "Old Norse for 'wind-eye'" },
+]
 
 // Dynamic imports for code splitting - these components load on-demand
 const HistorySidebar = dynamic(
@@ -26,18 +40,58 @@ const HistorySidebar = dynamic(
 function HomeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const ancestryTreeRef = useRef<HTMLDivElement>(null)
 
   // Hooks
   const { history, clearHistory, removeFromHistory } = useHistory()
-  const { state, result, error, searchWord } = useEtymologySearch()
+  const { isSimple, toggleSimple } = useSimpleMode()
+  const { state, events, partialResult, error, search, reset } = useStreamingEtymology()
+  const currentWord = searchParams.get('q')?.toLowerCase() ?? null
+  const [ngramData, setNgramData] = useState<NgramResult | null>(null)
 
   // Handle URL-based search on mount and param changes - intentional URL → action sync
   useEffect(() => {
     const q = searchParams.get('q')
     if (q) {
-      searchWord(q)
+      search(q)
+    } else {
+      reset()
     }
-  }, [searchParams, searchWord])
+  }, [searchParams, search, reset])
+
+  useEffect(() => {
+    const word = partialResult?.word?.trim()
+    if (!word) return
+
+    const controller = new AbortController()
+
+    fetch(`/api/ngram?word=${encodeURIComponent(word)}`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) return null
+        return response.json() as Promise<ApiResponse<NgramResult>>
+      })
+      .then((payload) => {
+        if (payload?.success && payload.data) {
+          setNgramData(payload.data)
+        }
+      })
+      .catch((fetchError) => {
+        if ((fetchError as Error).name !== 'AbortError') {
+          console.error('Failed to fetch ngram data:', fetchError)
+        }
+      })
+
+    return () => controller.abort()
+  }, [partialResult?.word])
+
+  // Only pair ngram data with the result when the word matches; avoids stale data after reset
+  const resultWithNgram = partialResult
+    ? {
+        ...partialResult,
+        ngram: ngramData && ngramData.word === partialResult.word ? ngramData : undefined,
+      }
+    : null
 
   // Single callback for all word navigation (history, suggestions, related words, surprise)
   const navigateToWord = useCallback(
@@ -46,6 +100,33 @@ function HomeContent() {
     },
     [router]
   )
+
+  const handleHistoryBack = useCallback(() => {
+    if (history.length === 0) return
+
+    if (!currentWord) {
+      navigateToWord(history[0].word)
+      return
+    }
+
+    const currentIndex = history.findIndex((entry) => entry.word === currentWord)
+    if (currentIndex === -1) {
+      navigateToWord(history[0].word)
+      return
+    }
+
+    const nextIndex = Math.min(currentIndex + 1, history.length - 1)
+    navigateToWord(history[nextIndex].word)
+  }, [history, currentWord, navigateToWord])
+
+  const handleHistoryForward = useCallback(() => {
+    if (!currentWord || history.length === 0) return
+
+    const currentIndex = history.findIndex((entry) => entry.word === currentWord)
+    if (currentIndex <= 0) return
+
+    navigateToWord(history[currentIndex - 1].word)
+  }, [history, currentWord, navigateToWord])
 
   return (
     <main
@@ -68,6 +149,10 @@ function HomeContent() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <header className="text-center mb-12 md:mb-16">
+          <div className="mb-6 flex justify-center">
+            <ThemeToggle />
+          </div>
+
           {/* Navigation links */}
           <nav className="flex justify-center gap-6 mb-8 text-sm font-serif">
             <Link href="/faq" className="text-charcoal-light hover:text-charcoal transition-colors">
@@ -89,7 +174,9 @@ function HomeContent() {
             tracking-tight
           "
           >
-            Etymology Explorer
+            <Link href="/" className="transition-opacity hover:opacity-85">
+              Etymology Explorer
+            </Link>
           </h1>
           <p
             className="
@@ -100,6 +187,10 @@ function HomeContent() {
           >
             Discover the roots and origins of words
           </p>
+
+          <div className="mt-4 flex justify-center">
+            <CostModeIndicator />
+          </div>
         </header>
 
         {/* Search bar */}
@@ -108,6 +199,7 @@ function HomeContent() {
             onSearch={navigateToWord}
             isLoading={state === 'loading'}
             initialValue={searchParams.get('q') || ''}
+            inputRef={searchInputRef}
           />
 
           {/* Surprise button */}
@@ -118,47 +210,98 @@ function HomeContent() {
 
         {/* Results area */}
         <div className="min-h-[400px]">
-          {/* Loading state */}
+          {/* Loading state - show research progress */}
           {state === 'loading' && (
-            <div className="flex justify-center py-16">
-              <div className="text-center">
-                <div
-                  className="
-                  w-12 h-12 mx-auto mb-4
-                  border-2 border-charcoal/20
-                  border-t-charcoal
-                  rounded-full
-                  animate-spin
-                "
-                />
-                <p className="font-serif text-charcoal-light italic">
-                  Tracing etymological roots...
-                </p>
-              </div>
+            <div className="py-8">
+              <ResearchProgress events={events} />
             </div>
           )}
 
           {/* Idle state */}
-          {state === 'idle' && <EmptyState />}
+          {state === 'idle' && (
+            <section
+              className="
+                relative overflow-hidden
+                rounded-lg border border-border-soft
+                bg-gradient-to-b from-surface to-cream-dark/35
+                p-6 sm:p-8 md:p-10
+              "
+            >
+              <div className="absolute -top-10 -right-8 h-32 w-32 rounded-full bg-amber-200/25 blur-2xl" />
+              <div className="absolute -bottom-12 -left-10 h-36 w-36 rounded-full bg-emerald-200/20 blur-2xl" />
+
+              <header className="relative mb-8">
+                <p className="text-xs uppercase tracking-[0.2em] text-charcoal-light/60 mb-3">
+                  Try these words
+                </p>
+                <h2 className="font-serif text-3xl md:text-4xl text-charcoal tracking-tight">
+                  Explore word origins
+                </h2>
+                <p className="font-serif italic text-charcoal-light mt-3 max-w-2xl">
+                  Wander through curious entries that reveal how meanings drift, split, and return.
+                </p>
+              </header>
+
+              <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                {CURATED_IDLE_WORDS.map((entry, index) => (
+                  <button
+                    key={entry.word}
+                    onClick={() => navigateToWord(entry.word)}
+                    className="
+                      group text-left
+                      rounded-md border border-charcoal/10
+                      bg-surface/85 backdrop-blur-[1px]
+                      p-4 sm:p-5
+                      shadow-sm
+                      hover:border-charcoal/25 hover:-translate-y-0.5
+                      hover:shadow-md
+                      transition-all duration-300
+                      animate-fadeIn
+                    "
+                    style={{ animationDelay: `${index * 70}ms`, animationFillMode: 'backwards' }}
+                  >
+                    <span className="font-serif text-xl text-charcoal group-hover:italic transition-all">
+                      {entry.word}
+                    </span>
+                    <p className="mt-2 text-sm leading-relaxed text-charcoal-light">
+                      {entry.teaser}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Error state */}
           {state === 'error' && error && (
             <ErrorState
-              type={error.type}
-              message={error.message}
-              suggestions={error.suggestions}
+              type="network-error"
+              message={error}
+              suggestions={[]}
               onSuggestionClick={navigateToWord}
             />
           )}
 
           {/* Success state */}
-          {state === 'success' && result && (
+          {state === 'success' && resultWithNgram && (
             <div className="space-y-12">
               {/* Main etymology card */}
-              <EtymologyCard result={result} onWordClick={navigateToWord} />
+              <EtymologyCard
+                result={resultWithNgram}
+                onWordClick={navigateToWord}
+                isSimple={isSimple}
+                ancestryTreeRef={ancestryTreeRef}
+                headerActions={
+                  <ShareMenu
+                    word={resultWithNgram.word}
+                    result={resultWithNgram}
+                    ancestryTreeRef={ancestryTreeRef}
+                  />
+                }
+              />
 
               {/* Related words section */}
-              {result.roots.length > 0 && (
+              {resultWithNgram.roots.length > 0 && (
                 <section>
                   <h2
                     className="
@@ -173,12 +316,19 @@ function HomeContent() {
                     <span className="flex-1 h-px bg-charcoal/20" />
                   </h2>
 
-                  <RelatedWordsList roots={result.roots} onWordClick={navigateToWord} />
+                  <RelatedWordsList roots={resultWithNgram.roots} onWordClick={navigateToWord} />
                 </section>
               )}
             </div>
           )}
         </div>
+
+        <KeyboardShortcuts
+          onFocusSearch={() => searchInputRef.current?.focus()}
+          onHistoryBack={handleHistoryBack}
+          onHistoryForward={handleHistoryForward}
+          onToggleSimpleMode={toggleSimple}
+        />
 
         {/* Footer */}
         <footer
@@ -192,7 +342,7 @@ function HomeContent() {
           <p
             className="
             text-sm font-serif
-            text-charcoal-light/50
+            text-charcoal-light/65
           "
           >
             Built by{' '}
@@ -200,20 +350,21 @@ function HomeContent() {
               href="https://thepushkarp.com/"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-charcoal"
+              className="underline hover:text-charcoal transition-colors"
             >
               thepushkarp
             </a>{' '}
-            with Curiosity, Claude, Codex and Cursor
+            with Curiosity
           </p>
           <p
             className="
             text-xs
-            text-charcoal-light/30
+            text-charcoal-light/50
             mt-2
           "
           >
-            Etymology data from Etymonline, Wiktionary, Wikipedia, and Urban Dictionary
+            Etymology data from Etymonline, Wiktionary, Wikipedia, Urban Dictionary and Free
+            Dictionary
           </p>
         </footer>
       </div>

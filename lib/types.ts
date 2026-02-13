@@ -1,4 +1,5 @@
 import type { ParsedEtymChain } from './etymologyParser'
+import type { FreeDictionaryEntry } from './freeDictionary'
 
 /**
  * A single etymological root component of a word
@@ -17,7 +18,13 @@ export interface Root {
  * A source reference with name, URL, and the specific word looked up
  */
 export interface SourceReference {
-  name: 'etymonline' | 'wiktionary' | 'synthesized'
+  name:
+    | 'etymonline'
+    | 'wiktionary'
+    | 'freeDictionary'
+    | 'urbanDictionary'
+    | 'incelsWiki'
+    | 'synthesized'
   url?: string // URL of the actual page used (undefined for 'synthesized')
   word?: string // The specific word/root that was looked up (undefined for 'synthesized')
 }
@@ -131,6 +138,12 @@ export interface ModernUsage {
   notableReferences?: string[] // Famous uses in media/literature
 }
 
+export interface NgramResult {
+  word: string
+  data: Array<{ year: number; count: number; matchCount?: number }>
+  corpus: string
+}
+
 /**
  * Complete etymology result for a word
  */
@@ -145,6 +158,11 @@ export interface EtymologyResult {
   partsOfSpeech?: POSDefinition[] // Definitions per grammatical category
   suggestions?: WordSuggestions // Related words for vocabulary building
   modernUsage?: ModernUsage // Contemporary/slang meanings
+  ngram?: NgramResult
+  rawSources?: {
+    wikipedia?: string
+    dateAttested?: string
+  }
 }
 
 /**
@@ -206,14 +224,20 @@ export interface ResearchContext {
     word: string
     etymonline: SourceData | null
     wiktionary: SourceData | null
-    wikipedia?: SourceData | null
+    freeDictionary?: FreeDictionaryEntry | null
     urbanDictionary?: SourceData | null
+    wikipedia?: SourceData | null
+    incelsWiki?: SourceData | null
   }
   identifiedRoots: string[]
   rootResearch: RootResearchData[]
   relatedWordsData: Record<string, SourceData>
   totalSourcesFetched: number
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
+  rawSources?: {
+    wikipedia?: string
+    dateAttested?: string
+  }
 }
 
 /** Protection states for cost guard — extends the budget degradation ladder */
@@ -232,3 +256,33 @@ export interface SecurityTelemetryEvent {
   timestamp: number
   detail: Record<string, unknown>
 }
+
+/**
+ * Server-sent event shapes for streaming etymology synthesis
+ * Emitted during the research and synthesis pipeline to provide real-time progress
+ */
+export type StreamEvent =
+  | { type: 'source_started'; source: string }
+  | {
+      type: 'source_complete'
+      source: string
+      timing: number
+      preview?: string
+    }
+  | { type: 'source_failed'; source: string; error: string }
+  | { type: 'parsing_complete'; chainCount: number; dateAttested?: string }
+  | { type: 'roots_identified'; roots: string[] }
+  | { type: 'root_research'; root: string; source: string; status: string }
+  | { type: 'synthesis_started' }
+  | { type: 'synthesis_token'; token: string }
+  | {
+      type: 'enrichment_done'
+      highConfidence: number
+      mediumConfidence: number
+    }
+  | { type: 'result'; data: EtymologyResult }
+  | {
+      type: 'error'
+      message: string
+      errorType: 'rate_limit' | 'budget' | 'network' | 'unknown'
+    }

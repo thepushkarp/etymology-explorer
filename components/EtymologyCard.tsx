@@ -5,24 +5,33 @@ import { EtymologyResult, SourceReference } from '@/lib/types'
 import { RootChip } from './RootChip'
 import { AncestryTree } from './AncestryTree'
 import { PronunciationButton } from './PronunciationButton'
+import HistoricalContext from './HistoricalContext'
+import UsageTimeline from './UsageTimeline'
 
 interface EtymologyCardProps {
   result: EtymologyResult
   onWordClick: (word: string) => void
+  isSimple?: boolean
+  headerActions?: React.ReactNode
+  ancestryTreeRef?: React.RefObject<HTMLDivElement | null>
 }
 
 export const EtymologyCard = memo(function EtymologyCard({
   result,
   onWordClick,
+  isSimple = false,
+  headerActions,
+  ancestryTreeRef,
 }: EtymologyCardProps) {
   return (
     <article
       className="
         relative
-        bg-white
+        bg-surface
+        dark:bg-surface
         rounded-lg
         shadow-sm
-        border border-charcoal/5
+        border border-border-soft
         overflow-hidden
         animate-fadeIn
       "
@@ -38,31 +47,43 @@ export const EtymologyCard = memo(function EtymologyCard({
       {/* Main content */}
       <div className="relative p-5 sm:p-8 md:p-12">
         {/* Header: Word + Pronunciation */}
-        <header className="mb-8 pb-6 border-b border-charcoal/10">
-          <div className="flex items-baseline gap-4 flex-wrap">
-            {/* Main word - styled like a dictionary headword */}
-            <h1
-              className="
-              font-serif text-4xl md:text-5xl
-              font-bold text-charcoal
-              tracking-tight
-            "
-            >
-              {result.word}
-            </h1>
+        <header className="mb-8 pb-6 border-b border-border-soft">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-baseline gap-4 flex-wrap">
+              {/* Main word - styled like a dictionary headword */}
+              <h1
+                className="
+                font-serif text-4xl md:text-5xl
+                font-bold text-charcoal
+                tracking-tight
+              "
+              >
+                {result.word}
+              </h1>
 
-            {/* Pronunciation in IPA with audio button */}
-            <span
-              className="
-              inline-flex items-center gap-1
-              font-serif text-lg
-              text-charcoal-light italic
-            "
-            >
-              {result.pronunciation}
-              <PronunciationButton word={result.word} />
-            </span>
+              {/* Pronunciation in IPA with audio button */}
+              <span
+                className="
+                inline-flex items-center gap-1
+                font-serif text-lg
+                  text-charcoal-light dark:text-charcoal-light italic
+              "
+              >
+                {!isSimple && result.pronunciation}
+                <PronunciationButton word={result.word} />
+              </span>
+            </div>
+
+            {headerActions && <div className="pt-1 shrink-0">{headerActions}</div>}
           </div>
+
+          {/* First Attested Date */}
+          {result.rawSources?.dateAttested && (
+            <span className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 bg-cream-dark/45 border border-border-soft rounded-full text-xs font-serif text-charcoal/70 dark:text-charcoal-light">
+              <span className="text-charcoal/40">⏱</span>
+              First attested {result.rawSources.dateAttested}
+            </span>
+          )}
 
           {/* Definition */}
           <p
@@ -96,6 +117,15 @@ export const EtymologyCard = memo(function EtymologyCard({
               ))}
             </div>
           )}
+
+          {result.ngram && result.ngram.data.length > 0 && (
+            <div className="mt-4 border-t border-border-soft pt-3">
+              <h4 className="mb-2 font-serif text-xs uppercase tracking-wider text-charcoal/55">
+                Usage over time
+              </h4>
+              <UsageTimeline data={result.ngram.data} word={result.ngram.word} showYearLabels />
+            </div>
+          )}
         </header>
 
         {/* Roots section */}
@@ -119,7 +149,9 @@ export const EtymologyCard = memo(function EtymologyCard({
 
         {/* Ancestry graph - visual journey showing root branches merging */}
         {result.ancestryGraph?.branches?.length > 0 && (
-          <AncestryTree graph={result.ancestryGraph} word={result.word} />
+          <div ref={ancestryTreeRef}>
+            <AncestryTree graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
+          </div>
         )}
 
         {/* Lore section - the memorable narrative */}
@@ -146,7 +178,7 @@ export const EtymologyCard = memo(function EtymologyCard({
               className="
               absolute -left-3 -top-2
               text-4xl font-serif
-              text-charcoal/10
+              text-charcoal/20
               select-none
             "
             >
@@ -165,13 +197,18 @@ export const EtymologyCard = memo(function EtymologyCard({
           </div>
         </section>
 
+        {/* Historical Context - Wikipedia extract */}
+        {!isSimple && result.rawSources?.wikipedia && (
+          <HistoricalContext wikipediaExtract={result.rawSources.wikipedia} />
+        )}
+
         {/* Modern Usage - after lore, before related words */}
         {result.modernUsage && result.modernUsage.hasSlangMeaning && (
           <section className="mb-8">
             <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-4">
               Modern Usage
             </h2>
-            <div className="relative pl-6 border-l-2 border-violet-200">
+            <div className="relative pl-6 border-l-2 border-violet-200 dark:border-violet-800">
               {result.modernUsage.slangDefinition && (
                 <p className="font-serif text-lg text-charcoal/80 leading-relaxed mb-3">
                   {result.modernUsage.slangDefinition}
@@ -188,13 +225,33 @@ export const EtymologyCard = memo(function EtymologyCard({
                   {result.modernUsage.contexts.map((ctx) => (
                     <span
                       key={ctx}
-                      className="px-2 py-0.5 text-xs font-serif bg-violet-50 text-violet-700 border border-violet-200 rounded-full"
+                      className="px-2 py-0.5 text-xs font-serif bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-700 rounded-full"
                     >
                       {ctx}
                     </span>
                   ))}
                 </div>
               )}
+
+              {!isSimple &&
+                result.modernUsage.notableReferences &&
+                result.modernUsage.notableReferences.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-violet-100 dark:border-violet-800">
+                    <p className="text-xs font-serif uppercase tracking-wider text-charcoal/50 mb-2">
+                      Notable References
+                    </p>
+                    <ul className="space-y-1">
+                      {result.modernUsage.notableReferences.slice(0, 3).map((reference, idx) => (
+                        <li
+                          key={`${reference}-${idx}`}
+                          className="text-sm text-charcoal/70 leading-relaxed"
+                        >
+                          {reference}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
             </div>
           </section>
         )}
@@ -252,36 +309,38 @@ export const EtymologyCard = memo(function EtymologyCard({
         )}
 
         {/* Sources footer */}
-        <footer
-          className="
-          pt-6
-          border-t border-charcoal/10
-        "
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <span
-              className="
-              font-serif text-xs uppercase
-              text-charcoal-light/60 tracking-wider
-              shrink-0
-            "
-            >
-              Sources
-            </span>
-            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1.5 sm:gap-2">
-              {result.sources.map((source, index) => (
-                <SourceBadge key={`${source.name}-${source.word || index}`} source={source} />
-              ))}
+        {!isSimple && (
+          <footer
+            className="
+            pt-6
+            border-t border-charcoal/10
+          "
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <span
+                className="
+                font-serif text-xs uppercase
+                text-charcoal-light/65 tracking-wider
+                shrink-0
+              "
+              >
+                Sources
+              </span>
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1.5 sm:gap-2">
+                {result.sources.map((source, index) => (
+                  <SourceBadge key={`${source.name}-${source.word || index}`} source={source} />
+                ))}
+              </div>
             </div>
-          </div>
-        </footer>
+          </footer>
+        )}
 
         {/* Decorative flourish - centered card ending */}
         <div
           className="
             flex items-center justify-center gap-2
             mt-6 pt-2
-            text-charcoal/15
+            text-charcoal/25
           "
         >
           <span className="w-8 h-px bg-current" />
@@ -297,14 +356,25 @@ function SourceBadge({ source }: { source: SourceReference }) {
   const labels: Record<string, string> = {
     etymonline: 'Etymonline',
     wiktionary: 'Wiktionary',
+    freeDictionary: 'Free Dictionary',
+    urbanDictionary: 'Urban Dictionary',
+    incelsWiki: 'Incels Wiki',
     synthesized: 'AI Synthesis',
   }
 
   const colors: Record<string, string> = {
     etymonline:
-      'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 hover:border-amber-300',
-    wiktionary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300',
-    synthesized: 'bg-purple-50 text-purple-700 border-purple-200',
+      'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700 hover:bg-amber-100 hover:border-amber-300',
+    wiktionary:
+      'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700 hover:bg-blue-100 hover:border-blue-300',
+    freeDictionary:
+      'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 hover:border-emerald-300',
+    urbanDictionary:
+      'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-700 hover:bg-violet-100 hover:border-violet-300',
+    incelsWiki:
+      'bg-stone-50 dark:bg-stone-950/40 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-100 hover:border-stone-300',
+    synthesized:
+      'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700',
   }
 
   const baseClasses = `
@@ -313,7 +383,7 @@ function SourceBadge({ source }: { source: SourceReference }) {
     rounded-md
     border
     transition-colors duration-200
-    ${colors[source.name] || 'bg-gray-50 text-gray-700 border-gray-200'}
+    ${colors[source.name] || 'bg-gray-50 dark:bg-gray-950/40 text-gray-700 dark:text-gray-300 border-gray-200'}
   `
 
   const sourceLabel = labels[source.name] || source.name
@@ -413,11 +483,12 @@ function SuggestionRow({
   color: 'emerald' | 'rose' | 'amber' | 'blue' | 'purple'
 }) {
   const colorClasses = {
-    emerald: 'border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300',
+    emerald:
+      'border-emerald-200 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-300',
     rose: 'border-rose-200 hover:bg-rose-50 hover:border-rose-300',
-    amber: 'border-amber-200 hover:bg-amber-50 hover:border-amber-300',
-    blue: 'border-blue-200 hover:bg-blue-50 hover:border-blue-300',
-    purple: 'border-purple-200 hover:bg-purple-50 hover:border-purple-300',
+    amber: 'border-amber-200 dark:border-amber-700 hover:bg-amber-50 hover:border-amber-300',
+    blue: 'border-blue-200 dark:border-blue-700 hover:bg-blue-50 hover:border-blue-300',
+    purple: 'border-purple-200 dark:border-purple-700 hover:bg-purple-50 hover:border-purple-300',
   }
 
   return (

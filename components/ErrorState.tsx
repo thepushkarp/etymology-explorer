@@ -20,7 +20,7 @@ export function ErrorState({ type, message, suggestions, onSuggestionClick }: Er
       <div
         className="
         relative
-        bg-white
+        bg-surface
         rounded-lg
         border border-charcoal/10
         shadow-sm
@@ -118,7 +118,7 @@ export function ErrorState({ type, message, suggestions, onSuggestionClick }: Er
           className="
           mt-8 pt-6
           border-t border-charcoal/5
-          text-charcoal/20
+          text-charcoal/35
           flex items-center justify-center gap-3
         "
         >

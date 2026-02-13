@@ -13,11 +13,12 @@ Try it out at [etymology.thepushkarp.com](https://etymology.thepushkarp.com)
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
 - **Related Words**: Discover words that share the same roots
 - **Word Suggestions**: Explore synonyms, antonyms, homophones, easily-confused words, and see-also links with color-coded clickable chips
-- **Modern Usage**: Slang definitions and contemporary context from Wikipedia and Urban Dictionary
+- **Modern Usage**: Slang context gated by source significance from Urban Dictionary and supplemental Incel Wiki extracts
 - **Pronunciation Audio**: Listen to word pronunciations powered by ElevenLabs
 - **Search History**: Track your vocabulary exploration with a persistent sidebar
 - **Surprise Me**: Discover random words to expand your vocabulary
 - **Structured Outputs**: Guaranteed valid JSON responses using constrained decoding
+- **Streaming UI**: Optional `?stream=true` server-sent events for source progress and token streaming
 - **Smart Caching**: Redis-backed caching reduces costs and improves speed (30d etymology, 1yr audio)
 - **Rate Limiting**: Per-IP protection via Upstash Redis with automatic budget enforcement
 
@@ -75,9 +76,12 @@ ELEVENLABS_VOICE_ID=your_voice_id_here
 PUBLIC_SEARCH_ENABLED=true
 PRONUNCIATION_ENABLED=true
 FORCE_CACHE_ONLY=false
+RATE_LIMIT_ENABLED=true
 ```
 
 See `.env.example` for full documentation.
+
+For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and restart `bun dev`.
 
 ## Tech Stack
 
@@ -90,8 +94,10 @@ See `.env.example` for full documentation.
 - **Data Sources**:
   - [Etymonline](https://www.etymonline.com/) - Historical etymology
   - [Wiktionary](https://en.wiktionary.org/) - Definitions and linguistic data
+  - [Free Dictionary API](https://dictionaryapi.dev/) - Definitions, pronunciation hints, and origin data
   - [Wikipedia](https://en.wikipedia.org/) - Encyclopedic context
-  - [Urban Dictionary](https://www.urbandictionary.com/) - Modern slang (NSFW filtered)
+  - [Urban Dictionary](https://www.urbandictionary.com/) - Modern slang (quality-filtered)
+  - [Incel Wiki](https://incels.wiki/) - Supplemental community slang context
 - **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
 - **Typography**: Libre Baskerville (serif)
 
@@ -135,8 +141,10 @@ etymology-explorer/
 │   ├── etymologyEnricher.ts # Post-LLM confidence enricher
 │   ├── etymonline.ts       # Etymonline HTML scraper
 │   ├── wiktionary.ts       # Wiktionary MediaWiki API client
+│   ├── freeDictionary.ts   # Free Dictionary API client
 │   ├── wikipedia.ts        # Wikipedia REST API client
-│   ├── urbanDictionary.ts  # Urban Dictionary API with NSFW filtering
+│   ├── urbanDictionary.ts  # Urban Dictionary API with quality scoring/filtering
+│   ├── incelsWiki.ts       # Incel Wiki MediaWiki API client (supplemental)
 │   ├── elevenlabs.ts       # ElevenLabs TTS for pronunciation audio
 │   ├── spellcheck.ts       # Typo detection and suggestions
 │   ├── prompts.ts          # System prompts and schemas
@@ -152,7 +160,8 @@ etymology-explorer/
 │   ├── validation.ts       # Input validation
 │   ├── wordlist.ts         # GRE word utilities
 │   ├── hooks/              # React hooks (localStorage, history, search)
-│   │   └── useEtymologySearch.ts
+│   │   ├── useStreamingEtymology.ts # Primary streaming search hook (SSE)
+│   │   └── useEtymologySearch.ts    # Non-streaming search hook
 │   └── schemas/
 │       ├── etymology.ts    # Zod schema for cache validation
 │       └── llm-schema.ts   # JSON Schema for LLM structured outputs
@@ -164,31 +173,31 @@ etymology-explorer/
 
 ## API Endpoints
 
-| Endpoint             | Method | Description                     | Auth Required     |
-| -------------------- | ------ | ------------------------------- | ----------------- |
-| `/api/etymology`     | GET    | Synthesize etymology for a word | No (rate-limited) |
-| `/api/pronunciation` | GET    | Get pronunciation audio         | No                |
-| `/api/suggestions`   | GET    | Get typo correction suggestions | No                |
-| `/api/random-word`   | GET    | Get a random word               | No                |
-| `/api/admin/stats`   | GET    | Get budget/usage statistics     | Admin secret      |
+| Endpoint             | Method | Description                                                   | Auth Required     |
+| -------------------- | ------ | ------------------------------------------------------------- | ----------------- |
+| `/api/etymology`     | GET    | Synthesize etymology (`?word=X`, optional `?stream=true` SSE) | No (rate-limited) |
+| `/api/pronunciation` | GET    | Get pronunciation audio                                       | No                |
+| `/api/suggestions`   | GET    | Get typo correction suggestions                               | No                |
+| `/api/random-word`   | GET    | Get a random word                                             | No                |
+| `/api/admin/stats`   | GET    | Get budget/usage statistics                                   | Admin secret      |
 
 ## How It Works
 
 1. **Request Deduplication**: Singleflight mechanism prevents duplicate concurrent searches
-2. **Rate Limiting**: Per-IP rate limiting (10 req/min + 100 req/day) via Upstash Redis
-3. **Cache Check**: Redis cache lookup (30d TTL for etymology, 1yr for audio)
+2. **Rate Limiting**: Per-IP rate limiting (20 req/min + 200 req/day) via Upstash Redis
+3. **Cache Check**: Redis cache lookup with versioned keys (`etymology:v2.1:`), schema validation on read, and negative cache (6h) for known no-source/invalid words
 4. **Grounded Etymology Pipeline**:
    - **Parser** (CPU-only): Extracts "from X, from Y" chains from raw source text
    - **Agentic Research**: Multi-phase research pipeline:
-     - Phase 1: Fetch main word data from 4 sources in parallel (Etymonline, Wiktionary, Wikipedia, Urban Dictionary)
+     - Phase 1: Fetch main word data from 6 sources in parallel (Etymonline, Wiktionary, Free Dictionary, Wikipedia, Urban Dictionary, Incel Wiki)
      - Phase 2: Quick LLM call extracts root morphemes (e.g., "telephone" → ["tele", "phone"])
      - Phase 3: Fetch etymology data for each identified root
      - Phase 4: Gather related terms for additional context (depth-limited)
    - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
-6. **Budget Enforcement**: Cost guard tracks spending and degrades service (normal → degraded → cache_only → blocked)
-7. **Rich Display**: Etymology rendered with expandable roots, ancestry graph with confidence badges, POS tags, modern usage, related words, and source attribution
+6. **Budget Enforcement**: Cost guard tracks spending and enforces protection modes (normal → protected_503 → cache_only → blocked)
+7. **Rich Display**: Etymology rendered with expandable roots, ancestry graph with confidence badges, POS tags, modern usage, related words, and source attribution (supplemental sources are only surfaced when significance checks pass)
 
 ### Architecture Diagram
 
@@ -203,7 +212,7 @@ etymology-explorer/
 │         │      (search history)            │                   │            │
 │         └────────────────┬─────────────────┴───────────────────┘            │
 └──────────────────────────┼──────────────────────────────────────────────────┘
-                           │ GET /api/etymology?word=...
+                           │ GET /api/etymology?word=... (&stream=true optional)
                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         MIDDLEWARE (Edge)                                   │
@@ -231,7 +240,7 @@ etymology-explorer/
 │  │                                                                       │  │
 │  │  ┌────────────┐      ┌──────────────────────┐      ┌──────────────┐  │  │
 │  │  │   Parser   │  ──▶ │  Agentic Research    │  ──▶ │   Enricher   │  │  │
-│  │  │ (CPU-only) │      │  (4-source parallel) │      │ (CPU-only)   │  │  │
+│  │  │ (CPU-only) │      │  (6-source parallel) │      │ (CPU-only)   │  │  │
 │  │  │            │      │                      │      │              │  │  │
 │  │  │ Extract    │      │ Phase 1-4 research   │      │ Assign       │  │  │
 │  │  │ "from X,Y" │      │ + LLM synthesis      │      │ confidence   │  │  │
@@ -250,8 +259,8 @@ etymology-explorer/
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │                       COST GUARD + BUDGET                             │  │
 │  │  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌──────────────────┐     │  │
-│  │  │  Normal  │─▶│ Degraded │─▶│Cache-only │─▶│     Blocked      │     │  │
-│  │  │  Mode    │  │  Mode    │  │   Mode    │  │ (budget exceeded)│     │  │
+│  │  │  Normal  │─▶│protected_503│─▶│Cache-only │─▶│     Blocked      │   │  │
+│  │  │  Mode    │  │    Mode     │  │   Mode    │  │ (budget exceeded)│   │  │
 │  │  └──────────┘  └──────────┘  └───────────┘  └──────────────────┘     │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -266,8 +275,12 @@ etymology-explorer/
 │   └────────────────┘  └────────────────┘  └────────────────────────────┘    │
 │   ┌────────────────┐  ┌────────────────┐  ┌────────────────────────────┐    │
 │   │  en.wikipedia  │  │ Urban Dict API │  │      ElevenLabs API        │    │
-│   │  (REST API)    │  │ (NSFW filtered)│  │  (pronunciation audio)     │    │
+│   │  (REST API)    │  │ (quality gate) │  │  (pronunciation audio)     │    │
 │   └────────────────┘  └────────────────┘  └────────────────────────────┘    │
+│   ┌────────────────┐  ┌────────────────┐                                     │
+│   │ Free Dict API  │  │ Incel Wiki API │                                     │
+│   │ (dictionaryapi)|  │ (MediaWiki)    │                                     │
+│   └────────────────┘  └────────────────┘                                     │
 │   ┌────────────────┐                                                         │
 │   │ Upstash Redis  │                                                         │
 │   │ (cache + rate) │                                                         │
@@ -306,8 +319,10 @@ MIT
 ## Acknowledgments
 
 - Etymology data from [Etymonline](https://www.etymonline.com/) and [Wiktionary](https://en.wiktionary.org/)
+- Definitions and pronunciation hints from [Free Dictionary API](https://dictionaryapi.dev/)
 - Encyclopedic context from [Wikipedia](https://en.wikipedia.org/)
 - Modern slang definitions from [Urban Dictionary](https://www.urbandictionary.com/)
+- Supplemental community slang context from [Incel Wiki](https://incels.wiki/)
 - Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)
 - Powered by [Claude](https://www.anthropic.com/claude) from Anthropic
 - Rate limiting and caching by [Upstash](https://upstash.com/)

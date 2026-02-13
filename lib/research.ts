@@ -8,7 +8,9 @@ import { fetchEtymonline } from './etymonline'
 import { fetchWiktionary } from './wiktionary'
 import { fetchWikipedia } from './wikipedia'
 import { fetchUrbanDictionary } from './urbanDictionary'
-import { ResearchContext, RootResearchData } from './types'
+import { fetchIncelsWiki } from './incelsWiki'
+import { fetchFreeDictionary } from './freeDictionary'
+import { ResearchContext, RootResearchData, StreamEvent } from './types'
 import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
 import Anthropic from '@anthropic-ai/sdk'
 import { CONFIG } from './config'
@@ -133,6 +135,18 @@ async function fetchRootResearch(root: string): Promise<RootResearchData> {
 }
 
 /**
+ * Emit a progress event safely (non-blocking)
+ */
+function emitProgress(callback: ((event: StreamEvent) => void) | undefined, event: StreamEvent) {
+  if (!callback) return
+  try {
+    callback(event)
+  } catch (error) {
+    console.error('[Research] Progress callback error:', safeError(error))
+  }
+}
+
+/**
  * Conduct agentic research to gather rich etymology context.
  * This is the main orchestrator that:
  * 1. Fetches initial word data
@@ -142,52 +156,162 @@ async function fetchRootResearch(root: string): Promise<RootResearchData> {
  */
 export async function conductAgenticResearch(
   word: string,
-  options?: { skipOptionalSources?: boolean }
+  options?: { skipOptionalSources?: boolean },
+  onProgress?: (event: StreamEvent) => void
 ): Promise<ResearchContext> {
   let totalFetches = 0
   const normalizedWord = word.toLowerCase().trim()
   const skipOptional = options?.skipOptionalSources ?? false
 
+  const runOptionalSource = <T>(
+    source: string,
+    startTime: number,
+    fetcher: () => Promise<T | null>,
+    preview: (data: T | null) => string | undefined
+  ): Promise<T | null> => {
+    return fetcher()
+      .then((data) => {
+        emitProgress(onProgress, {
+          type: 'source_complete',
+          source,
+          timing: Date.now() - startTime,
+          preview: preview(data),
+        })
+        return data
+      })
+      .catch((err) => {
+        console.error(`[Research] ${source} fetch failed for "${normalizedWord}":`, safeError(err))
+        emitProgress(onProgress, {
+          type: 'source_failed',
+          source,
+          error: safeError(err),
+        })
+        return null
+      })
+  }
+
+  const runRequiredSource = <T>(
+    source: string,
+    startTime: number,
+    fetcher: () => Promise<T | null>,
+    preview: (data: T | null) => string | undefined,
+    options?: { failHard?: boolean }
+  ): Promise<T | null> => {
+    const failHard = options?.failHard ?? true
+    return fetcher()
+      .then((data) => {
+        emitProgress(onProgress, {
+          type: 'source_complete',
+          source,
+          timing: Date.now() - startTime,
+          preview: preview(data),
+        })
+        return data
+      })
+      .catch((err) => {
+        if (!failHard) {
+          console.error(
+            `[Research] ${source} fetch failed for "${normalizedWord}":`,
+            safeError(err)
+          )
+        }
+        emitProgress(onProgress, {
+          type: 'source_failed',
+          source,
+          error: safeError(err),
+        })
+        if (failHard) throw err
+        return null
+      })
+  }
+
   // Phase 1: Initial fetch for main word
   console.log(
     `[Research] Phase 1: Fetching main word "${normalizedWord}"${skipOptional ? ' (skip optional sources)' : ''}`
   )
-  const [etymonlineData, wiktionaryData, wikipediaData, urbanDictData] = await Promise.all([
-    fetchEtymonline(normalizedWord),
-    fetchWiktionary(normalizedWord),
+
+  // Emit source_started events
+  emitProgress(onProgress, { type: 'source_started', source: 'etymonline' })
+  emitProgress(onProgress, { type: 'source_started', source: 'wiktionary' })
+  emitProgress(onProgress, { type: 'source_started', source: 'freeDictionary' })
+  if (!skipOptional) {
+    emitProgress(onProgress, { type: 'source_started', source: 'urbanDictionary' })
+    emitProgress(onProgress, { type: 'source_started', source: 'wikipedia' })
+    emitProgress(onProgress, { type: 'source_started', source: 'incelsWiki' })
+  }
+
+  const startTime = Date.now()
+  const [
+    etymonlineData,
+    wiktionaryData,
+    freeDictionaryData,
+    urbanDictionaryData,
+    wikipediaData,
+    incelsWikiData,
+  ] = await Promise.all([
+    runRequiredSource(
+      'etymonline',
+      startTime,
+      () => fetchEtymonline(normalizedWord),
+      (data) => data?.text.slice(0, 100)
+    ),
+    runRequiredSource(
+      'wiktionary',
+      startTime,
+      () => fetchWiktionary(normalizedWord),
+      (data) => data?.text.slice(0, 100)
+    ),
+    runRequiredSource(
+      'freeDictionary',
+      startTime,
+      () => fetchFreeDictionary(normalizedWord),
+      (data) => data?.origin?.slice(0, 100),
+      { failHard: false }
+    ),
     skipOptional
-      ? null
-      : fetchWikipedia(normalizedWord).catch((err) => {
-          console.error(
-            `[Research] Wikipedia fetch failed for "${normalizedWord}":`,
-            safeError(err)
-          )
-          return null
-        }),
+      ? Promise.resolve(null)
+      : runOptionalSource(
+          'urbanDictionary',
+          startTime,
+          () => fetchUrbanDictionary(normalizedWord),
+          (data) => data?.text.slice(0, 100)
+        ),
     skipOptional
-      ? null
-      : fetchUrbanDictionary(normalizedWord).catch((err) => {
-          console.error(
-            `[Research] Urban Dictionary fetch failed for "${normalizedWord}":`,
-            safeError(err)
-          )
-          return null
-        }),
+      ? Promise.resolve(null)
+      : runOptionalSource(
+          'wikipedia',
+          startTime,
+          () => fetchWikipedia(normalizedWord),
+          (data) => data?.text.slice(0, 100)
+        ),
+    skipOptional
+      ? Promise.resolve(null)
+      : runOptionalSource(
+          'incelsWiki',
+          startTime,
+          () => fetchIncelsWiki(normalizedWord),
+          (data) => data?.text.slice(0, 100)
+        ),
   ])
-  totalFetches += skipOptional ? 2 : 4
+  totalFetches += 3 + (skipOptional ? 0 : 3)
 
   const context: ResearchContext = {
     mainWord: {
       word: normalizedWord,
       etymonline: etymonlineData,
       wiktionary: wiktionaryData,
+      freeDictionary: freeDictionaryData,
+      urbanDictionary: urbanDictionaryData,
       wikipedia: wikipediaData,
-      urbanDictionary: urbanDictData,
+      incelsWiki: incelsWikiData,
     },
     identifiedRoots: [],
     rootResearch: [],
     relatedWordsData: {},
     totalSourcesFetched: totalFetches,
+    rawSources: {
+      wikipedia: wikipediaData?.text,
+    },
   }
 
   // Phase 1.5: Pre-parse etymology chains from source text (CPU-only, no API calls)
@@ -198,9 +322,17 @@ export async function conductAgenticResearch(
     wiktionaryData?.text ?? null
   )
   context.parsedChains = parsedChains
+  const dateAttested = parsedChains.find((c) => c.dateAttested)?.dateAttested
+  if (dateAttested && context.rawSources) {
+    context.rawSources.dateAttested = dateAttested
+  }
   console.log(
     `[Research] Parsed ${parsedChains.length} chain(s) with ${parsedChains.reduce((sum, c) => sum + c.links.length, 0)} total links`
   )
+  emitProgress(onProgress, {
+    type: 'parsing_complete',
+    chainCount: parsedChains.length,
+  })
 
   // If no data found at all, return early
   if (!etymonlineData && !wiktionaryData) {
@@ -217,6 +349,10 @@ export async function conductAgenticResearch(
   )
   context.identifiedRoots = identifiedRoots
   console.log(`[Research] Identified roots: ${identifiedRoots.join(', ') || 'none'}`)
+  emitProgress(onProgress, {
+    type: 'roots_identified',
+    roots: identifiedRoots,
+  })
 
   // Phase 3: Fetch data for each root (if different from main word)
   console.log('[Research] Phase 3: Researching roots')
@@ -246,6 +382,13 @@ export async function conductAgenticResearch(
         context.rootResearch.push(rootData)
         totalFetches += 2
 
+        emitProgress(onProgress, {
+          type: 'root_research',
+          root: rootData.root,
+          source: 'etymonline+wiktionary',
+          status: 'complete',
+        })
+
         // Phase 4: Fetch a couple of related terms for depth
         for (const relatedTerm of rootData.relatedTerms.slice(0, CONFIG.maxRelatedWordsPerRoot)) {
           if (totalFetches >= CONFIG.maxTotalFetches) break
@@ -255,11 +398,23 @@ export async function conductAgenticResearch(
           const relatedData = await fetchEtymonline(relatedTerm)
           if (relatedData) {
             context.relatedWordsData[relatedTerm] = relatedData
+            emitProgress(onProgress, {
+              type: 'root_research',
+              root: relatedTerm,
+              source: 'etymonline',
+              status: 'complete',
+            })
           }
           totalFetches += 1
         }
       } else {
         console.error('[Research] Root fetch failed:', safeError(result.reason))
+        emitProgress(onProgress, {
+          type: 'root_research',
+          root: rootsToFetch[rootResults.indexOf(result)],
+          source: 'unknown',
+          status: 'failed',
+        })
       }
     }
   } else {
@@ -325,9 +480,19 @@ export function buildResearchPrompt(context: ResearchContext): string {
       `\n<source_data name="wikipedia">\n${sanitizeSourceText(context.mainWord.wikipedia.text, maxChars)}\n</source_data>`
     )
   }
+  if (context.mainWord.freeDictionary) {
+    sections.push(
+      `\n<source_data name="free_dictionary">\n${sanitizeSourceText(JSON.stringify(context.mainWord.freeDictionary), maxChars)}\n</source_data>`
+    )
+  }
   if (context.mainWord.urbanDictionary) {
     sections.push(
       `\n<source_data name="urban_dictionary">\n${sanitizeSourceText(context.mainWord.urbanDictionary.text, maxChars)}\n</source_data>`
+    )
+  }
+  if (context.mainWord.incelsWiki) {
+    sections.push(
+      `\n<source_data name="incels_wiki">\n${sanitizeSourceText(context.mainWord.incelsWiki.text, maxChars)}\n</source_data>`
     )
   }
 

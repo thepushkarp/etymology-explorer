@@ -1,10 +1,29 @@
 @import 'tailwindcss';
 
+/* Wire Tailwind's dark: variant to the .dark class on <html> (set by useTheme hook + inline script).
+   Without this, dark: uses @media prefers-color-scheme which doesn't match the manual toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --cream: #fdfbf7;
-  --cream-dark: #f5f0e8;
-  --charcoal: #2c2c2c;
-  --charcoal-light: #4a4a4a;
+  --cream: #f9f5ee;
+  --cream-dark: #efe6d8;
+  --charcoal: #2f2923;
+  --charcoal-light: #5f5548;
+  --surface: #fffdf8;
+  --surface-muted: #f3ecdf;
+  --border: rgba(69, 56, 43, 0.2);
+  --accent-soft: #c8a86f;
+}
+
+.dark {
+  --cream: #1a1a1a;
+  --cream-dark: #242424;
+  --charcoal: #ececec;
+  --charcoal-light: #a8a8a8;
+  --surface: #1f1f1f;
+  --surface-muted: #2a2a2a;
+  --border: rgba(236, 236, 236, 0.14);
+  --accent-soft: #d4a857;
 }
 
 @theme inline {
@@ -12,15 +31,29 @@
   --color-cream-dark: var(--cream-dark);
   --color-charcoal: var(--charcoal);
   --color-charcoal-light: var(--charcoal-light);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border-soft: var(--border);
+  --color-accent-soft: var(--accent-soft);
   --font-serif: var(--font-libre-baskerville);
 }
 
 html {
   background: var(--cream);
   color: var(--charcoal);
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
 body {
+  background:
+    radial-gradient(
+      circle at 15% 0%,
+      color-mix(in srgb, var(--surface) 65%, transparent),
+      transparent 45%
+    ),
+    var(--cream);
   font-family: var(--font-serif), Georgia, serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

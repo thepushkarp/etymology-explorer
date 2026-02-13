@@ -52,7 +52,7 @@ export function HistorySidebar({
           z-40
           flex items-center gap-2
           px-3 py-4
-          bg-white border border-l-0 border-charcoal/10
+          bg-surface border border-l-0 border-charcoal/10
           rounded-r-lg shadow-sm
           text-charcoal-light
           hover:text-charcoal hover:bg-cream-dark/50
@@ -93,7 +93,7 @@ export function HistorySidebar({
           fixed left-0 top-0 bottom-0
           z-30
           w-72
-          bg-white
+          bg-surface
           border-r border-charcoal/10
           shadow-lg
           transform transition-transform duration-300 ease-out
@@ -116,7 +116,7 @@ export function HistorySidebar({
               className="
                 text-xs font-serif
                 text-charcoal-light/60
-                hover:text-red-600
+                hover:text-red-600 dark:hover:text-red-400
                 transition-colors
               "
             >
@@ -187,7 +187,7 @@ export function HistorySidebar({
                       <span
                         className="
                         text-xs font-serif
-                        text-charcoal-light/40
+                        text-charcoal-light/55
                       "
                       >
                         {formatRelativeTime(entry.timestamp, currentTime)}
@@ -202,8 +202,8 @@ export function HistorySidebar({
                       }}
                       className="
                         px-2 py-2
-                        text-charcoal-light/30
-                        hover:text-red-500
+                        text-charcoal-light/50
+                        hover:text-red-500 dark:hover:text-red-400
                         opacity-0 group-hover:opacity-100
                         transition-all
                       "
@@ -235,7 +235,7 @@ export function HistorySidebar({
           className="
           absolute bottom-0 left-0 right-0
           h-16
-          bg-gradient-to-t from-white to-transparent
+          bg-gradient-to-t from-surface to-transparent
           pointer-events-none
         "
         />

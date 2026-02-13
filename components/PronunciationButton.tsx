@@ -82,7 +82,7 @@ export function PronunciationButton({ word, className = '' }: PronunciationButto
         transition-all duration-200
         ${
           error
-            ? 'text-red-500/70 hover:text-red-500 hover:bg-red-50'
+            ? 'text-red-500/70 dark:text-red-400/70 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30'
             : 'text-charcoal/40 hover:text-charcoal/70 hover:bg-charcoal/5'
         }
         disabled:opacity-50 disabled:cursor-not-allowed
