@@ -30,8 +30,12 @@
   --accent-soft: #d4b06a;
 }
 
+/* Palette overrides — use .dark.dark-* to beat .dark in specificity.
+   Without the compound selector, Tailwind's CSS layers can reorder
+   these below .dark and the cascade won't pick them up. */
+
 /* A: Cool Slate — scholarly ink-on-paper */
-.dark-slate {
+.dark.dark-slate {
   --cream: #1a1d23;
   --cream-dark: #22262e;
   --charcoal: #e8e4dc;
@@ -43,7 +47,7 @@
 }
 
 /* C: Neutral Dark — pure gray, max contrast */
-.dark-neutral {
+.dark.dark-neutral {
   --cream: #1a1a1a;
   --cream-dark: #242424;
   --charcoal: #ececec;
@@ -54,8 +58,8 @@
   --accent-soft: #d4a857;
 }
 
-/* D: Warm Gray — lighter brown, less chocolate */
-.dark-warm {
+/* D: Warm Gray — same as .dark default, explicit for palette picker */
+.dark.dark-warm {
   --cream: #1e1c1a;
   --cream-dark: #2a2725;
   --charcoal: #eae6df;
