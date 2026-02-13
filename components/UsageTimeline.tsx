@@ -10,6 +10,22 @@ interface UsageTimelineProps {
   showYearLabels?: boolean
 }
 
+function formatPeakUsage(count: number): string {
+  if (!Number.isFinite(count) || count <= 0) return '0'
+
+  // Google Ngram values are relative frequencies. Tiny values are easier to read as "per million".
+  if (count < 0.01) {
+    const perMillion = count * 1_000_000
+    return `${perMillion.toLocaleString(undefined, { maximumFractionDigits: 2 })} per million words`
+  }
+
+  if (count < 1) {
+    return `${(count * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
+  }
+
+  return count.toLocaleString(undefined, { maximumSignificantDigits: 3 })
+}
+
 export default function UsageTimeline({
   data,
   word,
@@ -57,6 +73,24 @@ export default function UsageTimeline({
     }
   }, [data, height])
 
+  const decadeTicks = useMemo(() => {
+    if (minYear === 0 || maxYear === 0 || maxYear <= minYear) return []
+
+    const startDecade = Math.ceil(minYear / 10) * 10
+    const endDecade = Math.floor(maxYear / 10) * 10
+    const range = maxYear - minYear
+    const ticks: Array<{ year: number; offsetPercent: number }> = []
+
+    for (let year = startDecade; year <= endDecade; year += 10) {
+      ticks.push({
+        year,
+        offsetPercent: ((year - minYear) / range) * 100,
+      })
+    }
+
+    return ticks
+  }, [minYear, maxYear])
+
   if (!data || data.length === 0) return null
 
   return (
@@ -79,15 +113,33 @@ export default function UsageTimeline({
         <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" />
       </svg>
 
-      {showYearLabels && (
-        <div className="mt-1 flex justify-between text-[11px] text-charcoal-light/75">
-          <span>{minYear}</span>
-          <span>{maxYear}</span>
+      {showYearLabels && decadeTicks.length > 0 && (
+        <div className="mt-1 relative h-8">
+          <div className="absolute inset-x-0 top-0 h-px bg-charcoal/15" />
+          {decadeTicks.map((tick) => (
+            <div
+              key={tick.year}
+              className="absolute top-0 -translate-x-1/2"
+              style={{ left: `${tick.offsetPercent}%` }}
+            >
+              <span className="mx-auto block h-1.5 w-px bg-charcoal/35" />
+              <span className="mt-0.5 block origin-top -rotate-45 text-[9px] leading-none text-charcoal-light/75 font-mono tabular-nums">
+                {tick.year}
+              </span>
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="mt-1 text-[11px] text-charcoal-light/75">
-        Peak usage: {maxCount.toLocaleString(undefined, { maximumSignificantDigits: 3 })}
+      {showYearLabels && decadeTicks.length === 0 && (
+        <div className="mt-1 flex justify-between text-[11px] text-charcoal-light/75">
+          <span className="font-mono tabular-nums">{minYear}</span>
+          <span className="font-mono tabular-nums">{maxYear}</span>
+        </div>
+      )}
+
+      <div className="mt-2 text-[11px] text-charcoal-light/75">
+        Peak usage: {formatPeakUsage(maxCount)}
       </div>
     </div>
   )

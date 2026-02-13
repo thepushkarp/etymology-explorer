@@ -15,7 +15,7 @@ export function SurpriseButton({ onWordSelected, disabled }: SurpriseButtonProps
 
     setIsLoading(true)
     try {
-      const response = await fetch('/api/random-word')
+      const response = await fetch('/api/random-word', { cache: 'no-store' })
       const data = await response.json()
 
       if (data.success && data.data?.word) {

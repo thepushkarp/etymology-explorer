@@ -210,7 +210,7 @@ function HomeContent() {
           {/* Loading state - show research progress */}
           {state === 'loading' && (
             <div className="py-8">
-              <ResearchProgress events={events} isStreaming={true} />
+              <ResearchProgress events={events} />
             </div>
           )}
 
