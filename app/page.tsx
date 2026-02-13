@@ -20,16 +20,10 @@ import ThemeToggle from '@/components/ThemeToggle'
 import type { ApiResponse, NgramResult } from '@/lib/types'
 
 const CURATED_IDLE_WORDS = [
-  { word: 'algorithm', teaser: "from a Persian mathematician's name" },
-  { word: 'salary', teaser: 'ancient Romans were paid in this' },
-  { word: 'quarantine', teaser: '40 days of isolation' },
-  { word: 'disaster', teaser: "literally 'bad star'" },
   { word: 'nice', teaser: "once meant 'foolish'" },
+  { word: 'villain', teaser: 'used to mean farmworker' },
   { word: 'muscle', teaser: "Latin for 'little mouse'" },
-  { word: 'candidate', teaser: 'they wore white' },
-  { word: 'villain', teaser: 'just a farmworker' },
   { word: 'window', teaser: "Old Norse for 'wind-eye'" },
-  { word: 'panic', teaser: 'named for the god Pan' },
 ]
 
 // Dynamic imports for code splitting - these components load on-demand

@@ -23,10 +23,13 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
+    "@heroicons/react": "^2.2.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.36.1",
     "@vercel/analytics": "^1.6.1",
+    "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",
+    "lucide-react": "^0.563.0",
     "next": "16.1.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",

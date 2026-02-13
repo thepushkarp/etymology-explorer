@@ -23,7 +23,11 @@ function applyTheme(resolved: ResolvedTheme) {
 
 function getInitialTheme(): Theme {
   if (typeof window === 'undefined') return 'system'
-  return (localStorage.getItem(STORAGE_KEY) as Theme | null) || 'system'
+  const stored = localStorage.getItem(STORAGE_KEY)
+  if (stored === 'light' || stored === 'dark' || stored === 'system') {
+    return stored
+  }
+  return 'system'
 }
 
 function getInitialResolved(theme: Theme): ResolvedTheme {
@@ -46,9 +50,7 @@ export function useTheme() {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const handler = () => {
       if (theme === 'system') {
-        const resolved = getSystemTheme()
-        setResolvedTheme(resolved)
-        applyTheme(resolved)
+        setResolvedTheme(getSystemTheme())
       }
     }
     mq.addEventListener('change', handler)
@@ -58,9 +60,7 @@ export function useTheme() {
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme)
     localStorage.setItem(STORAGE_KEY, newTheme)
-    const resolved = newTheme === 'system' ? getSystemTheme() : newTheme
-    setResolvedTheme(resolved)
-    applyTheme(resolved)
+    setResolvedTheme(newTheme === 'system' ? getSystemTheme() : newTheme)
   }, [])
 
   return { theme, resolvedTheme, setTheme }

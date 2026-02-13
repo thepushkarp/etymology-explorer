@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { useLocalStorage } from '@/lib/hooks/useLocalStorage'
 import type { HistoryEntry } from '@/lib/types'
 import { SearchSuggestions, getSuggestionItems } from '@/components/SearchSuggestions'
@@ -206,7 +207,7 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
                 bg-transparent
                 border-none outline-none
                  font-serif text-charcoal dark:text-cream
-                 placeholder:text-charcoal-light/45 dark:placeholder:text-cream/45
+                 placeholder:text-charcoal-light/70 dark:placeholder:text-cream/65
                 placeholder:italic
                 disabled:opacity-50
                 tracking-wide
@@ -232,7 +233,7 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
               className="
                 absolute right-4 top-1/2 -translate-y-1/2
                 p-3 rounded-full
-                 text-charcoal-light dark:text-cream/75
+                 text-charcoal dark:text-cream
                  hover:text-charcoal dark:hover:text-cream hover:bg-cream-dark/50 dark:hover:bg-cream/10
                 transition-all duration-300
                 disabled:opacity-30 disabled:cursor-not-allowed
@@ -259,20 +260,7 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
 
 function SearchIcon() {
   return (
-    <svg
-      width="22"
-      height="22"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="transition-transform group-hover:scale-110"
-    >
-      <circle cx="11" cy="11" r="8" />
-      <path d="m21 21-4.35-4.35" />
-    </svg>
+    <MagnifyingGlassIcon className="h-[22px] w-[22px] transition-transform group-hover:scale-110" />
   )
 }
 

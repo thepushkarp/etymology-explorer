@@ -1,6 +1,12 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import {
+  ArrowTopRightOnSquareIcon,
+  DocumentTextIcon,
+  PhotoIcon,
+  ShareIcon,
+} from '@heroicons/react/24/outline'
 import { EtymologyResult } from '@/lib/types'
 
 interface ShareMenuProps {
@@ -72,29 +78,22 @@ ${result.lore}`
     }
 
     try {
-      const html2canvas = (await import('html2canvas')).default
-
-      const canvas = await html2canvas(ancestryTreeRef.current, {
-        backgroundColor: '#faf8f3',
-        scale: 2,
-        logging: false,
+      const { toPng } = await import('html-to-image')
+      const dataUrl = await toPng(ancestryTreeRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#f9f5ee',
       })
 
-      canvas.toBlob((blob: Blob | null) => {
-        if (!blob) return
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = `${word}-etymology.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
 
-        const url = URL.createObjectURL(blob)
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `${word}-etymology.png`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        URL.revokeObjectURL(url)
-
-        showFeedback()
-        setIsOpen(false)
-      })
+      showFeedback()
+      setIsOpen(false)
     } catch (err) {
       console.error('Failed to capture image:', err)
     }
@@ -106,12 +105,12 @@ ${result.lore}`
         onClick={() => setIsOpen(!isOpen)}
         className="
           inline-flex items-center justify-center
-          w-8 h-8
+          w-9 h-9
           rounded-md
-          border border-charcoal/20
-          text-charcoal/70 dark:text-cream/80
-          hover:bg-cream-dark/30 dark:hover:bg-cream/10
-          hover:border-charcoal/30 dark:hover:border-cream/40
+          border border-charcoal/25 dark:border-cream/35
+          text-charcoal dark:text-cream
+          hover:bg-cream-dark/50 dark:hover:bg-cream/20
+          hover:border-charcoal/45 dark:hover:border-cream/60
           transition-colors
           duration-200
         "
@@ -119,14 +118,7 @@ ${result.lore}`
         aria-label="Share menu"
         aria-expanded={isOpen}
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.769-.283 1.093m0-2.186l6.566-3.391m3.534 2.3a2.25 2.25 0 100-2.186m0 2.186c.18.324.283.696.283 1.093s-.103.769-.283 1.093m0-2.186l-6.566-3.391"
-          />
-        </svg>
+        <ShareIcon className="h-4 w-4" />
       </button>
 
       {isOpen && (
@@ -155,19 +147,7 @@ ${result.lore}`
                flex items-center gap-2
              "
           >
-            <svg
-              className="w-4 h-4 text-charcoal/50"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m2.121 2.121a4.5 4.5 0 016.364 0m-1.06-4.61a4.5 4.5 0 00-6.364 0l-4.5 4.5a4.5 4.5 0 006.364 6.364l1.757-1.757"
-              />
-            </svg>
+            <ArrowTopRightOnSquareIcon className="h-4 w-4 text-charcoal/70 dark:text-cream/80" />
             Copy link
             {feedback === 'copied' && <span className="ml-auto text-xs text-emerald-600">✓</span>}
           </button>
@@ -185,19 +165,7 @@ ${result.lore}`
                flex items-center gap-2
              "
           >
-            <svg
-              className="w-4 h-4 text-charcoal/50"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.66V18a2.25 2.25 0 002.25 2.25h10.5m-12-12V9m0 0V5.25M9 21H5.25A2.25 2.25 0 013 18.75V5.25A2.25 2.25 0 015.25 3H9"
-              />
-            </svg>
+            <DocumentTextIcon className="h-4 w-4 text-charcoal/70 dark:text-cream/80" />
             Copy as text
             {feedback === 'copied' && <span className="ml-auto text-xs text-emerald-600">✓</span>}
           </button>
@@ -214,19 +182,7 @@ ${result.lore}`
                flex items-center gap-2
              "
           >
-            <svg
-              className="w-4 h-4 text-charcoal/50"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-              />
-            </svg>
+            <PhotoIcon className="h-4 w-4 text-charcoal/70 dark:text-cream/80" />
             Share as image
             {feedback === 'copied' && <span className="ml-auto text-xs text-emerald-600">✓</span>}
           </button>
