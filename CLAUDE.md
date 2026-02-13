@@ -8,7 +8,7 @@ Etymology Explorer is a Next.js web app that helps users discover word origins t
 
 Users search for a word, and the app:
 
-1. Fetches raw data from 4 sources in parallel (Etymonline, Wiktionary, Wikipedia, Urban Dictionary)
+1. Fetches raw data from 6 sources in parallel (Etymonline, Wiktionary, Free Dictionary always; Wikipedia, Urban Dictionary, Incel Wiki as optional supplemental sources)
 2. Pre-parses etymological chains from source text (CPU-only)
 3. Sends aggregated data to Claude for structured synthesis
 4. Post-processes LLM output to match ancestry stages to parsed evidence and assign programmatic confidence scores
@@ -41,13 +41,13 @@ Pre-commit hooks (Husky + lint-staged) automatically run ESLint and Prettier on 
 ```
 User Search → proxy.ts (rate limit, CSP headers)
     ↓
-GET /api/etymology?word=X
+GET /api/etymology?word=X[&stream=true]
     ├── Input validation (lib/validation.ts)
     ├── Redis cache check (lib/cache.ts, 30d TTL)
     ├── Singleflight lock (lib/singleflight.ts, prevents duplicate concurrent requests)
-    ├── Cost guard check (lib/costGuard.ts, 4 modes: normal → degraded → cache_only → blocked)
+    ├── Cost guard check (lib/costGuard.ts, 4 modes: normal → protected_503 → cache_only → blocked)
     ├── Agentic Research Pipeline (lib/research.ts):
-    │   ├── Phase 1: Parallel fetch from 4 sources (timeout: 4s each)
+    │   ├── Phase 1: Parallel fetch from 6 sources (3 core + 3 optional, timeout: 4s each)
     │   ├── Phase 1.5: Pre-parse "from X, from Y" chains (lib/etymologyParser.ts, CPU-only)
     │   ├── Phase 2: LLM call to extract root morphemes
     │   ├── Phase 3: Fetch data for each root (max 3)
@@ -65,7 +65,7 @@ GET /api/etymology?word=X
 The app operates in **public mode** with server-side cost controls (added in PR #41):
 
 - **`proxy.ts`** - Rate limiting via @upstash/ratelimit:
-  - Etymology: 10 req/min + 100 req/day per IP
+  - Etymology: 20 req/min + 200 req/day per IP
   - Pronunciation: 20 req/min per IP
   - General: 60 req/min per IP
   - CSP headers and security headers
@@ -79,8 +79,8 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates ANTHROPIC_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
 
 - **`lib/costGuard.ts`** - Daily budget enforcement via atomic Redis INCR:
-  - Normal mode (0-70% budget): all 4 sources
-  - Degraded mode (70-90%): skip Wikipedia + Urban Dictionary
+  - Normal mode (0-70% budget): allow uncached requests
+  - Protected_503 mode (70-90%): reject uncached requests
   - Cache-only mode (90-100%): serve cached results only
   - Blocked mode (100%+): reject new requests
   - Fail-open if Redis unavailable
@@ -88,9 +88,9 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/singleflight.ts`** - Distributed request deduplication via Redis SET NX (30s TTL). If 10 users search "etymology" simultaneously, only 1 LLM call is made; others poll and receive the same result.
 
 - **`lib/cache.ts`** - Redis caching:
-  - Etymology results: 30 day TTL, versioned keys
+  - Etymology results: 30 day TTL, versioned keys (`etymology:v2.1:`)
   - TTS audio: 1 year TTL
-  - Negative cache: 6 hour TTL for errors
+  - Negative cache: 6 hour TTL for admitted types (`no_sources`, `invalid_word`)
   - Zod validation on reads for forward compatibility
 
 - **`lib/redis.ts`** - Shared Redis client factory (returns null if not configured; all callers fail open)
@@ -120,11 +120,11 @@ New optional fields on `AncestryStage`: `isReconstructed`, `confidence`, `eviden
 
 ### Research Pipeline Limits
 
-Defined in `lib/research.ts` to control API costs:
+Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API costs:
 
-- `MAX_ROOTS_TO_EXPLORE = 3` - Max root morphemes to research
-- `MAX_RELATED_WORDS_PER_ROOT = 2` - Related terms per root
-- `MAX_TOTAL_FETCHES = 10` - Hard cap on external API calls per search
+- `maxRootsToExplore = 3` - Max root morphemes to research
+- `maxRelatedWordsPerRoot = 2` - Related terms per root
+- `maxTotalFetches = 10` - Hard cap on external API calls per search
 
 ### LLM Integration
 
@@ -133,7 +133,7 @@ The app uses **Anthropic's structured outputs API** for guaranteed valid JSON.
 **Schema split** (critical for maintainers):
 
 - `lib/schemas/llm-schema.ts` - JSON Schema sent to LLM (defines structure for generation)
-- `lib/schemas/etymology.ts` - Zod schema for cache validation (client-side). Uses `.passthrough()` for forward compat.
+- `lib/schemas/etymology.ts` - Zod schema for cache validation. Uses `.passthrough()` for forward compat.
 - **Must stay in sync manually** - post-processing fields (confidence, evidence) only exist in Zod schema, not LLM schema
 
 LLM receives:
@@ -143,7 +143,7 @@ LLM receives:
 3. JSON schema from `lib/schemas/llm-schema.ts`
 4. System prompt from `lib/prompts.ts`
 
-**Note**: Anthropic calls use `betas: ['structured-outputs-2025-11-13']` flag.
+**Note**: Anthropic calls use `output_config` with JSON schema structured outputs.
 
 ### State Management
 
@@ -154,7 +154,7 @@ LLM receives:
 - Rate limit counters (per-IP, sliding windows)
 - Daily budget counters (atomic INCR)
 - Singleflight locks (30s TTL)
-- Negative cache for gibberish words (6hr TTL)
+- Negative cache for admitted invalid/no-source words (6hr TTL)
 
 **Client-side** (localStorage):
 
@@ -164,7 +164,8 @@ LLM receives:
 
 **Key hooks**:
 
-- `lib/hooks/useEtymologySearch.ts` - Main search state management (idle/loading/success/error)
+- `lib/hooks/useStreamingEtymology.ts` - Main streaming search state management (SSE progress + token streaming)
+- `lib/hooks/useEtymologySearch.ts` - Non-streaming search state management (idle/loading/success/error)
 - `lib/hooks/useLocalStorage.ts` - Persistent client state
 - `lib/hooks/useHistory.ts` - Search history management
 
@@ -201,13 +202,13 @@ When adding UI: _"Would this feel at home in a beautifully typeset etymology dic
 
 ## API Endpoints
 
-| Endpoint             | Method | Purpose                                               |
-| -------------------- | ------ | ----------------------------------------------------- |
-| `/api/etymology`     | GET    | Main synthesis - `?word=X` (server-side API key)      |
-| `/api/suggestions`   | GET    | Typo correction - `?q=word`                           |
-| `/api/random-word`   | GET    | Random GRE word (crypto randomness)                   |
-| `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, 8s timeout)     |
-| `/api/admin/stats`   | GET    | Budget usage stats (requires `x-admin-secret` header) |
+| Endpoint             | Method | Purpose                                                                           |
+| -------------------- | ------ | --------------------------------------------------------------------------------- |
+| `/api/etymology`     | GET    | Main synthesis - `?word=X`; optional `?stream=true` for SSE (server-side API key) |
+| `/api/suggestions`   | GET    | Typo correction - `?q=word`                                                       |
+| `/api/random-word`   | GET    | Random GRE word (crypto randomness)                                               |
+| `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, 8s timeout)                                 |
+| `/api/admin/stats`   | GET    | Budget usage stats (requires `x-admin-secret` header)                             |
 
 All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
@@ -218,7 +219,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `proxy.ts` - Rate limiting, CSP headers
 - `lib/config.ts` - Centralized config (budgets, timeouts, limits)
 - `lib/env.ts` - Zod env validation
-- `lib/costGuard.ts` - Daily budget enforcement with degradation modes
+- `lib/costGuard.ts` - Daily budget enforcement with protection modes
 - `lib/singleflight.ts` - Distributed request deduplication
 - `lib/cache.ts` - Redis caching with versioned keys
 - `lib/redis.ts` - Shared Redis client factory
@@ -230,7 +231,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 **Core Pipeline:**
 
-- `lib/research.ts` - Agentic research orchestrator (4-source parallel fetch)
+- `lib/research.ts` - Agentic research orchestrator (6-source parallel fetch)
 - `lib/claude.ts` - LLM client (Anthropic SDK)
 - `lib/prompts.ts` - System prompt for LLM synthesis
 
@@ -244,8 +245,10 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 - `lib/etymonline.ts` - HTML scraper with fallback patterns
 - `lib/wiktionary.ts` - MediaWiki API client
+- `lib/freeDictionary.ts` - Free Dictionary API client
 - `lib/wikipedia.ts` - Wikipedia REST API
-- `lib/urbanDictionary.ts` - Urban Dictionary API with NSFW filtering
+- `lib/urbanDictionary.ts` - Urban Dictionary API with quality scoring/filtering
+- `lib/incelsWiki.ts` - Incel Wiki MediaWiki API client (supplemental context)
 - `lib/elevenlabs.ts` - ElevenLabs TTS client
 
 **Admin:**
