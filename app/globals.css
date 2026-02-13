@@ -15,39 +15,7 @@
   --accent-soft: #c8a86f;
 }
 
-/* Dark palettes — .dark is always present for Tailwind dark: variant,
-   palette class (.dark-slate, .dark-neutral, .dark-warm) overrides the colors.
-   Default .dark values use warm-gray (option D). */
-
 .dark {
-  --cream: #1e1c1a;
-  --cream-dark: #2a2725;
-  --charcoal: #eae6df;
-  --charcoal-light: #b8b0a5;
-  --surface: #252220;
-  --surface-muted: #302c29;
-  --border: rgba(234, 230, 223, 0.15);
-  --accent-soft: #d4b06a;
-}
-
-/* Palette overrides — use .dark.dark-* to beat .dark in specificity.
-   Without the compound selector, Tailwind's CSS layers can reorder
-   these below .dark and the cascade won't pick them up. */
-
-/* A: Cool Slate — scholarly ink-on-paper */
-.dark.dark-slate {
-  --cream: #1a1d23;
-  --cream-dark: #22262e;
-  --charcoal: #e8e4dc;
-  --charcoal-light: #b5aea3;
-  --surface: #1f2229;
-  --surface-muted: #272b33;
-  --border: rgba(232, 228, 220, 0.14);
-  --accent-soft: #c8a86f;
-}
-
-/* C: Neutral Dark — pure gray, max contrast */
-.dark.dark-neutral {
   --cream: #1a1a1a;
   --cream-dark: #242424;
   --charcoal: #ececec;
@@ -56,18 +24,6 @@
   --surface-muted: #2a2a2a;
   --border: rgba(236, 236, 236, 0.14);
   --accent-soft: #d4a857;
-}
-
-/* D: Warm Gray — same as .dark default, explicit for palette picker */
-.dark.dark-warm {
-  --cream: #1e1c1a;
-  --cream-dark: #2a2725;
-  --charcoal: #eae6df;
-  --charcoal-light: #b8b0a5;
-  --surface: #252220;
-  --surface-muted: #302c29;
-  --border: rgba(234, 230, 223, 0.15);
-  --accent-soft: #d4b06a;
 }
 
 @theme inline {

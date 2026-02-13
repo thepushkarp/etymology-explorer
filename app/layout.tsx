@@ -79,7 +79,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme-preference');var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d){var r=document.documentElement;r.classList.add('dark');var p=localStorage.getItem('dark-palette');if(p==='slate'||p==='neutral'||p==='warm')r.classList.add('dark-'+p);else r.classList.add('dark-warm')}}catch(e){}})()`,
+            __html: `(function(){try{var t=localStorage.getItem('theme-preference');var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.classList.add('dark')}catch(e){}})()`,
           }}
         />
       </head>
