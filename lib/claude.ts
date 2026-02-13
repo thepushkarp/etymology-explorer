@@ -105,6 +105,29 @@ function dedupeStrings(values: string[]): string[] {
   return Array.from(new Set(values))
 }
 
+interface SupplementalSourceSignals {
+  urbanDictionary: boolean
+  incelsWiki: boolean
+}
+
+const MIN_SIGNIFICANT_URBAN_CHARS = 40
+const MIN_SIGNIFICANT_INCELS_CHARS = 120
+const INCELS_USAGE_SIGNALS =
+  /\b(incel|femcel|blackpill|redpill|looksmax|manosphere|internet|slang|term|coined|refers to|used)\b/i
+
+function getSupplementalSourceSignals(researchContext: ResearchContext): SupplementalSourceSignals {
+  const urbanText =
+    researchContext.mainWord.urbanDictionary?.text?.replace(/\s+/g, ' ').trim() ?? ''
+  const incelsText = researchContext.mainWord.incelsWiki?.text?.replace(/\s+/g, ' ').trim() ?? ''
+
+  const urbanDictionary =
+    urbanText.length >= MIN_SIGNIFICANT_URBAN_CHARS && /Definition:/i.test(urbanText)
+  const incelsWiki =
+    incelsText.length >= MIN_SIGNIFICANT_INCELS_CHARS && INCELS_USAGE_SIGNALS.test(incelsText)
+
+  return { urbanDictionary, incelsWiki }
+}
+
 /**
  * Keep modern usage grounded: only surface it when we have clear, high-signal evidence.
  * This prevents vague or speculative slang blurbs from showing up in the UI.
@@ -118,8 +141,10 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
     return
   }
 
-  const hasUrbanEvidence = Boolean(researchContext.mainWord.urbanDictionary?.text)
-  if (!hasUrbanEvidence) {
+  const supplementalSignals = getSupplementalSourceSignals(researchContext)
+  const hasSupplementalSlangEvidence =
+    supplementalSignals.urbanDictionary || supplementalSignals.incelsWiki
+  if (!hasSupplementalSlangEvidence) {
     result.modernUsage = { hasSlangMeaning: false }
     return
   }
@@ -210,6 +235,7 @@ export async function synthesizeFromResearch(
 
   // Build sources array with URLs and word info from research context
   const sources: SourceReference[] = []
+  const supplementalSignals = getSupplementalSourceSignals(researchContext)
   const mainWord = researchContext.mainWord.word
   if (researchContext.mainWord.etymonline) {
     sources.push({
@@ -232,10 +258,17 @@ export async function synthesizeFromResearch(
       word: mainWord,
     })
   }
-  if (researchContext.mainWord.urbanDictionary) {
+  if (researchContext.mainWord.urbanDictionary && supplementalSignals.urbanDictionary) {
     sources.push({
       name: 'urbanDictionary',
       url: researchContext.mainWord.urbanDictionary.url,
+      word: mainWord,
+    })
+  }
+  if (researchContext.mainWord.incelsWiki && supplementalSignals.incelsWiki) {
+    sources.push({
+      name: 'incelsWiki',
+      url: researchContext.mainWord.incelsWiki.url,
       word: mainWord,
     })
   }
@@ -344,6 +377,7 @@ export async function streamSynthesis(
 
   // Build sources array with URLs and word info from research context
   const sources: SourceReference[] = []
+  const supplementalSignals = getSupplementalSourceSignals(researchContext)
   const mainWord = researchContext.mainWord.word
   if (researchContext.mainWord.etymonline) {
     sources.push({
@@ -366,10 +400,17 @@ export async function streamSynthesis(
       word: mainWord,
     })
   }
-  if (researchContext.mainWord.urbanDictionary) {
+  if (researchContext.mainWord.urbanDictionary && supplementalSignals.urbanDictionary) {
     sources.push({
       name: 'urbanDictionary',
       url: researchContext.mainWord.urbanDictionary.url,
+      word: mainWord,
+    })
+  }
+  if (researchContext.mainWord.incelsWiki && supplementalSignals.incelsWiki) {
+    sources.push({
+      name: 'incelsWiki',
+      url: researchContext.mainWord.incelsWiki.url,
       word: mainWord,
     })
   }

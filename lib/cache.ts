@@ -21,8 +21,8 @@ function jitterTTL(ttl: number): number {
   return Math.round(ttl * (1 + (Math.random() * 2 - 1) * jitter))
 }
 
-// Bump version when EtymologyResult schema changes
-const CACHE_VERSION = 2
+// Bump version when EtymologyResult schema or sourcing behavior changes
+const CACHE_VERSION = '2.1'
 const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
 const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
 

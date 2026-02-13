@@ -18,16 +18,18 @@ const SOURCE_LABELS: Record<string, string> = {
   etymonline: 'Etymonline',
   wiktionary: 'Wiktionary',
   freedictionary: 'Free Dictionary',
-  urbandictionary: 'Urban Dictionary',
   wikipedia: 'Wikipedia',
+  urbandictionary: 'Urban Dictionary',
+  incelswiki: 'Incels Wiki',
 }
 
 const DEFAULT_SOURCE_ORDER = [
   'etymonline',
   'wiktionary',
   'freedictionary',
-  'urbandictionary',
   'wikipedia',
+  'urbandictionary',
+  'incelswiki',
 ]
 
 function normalizeSourceKey(source: string): string {

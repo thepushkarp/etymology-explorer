@@ -46,7 +46,7 @@ Your responses must be valid JSON matching this exact structure:
     ]
   },
   "lore": "The narrative etymology...",
-  "sources": ["list which sources contributed: etymonline, wiktionary, freeDictionary, urbanDictionary, or synthesized"],
+  "sources": ["list which sources contributed: etymonline, wiktionary, freeDictionary, urbanDictionary, incelsWiki, or synthesized"],
   "partsOfSpeech": [
     {
       "pos": "noun",
@@ -152,6 +152,7 @@ GROUNDED ANCESTRY:
 
 - You also have access to Free Dictionary API data, which can include pronunciation details, structured definitions, and occasional origin/etymology hints.
 - You may also receive Urban Dictionary entries with vote counts; treat these as modern-usage evidence only when the entry quality looks strong and specific.
+- You may also receive incels_wiki extracts; treat these as supplemental community context only (lower trust), prioritize neutral sources, and avoid amplifying inflammatory wording.
 
 - Output ONLY valid JSON, no markdown or explanation`
 
@@ -200,7 +201,7 @@ export function buildRichUserPrompt(word: string, researchData: string): string 
 5. If pre-parsed etymology chains are provided above, use them as the backbone for your ancestryGraph — prefer their forms and language labels over your training data
 6. For suggestions: return ONLY bare words, never include definitions or annotations in the array items
 7. If free_dictionary source data appears above, use its origin/phonetic information as supporting evidence when it aligns with other sources
-8. If urban_dictionary source data appears above, only add modernUsage when those entries provide concrete, meaningful, and high-signal evidence
+8. If urban_dictionary or incels_wiki source data appears above, only add modernUsage when the evidence is concrete, meaningful, and high-signal. Prefer Urban Dictionary and neutral corroboration when available.
 
 Follow the JSON schema in your instructions.`
 

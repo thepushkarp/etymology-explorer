@@ -13,7 +13,7 @@ Try it out at [etymology.thepushkarp.com](https://etymology.thepushkarp.com)
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
 - **Related Words**: Discover words that share the same roots
 - **Word Suggestions**: Explore synonyms, antonyms, homophones, easily-confused words, and see-also links with color-coded clickable chips
-- **Modern Usage**: Slang definitions and contemporary context from Wikipedia and Urban Dictionary
+- **Modern Usage**: Slang definitions and contemporary context from Wikipedia, Urban Dictionary, and supplemental Incels Wiki extracts
 - **Pronunciation Audio**: Listen to word pronunciations powered by ElevenLabs
 - **Search History**: Track your vocabulary exploration with a persistent sidebar
 - **Surprise Me**: Discover random words to expand your vocabulary
@@ -95,6 +95,7 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
   - [Wiktionary](https://en.wiktionary.org/) - Definitions and linguistic data
   - [Wikipedia](https://en.wikipedia.org/) - Encyclopedic context
   - [Urban Dictionary](https://www.urbandictionary.com/) - Modern slang (NSFW filtered)
+  - [Incel Wiki](https://incels.wiki/) - Supplemental community slang context
 - **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
 - **Typography**: Libre Baskerville (serif)
 
@@ -140,6 +141,7 @@ etymology-explorer/
 │   ├── wiktionary.ts       # Wiktionary MediaWiki API client
 │   ├── wikipedia.ts        # Wikipedia REST API client
 │   ├── urbanDictionary.ts  # Urban Dictionary API with NSFW filtering
+│   ├── incelsWiki.ts       # Incel Wiki MediaWiki API client (supplemental)
 │   ├── elevenlabs.ts       # ElevenLabs TTS for pronunciation audio
 │   ├── spellcheck.ts       # Typo detection and suggestions
 │   ├── prompts.ts          # System prompts and schemas
@@ -183,7 +185,7 @@ etymology-explorer/
 4. **Grounded Etymology Pipeline**:
    - **Parser** (CPU-only): Extracts "from X, from Y" chains from raw source text
    - **Agentic Research**: Multi-phase research pipeline:
-     - Phase 1: Fetch main word data from 4 sources in parallel (Etymonline, Wiktionary, Wikipedia, Urban Dictionary)
+     - Phase 1: Fetch main word data from 6 sources in parallel (Etymonline, Wiktionary, Free Dictionary, Wikipedia, Urban Dictionary, Incel Wiki)
      - Phase 2: Quick LLM call extracts root morphemes (e.g., "telephone" → ["tele", "phone"])
      - Phase 3: Fetch etymology data for each identified root
      - Phase 4: Gather related terms for additional context (depth-limited)
@@ -311,6 +313,7 @@ MIT
 - Etymology data from [Etymonline](https://www.etymonline.com/) and [Wiktionary](https://en.wiktionary.org/)
 - Encyclopedic context from [Wikipedia](https://en.wikipedia.org/)
 - Modern slang definitions from [Urban Dictionary](https://www.urbandictionary.com/)
+- Supplemental community slang context from [Incel Wiki](https://incels.wiki/)
 - Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)
 - Powered by [Claude](https://www.anthropic.com/claude) from Anthropic
 - Rate limiting and caching by [Upstash](https://upstash.com/)

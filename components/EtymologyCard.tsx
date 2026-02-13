@@ -358,6 +358,7 @@ function SourceBadge({ source }: { source: SourceReference }) {
     wiktionary: 'Wiktionary',
     freeDictionary: 'Free Dictionary',
     urbanDictionary: 'Urban Dictionary',
+    incelsWiki: 'Incels Wiki',
     synthesized: 'AI Synthesis',
   }
 
@@ -370,6 +371,8 @@ function SourceBadge({ source }: { source: SourceReference }) {
       'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 hover:border-emerald-300',
     urbanDictionary:
       'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-700 hover:bg-violet-100 hover:border-violet-300',
+    incelsWiki:
+      'bg-stone-50 dark:bg-stone-950/40 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-100 hover:border-stone-300',
     synthesized:
       'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700',
   }
