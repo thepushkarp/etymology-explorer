@@ -223,3 +223,11 @@ export async function streamSynthesis(
 - Updated `components/EtymologyCard.tsx` to render a "Usage over time" section when `result.ngram` exists.
 - Updated `app/page.tsx` to fetch `/api/ngram?word=...` after streaming result completion, clear stale timeline data between words, and abort in-flight ngram requests on cleanup.
 - Verification: LSP diagnostics clean on all changed files and `bun run build` passes; existing unrelated warning about missing `html2canvas` dynamic import remains.
+
+## Cost Guard Mode Indicator UI
+
+- Added `components/CostModeIndicator.tsx` client component with `CostMode` union (`normal | degraded | cache_only | blocked`).
+- Component initializes from `initialMode` prop and then reads `localStorage['cost-mode']` on mount to support simple client-side mode persistence.
+- Indicator hides entirely in `normal` mode and renders subtle inline pill for non-normal states with status-specific label/color and explanatory tooltip.
+- Integrated indicator in `app/page.tsx` header beneath the subtitle so budget constraints are visible without disrupting search flow.
+- Verification: LSP diagnostics clean for both changed files; `bun run build` passes (existing unrelated warning: missing optional `html2canvas` module in `ShareMenu.tsx`).

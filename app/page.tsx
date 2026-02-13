@@ -12,6 +12,7 @@ import { EtymologyCard } from '@/components/EtymologyCard'
 import { RelatedWordsList } from '@/components/RelatedWordsList'
 import { SurpriseButton } from '@/components/SurpriseButton'
 import { ErrorState } from '@/components/ErrorState'
+import CostModeIndicator from '@/components/CostModeIndicator'
 import ResearchProgress from '@/components/ResearchProgress'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { ShareMenu } from '@/components/ShareMenu'
@@ -184,6 +185,10 @@ function HomeContent() {
           >
             Discover the roots and origins of words
           </p>
+
+          <div className="mt-4 flex justify-center">
+            <CostModeIndicator />
+          </div>
         </header>
 
         {/* Search bar */}
