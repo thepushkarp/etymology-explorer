@@ -43,7 +43,7 @@ export const CONFIG = {
 
   // Timeouts (milliseconds)
   timeouts: {
-    source: 4_000, // etymonline, wiktionary, wikipedia, urbanDictionary
+    source: 4_000,
     llm: 15_000, // Anthropic API
     tts: 8_000, // ElevenLabs
   },

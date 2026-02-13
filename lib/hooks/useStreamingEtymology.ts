@@ -6,6 +6,9 @@ import { useHistory } from '@/lib/hooks/useHistory'
 
 export type StreamingState = 'idle' | 'loading' | 'success' | 'error'
 
+const MAX_RETRIES = 2
+const RETRY_BASE_DELAY_MS = 600
+
 export function useStreamingEtymology() {
   const [state, setState] = useState<StreamingState>('idle')
   const [events, setEvents] = useState<StreamEvent[]>([])
@@ -13,7 +16,34 @@ export function useStreamingEtymology() {
   const [error, setError] = useState<string | null>(null)
 
   const eventSourceRef = useRef<EventSource | null>(null)
+  const activeRequestRef = useRef(0)
   const { addToHistory } = useHistory()
+
+  const fallbackFetch = useCallback(
+    async (word: string, requestId: number) => {
+      try {
+        const response = await fetch(`/api/etymology?word=${encodeURIComponent(word)}`)
+        const payload = await response.json()
+
+        if (activeRequestRef.current !== requestId) return
+
+        if (!response.ok || !payload.success || !payload.data) {
+          setState('error')
+          setError(payload.error ?? 'Search failed')
+          return
+        }
+
+        setPartialResult(payload.data as EtymologyResult)
+        setState('success')
+        addToHistory(word)
+      } catch {
+        if (activeRequestRef.current !== requestId) return
+        setState('error')
+        setError('Unable to load etymology right now')
+      }
+    },
+    [addToHistory]
+  )
 
   // Cleanup EventSource on unmount
   useEffect(() => {
@@ -30,6 +60,9 @@ export function useStreamingEtymology() {
       const trimmed = word.trim().toLowerCase()
       if (!trimmed) return
 
+      const requestId = activeRequestRef.current + 1
+      activeRequestRef.current = requestId
+
       // Reset state
       setState('loading')
       setEvents([])
@@ -41,12 +74,16 @@ export function useStreamingEtymology() {
         eventSourceRef.current.close()
       }
 
-      try {
+      const connect = (attempt: number) => {
+        if (activeRequestRef.current !== requestId) return
+
         const url = `/api/etymology?word=${encodeURIComponent(trimmed)}&stream=true`
         const eventSource = new EventSource(url)
         eventSourceRef.current = eventSource
 
         eventSource.addEventListener('message', (event) => {
+          if (activeRequestRef.current !== requestId) return
+
           try {
             const streamEvent: StreamEvent = JSON.parse(event.data)
 
@@ -70,28 +107,48 @@ export function useStreamingEtymology() {
               eventSourceRef.current = null
             }
           } catch (parseErr) {
-            console.error('Failed to parse SSE message:', parseErr)
-            setState('error')
-            setError('Failed to parse server response')
+            if (activeRequestRef.current !== requestId) return
+
+            if (attempt < MAX_RETRIES) {
+              eventSource.close()
+              const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
+              window.setTimeout(() => {
+                connect(attempt + 1)
+              }, delay)
+              return
+            }
+
             eventSource.close()
             eventSourceRef.current = null
+            void fallbackFetch(trimmed, requestId)
           }
         })
 
         eventSource.addEventListener('error', () => {
-          console.error('EventSource error')
-          setState('error')
-          setError('Connection lost')
+          if (activeRequestRef.current !== requestId) return
+
           eventSource.close()
           eventSourceRef.current = null
+
+          if (attempt < MAX_RETRIES) {
+            const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
+            window.setTimeout(() => {
+              connect(attempt + 1)
+            }, delay)
+            return
+          }
+
+          void fallbackFetch(trimmed, requestId)
         })
-      } catch (err) {
-        console.error('Failed to create EventSource:', err)
-        setState('error')
-        setError('Failed to connect to server')
+      }
+
+      try {
+        connect(0)
+      } catch {
+        void fallbackFetch(trimmed, requestId)
       }
     },
-    [addToHistory]
+    [addToHistory, fallbackFetch]
   )
 
   const reset = useCallback(() => {

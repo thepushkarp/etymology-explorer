@@ -20,8 +20,8 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
   const sources: Record<string, SourceState> = {
     etymonline: { name: 'Etymonline', status: 'pending' },
     wiktionary: { name: 'Wiktionary', status: 'pending' },
+    freeDictionary: { name: 'Free Dictionary', status: 'pending' },
     wikipedia: { name: 'Wikipedia', status: 'pending' },
-    urbanDictionary: { name: 'Urban Dictionary', status: 'pending' },
   }
 
   let parsingComplete = false
@@ -140,10 +140,10 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
               font-medium
               ${
                 source.status === 'complete'
-                  ? 'text-charcoal/80'
+                  ? 'text-charcoal/80 dark:text-cream/90'
                   : source.status === 'failed'
                     ? 'text-red-600/80'
-                    : 'text-charcoal/50'
+                    : 'text-charcoal/50 dark:text-cream/60'
               }
             `}
             >
@@ -151,7 +151,7 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
             </span>
 
             {source.status === 'complete' && source.timing && (
-              <span className="text-xs text-charcoal/40 font-mono">
+              <span className="text-xs text-charcoal/40 dark:text-cream/60 font-mono">
                 {(source.timing / 1000).toFixed(1)}s
               </span>
             )}
@@ -163,7 +163,7 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
       <div className="space-y-3 text-center">
         {parsingComplete && (
           <div className="animate-fadeIn">
-            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 font-serif italic">
+            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 dark:text-cream/75 font-serif italic">
               <svg
                 className="w-4 h-4 text-emerald-600"
                 fill="none"
@@ -184,7 +184,7 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
 
         {synthesisStarted && (
           <div className="animate-fadeIn">
-            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 font-serif italic">
+            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 dark:text-cream/75 font-serif italic">
               {!enrichmentDone && (
                 <svg
                   className="w-4 h-4 animate-pulse text-violet-600"
@@ -215,7 +215,7 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
             </div>
 
             {synthesisTokens && synthesisTokens.length > 0 && (
-              <div className="mt-2 text-xs text-charcoal/40 font-mono max-w-md mx-auto line-clamp-2">
+              <div className="mt-2 text-xs text-charcoal/40 dark:text-cream/60 font-mono max-w-md mx-auto line-clamp-2">
                 {synthesisTokens.slice(-100)}...
               </div>
             )}
@@ -224,7 +224,7 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
 
         {enrichmentDone && (
           <div className="animate-fadeIn">
-            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 font-serif italic">
+            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 dark:text-cream/75 font-serif italic">
               <svg
                 className="w-4 h-4 text-emerald-600"
                 fill="none"

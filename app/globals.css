@@ -1,17 +1,25 @@
 @import 'tailwindcss';
 
 :root {
-  --cream: #fdfbf7;
-  --cream-dark: #f5f0e8;
-  --charcoal: #2c2c2c;
-  --charcoal-light: #4a4a4a;
+  --cream: #f9f5ee;
+  --cream-dark: #efe6d8;
+  --charcoal: #2f2923;
+  --charcoal-light: #5f5548;
+  --surface: #fffdf8;
+  --surface-muted: #f3ecdf;
+  --border: rgba(69, 56, 43, 0.2);
+  --accent-soft: #c8a86f;
 }
 
 .dark {
-  --cream: #1a1a2e;
-  --cream-dark: #16162a;
-  --charcoal: #e8dcc8;
-  --charcoal-light: #c4b8a4;
+  --cream: #2a241f;
+  --cream-dark: #352d26;
+  --charcoal: #efe3cf;
+  --charcoal-light: #cbbca4;
+  --surface: #332b24;
+  --surface-muted: #3d332a;
+  --border: rgba(241, 227, 201, 0.18);
+  --accent-soft: #d8b57c;
 }
 
 @theme inline {
@@ -19,6 +27,10 @@
   --color-cream-dark: var(--cream-dark);
   --color-charcoal: var(--charcoal);
   --color-charcoal-light: var(--charcoal-light);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border-soft: var(--border);
+  --color-accent-soft: var(--accent-soft);
   --font-serif: var(--font-libre-baskerville);
 }
 
@@ -31,6 +43,13 @@ html {
 }
 
 body {
+  background:
+    radial-gradient(
+      circle at 15% 0%,
+      color-mix(in srgb, var(--surface) 65%, transparent),
+      transparent 45%
+    ),
+    var(--cream);
   font-family: var(--font-serif), Georgia, serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

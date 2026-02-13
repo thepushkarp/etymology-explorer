@@ -72,7 +72,6 @@ ${result.lore}`
     }
 
     try {
-      // @ts-expect-error - dynamic import, not in package.json at build time
       const html2canvas = (await import('html2canvas')).default
 
       const canvas = await html2canvas(ancestryTreeRef.current, {
@@ -110,9 +109,9 @@ ${result.lore}`
           w-8 h-8
           rounded-md
           border border-charcoal/20
-          text-charcoal/60
-          hover:bg-cream-dark/30
-          hover:border-charcoal/30
+          text-charcoal/70 dark:text-cream/80
+          hover:bg-cream-dark/30 dark:hover:bg-cream/10
+          hover:border-charcoal/30 dark:hover:border-cream/40
           transition-colors
           duration-200
         "
@@ -135,8 +134,8 @@ ${result.lore}`
           className="
             absolute right-0 mt-2
             w-48
-            bg-white
-            border border-charcoal/15
+            bg-surface dark:bg-surface
+            border border-border-soft
             rounded-md
             shadow-sm
             z-50
@@ -147,14 +146,14 @@ ${result.lore}`
             onClick={handleCopyLink}
             className="
               w-full text-left
-              px-4 py-2.5
-              text-sm font-serif
-              text-charcoal/80
-              hover:bg-cream-dark/20
-              transition-colors
-              border-b border-charcoal/5
-              flex items-center gap-2
-            "
+               px-4 py-2.5
+               text-sm font-serif
+               text-charcoal/80 dark:text-cream/90
+               hover:bg-cream-dark/20 dark:hover:bg-cream/10
+               transition-colors
+               border-b border-border-soft
+               flex items-center gap-2
+             "
           >
             <svg
               className="w-4 h-4 text-charcoal/50"
@@ -177,14 +176,14 @@ ${result.lore}`
             onClick={handleCopyAsText}
             className="
               w-full text-left
-              px-4 py-2.5
-              text-sm font-serif
-              text-charcoal/80
-              hover:bg-cream-dark/20
-              transition-colors
-              border-b border-charcoal/5
-              flex items-center gap-2
-            "
+               px-4 py-2.5
+               text-sm font-serif
+               text-charcoal/80 dark:text-cream/90
+               hover:bg-cream-dark/20 dark:hover:bg-cream/10
+               transition-colors
+               border-b border-border-soft
+               flex items-center gap-2
+             "
           >
             <svg
               className="w-4 h-4 text-charcoal/50"
@@ -207,13 +206,13 @@ ${result.lore}`
             onClick={handleShareAsImage}
             className="
               w-full text-left
-              px-4 py-2.5
-              text-sm font-serif
-              text-charcoal/80
-              hover:bg-cream-dark/20
-              transition-colors
-              flex items-center gap-2
-            "
+               px-4 py-2.5
+               text-sm font-serif
+               text-charcoal/80 dark:text-cream/90
+               hover:bg-cream-dark/20 dark:hover:bg-cream/10
+               transition-colors
+               flex items-center gap-2
+             "
           >
             <svg
               className="w-4 h-4 text-charcoal/50"

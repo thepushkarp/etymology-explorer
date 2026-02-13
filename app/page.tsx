@@ -16,6 +16,7 @@ import CostModeIndicator from '@/components/CostModeIndicator'
 import ResearchProgress from '@/components/ResearchProgress'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { ShareMenu } from '@/components/ShareMenu'
+import ThemeToggle from '@/components/ThemeToggle'
 import type { ApiResponse, NgramResult } from '@/lib/types'
 
 const CURATED_IDLE_WORDS = [
@@ -153,14 +154,21 @@ function HomeContent() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <header className="text-center mb-12 md:mb-16">
+          <div className="mb-6 flex justify-center">
+            <ThemeToggle />
+          </div>
+
           {/* Navigation links */}
           <nav className="flex justify-center gap-6 mb-8 text-sm font-serif">
-            <Link href="/faq" className="text-charcoal-light hover:text-charcoal transition-colors">
+            <Link
+              href="/faq"
+              className="text-charcoal-light hover:text-charcoal dark:hover:text-cream transition-colors"
+            >
               FAQ
             </Link>
             <Link
               href="/learn/what-is-etymology"
-              className="text-charcoal-light hover:text-charcoal transition-colors"
+              className="text-charcoal-light hover:text-charcoal dark:hover:text-cream transition-colors"
             >
               Learn
             </Link>
@@ -220,8 +228,8 @@ function HomeContent() {
             <section
               className="
                 relative overflow-hidden
-                rounded-lg border border-charcoal/10
-                bg-gradient-to-b from-white to-cream-dark/30
+                rounded-lg border border-border-soft
+                bg-gradient-to-b from-surface to-cream-dark/35 dark:from-surface dark:to-cream-dark/40
                 p-6 sm:p-8 md:p-10
               "
             >
@@ -361,7 +369,7 @@ function HomeContent() {
             mt-2
           "
           >
-            Etymology data from Etymonline, Wiktionary, Wikipedia, and Urban Dictionary
+            Etymology data from Etymonline, Wiktionary, Wikipedia, and Free Dictionary
           </p>
         </footer>
       </div>

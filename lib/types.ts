@@ -155,7 +155,6 @@ export interface EtymologyResult {
   ngram?: NgramResult
   rawSources?: {
     wikipedia?: string
-    urbanDictionary?: string[]
     dateAttested?: string
   }
 }
@@ -221,7 +220,6 @@ export interface ResearchContext {
     wiktionary: SourceData | null
     freeDictionary?: FreeDictionaryEntry | null
     wikipedia?: SourceData | null
-    urbanDictionary?: SourceData | null
   }
   identifiedRoots: string[]
   rootResearch: RootResearchData[]
@@ -230,7 +228,6 @@ export interface ResearchContext {
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
   rawSources?: {
     wikipedia?: string
-    urbanDictionary?: string[]
     dateAttested?: string
   }
 }

@@ -27,10 +27,11 @@ export const EtymologyCard = memo(function EtymologyCard({
     <article
       className="
         relative
-        bg-white
+        bg-surface
+        dark:bg-surface
         rounded-lg
         shadow-sm
-        border border-charcoal/5
+        border border-border-soft
         overflow-hidden
         animate-fadeIn
       "
@@ -46,7 +47,7 @@ export const EtymologyCard = memo(function EtymologyCard({
       {/* Main content */}
       <div className="relative p-5 sm:p-8 md:p-12">
         {/* Header: Word + Pronunciation */}
-        <header className="mb-8 pb-6 border-b border-charcoal/10">
+        <header className="mb-8 pb-6 border-b border-border-soft">
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div className="flex items-baseline gap-4 flex-wrap">
               {/* Main word - styled like a dictionary headword */}
@@ -65,7 +66,7 @@ export const EtymologyCard = memo(function EtymologyCard({
                 className="
                 inline-flex items-center gap-1
                 font-serif text-lg
-                text-charcoal-light italic
+                  text-charcoal-light dark:text-charcoal-light italic
               "
               >
                 {!isSimple && result.pronunciation}
@@ -78,7 +79,7 @@ export const EtymologyCard = memo(function EtymologyCard({
 
           {/* First Attested Date */}
           {result.rawSources?.dateAttested && (
-            <span className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 bg-cream-dark/40 border border-charcoal/10 rounded-full text-xs font-serif text-charcoal/60">
+            <span className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 bg-cream-dark/45 border border-border-soft rounded-full text-xs font-serif text-charcoal/70 dark:text-charcoal-light">
               <span className="text-charcoal/40">⏱</span>
               First attested {result.rawSources.dateAttested}
             </span>
@@ -118,7 +119,7 @@ export const EtymologyCard = memo(function EtymologyCard({
           )}
 
           {result.ngram && result.ngram.data.length > 0 && (
-            <div className="mt-4 border-t border-charcoal/10 pt-3">
+            <div className="mt-4 border-t border-border-soft pt-3">
               <h4 className="mb-2 font-serif text-xs uppercase tracking-wider text-charcoal/55">
                 Usage over time
               </h4>
@@ -249,23 +250,6 @@ export const EtymologyCard = memo(function EtymologyCard({
                         </li>
                       ))}
                     </ul>
-                  </div>
-                )}
-
-              {!isSimple &&
-                result.rawSources?.urbanDictionary &&
-                result.rawSources.urbanDictionary.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-violet-100">
-                    <p className="text-xs font-serif uppercase tracking-wider text-charcoal/50 mb-2">
-                      Urban Dictionary
-                    </p>
-                    <div className="space-y-2">
-                      {result.rawSources.urbanDictionary.slice(0, 3).map((def, idx) => (
-                        <p key={idx} className="text-sm text-charcoal/70 leading-relaxed">
-                          {idx + 1}. {def}
-                        </p>
-                      ))}
-                    </div>
                   </div>
                 )}
             </div>
