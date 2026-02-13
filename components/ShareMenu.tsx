@@ -6,7 +6,7 @@ import { EtymologyResult } from '@/lib/types'
 interface ShareMenuProps {
   word: string
   result: EtymologyResult
-  ancestryTreeRef?: React.RefObject<HTMLDivElement>
+  ancestryTreeRef?: React.RefObject<HTMLDivElement | null>
 }
 
 export function ShareMenu({ word, result, ancestryTreeRef }: ShareMenuProps) {

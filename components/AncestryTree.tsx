@@ -8,10 +8,12 @@ import {
   ConvergencePoint,
   StageConfidence,
 } from '@/lib/types'
+import { AncestryTimeline } from './AncestryTimeline'
 
 interface AncestryTreeProps {
   graph: AncestryGraph
   word: string
+  isSimple?: boolean
 }
 
 /**
@@ -172,16 +174,18 @@ function StageNode({
   stage,
   isLast,
   animationDelay,
+  isSimple,
 }: {
   stage: AncestryStage
   isLast?: boolean
   animationDelay?: number
+  isSimple?: boolean
 }) {
   const [showEvidence, setShowEvidence] = useState(false)
   const nodeRef = useRef<HTMLDivElement>(null)
   const colors = getStageColors(stage.stage)
   const isReconstructed = stage.isReconstructed
-  const hasEvidence = stage.evidence && stage.evidence.length > 0
+  const hasEvidence = !isSimple && stage.evidence && stage.evidence.length > 0
 
   // Close evidence panel on outside click
   useEffect(() => {
@@ -215,7 +219,7 @@ function StageNode({
           px-3 py-2 rounded-lg w-full
           ${isReconstructed ? 'border-2 border-dashed' : 'border-2'}
           ${isReconstructed ? 'bg-stone-50/60 border-stone-300' : `${colors.bg} ${colors.border}`}
-          text-center shadow-sm
+          text-center shadow-sm transition-all duration-300
           ${hasEvidence ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}
         `}
       >
@@ -228,7 +232,7 @@ function StageNode({
           >
             {stage.stage}
           </div>
-          <ConfidenceBadge confidence={stage.confidence} />
+          {!isSimple && <ConfidenceBadge confidence={stage.confidence} />}
         </div>
 
         {/* Form */}
@@ -243,7 +247,7 @@ function StageNode({
         </div>
 
         {/* Reconstructed label */}
-        {isReconstructed && (
+        {!isSimple && isReconstructed && (
           <div className="text-[8px] uppercase tracking-widest text-stone-400 mt-0.5">
             reconstructed
           </div>
@@ -253,7 +257,7 @@ function StageNode({
         <div className="mt-0.5 text-[10px] text-charcoal-light leading-tight">{stage.note}</div>
 
         {/* Source pills */}
-        <SourcePills stage={stage} />
+        {!isSimple && <SourcePills stage={stage} />}
 
         {/* Inline evidence preview (always visible) */}
         {hasEvidence && !showEvidence && (
@@ -271,7 +275,7 @@ function StageNode({
       </div>
 
       {/* Full evidence panel (expanded on click) */}
-      {showEvidence && <EvidencePanel stage={stage} />}
+      {!isSimple && showEvidence && <EvidencePanel stage={stage} />}
     </div>
   )
 }
@@ -363,13 +367,18 @@ function BranchColumn({
   branchIndex,
   convergencePoints,
   baseDelay,
+  isSimple,
 }: {
   branch: AncestryBranch
   branchIndex: number
   convergencePoints?: ConvergencePoint[]
   baseDelay: number
+  isSimple?: boolean
 }) {
   const branchColor = branchColors[branchIndex % branchColors.length]
+  const visibleStages = isSimple
+    ? branch.stages.filter((stage) => !stage.isReconstructed)
+    : branch.stages
 
   // Find convergences this branch participates in
   const convergences =
@@ -405,13 +414,14 @@ function BranchColumn({
       </div>
 
       {/* Stages */}
-      {branch.stages.map((stage, idx) => (
+      {visibleStages.map((stage, idx) => (
         <div key={`${stage.stage}-${idx}`} className="flex flex-col items-center w-full">
           {idx > 0 && <VerticalConnector color={branchColor.line} />}
           <StageNode
             stage={stage}
-            isLast={idx === branch.stages.length - 1}
+            isLast={idx === visibleStages.length - 1}
             animationDelay={baseDelay + (idx + 1) * 100}
+            isSimple={isSimple}
           />
         </div>
       ))}
@@ -419,15 +429,32 @@ function BranchColumn({
   )
 }
 
-export const AncestryTree = memo(function AncestryTree({ graph, word }: AncestryTreeProps) {
+export const AncestryTree = memo(function AncestryTree({
+  graph,
+  word,
+  isSimple = false,
+}: AncestryTreeProps) {
   if (!graph || !graph.branches || graph.branches.length === 0) return null
 
-  const hasMerge = graph.mergePoint && graph.branches.length > 1
-  const hasPostMerge = graph.postMerge && graph.postMerge.length > 0
-  const hasConvergence = graph.convergencePoints && graph.convergencePoints.length > 0
+  const visibleGraph = {
+    ...graph,
+    branches: graph.branches.map((branch) => ({
+      ...branch,
+      stages: isSimple ? branch.stages.filter((stage) => !stage.isReconstructed) : branch.stages,
+    })),
+    postMerge:
+      isSimple && graph.postMerge
+        ? graph.postMerge.filter((stage) => !stage.isReconstructed)
+        : graph.postMerge,
+  }
+
+  const hasMerge = visibleGraph.mergePoint && visibleGraph.branches.length > 1
+  const hasPostMerge = visibleGraph.postMerge && visibleGraph.postMerge.length > 0
+  const hasConvergence =
+    !isSimple && visibleGraph.convergencePoints && visibleGraph.convergencePoints.length > 0
 
   // Calculate the max stages across all branches for delay calculation
-  const maxStages = Math.max(...graph.branches.map((b) => b.stages.length))
+  const maxStages = Math.max(...visibleGraph.branches.map((b) => b.stages.length), 0)
 
   return (
     <section className="mb-8">
@@ -435,80 +462,91 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
         Etymological Journey
       </h2>
 
-      <div className="flex flex-col items-center">
-        {/* Convergence callout - shared PIE ancestry */}
-        {hasConvergence && (
-          <ConvergenceCallout points={graph.convergencePoints!} branches={graph.branches} />
-        )}
-
-        {/* Branches side by side - items-end aligns at bottom for merge point */}
-        <div className={`grid items-end gap-4 w-full ${gridColsClass(graph.branches.length)}`}>
-          {graph.branches.map((branch, idx) => (
-            <BranchColumn
-              key={branch.root}
-              branch={branch}
-              branchIndex={idx}
-              convergencePoints={graph.convergencePoints}
-              baseDelay={idx * 50}
-            />
-          ))}
+      <div className="flex flex-col items-center transition-all duration-300 ease-out">
+        <div className="w-full md:hidden">
+          <AncestryTimeline graph={visibleGraph} word={word} isSimple={isSimple} />
         </div>
 
-        {/* Merge point (if multiple branches) */}
-        {hasMerge && (
-          <>
-            {/* Merge lines converging — smooth bezier curves */}
-            <div className="relative w-full max-w-lg h-8 mt-2">
-              <svg
-                className="w-full h-full"
-                viewBox="0 0 100 20"
-                preserveAspectRatio="none"
-                fill="none"
-              >
-                {graph.branches.length === 2 && (
-                  <>
-                    <path
-                      d="M25 0 C25 12, 50 12, 50 18"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-charcoal/20"
-                    />
-                    <path
-                      d="M75 0 C75 12, 50 12, 50 18"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-charcoal/20"
-                    />
-                  </>
-                )}
-                {graph.branches.length === 3 && (
-                  <>
-                    <path
-                      d="M17 0 C17 12, 50 12, 50 18"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-charcoal/20"
-                    />
-                    <path
-                      d="M50 0 L50 18"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-charcoal/20"
-                    />
-                    <path
-                      d="M83 0 C83 12, 50 12, 50 18"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-charcoal/20"
-                    />
-                  </>
-                )}
-              </svg>
-            </div>
+        <div className="hidden md:flex md:flex-col md:items-center md:w-full">
+          {/* Convergence callout - shared PIE ancestry */}
+          {hasConvergence && (
+            <ConvergenceCallout
+              points={visibleGraph.convergencePoints!}
+              branches={visibleGraph.branches}
+            />
+          )}
 
-            {/* Merge node */}
-            <div
-              className="
+          {/* Branches side by side - items-end aligns at bottom for merge point */}
+          <div
+            className={`grid items-end gap-4 w-full ${gridColsClass(visibleGraph.branches.length)}`}
+          >
+            {visibleGraph.branches.map((branch, idx) => (
+              <BranchColumn
+                key={branch.root}
+                branch={branch}
+                branchIndex={idx}
+                convergencePoints={visibleGraph.convergencePoints}
+                baseDelay={idx * 50}
+                isSimple={isSimple}
+              />
+            ))}
+          </div>
+
+          {/* Merge point (if multiple branches) */}
+          {hasMerge && (
+            <>
+              {/* Merge lines converging — smooth bezier curves */}
+              <div className="relative w-full max-w-lg h-8 mt-2">
+                <svg
+                  className="w-full h-full"
+                  viewBox="0 0 100 20"
+                  preserveAspectRatio="none"
+                  fill="none"
+                >
+                  {visibleGraph.branches.length === 2 && (
+                    <>
+                      <path
+                        d="M25 0 C25 12, 50 12, 50 18"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        className="text-charcoal/20"
+                      />
+                      <path
+                        d="M75 0 C75 12, 50 12, 50 18"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        className="text-charcoal/20"
+                      />
+                    </>
+                  )}
+                  {visibleGraph.branches.length === 3 && (
+                    <>
+                      <path
+                        d="M17 0 C17 12, 50 12, 50 18"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        className="text-charcoal/20"
+                      />
+                      <path
+                        d="M50 0 L50 18"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        className="text-charcoal/20"
+                      />
+                      <path
+                        d="M83 0 C83 12, 50 12, 50 18"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        className="text-charcoal/20"
+                      />
+                    </>
+                  )}
+                </svg>
+              </div>
+
+              {/* Merge node */}
+              <div
+                className="
                 px-4 py-2 rounded-lg border-2
                 bg-gradient-to-b from-violet-50 to-purple-50
                 border-violet-400
@@ -516,63 +554,71 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
                 max-w-sm
                 animate-stage-reveal
               "
-              style={{
-                animationDelay: `${(maxStages + 1) * 100}ms`,
-                animationFillMode: 'backwards',
-              }}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 mb-0.5">
-                Combined
+                style={{
+                  animationDelay: `${(maxStages + 1) * 100}ms`,
+                  animationFillMode: 'backwards',
+                }}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 mb-0.5">
+                  Combined
+                </div>
+                <div className="font-serif text-base font-semibold text-charcoal">
+                  {visibleGraph.mergePoint!.form}
+                </div>
+                <div className="mt-0.5 text-[10px] text-charcoal-light">
+                  {visibleGraph.mergePoint!.note}
+                </div>
               </div>
-              <div className="font-serif text-base font-semibold text-charcoal">
-                {graph.mergePoint!.form}
-              </div>
-              <div className="mt-0.5 text-[10px] text-charcoal-light">{graph.mergePoint!.note}</div>
+            </>
+          )}
+
+          {/* Post-merge evolution */}
+          {hasPostMerge && (
+            <div className="flex flex-col items-center">
+              {visibleGraph.postMerge!.map((stage, idx) => (
+                <div key={`post-${idx}`} className="flex flex-col items-center w-full max-w-xs">
+                  <VerticalConnector color="bg-violet-300" />
+                  <StageNode
+                    stage={stage}
+                    isLast={idx === visibleGraph.postMerge!.length - 1}
+                    animationDelay={(maxStages + 2 + idx) * 100}
+                    isSimple={isSimple}
+                  />
+                </div>
+              ))}
             </div>
-          </>
-        )}
+          )}
 
-        {/* Post-merge evolution */}
-        {hasPostMerge && (
-          <div className="flex flex-col items-center">
-            {graph.postMerge!.map((stage, idx) => (
-              <div key={`post-${idx}`} className="flex flex-col items-center w-full max-w-xs">
-                <VerticalConnector color="bg-violet-300" />
-                <StageNode
-                  stage={stage}
-                  isLast={idx === graph.postMerge!.length - 1}
-                  animationDelay={(maxStages + 2 + idx) * 100}
-                />
-              </div>
-            ))}
+          {/* Final word */}
+          <div className="flex flex-col items-center mt-1">
+            <div className="w-0.5 h-4 bg-violet-400" />
+            <svg
+              className="w-3 h-3 text-violet-500 -mt-0.5"
+              fill="currentColor"
+              viewBox="0 0 12 12"
+            >
+              <path d="M6 9L1 4h10L6 9z" />
+            </svg>
           </div>
-        )}
 
-        {/* Final word */}
-        <div className="flex flex-col items-center mt-1">
-          <div className="w-0.5 h-4 bg-violet-400" />
-          <svg className="w-3 h-3 text-violet-500 -mt-0.5" fill="currentColor" viewBox="0 0 12 12">
-            <path d="M6 9L1 4h10L6 9z" />
-          </svg>
-        </div>
-
-        <div
-          className="
+          <div
+            className="
             px-6 py-3
             rounded-lg border-2
             bg-violet-100 border-violet-500
             shadow-md
             animate-stage-reveal
           "
-          style={{
-            animationDelay: `${(maxStages + 3 + (graph.postMerge?.length || 0)) * 100}ms`,
-            animationFillMode: 'backwards',
-          }}
-        >
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 mb-1">
-            Modern English
+            style={{
+              animationDelay: `${(maxStages + 3 + (graph.postMerge?.length || 0)) * 100}ms`,
+              animationFillMode: 'backwards',
+            }}
+          >
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 mb-1">
+              Modern English
+            </div>
+            <div className="font-serif text-xl font-bold text-charcoal">{word}</div>
           </div>
-          <div className="font-serif text-xl font-bold text-charcoal">{word}</div>
         </div>
       </div>
     </section>

@@ -10,11 +10,17 @@ import HistoricalContext from './HistoricalContext'
 interface EtymologyCardProps {
   result: EtymologyResult
   onWordClick: (word: string) => void
+  isSimple?: boolean
+  headerActions?: React.ReactNode
+  ancestryTreeRef?: React.RefObject<HTMLDivElement | null>
 }
 
 export const EtymologyCard = memo(function EtymologyCard({
   result,
   onWordClick,
+  isSimple = false,
+  headerActions,
+  ancestryTreeRef,
 }: EtymologyCardProps) {
   return (
     <article
@@ -40,29 +46,33 @@ export const EtymologyCard = memo(function EtymologyCard({
       <div className="relative p-5 sm:p-8 md:p-12">
         {/* Header: Word + Pronunciation */}
         <header className="mb-8 pb-6 border-b border-charcoal/10">
-          <div className="flex items-baseline gap-4 flex-wrap">
-            {/* Main word - styled like a dictionary headword */}
-            <h1
-              className="
-              font-serif text-4xl md:text-5xl
-              font-bold text-charcoal
-              tracking-tight
-            "
-            >
-              {result.word}
-            </h1>
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="flex items-baseline gap-4 flex-wrap">
+              {/* Main word - styled like a dictionary headword */}
+              <h1
+                className="
+                font-serif text-4xl md:text-5xl
+                font-bold text-charcoal
+                tracking-tight
+              "
+              >
+                {result.word}
+              </h1>
 
-            {/* Pronunciation in IPA with audio button */}
-            <span
-              className="
-              inline-flex items-center gap-1
-              font-serif text-lg
-              text-charcoal-light italic
-            "
-            >
-              {result.pronunciation}
-              <PronunciationButton word={result.word} />
-            </span>
+              {/* Pronunciation in IPA with audio button */}
+              <span
+                className="
+                inline-flex items-center gap-1
+                font-serif text-lg
+                text-charcoal-light italic
+              "
+              >
+                {!isSimple && result.pronunciation}
+                <PronunciationButton word={result.word} />
+              </span>
+            </div>
+
+            {headerActions && <div className="pt-1 shrink-0">{headerActions}</div>}
           </div>
 
           {/* First Attested Date */}
@@ -128,7 +138,9 @@ export const EtymologyCard = memo(function EtymologyCard({
 
         {/* Ancestry graph - visual journey showing root branches merging */}
         {result.ancestryGraph?.branches?.length > 0 && (
-          <AncestryTree graph={result.ancestryGraph} word={result.word} />
+          <div ref={ancestryTreeRef}>
+            <AncestryTree graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
+          </div>
         )}
 
         {/* Lore section - the memorable narrative */}
@@ -175,7 +187,7 @@ export const EtymologyCard = memo(function EtymologyCard({
         </section>
 
         {/* Historical Context - Wikipedia extract */}
-        {result.rawSources?.wikipedia && (
+        {!isSimple && result.rawSources?.wikipedia && (
           <HistoricalContext wikipediaExtract={result.rawSources.wikipedia} />
         )}
 
@@ -210,7 +222,28 @@ export const EtymologyCard = memo(function EtymologyCard({
                 </div>
               )}
 
-              {result.rawSources?.urbanDictionary &&
+              {!isSimple &&
+                result.modernUsage.notableReferences &&
+                result.modernUsage.notableReferences.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-violet-100">
+                    <p className="text-xs font-serif uppercase tracking-wider text-charcoal/50 mb-2">
+                      Notable References
+                    </p>
+                    <ul className="space-y-1">
+                      {result.modernUsage.notableReferences.slice(0, 3).map((reference, idx) => (
+                        <li
+                          key={`${reference}-${idx}`}
+                          className="text-sm text-charcoal/70 leading-relaxed"
+                        >
+                          {reference}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+              {!isSimple &&
+                result.rawSources?.urbanDictionary &&
                 result.rawSources.urbanDictionary.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-violet-100">
                     <p className="text-xs font-serif uppercase tracking-wider text-charcoal/50 mb-2">
@@ -282,29 +315,31 @@ export const EtymologyCard = memo(function EtymologyCard({
         )}
 
         {/* Sources footer */}
-        <footer
-          className="
-          pt-6
-          border-t border-charcoal/10
-        "
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <span
-              className="
-              font-serif text-xs uppercase
-              text-charcoal-light/60 tracking-wider
-              shrink-0
-            "
-            >
-              Sources
-            </span>
-            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1.5 sm:gap-2">
-              {result.sources.map((source, index) => (
-                <SourceBadge key={`${source.name}-${source.word || index}`} source={source} />
-              ))}
+        {!isSimple && (
+          <footer
+            className="
+            pt-6
+            border-t border-charcoal/10
+          "
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <span
+                className="
+                font-serif text-xs uppercase
+                text-charcoal-light/60 tracking-wider
+                shrink-0
+              "
+              >
+                Sources
+              </span>
+              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1.5 sm:gap-2">
+                {result.sources.map((source, index) => (
+                  <SourceBadge key={`${source.name}-${source.word || index}`} source={source} />
+                ))}
+              </div>
             </div>
-          </div>
-        </footer>
+          </footer>
+        )}
 
         {/* Decorative flourish - centered card ending */}
         <div

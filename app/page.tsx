@@ -1,17 +1,33 @@
 'use client'
 
-import { useEffect, useCallback, Suspense } from 'react'
+import { useEffect, useCallback, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useHistory } from '@/lib/hooks/useHistory'
+import { useSimpleMode } from '@/lib/hooks/useSimpleMode'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { SearchBar } from '@/components/SearchBar'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { RelatedWordsList } from '@/components/RelatedWordsList'
 import { SurpriseButton } from '@/components/SurpriseButton'
-import { ErrorState, EmptyState } from '@/components/ErrorState'
+import { ErrorState } from '@/components/ErrorState'
 import ResearchProgress from '@/components/ResearchProgress'
+import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
+import { ShareMenu } from '@/components/ShareMenu'
+
+const CURATED_IDLE_WORDS = [
+  { word: 'algorithm', teaser: "from a Persian mathematician's name" },
+  { word: 'salary', teaser: 'ancient Romans were paid in this' },
+  { word: 'quarantine', teaser: '40 days of isolation' },
+  { word: 'disaster', teaser: "literally 'bad star'" },
+  { word: 'nice', teaser: "once meant 'foolish'" },
+  { word: 'muscle', teaser: "Latin for 'little mouse'" },
+  { word: 'candidate', teaser: 'they wore white' },
+  { word: 'villain', teaser: 'just a farmworker' },
+  { word: 'window', teaser: "Old Norse for 'wind-eye'" },
+  { word: 'panic', teaser: 'named for the god Pan' },
+]
 
 // Dynamic imports for code splitting - these components load on-demand
 const HistorySidebar = dynamic(
@@ -27,10 +43,14 @@ const HistorySidebar = dynamic(
 function HomeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const ancestryTreeRef = useRef<HTMLDivElement>(null)
 
   // Hooks
   const { history, clearHistory, removeFromHistory } = useHistory()
+  const { isSimple, toggleSimple } = useSimpleMode()
   const { state, events, partialResult, error, search } = useStreamingEtymology()
+  const currentWord = searchParams.get('q')?.toLowerCase() ?? null
 
   // Handle URL-based search on mount and param changes - intentional URL → action sync
   useEffect(() => {
@@ -47,6 +67,33 @@ function HomeContent() {
     },
     [router]
   )
+
+  const handleHistoryBack = useCallback(() => {
+    if (history.length === 0) return
+
+    if (!currentWord) {
+      navigateToWord(history[0].word)
+      return
+    }
+
+    const currentIndex = history.findIndex((entry) => entry.word === currentWord)
+    if (currentIndex === -1) {
+      navigateToWord(history[0].word)
+      return
+    }
+
+    const nextIndex = Math.min(currentIndex + 1, history.length - 1)
+    navigateToWord(history[nextIndex].word)
+  }, [history, currentWord, navigateToWord])
+
+  const handleHistoryForward = useCallback(() => {
+    if (!currentWord || history.length === 0) return
+
+    const currentIndex = history.findIndex((entry) => entry.word === currentWord)
+    if (currentIndex <= 0) return
+
+    navigateToWord(history[currentIndex - 1].word)
+  }, [history, currentWord, navigateToWord])
 
   return (
     <main
@@ -109,6 +156,7 @@ function HomeContent() {
             onSearch={navigateToWord}
             isLoading={state === 'loading'}
             initialValue={searchParams.get('q') || ''}
+            inputRef={searchInputRef}
           />
 
           {/* Surprise button */}
@@ -127,7 +175,59 @@ function HomeContent() {
           )}
 
           {/* Idle state */}
-          {state === 'idle' && <EmptyState />}
+          {state === 'idle' && (
+            <section
+              className="
+                relative overflow-hidden
+                rounded-lg border border-charcoal/10
+                bg-gradient-to-b from-white to-cream-dark/30
+                p-6 sm:p-8 md:p-10
+              "
+            >
+              <div className="absolute -top-10 -right-8 h-32 w-32 rounded-full bg-amber-200/25 blur-2xl" />
+              <div className="absolute -bottom-12 -left-10 h-36 w-36 rounded-full bg-emerald-200/20 blur-2xl" />
+
+              <header className="relative mb-8">
+                <p className="text-xs uppercase tracking-[0.2em] text-charcoal-light/60 mb-3">
+                  Try these words
+                </p>
+                <h2 className="font-serif text-3xl md:text-4xl text-charcoal tracking-tight">
+                  Explore word origins
+                </h2>
+                <p className="font-serif italic text-charcoal-light mt-3 max-w-2xl">
+                  Wander through curious entries that reveal how meanings drift, split, and return.
+                </p>
+              </header>
+
+              <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                {CURATED_IDLE_WORDS.map((entry, index) => (
+                  <button
+                    key={entry.word}
+                    onClick={() => navigateToWord(entry.word)}
+                    className="
+                      group text-left
+                      rounded-md border border-charcoal/10
+                      bg-white/85 backdrop-blur-[1px]
+                      p-4 sm:p-5
+                      shadow-[0_1px_0_rgba(0,0,0,0.04)]
+                      hover:border-charcoal/25 hover:-translate-y-0.5
+                      hover:shadow-[0_10px_24px_rgba(41,37,36,0.08)]
+                      transition-all duration-300
+                      animate-fadeIn
+                    "
+                    style={{ animationDelay: `${index * 70}ms`, animationFillMode: 'backwards' }}
+                  >
+                    <span className="font-serif text-xl text-charcoal group-hover:italic transition-all">
+                      {entry.word}
+                    </span>
+                    <p className="mt-2 text-sm leading-relaxed text-charcoal-light">
+                      {entry.teaser}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Error state */}
           {state === 'error' && error && (
@@ -143,7 +243,19 @@ function HomeContent() {
           {state === 'success' && partialResult && (
             <div className="space-y-12">
               {/* Main etymology card */}
-              <EtymologyCard result={partialResult} onWordClick={navigateToWord} />
+              <EtymologyCard
+                result={partialResult}
+                onWordClick={navigateToWord}
+                isSimple={isSimple}
+                ancestryTreeRef={ancestryTreeRef}
+                headerActions={
+                  <ShareMenu
+                    word={partialResult.word}
+                    result={partialResult}
+                    ancestryTreeRef={ancestryTreeRef}
+                  />
+                }
+              />
 
               {/* Related words section */}
               {partialResult.roots.length > 0 && (
@@ -167,6 +279,13 @@ function HomeContent() {
             </div>
           )}
         </div>
+
+        <KeyboardShortcuts
+          onFocusSearch={() => searchInputRef.current?.focus()}
+          onHistoryBack={handleHistoryBack}
+          onHistoryForward={handleHistoryForward}
+          onToggleSimpleMode={toggleSimple}
+        />
 
         {/* Footer */}
         <footer
