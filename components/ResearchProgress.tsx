@@ -18,10 +18,17 @@ const SOURCE_LABELS: Record<string, string> = {
   etymonline: 'Etymonline',
   wiktionary: 'Wiktionary',
   freedictionary: 'Free Dictionary',
+  urbandictionary: 'Urban Dictionary',
   wikipedia: 'Wikipedia',
 }
 
-const DEFAULT_SOURCE_ORDER = ['etymonline', 'wiktionary', 'freedictionary', 'wikipedia']
+const DEFAULT_SOURCE_ORDER = [
+  'etymonline',
+  'wiktionary',
+  'freedictionary',
+  'urbandictionary',
+  'wikipedia',
+]
 
 function normalizeSourceKey(source: string): string {
   return source.toLowerCase().replace(/\s+/g, '')
@@ -82,16 +89,25 @@ export default function ResearchProgress({ events }: ResearchProgressProps) {
     }
   }
 
+  const collapseSourceChips = parsingComplete
+
   return (
     <div className="space-y-6 py-4">
       {/* Source cards */}
-      <div className="flex flex-wrap gap-3 justify-center">
-        {sourceOrder.map((key, index) => {
-          const source = sources[key]
-          return (
-            <div
-              key={key}
-              className={`
+      <div
+        className={`
+          overflow-hidden
+          transition-all duration-500 ease-out
+          ${collapseSourceChips ? 'max-h-0 opacity-0 -translate-y-1' : 'max-h-64 opacity-100'}
+        `}
+      >
+        <div className="flex flex-wrap gap-3 justify-center">
+          {sourceOrder.map((key, index) => {
+            const source = sources[key]
+            return (
+              <div
+                key={key}
+                className={`
               inline-flex items-center gap-2 px-4 py-2
               rounded-full border
               text-sm font-sans
@@ -105,62 +121,62 @@ export default function ResearchProgress({ events }: ResearchProgressProps) {
                     : 'border-charcoal/10 bg-transparent'
               }
             `}
-              style={{ animationDelay: `${index * 50}ms` }}
-            >
-              {source.status === 'pending' && (
-                <svg
-                  className="w-4 h-4 animate-spin text-charcoal/55"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                {source.status === 'pending' && (
+                  <svg
+                    className="w-4 h-4 animate-spin text-charcoal/55"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                )}
+                {source.status === 'complete' && (
+                  <svg
+                    className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
                     stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-              )}
-              {source.status === 'complete' && (
-                <svg
-                  className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              )}
-              {source.status === 'failed' && (
-                <svg
-                  className="w-4 h-4 text-red-600 dark:text-red-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              )}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                )}
+                {source.status === 'failed' && (
+                  <svg
+                    className="w-4 h-4 text-red-600 dark:text-red-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                )}
 
-              <span
-                className={`
+                <span
+                  className={`
               font-medium
               ${
                 source.status === 'complete'
@@ -170,18 +186,19 @@ export default function ResearchProgress({ events }: ResearchProgressProps) {
                     : 'text-charcoal/50'
               }
             `}
-              >
-                {source.name}
-              </span>
-
-              {source.status === 'complete' && source.timing && (
-                <span className="text-xs text-charcoal/55 font-mono">
-                  {(source.timing / 1000).toFixed(1)}s
+                >
+                  {source.name}
                 </span>
-              )}
-            </div>
-          )
-        })}
+
+                {source.status === 'complete' && source.timing && (
+                  <span className="text-xs text-charcoal/55 font-mono">
+                    {(source.timing / 1000).toFixed(1)}s
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
       </div>
 
       {/* Phase indicators */}

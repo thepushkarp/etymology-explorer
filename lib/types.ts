@@ -18,7 +18,7 @@ export interface Root {
  * A source reference with name, URL, and the specific word looked up
  */
 export interface SourceReference {
-  name: 'etymonline' | 'wiktionary' | 'freeDictionary' | 'synthesized'
+  name: 'etymonline' | 'wiktionary' | 'freeDictionary' | 'urbanDictionary' | 'synthesized'
   url?: string // URL of the actual page used (undefined for 'synthesized')
   word?: string // The specific word/root that was looked up (undefined for 'synthesized')
 }
@@ -219,6 +219,7 @@ export interface ResearchContext {
     etymonline: SourceData | null
     wiktionary: SourceData | null
     freeDictionary?: FreeDictionaryEntry | null
+    urbanDictionary?: SourceData | null
     wikipedia?: SourceData | null
   }
   identifiedRoots: string[]

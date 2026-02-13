@@ -356,6 +356,8 @@ function SourceBadge({ source }: { source: SourceReference }) {
   const labels: Record<string, string> = {
     etymonline: 'Etymonline',
     wiktionary: 'Wiktionary',
+    freeDictionary: 'Free Dictionary',
+    urbanDictionary: 'Urban Dictionary',
     synthesized: 'AI Synthesis',
   }
 
@@ -364,6 +366,10 @@ function SourceBadge({ source }: { source: SourceReference }) {
       'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700 hover:bg-amber-100 hover:border-amber-300',
     wiktionary:
       'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700 hover:bg-blue-100 hover:border-blue-300',
+    freeDictionary:
+      'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 hover:border-emerald-300',
+    urbanDictionary:
+      'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-700 hover:bg-violet-100 hover:border-violet-300',
     synthesized:
       'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700',
   }

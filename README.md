@@ -75,9 +75,12 @@ ELEVENLABS_VOICE_ID=your_voice_id_here
 PUBLIC_SEARCH_ENABLED=true
 PRONUNCIATION_ENABLED=true
 FORCE_CACHE_ONLY=false
+RATE_LIMIT_ENABLED=true
 ```
 
 See `.env.example` for full documentation.
+
+For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and restart `bun dev`.
 
 ## Tech Stack
 

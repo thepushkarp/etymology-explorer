@@ -20,25 +20,58 @@ interface UrbanDictionaryEntry {
   thumbs_down: number
 }
 
-const NSFW_WORDS = [
-  'fuck',
-  'shit',
-  'cock',
-  'dick',
-  'pussy',
-  'cunt',
-  'ass',
-  'penis',
-  'vagina',
-  'anal',
-  'orgasm',
-  'ejaculate',
-  'masturbat',
+const MIN_DEFINITION_WORDS = 5
+const MIN_DEFINITION_CHARS = 20
+const MAX_DEFINITION_CHARS = 500
+const MAX_URBAN_ENTRIES = 2
+const MIN_QUALITY_SCORE = 1
+
+const LOW_SIGNAL_PATTERNS = [
+  /^a word\b/i,
+  /^a term\b/i,
+  /can be used in many situations/i,
+  /whatever you want/i,
+  /literally just\b/i,
+  /^something you tell someone/i,
 ]
 
-function isClean(text: string): boolean {
-  const lower = text.toLowerCase()
-  return !NSFW_WORDS.some((word) => new RegExp(`\\b${word}\\b`).test(lower))
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\[|\]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+function normalizeWord(text: string): string {
+  return text.toLowerCase().trim()
+}
+
+function scoreQuality(entry: UrbanDictionaryEntry): number {
+  const definition = normalizeWhitespace(entry.definition)
+  const example = normalizeWhitespace(entry.example || '')
+  const upvotes = Math.max(0, entry.thumbs_up)
+  const downvotes = Math.max(0, entry.thumbs_down)
+  const wordCount = definition.split(/\s+/).filter(Boolean).length
+
+  if (definition.length < MIN_DEFINITION_CHARS || definition.length > MAX_DEFINITION_CHARS)
+    return -10
+  if (wordCount < MIN_DEFINITION_WORDS) return -10
+
+  let score = 0
+
+  if (definition.length >= 35 && definition.length <= 260) score += 1
+  if (example.length >= 20) score += 1
+
+  // In some environments votes are always 0; treat vote quality as optional signal.
+  if (upvotes > 0 || downvotes > 0) {
+    const approvalRatio = upvotes / Math.max(1, downvotes)
+    const scoreDelta = upvotes - downvotes
+    if (scoreDelta >= 10) score += 1
+    if (approvalRatio >= 1.2) score += 1
+  }
+
+  if (LOW_SIGNAL_PATTERNS.some((pattern) => pattern.test(definition))) {
+    score -= 2
+  }
+
+  return score
 }
 
 export async function fetchUrbanDictionary(word: string): Promise<SourceData | null> {
@@ -53,16 +86,41 @@ export async function fetchUrbanDictionary(word: string): Promise<SourceData | n
 
     const data = await response.json()
 
-    // Filter to clean definitions with decent votes
+    const normalizedWord = normalizeWord(word)
     const entries = (data.list || []) as UrbanDictionaryEntry[]
     const filtered = entries
-      .filter((d) => d.thumbs_up > 100)
-      .filter((d) => isClean(d.definition) && isClean(d.example || ''))
-      .slice(0, 2)
+      .filter((entry) => normalizeWord(entry.word) === normalizedWord)
+      .map((entry) => ({
+        entry,
+        definition: normalizeWhitespace(entry.definition),
+        example: normalizeWhitespace(entry.example || ''),
+        quality: scoreQuality(entry),
+      }))
+      .filter((item) => item.quality >= MIN_QUALITY_SCORE)
+      .sort((a, b) => {
+        const voteScoreA = a.entry.thumbs_up - a.entry.thumbs_down
+        const voteScoreB = b.entry.thumbs_up - b.entry.thumbs_down
+        return b.quality - a.quality || voteScoreB - voteScoreA
+      })
+      .slice(0, MAX_URBAN_ENTRIES)
 
     if (filtered.length === 0) return null
 
-    const text = filtered.map((d) => d.definition.replace(/\[|\]/g, '')).join('\n\n')
+    const text = filtered
+      .map(({ entry, definition, example }, index) => {
+        const hasVotes = entry.thumbs_up > 0 || entry.thumbs_down > 0
+
+        return [
+          hasVotes
+            ? `Entry ${index + 1}: up=${entry.thumbs_up}, down=${entry.thumbs_down}`
+            : `Entry ${index + 1}`,
+          `Definition: ${definition}`,
+          example ? `Example: ${example}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n')
+      })
+      .join('\n\n')
 
     return {
       text,

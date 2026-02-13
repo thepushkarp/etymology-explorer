@@ -67,6 +67,7 @@ export const CONFIG = {
     publicSearchEnabled: process.env.PUBLIC_SEARCH_ENABLED !== 'false',
     pronunciationEnabled: process.env.PRONUNCIATION_ENABLED !== 'false',
     forceCacheOnly: process.env.FORCE_CACHE_ONLY === 'true',
+    rateLimitEnabled: process.env.RATE_LIMIT_ENABLED !== 'false',
   },
 
   // Protection model (budget-based degradation ladder)

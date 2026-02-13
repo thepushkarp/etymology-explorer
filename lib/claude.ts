@@ -101,6 +101,67 @@ function sanitizeSuggestions(result: EtymologyResult): void {
   }
 }
 
+function dedupeStrings(values: string[]): string[] {
+  return Array.from(new Set(values))
+}
+
+/**
+ * Keep modern usage grounded: only surface it when we have clear, high-signal evidence.
+ * This prevents vague or speculative slang blurbs from showing up in the UI.
+ */
+function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchContext): void {
+  const modernUsage = result.modernUsage
+  if (!modernUsage) return
+
+  if (!modernUsage.hasSlangMeaning) {
+    result.modernUsage = { hasSlangMeaning: false }
+    return
+  }
+
+  const hasUrbanEvidence = Boolean(researchContext.mainWord.urbanDictionary?.text)
+  if (!hasUrbanEvidence) {
+    result.modernUsage = { hasSlangMeaning: false }
+    return
+  }
+
+  const compact = (value: string) => value.replace(/\s+/g, ' ').trim()
+  const slangDefinition = modernUsage.slangDefinition ? compact(modernUsage.slangDefinition) : ''
+  const popularizedBy = modernUsage.popularizedBy ? compact(modernUsage.popularizedBy) : ''
+  const contexts = dedupeStrings(
+    (modernUsage.contexts ?? [])
+      .map(compact)
+      .filter((context) => context.length >= 3 && context.length <= 50)
+  ).slice(0, 4)
+  const notableReferences = dedupeStrings(
+    (modernUsage.notableReferences ?? [])
+      .map(compact)
+      .filter((reference) => reference.length >= 6 && reference.length <= 140)
+  ).slice(0, 3)
+
+  const lowSignalPattern =
+    /^slang term$|^internet slang$|^modern slang$|^used online$|^expression$/i
+  const definitionWordCount = slangDefinition.split(/\s+/).filter(Boolean).length
+  const hasSubstantiveDefinition =
+    slangDefinition.length >= 24 &&
+    definitionWordCount >= 5 &&
+    !lowSignalPattern.test(slangDefinition.toLowerCase())
+  const hasContextSignals =
+    popularizedBy.length >= 3 || contexts.length > 0 || notableReferences.length > 0
+
+  if (!hasSubstantiveDefinition || !hasContextSignals) {
+    result.modernUsage = { hasSlangMeaning: false }
+    return
+  }
+
+  result.modernUsage = {
+    hasSlangMeaning: true,
+    slangDefinition,
+    ...(popularizedBy ? { popularizedBy } : {}),
+    ...(contexts.length > 0 ? { contexts } : {}),
+    ...(notableReferences.length > 0 ? { notableReferences } : {}),
+  }
+}
+
 /**
  * Generate etymology response via Anthropic structured output.
  * Returns the parsed (but not yet enriched) result and token usage.
@@ -140,6 +201,8 @@ export async function synthesizeFromResearch(
 
   const { result, usage } = await generateEtymologyResponse(userPrompt)
 
+  sanitizeModernUsage(result, researchContext)
+
   // Enrich ancestry graph with source evidence and confidence levels
   if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
     enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
@@ -166,6 +229,13 @@ export async function synthesizeFromResearch(
     sources.push({
       name: 'freeDictionary',
       url: `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(mainWord)}`,
+      word: mainWord,
+    })
+  }
+  if (researchContext.mainWord.urbanDictionary) {
+    sources.push({
+      name: 'urbanDictionary',
+      url: researchContext.mainWord.urbanDictionary.url,
       word: mainWord,
     })
   }
@@ -266,6 +336,8 @@ export async function streamSynthesis(
   }
 
   // Enrich ancestry graph with source evidence and confidence levels
+  sanitizeModernUsage(result, researchContext)
+
   if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
     enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
   }
@@ -291,6 +363,13 @@ export async function streamSynthesis(
     sources.push({
       name: 'freeDictionary',
       url: `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(mainWord)}`,
+      word: mainWord,
+    })
+  }
+  if (researchContext.mainWord.urbanDictionary) {
+    sources.push({
+      name: 'urbanDictionary',
+      url: researchContext.mainWord.urbanDictionary.url,
       word: mainWord,
     })
   }

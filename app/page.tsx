@@ -173,7 +173,9 @@ function HomeContent() {
             tracking-tight
           "
           >
-            Etymology Explorer
+            <Link href="/" className="transition-opacity hover:opacity-85">
+              Etymology Explorer
+            </Link>
           </h1>
           <p
             className="
@@ -351,7 +353,7 @@ function HomeContent() {
             >
               thepushkarp
             </a>{' '}
-            with Curiosity, Claude, Codex and Cursor
+            with Curiosity
           </p>
           <p
             className="
@@ -360,7 +362,8 @@ function HomeContent() {
             mt-2
           "
           >
-            Etymology data from Etymonline, Wiktionary, Wikipedia, and Free Dictionary
+            Etymology data from Etymonline, Wiktionary, Wikipedia, Urban Dictionary and Free
+            Dictionary
           </p>
         </footer>
       </div>

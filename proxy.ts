@@ -95,23 +95,25 @@ export async function proxy(request: NextRequest) {
     limiters = [getGeneralLimiter()]
   }
 
-  // Check all applicable rate limits
-  for (const limiter of limiters) {
-    if (!limiter) continue // Redis not configured — skip rate limiting
+  if (CONFIG.features.rateLimitEnabled) {
+    // Check all applicable rate limits
+    for (const limiter of limiters) {
+      if (!limiter) continue // Redis not configured — skip rate limiting
 
-    const { success, reset } = await limiter.limit(ip)
+      const { success, reset } = await limiter.limit(ip)
 
-    if (!success) {
-      const retryAfter = Math.ceil((reset - Date.now()) / 1000)
-      return NextResponse.json(
-        { success: false, error: 'Too many requests. Please slow down.' },
-        {
-          status: 429,
-          headers: {
-            'Retry-After': String(Math.max(retryAfter, 1)),
-          },
-        }
-      )
+      if (!success) {
+        const retryAfter = Math.ceil((reset - Date.now()) / 1000)
+        return NextResponse.json(
+          { success: false, error: 'Too many requests. Please slow down.' },
+          {
+            status: 429,
+            headers: {
+              'Retry-After': String(Math.max(retryAfter, 1)),
+            },
+          }
+        )
+      }
     }
   }
 
