@@ -275,7 +275,7 @@ export function KeyboardShortcuts({
 
             {/* Footer */}
             <div className="mt-8 pt-6 border-t border-charcoal/10">
-              <p className="text-xs font-serif text-charcoal-light/60">
+              <p className="text-xs font-serif text-charcoal-light/65">
                 Press{' '}
                 <kbd className="inline-block px-2 py-1 bg-charcoal/5 border border-charcoal/20 rounded font-mono text-xs">
                   ?

@@ -60,32 +60,25 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
         {Object.entries(sources).map(([key, source], index) => (
           <div
             key={key}
-            className="
+            className={`
               inline-flex items-center gap-2 px-4 py-2
               rounded-full border
               text-sm font-sans
               transition-all duration-300
               animate-fadeIn
-            "
-            style={{
-              animationDelay: `${index * 50}ms`,
-              borderColor:
+              ${
                 source.status === 'complete'
-                  ? 'rgba(44, 44, 44, 0.2)'
+                  ? 'border-charcoal/20 bg-charcoal/[0.03]'
                   : source.status === 'failed'
-                    ? 'rgba(220, 38, 38, 0.3)'
-                    : 'rgba(44, 44, 44, 0.1)',
-              backgroundColor:
-                source.status === 'complete'
-                  ? 'rgba(44, 44, 44, 0.03)'
-                  : source.status === 'failed'
-                    ? 'rgba(220, 38, 38, 0.05)'
-                    : 'transparent',
-            }}
+                    ? 'border-red-500/30 bg-red-500/[0.05]'
+                    : 'border-charcoal/10 bg-transparent'
+              }
+            `}
+            style={{ animationDelay: `${index * 50}ms` }}
           >
             {source.status === 'pending' && (
               <svg
-                className="w-4 h-4 animate-spin text-charcoal/40"
+                className="w-4 h-4 animate-spin text-charcoal/55"
                 fill="none"
                 viewBox="0 0 24 24"
               >
@@ -106,7 +99,7 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
             )}
             {source.status === 'complete' && (
               <svg
-                className="w-4 h-4 text-emerald-600"
+                className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -121,7 +114,7 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
             )}
             {source.status === 'failed' && (
               <svg
-                className="w-4 h-4 text-red-600"
+                className="w-4 h-4 text-red-600 dark:text-red-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -140,10 +133,10 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
               font-medium
               ${
                 source.status === 'complete'
-                  ? 'text-charcoal/80 dark:text-cream/90'
+                  ? 'text-charcoal/80'
                   : source.status === 'failed'
-                    ? 'text-red-600/80'
-                    : 'text-charcoal/50 dark:text-cream/60'
+                    ? 'text-red-600/80 dark:text-red-400/80'
+                    : 'text-charcoal/50'
               }
             `}
             >
@@ -151,7 +144,7 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
             </span>
 
             {source.status === 'complete' && source.timing && (
-              <span className="text-xs text-charcoal/40 dark:text-cream/60 font-mono">
+              <span className="text-xs text-charcoal/55 font-mono">
                 {(source.timing / 1000).toFixed(1)}s
               </span>
             )}
@@ -163,9 +156,9 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
       <div className="space-y-3 text-center">
         {parsingComplete && (
           <div className="animate-fadeIn">
-            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 dark:text-cream/75 font-serif italic">
+            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 font-serif italic">
               <svg
-                className="w-4 h-4 text-emerald-600"
+                className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -184,10 +177,10 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
 
         {synthesisStarted && (
           <div className="animate-fadeIn">
-            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 dark:text-cream/75 font-serif italic">
+            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 font-serif italic">
               {!enrichmentDone && (
                 <svg
-                  className="w-4 h-4 animate-pulse text-violet-600"
+                  className="w-4 h-4 animate-pulse text-violet-600 dark:text-violet-400"
                   viewBox="0 0 24 24"
                   fill="currentColor"
                 >
@@ -198,7 +191,7 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
               )}
               {enrichmentDone && (
                 <svg
-                  className="w-4 h-4 text-emerald-600"
+                  className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -215,7 +208,7 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
             </div>
 
             {synthesisTokens && synthesisTokens.length > 0 && (
-              <div className="mt-2 text-xs text-charcoal/40 dark:text-cream/60 font-mono max-w-md mx-auto line-clamp-2">
+              <div className="mt-2 text-xs text-charcoal/55 font-mono max-w-md mx-auto line-clamp-2">
                 {synthesisTokens.slice(-100)}...
               </div>
             )}
@@ -224,9 +217,9 @@ export default function ResearchProgress({ events, isStreaming }: ResearchProgre
 
         {enrichmentDone && (
           <div className="animate-fadeIn">
-            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 dark:text-cream/75 font-serif italic">
+            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 font-serif italic">
               <svg
-                className="w-4 h-4 text-emerald-600"
+                className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

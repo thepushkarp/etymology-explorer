@@ -82,7 +82,7 @@ ${result.lore}`
       const dataUrl = await toPng(ancestryTreeRef.current, {
         cacheBust: true,
         pixelRatio: 2,
-        backgroundColor: '#f9f5ee',
+        backgroundColor: 'var(--cream)',
       })
 
       const link = document.createElement('a')
@@ -107,10 +107,10 @@ ${result.lore}`
           inline-flex items-center justify-center
           w-9 h-9
           rounded-md
-          border border-charcoal/25 dark:border-cream/35
-          text-charcoal dark:text-cream
-          hover:bg-cream-dark/50 dark:hover:bg-cream/20
-          hover:border-charcoal/45 dark:hover:border-cream/60
+          border border-charcoal/25
+          text-charcoal
+          hover:bg-cream-dark/50
+          hover:border-charcoal/45
           transition-colors
           duration-200
         "
@@ -126,7 +126,7 @@ ${result.lore}`
           className="
             absolute right-0 mt-2
             w-48
-            bg-surface dark:bg-surface
+            bg-surface
             border border-border-soft
             rounded-md
             shadow-sm
@@ -140,16 +140,18 @@ ${result.lore}`
               w-full text-left
                px-4 py-2.5
                text-sm font-serif
-               text-charcoal/80 dark:text-cream/90
-               hover:bg-cream-dark/20 dark:hover:bg-cream/10
+               text-charcoal/80
+               hover:bg-cream-dark/20
                transition-colors
                border-b border-border-soft
                flex items-center gap-2
              "
           >
-            <ArrowTopRightOnSquareIcon className="h-4 w-4 text-charcoal/70 dark:text-cream/80" />
+            <ArrowTopRightOnSquareIcon className="h-4 w-4 text-charcoal/70" />
             Copy link
-            {feedback === 'copied' && <span className="ml-auto text-xs text-emerald-600">✓</span>}
+            {feedback === 'copied' && (
+              <span className="ml-auto text-xs text-emerald-600 dark:text-emerald-400">✓</span>
+            )}
           </button>
 
           <button
@@ -158,16 +160,18 @@ ${result.lore}`
               w-full text-left
                px-4 py-2.5
                text-sm font-serif
-               text-charcoal/80 dark:text-cream/90
-               hover:bg-cream-dark/20 dark:hover:bg-cream/10
+               text-charcoal/80
+               hover:bg-cream-dark/20
                transition-colors
                border-b border-border-soft
                flex items-center gap-2
              "
           >
-            <DocumentTextIcon className="h-4 w-4 text-charcoal/70 dark:text-cream/80" />
+            <DocumentTextIcon className="h-4 w-4 text-charcoal/70" />
             Copy as text
-            {feedback === 'copied' && <span className="ml-auto text-xs text-emerald-600">✓</span>}
+            {feedback === 'copied' && (
+              <span className="ml-auto text-xs text-emerald-600 dark:text-emerald-400">✓</span>
+            )}
           </button>
 
           <button
@@ -176,15 +180,17 @@ ${result.lore}`
               w-full text-left
                px-4 py-2.5
                text-sm font-serif
-               text-charcoal/80 dark:text-cream/90
-               hover:bg-cream-dark/20 dark:hover:bg-cream/10
+               text-charcoal/80
+               hover:bg-cream-dark/20
                transition-colors
                flex items-center gap-2
              "
           >
-            <PhotoIcon className="h-4 w-4 text-charcoal/70 dark:text-cream/80" />
+            <PhotoIcon className="h-4 w-4 text-charcoal/70" />
             Share as image
-            {feedback === 'copied' && <span className="ml-auto text-xs text-emerald-600">✓</span>}
+            {feedback === 'copied' && (
+              <span className="ml-auto text-xs text-emerald-600 dark:text-emerald-400">✓</span>
+            )}
           </button>
         </div>
       )}

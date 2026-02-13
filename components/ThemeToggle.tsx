@@ -29,7 +29,7 @@ export default function ThemeToggle() {
       <button
         aria-label="Theme selector"
         className="inline-flex items-center gap-2.5 rounded-full border border-charcoal/25 bg-surface px-4 py-2
-        text-sm font-semibold text-charcoal shadow-sm dark:border-cream/35 dark:bg-surface dark:text-cream"
+        text-sm font-semibold text-charcoal shadow-sm"
       >
         <ComputerDesktopIcon className="h-4 w-4" />
         <span>Auto</span>
@@ -48,8 +48,7 @@ export default function ThemeToggle() {
       title={`Theme: ${current.label} (next: ${next.label})`}
       className="inline-flex items-center gap-2.5 rounded-full border border-charcoal/25 bg-surface px-4 py-2
       text-sm font-semibold text-charcoal shadow-sm transition-colors duration-200
-      hover:bg-cream-dark/60 hover:border-charcoal/45
-      dark:border-cream/35 dark:bg-surface dark:text-cream dark:hover:bg-cream/20 dark:hover:border-cream/60"
+      hover:bg-cream-dark/60 hover:border-charcoal/45"
     >
       <Icon className="h-4 w-4" strokeWidth={2} />
       <span>{current.label}</span>

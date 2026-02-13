@@ -21,9 +21,21 @@ export default function CostModeIndicator({ initialMode = 'normal' }: CostModeIn
 
   const indicators = {
     normal: { icon: '', label: '', className: '' },
-    degraded: { icon: '⚡', label: 'Fast mode', className: 'bg-amber-100 text-amber-800' },
-    cache_only: { icon: '📦', label: 'Cached only', className: 'bg-stone-100 text-stone-600' },
-    blocked: { icon: '🚫', label: 'Try tomorrow', className: 'bg-rose-100 text-rose-800' },
+    degraded: {
+      icon: '⚡',
+      label: 'Fast mode',
+      className: 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300',
+    },
+    cache_only: {
+      icon: '📦',
+      label: 'Cached only',
+      className: 'bg-stone-100 dark:bg-stone-800/30 text-stone-600 dark:text-stone-400',
+    },
+    blocked: {
+      icon: '🚫',
+      label: 'Try tomorrow',
+      className: 'bg-rose-100 dark:bg-rose-900/30 text-rose-800 dark:text-rose-300',
+    },
   }
 
   const { icon, label, className } = indicators[mode]

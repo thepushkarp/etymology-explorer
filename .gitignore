@@ -34,9 +34,11 @@ npm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# claude
+# agents
 .claude
-.serena/
+.serena
+.cursor
+.agents
 
 # worktrees
 .worktrees/

@@ -111,7 +111,7 @@ export function SearchSuggestions({
     >
       {recentCount > 0 && (
         <section className="px-3 py-2 border-b border-charcoal/10">
-          <h3 className="px-2 pb-2 text-[10px] uppercase tracking-[0.16em] text-charcoal-light/70">
+          <h3 className="px-2 pb-2 text-[10px] uppercase tracking-[0.16em] text-charcoal-light/75">
             Recent
           </h3>
           <ul className="space-y-1">
@@ -129,7 +129,7 @@ export function SearchSuggestions({
                   `}
                 >
                   <span className="truncate">{item.word}</span>
-                  <span className="text-[10px] uppercase tracking-[0.12em] border border-charcoal/20 px-2 py-0.5 text-charcoal-light/70">
+                  <span className="text-[10px] uppercase tracking-[0.12em] border border-charcoal/20 px-2 py-0.5 text-charcoal-light/75">
                     Recent
                   </span>
                 </button>
@@ -141,7 +141,7 @@ export function SearchSuggestions({
 
       {suggestions.length > recentCount && (
         <section className="px-3 py-2">
-          <h3 className="px-2 pb-2 text-[10px] uppercase tracking-[0.16em] text-charcoal-light/70">
+          <h3 className="px-2 pb-2 text-[10px] uppercase tracking-[0.16em] text-charcoal-light/75">
             Suggestions
           </h3>
           <ul className="space-y-1">
@@ -162,7 +162,7 @@ export function SearchSuggestions({
                     `}
                   >
                     <span className="truncate">{item.word}</span>
-                    <span className="text-[10px] uppercase tracking-[0.12em] border border-charcoal/20 px-2 py-0.5 text-charcoal-light/70">
+                    <span className="text-[10px] uppercase tracking-[0.12em] border border-charcoal/20 px-2 py-0.5 text-charcoal-light/75">
                       Suggested
                     </span>
                   </button>

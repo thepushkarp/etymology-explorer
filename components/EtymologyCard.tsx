@@ -178,7 +178,7 @@ export const EtymologyCard = memo(function EtymologyCard({
               className="
               absolute -left-3 -top-2
               text-4xl font-serif
-              text-charcoal/10
+              text-charcoal/20
               select-none
             "
             >
@@ -208,7 +208,7 @@ export const EtymologyCard = memo(function EtymologyCard({
             <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-4">
               Modern Usage
             </h2>
-            <div className="relative pl-6 border-l-2 border-violet-200">
+            <div className="relative pl-6 border-l-2 border-violet-200 dark:border-violet-800">
               {result.modernUsage.slangDefinition && (
                 <p className="font-serif text-lg text-charcoal/80 leading-relaxed mb-3">
                   {result.modernUsage.slangDefinition}
@@ -225,7 +225,7 @@ export const EtymologyCard = memo(function EtymologyCard({
                   {result.modernUsage.contexts.map((ctx) => (
                     <span
                       key={ctx}
-                      className="px-2 py-0.5 text-xs font-serif bg-violet-50 text-violet-700 border border-violet-200 rounded-full"
+                      className="px-2 py-0.5 text-xs font-serif bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-700 rounded-full"
                     >
                       {ctx}
                     </span>
@@ -236,7 +236,7 @@ export const EtymologyCard = memo(function EtymologyCard({
               {!isSimple &&
                 result.modernUsage.notableReferences &&
                 result.modernUsage.notableReferences.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-violet-100">
+                  <div className="mt-4 pt-4 border-t border-violet-100 dark:border-violet-800">
                     <p className="text-xs font-serif uppercase tracking-wider text-charcoal/50 mb-2">
                       Notable References
                     </p>
@@ -320,7 +320,7 @@ export const EtymologyCard = memo(function EtymologyCard({
               <span
                 className="
                 font-serif text-xs uppercase
-                text-charcoal-light/60 tracking-wider
+                text-charcoal-light/65 tracking-wider
                 shrink-0
               "
               >
@@ -340,7 +340,7 @@ export const EtymologyCard = memo(function EtymologyCard({
           className="
             flex items-center justify-center gap-2
             mt-6 pt-2
-            text-charcoal/15
+            text-charcoal/25
           "
         >
           <span className="w-8 h-px bg-current" />
@@ -361,9 +361,11 @@ function SourceBadge({ source }: { source: SourceReference }) {
 
   const colors: Record<string, string> = {
     etymonline:
-      'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 hover:border-amber-300',
-    wiktionary: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 hover:border-blue-300',
-    synthesized: 'bg-purple-50 text-purple-700 border-purple-200',
+      'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700 hover:bg-amber-100 hover:border-amber-300',
+    wiktionary:
+      'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700 hover:bg-blue-100 hover:border-blue-300',
+    synthesized:
+      'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700',
   }
 
   const baseClasses = `
@@ -372,7 +374,7 @@ function SourceBadge({ source }: { source: SourceReference }) {
     rounded-md
     border
     transition-colors duration-200
-    ${colors[source.name] || 'bg-gray-50 text-gray-700 border-gray-200'}
+    ${colors[source.name] || 'bg-gray-50 dark:bg-gray-950/40 text-gray-700 dark:text-gray-300 border-gray-200'}
   `
 
   const sourceLabel = labels[source.name] || source.name
@@ -472,11 +474,12 @@ function SuggestionRow({
   color: 'emerald' | 'rose' | 'amber' | 'blue' | 'purple'
 }) {
   const colorClasses = {
-    emerald: 'border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300',
+    emerald:
+      'border-emerald-200 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-300',
     rose: 'border-rose-200 hover:bg-rose-50 hover:border-rose-300',
-    amber: 'border-amber-200 hover:bg-amber-50 hover:border-amber-300',
-    blue: 'border-blue-200 hover:bg-blue-50 hover:border-blue-300',
-    purple: 'border-purple-200 hover:bg-purple-50 hover:border-purple-300',
+    amber: 'border-amber-200 dark:border-amber-700 hover:bg-amber-50 hover:border-amber-300',
+    blue: 'border-blue-200 dark:border-blue-700 hover:bg-blue-50 hover:border-blue-300',
+    purple: 'border-purple-200 dark:border-purple-700 hover:bg-purple-50 hover:border-purple-300',
   }
 
   return (

@@ -25,7 +25,7 @@ export function RootChip({ root, onWordClick }: RootChipProps) {
           ${
             isExpanded
               ? 'bg-charcoal text-cream shadow-lg'
-              : 'bg-white border border-charcoal/20 text-charcoal hover:border-charcoal/40 hover:shadow-sm'
+              : 'bg-surface border border-charcoal/20 text-charcoal hover:border-charcoal/40 hover:shadow-sm'
           }
         `}
       >

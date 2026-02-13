@@ -106,7 +106,7 @@ export const RelatedWordsList = memo(function RelatedWordsList({
             >
               From{' '}
               <span className="font-semibold text-charcoal italic">&apos;{root.root}&apos;</span>
-              <span className="text-charcoal/40 mx-2">·</span>
+              <span className="text-charcoal/55 mx-2">·</span>
               <span className="text-charcoal/60">{root.meaning}</span>
             </h3>
 
@@ -135,7 +135,7 @@ export const RelatedWordsList = memo(function RelatedWordsList({
                       >
                         {meta.label}
                       </h4>
-                      <p className="text-xs text-charcoal/40 italic">{meta.description}</p>
+                      <p className="text-xs text-charcoal/55 italic">{meta.description}</p>
                     </div>
 
                     {/* Word list - styled like a scholarly index */}
@@ -163,7 +163,7 @@ export const RelatedWordsList = memo(function RelatedWordsList({
                             {/* Arrow indicator */}
                             <span
                               className="
-                              text-charcoal-light/40
+                              text-charcoal-light/55
                               group-hover:text-charcoal
                               group-hover:translate-x-1
                               transition-all duration-200

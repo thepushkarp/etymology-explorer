@@ -33,7 +33,7 @@ function FaqAccordionItem({ faq }: FaqItemProps) {
         <span>{faq.question}</span>
         <span
           className="
-            ml-4 text-xl text-charcoal/40
+            ml-4 text-xl text-charcoal/55
             transition-transform duration-200
             group-open:rotate-45
           "

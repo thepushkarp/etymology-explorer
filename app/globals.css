@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+/* Wire Tailwind's dark: variant to the .dark class on <html> (set by useTheme hook + inline script).
+   Without this, dark: uses @media prefers-color-scheme which doesn't match the manual toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --cream: #f9f5ee;
   --cream-dark: #efe6d8;

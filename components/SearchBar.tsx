@@ -171,19 +171,19 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
             absolute -inset-3 rounded-xl
             border border-border-soft
             transition-all duration-500
-            ${isFocused ? 'border-charcoal/30 dark:border-cream/35 -inset-4' : ''}
+            ${isFocused ? 'border-charcoal/30 -inset-4' : ''}
           `}
         />
 
         {/* Decorative corners */}
-        <div className="absolute -top-3 -left-3 w-6 h-6 border-l-2 border-t-2 border-charcoal/20 dark:border-cream/30 rounded-tl-lg" />
-        <div className="absolute -top-3 -right-3 w-6 h-6 border-r-2 border-t-2 border-charcoal/20 dark:border-cream/30 rounded-tr-lg" />
-        <div className="absolute -bottom-3 -left-3 w-6 h-6 border-l-2 border-b-2 border-charcoal/20 dark:border-cream/30 rounded-bl-lg" />
-        <div className="absolute -bottom-3 -right-3 w-6 h-6 border-r-2 border-b-2 border-charcoal/20 dark:border-cream/30 rounded-br-lg" />
+        <div className="absolute -top-3 -left-3 w-6 h-6 border-l-2 border-t-2 border-charcoal/20 rounded-tl-lg" />
+        <div className="absolute -top-3 -right-3 w-6 h-6 border-r-2 border-t-2 border-charcoal/20 rounded-tr-lg" />
+        <div className="absolute -bottom-3 -left-3 w-6 h-6 border-l-2 border-b-2 border-charcoal/20 rounded-bl-lg" />
+        <div className="absolute -bottom-3 -right-3 w-6 h-6 border-r-2 border-b-2 border-charcoal/20 rounded-br-lg" />
 
         {/* Main input container */}
         <div className="relative">
-          <div className="relative bg-surface dark:bg-surface rounded-lg shadow-sm overflow-hidden">
+          <div className="relative bg-surface rounded-lg shadow-sm overflow-hidden">
             {/* Subtle paper texture overlay */}
             <div
               className="absolute inset-0 opacity-[0.03] pointer-events-none"
@@ -206,8 +206,8 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
                 w-full px-8 py-5 text-xl
                 bg-transparent
                 border-none outline-none
-                 font-serif text-charcoal dark:text-cream
-                 placeholder:text-charcoal-light/70 dark:placeholder:text-cream/65
+                 font-serif text-charcoal
+                 placeholder:text-charcoal-light/70
                 placeholder:italic
                 disabled:opacity-50
                 tracking-wide
@@ -220,7 +220,7 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
             <div
               className={`
                 absolute bottom-0 left-1/2 -translate-x-1/2
-                h-px bg-gradient-to-r from-transparent via-charcoal/45 dark:via-cream/50 to-transparent
+                h-px bg-gradient-to-r from-transparent via-charcoal/45 to-transparent
                 transition-all duration-500 ease-out
                 ${isFocused ? 'w-[90%]' : 'w-0'}
               `}
@@ -233,8 +233,8 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
               className="
                 absolute right-4 top-1/2 -translate-y-1/2
                 p-3 rounded-full
-                 text-charcoal dark:text-cream
-                 hover:text-charcoal dark:hover:text-cream hover:bg-cream-dark/50 dark:hover:bg-cream/10
+                 text-charcoal
+                 hover:text-charcoal hover:bg-cream-dark/50
                 transition-all duration-300
                 disabled:opacity-30 disabled:cursor-not-allowed
                 disabled:hover:bg-transparent

@@ -63,7 +63,7 @@ export default function UsageTimeline({
     <div className="relative">
       <svg
         viewBox={`0 0 200 ${height}`}
-        className="w-full h-auto text-charcoal/65"
+        className="w-full h-auto text-charcoal/70"
         preserveAspectRatio="none"
         role="img"
         aria-label={`Usage timeline for ${word}`}
@@ -80,13 +80,13 @@ export default function UsageTimeline({
       </svg>
 
       {showYearLabels && (
-        <div className="mt-1 flex justify-between text-[11px] text-charcoal-light/70">
+        <div className="mt-1 flex justify-between text-[11px] text-charcoal-light/75">
           <span>{minYear}</span>
           <span>{maxYear}</span>
         </div>
       )}
 
-      <div className="mt-1 text-[11px] text-charcoal-light/70">
+      <div className="mt-1 text-[11px] text-charcoal-light/75">
         Peak usage: {maxCount.toLocaleString(undefined, { maximumSignificantDigits: 3 })}
       </div>
     </div>

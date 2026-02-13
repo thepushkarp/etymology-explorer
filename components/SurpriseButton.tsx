@@ -38,7 +38,7 @@ export function SurpriseButton({ onWordSelected, disabled }: SurpriseButtonProps
         inline-flex items-center gap-2
         px-6 py-3
         font-serif text-sm
-        bg-white
+        bg-surface
         border border-charcoal/20
         rounded-full
         text-charcoal
@@ -52,7 +52,7 @@ export function SurpriseButton({ onWordSelected, disabled }: SurpriseButtonProps
         className="
         absolute inset-0
         rounded-full
-        bg-gradient-to-r from-amber-50 via-cream to-amber-50
+        bg-gradient-to-r from-amber-50 dark:from-amber-950/30 via-cream to-amber-50 dark:to-amber-950/30
         opacity-0 group-hover:opacity-100
         transition-opacity duration-300
       "
@@ -95,8 +95,8 @@ export function SurpriseButton({ onWordSelected, disabled }: SurpriseButtonProps
       <span
         className="
         relative z-10
-        text-charcoal/30
-        group-hover:text-charcoal/60
+        text-charcoal/45
+        group-hover:text-charcoal/70
         transition-colors duration-300
       "
       >

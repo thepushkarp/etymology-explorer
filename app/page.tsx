@@ -154,15 +154,12 @@ function HomeContent() {
 
           {/* Navigation links */}
           <nav className="flex justify-center gap-6 mb-8 text-sm font-serif">
-            <Link
-              href="/faq"
-              className="text-charcoal-light hover:text-charcoal dark:hover:text-cream transition-colors"
-            >
+            <Link href="/faq" className="text-charcoal-light hover:text-charcoal transition-colors">
               FAQ
             </Link>
             <Link
               href="/learn/what-is-etymology"
-              className="text-charcoal-light hover:text-charcoal dark:hover:text-cream transition-colors"
+              className="text-charcoal-light hover:text-charcoal transition-colors"
             >
               Learn
             </Link>
@@ -223,7 +220,7 @@ function HomeContent() {
               className="
                 relative overflow-hidden
                 rounded-lg border border-border-soft
-                bg-gradient-to-b from-surface to-cream-dark/35 dark:from-surface dark:to-cream-dark/40
+                bg-gradient-to-b from-surface to-cream-dark/35
                 p-6 sm:p-8 md:p-10
               "
             >
@@ -250,11 +247,11 @@ function HomeContent() {
                     className="
                       group text-left
                       rounded-md border border-charcoal/10
-                      bg-white/85 backdrop-blur-[1px]
+                      bg-surface/85 backdrop-blur-[1px]
                       p-4 sm:p-5
-                      shadow-[0_1px_0_rgba(0,0,0,0.04)]
+                      shadow-sm
                       hover:border-charcoal/25 hover:-translate-y-0.5
-                      hover:shadow-[0_10px_24px_rgba(41,37,36,0.08)]
+                      hover:shadow-md
                       transition-all duration-300
                       animate-fadeIn
                     "
@@ -342,7 +339,7 @@ function HomeContent() {
           <p
             className="
             text-sm font-serif
-            text-charcoal-light/50
+            text-charcoal-light/65
           "
           >
             Built by{' '}
@@ -350,7 +347,7 @@ function HomeContent() {
               href="https://thepushkarp.com/"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-charcoal"
+              className="underline hover:text-charcoal transition-colors"
             >
               thepushkarp
             </a>{' '}
@@ -359,7 +356,7 @@ function HomeContent() {
           <p
             className="
             text-xs
-            text-charcoal-light/30
+            text-charcoal-light/50
             mt-2
           "
           >

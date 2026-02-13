@@ -2,39 +2,12 @@
 
 import { memo } from 'react'
 import { AncestryGraph, AncestryStage } from '@/lib/types'
+import { getStageColors } from '@/lib/themeColors'
 
 interface AncestryTimelineProps {
   graph: AncestryGraph
   word: string
   isSimple?: boolean
-}
-
-const stageColors: Record<string, { bg: string; border: string; text: string }> = {
-  'Proto-Indo-European': { bg: 'bg-stone-50', border: 'border-stone-300', text: 'text-stone-700' },
-  PIE: { bg: 'bg-stone-50', border: 'border-stone-300', text: 'text-stone-700' },
-  Greek: { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-800' },
-  Latin: { bg: 'bg-amber-50', border: 'border-amber-300', text: 'text-amber-800' },
-  'Old French': { bg: 'bg-rose-50', border: 'border-rose-300', text: 'text-rose-800' },
-  French: { bg: 'bg-rose-50', border: 'border-rose-300', text: 'text-rose-800' },
-  'Middle English': { bg: 'bg-emerald-50', border: 'border-emerald-300', text: 'text-emerald-800' },
-  'Old English': { bg: 'bg-teal-50', border: 'border-teal-300', text: 'text-teal-800' },
-  English: { bg: 'bg-violet-50', border: 'border-violet-300', text: 'text-violet-800' },
-  Germanic: { bg: 'bg-slate-50', border: 'border-slate-300', text: 'text-slate-700' },
-  'Proto-Germanic': { bg: 'bg-slate-50', border: 'border-slate-300', text: 'text-slate-700' },
-  'Scientific Latin': { bg: 'bg-amber-50', border: 'border-amber-300', text: 'text-amber-800' },
-  Arabic: { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-800' },
-  Sanskrit: { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-800' },
-  Hebrew: { bg: 'bg-cyan-50', border: 'border-cyan-300', text: 'text-cyan-800' },
-}
-
-const defaultColors = { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-700' }
-
-function getStageColors(stage: string) {
-  if (stageColors[stage]) return stageColors[stage]
-  for (const [key, colors] of Object.entries(stageColors)) {
-    if (stage.toLowerCase().includes(key.toLowerCase())) return colors
-  }
-  return defaultColors
 }
 
 function StageCard({ stage, index }: { stage: AncestryStage; index: number }) {
@@ -123,7 +96,7 @@ export const AncestryTimeline = memo(function AncestryTimeline({
   const finalIndex = mergeIndex + (hasMerge ? 1 : 0) + postMergeItems.length
 
   return (
-    <div className="relative overflow-x-hidden rounded-lg border border-charcoal/10 bg-white/70 p-4">
+    <div className="relative overflow-x-hidden rounded-lg border border-charcoal/10 bg-surface/70 p-4">
       <div
         className="absolute bottom-10 left-[18px] top-8 w-0.5 bg-charcoal/20"
         aria-hidden="true"
@@ -158,9 +131,11 @@ export const AncestryTimeline = memo(function AncestryTimeline({
             className="relative pl-8 pb-4 animate-stage-reveal"
             style={{ animationDelay: `${mergeIndex * 80}ms`, animationFillMode: 'backwards' }}
           >
-            <span className="absolute left-[2px] top-5 h-4 w-4 rounded-full border border-violet-300 bg-violet-100" />
-            <article className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-3 shadow-sm transition-all duration-300">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-violet-600">Convergence</p>
+            <span className="absolute left-[2px] top-5 h-4 w-4 rounded-full border border-violet-300 dark:border-violet-700 bg-violet-100 dark:bg-violet-900/30" />
+            <article className="rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/40 px-3 py-3 shadow-sm transition-all duration-300">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-violet-600 dark:text-violet-400">
+                Convergence
+              </p>
               <p className="mt-0.5 font-serif text-base text-charcoal">{graph.mergePoint!.form}</p>
               <p className="mt-1 text-xs text-charcoal/65">{graph.mergePoint!.note}</p>
             </article>
@@ -180,9 +155,9 @@ export const AncestryTimeline = memo(function AncestryTimeline({
           className="relative pl-8 animate-stage-reveal"
           style={{ animationDelay: `${finalIndex * 80}ms`, animationFillMode: 'backwards' }}
         >
-          <span className="absolute left-[2px] top-5 h-4 w-4 rounded-full border border-violet-400 bg-violet-200" />
-          <article className="rounded-lg border-2 border-violet-500 bg-violet-100 px-3 py-3 shadow-sm transition-all duration-300">
-            <p className="text-[10px] uppercase tracking-[0.16em] text-violet-700">
+          <span className="absolute left-[2px] top-5 h-4 w-4 rounded-full border border-violet-400 dark:border-violet-600 bg-violet-200 dark:bg-violet-900/30" />
+          <article className="rounded-lg border-2 border-violet-500 dark:border-violet-600 bg-violet-100 dark:bg-violet-900/30 px-3 py-3 shadow-sm transition-all duration-300">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-violet-700 dark:text-violet-300">
               Modern English
             </p>
             <p className="mt-1 font-serif text-lg font-bold text-charcoal">{word}</p>

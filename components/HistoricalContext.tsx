@@ -25,18 +25,18 @@ export default function HistoricalContext({ wikipediaExtract }: HistoricalContex
         aria-controls="historical-context-content"
       >
         <div className="flex items-center gap-3">
-          <span className="text-2xl font-serif text-charcoal/30 select-none">\u00a7</span>
+          <span className="text-2xl font-serif text-charcoal/45 select-none">\u00a7</span>
           <h2 className="font-serif text-xl font-semibold text-charcoal/80 group-hover:text-charcoal">
             Historical Context
           </h2>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-charcoal/40 font-sans uppercase tracking-wider">
+          <span className="text-xs text-charcoal/55 font-sans uppercase tracking-wider">
             from Wikipedia
           </span>
           <svg
-            className={`w-5 h-5 text-charcoal/40 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+            className={`w-5 h-5 text-charcoal/55 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -68,7 +68,7 @@ export default function HistoricalContext({ wikipediaExtract }: HistoricalContex
             </p>
           </div>
 
-          <p className="mt-3 text-xs text-charcoal/40 font-sans">
+          <p className="mt-3 text-xs text-charcoal/55 font-sans">
             Source:{' '}
             <a
               href={`https://en.wikipedia.org/wiki/${wikipediaExtract.split(' ')[0]}`}

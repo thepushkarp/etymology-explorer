@@ -9,63 +9,18 @@ import {
   StageConfidence,
 } from '@/lib/types'
 import { AncestryTimeline } from './AncestryTimeline'
+import {
+  branchColors,
+  confidenceConfig,
+  sourcePillColors,
+  defaultSourcePillColors,
+  getStageColors,
+} from '@/lib/themeColors'
 
 interface AncestryTreeProps {
   graph: AncestryGraph
   word: string
   isSimple?: boolean
-}
-
-/**
- * Color palette for different language stages
- */
-const stageColors: Record<string, { bg: string; border: string; text: string }> = {
-  'Proto-Indo-European': { bg: 'bg-stone-50', border: 'border-stone-300', text: 'text-stone-700' },
-  PIE: { bg: 'bg-stone-50', border: 'border-stone-300', text: 'text-stone-700' },
-  Greek: { bg: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-800' },
-  Latin: { bg: 'bg-amber-50', border: 'border-amber-300', text: 'text-amber-800' },
-  'Old French': { bg: 'bg-rose-50', border: 'border-rose-300', text: 'text-rose-800' },
-  French: { bg: 'bg-rose-50', border: 'border-rose-300', text: 'text-rose-800' },
-  'Middle English': { bg: 'bg-emerald-50', border: 'border-emerald-300', text: 'text-emerald-800' },
-  'Old English': { bg: 'bg-teal-50', border: 'border-teal-300', text: 'text-teal-800' },
-  English: { bg: 'bg-violet-50', border: 'border-violet-300', text: 'text-violet-800' },
-  Germanic: { bg: 'bg-slate-50', border: 'border-slate-300', text: 'text-slate-700' },
-  'Proto-Germanic': { bg: 'bg-slate-50', border: 'border-slate-300', text: 'text-slate-700' },
-  'Scientific Latin': { bg: 'bg-amber-50', border: 'border-amber-300', text: 'text-amber-800' },
-  Arabic: { bg: 'bg-orange-50', border: 'border-orange-300', text: 'text-orange-800' },
-  Sanskrit: { bg: 'bg-yellow-50', border: 'border-yellow-300', text: 'text-yellow-800' },
-  Hebrew: { bg: 'bg-cyan-50', border: 'border-cyan-300', text: 'text-cyan-800' },
-}
-
-const defaultColors = { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-700' }
-
-// Branch colors for distinguishing different root paths
-const branchColors = [
-  { accent: 'border-blue-400', line: 'bg-blue-300' },
-  { accent: 'border-rose-400', line: 'bg-rose-300' },
-  { accent: 'border-emerald-400', line: 'bg-emerald-300' },
-  { accent: 'border-amber-400', line: 'bg-amber-300' },
-]
-
-/** Confidence indicator config */
-const confidenceConfig: Record<StageConfidence, { color: string; label: string }> = {
-  high: { color: 'bg-emerald-400', label: 'Verified' },
-  medium: { color: 'bg-amber-400', label: 'Single source' },
-  low: { color: 'bg-stone-300', label: 'AI-inferred' },
-}
-
-/** Source pill colors */
-const sourcePillColors: Record<string, string> = {
-  etymonline: 'bg-amber-100 text-amber-700 border-amber-200',
-  wiktionary: 'bg-blue-100 text-blue-700 border-blue-200',
-}
-
-function getStageColors(stage: string) {
-  if (stageColors[stage]) return stageColors[stage]
-  for (const [key, colors] of Object.entries(stageColors)) {
-    if (stage.toLowerCase().includes(key.toLowerCase())) return colors
-  }
-  return defaultColors
 }
 
 /**
@@ -79,8 +34,8 @@ function EvidencePanel({ stage }: { stage: AncestryStage }) {
     <div
       className="
         mt-2 w-full
-        border-l-4 border-stone-300
-        bg-stone-50/80 rounded-r-md
+        border-l-4 border-stone-300 dark:border-stone-700
+        bg-stone-50/80 dark:bg-stone-900/40 rounded-r-md
         px-3 py-2
       "
     >
@@ -90,7 +45,7 @@ function EvidencePanel({ stage }: { stage: AncestryStage }) {
             className={`
               inline-block text-[9px] font-semibold uppercase tracking-wider
               px-1.5 py-0.5 rounded border mb-1
-              ${sourcePillColors[ev.source] || 'bg-purple-100 text-purple-700 border-purple-200'}
+              ${sourcePillColors[ev.source] || defaultSourcePillColors}
             `}
           >
             {ev.source}
@@ -116,9 +71,9 @@ function ConfidenceBadge({ confidence }: { confidence?: StageConfidence }) {
       className={`
         inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full
         text-[8px] font-semibold uppercase tracking-wider leading-none
-        ${confidence === 'high' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : ''}
-        ${confidence === 'medium' ? 'bg-amber-50 text-amber-700 border border-amber-200' : ''}
-        ${confidence === 'low' ? 'bg-stone-100 text-stone-500 border border-stone-200' : ''}
+        ${confidence === 'high' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700' : ''}
+        ${confidence === 'medium' ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700' : ''}
+        ${confidence === 'low' ? 'bg-stone-100 dark:bg-stone-900/40 text-stone-500 dark:text-stone-400 border border-stone-200 dark:border-stone-700' : ''}
       `}
       title={config.label}
       aria-label={config.label}
@@ -146,7 +101,7 @@ function SourcePills({ stage }: { stage: AncestryStage }) {
             className={`
               text-[8px] font-semibold uppercase tracking-wider
               px-1.5 py-0.5 rounded border leading-none
-              ${sourcePillColors[source] || 'bg-purple-100 text-purple-700 border-purple-200'}
+              ${sourcePillColors[source] || defaultSourcePillColors}
             `}
           >
             {source}
@@ -160,7 +115,7 @@ function SourcePills({ stage }: { stage: AncestryStage }) {
   if (stage.confidence === 'low') {
     return (
       <div className="flex items-center justify-center mt-1">
-        <span className="text-[8px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-purple-50 text-purple-600 border-purple-200 leading-none">
+        <span className="text-[8px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-700 leading-none">
           AI
         </span>
       </div>
@@ -218,7 +173,7 @@ function StageNode({
         className={`
           px-3 py-2 rounded-lg w-full
           ${isReconstructed ? 'border-2 border-dashed' : 'border-2'}
-          ${isReconstructed ? 'bg-stone-50/60 border-stone-300' : `${colors.bg} ${colors.border}`}
+          ${isReconstructed ? 'bg-stone-50/60 dark:bg-stone-900/40 border-stone-300 dark:border-stone-700' : `${colors.bg} ${colors.border}`}
           text-center shadow-sm transition-all duration-300
           ${hasEvidence ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}
         `}
@@ -227,7 +182,7 @@ function StageNode({
         <div className="flex items-center justify-center gap-1.5 mb-0.5">
           <div
             className={`text-[10px] font-semibold uppercase tracking-wider ${
-              isReconstructed ? 'text-stone-500' : colors.text
+              isReconstructed ? 'text-stone-500 dark:text-stone-400' : colors.text
             }`}
           >
             {stage.stage}
@@ -239,7 +194,7 @@ function StageNode({
         <div
           className={`
             font-serif text-sm
-            ${isReconstructed ? 'italic text-stone-600' : ''}
+            ${isReconstructed ? 'italic text-stone-600 dark:text-stone-400' : ''}
             ${isLast ? 'font-semibold text-charcoal' : 'text-charcoal/90'}
           `}
         >
@@ -248,7 +203,7 @@ function StageNode({
 
         {/* Reconstructed label */}
         {!isSimple && isReconstructed && (
-          <div className="text-[8px] uppercase tracking-widest text-stone-400 mt-0.5">
+          <div className="text-[8px] uppercase tracking-widest text-stone-400 dark:text-stone-500 mt-0.5">
             reconstructed
           </div>
         )}
@@ -261,7 +216,7 @@ function StageNode({
 
         {/* Inline evidence preview (always visible) */}
         {hasEvidence && !showEvidence && (
-          <div className="mt-1.5 pt-1.5 border-t border-stone-200/60">
+          <div className="mt-1.5 pt-1.5 border-t border-stone-200/60 dark:border-stone-700/60">
             <p className="font-serif text-[9px] italic text-charcoal/50 leading-snug line-clamp-2">
               {stage.evidence![0].snippet}
             </p>
@@ -306,8 +261,8 @@ function ConvergenceCallout({
     <aside
       className="
         mb-6 p-4 w-full max-w-lg
-        bg-stone-50/80
-        border-l-4 border-stone-400
+        bg-stone-50/80 dark:bg-stone-900/40
+        border-l-4 border-stone-400 dark:border-stone-600
         rounded-r-lg
       "
       role="note"
@@ -316,7 +271,7 @@ function ConvergenceCallout({
       <h3
         className="
           text-[10px] font-semibold uppercase tracking-widest
-          text-stone-600 mb-2
+          text-stone-600 dark:text-stone-400 mb-2
           flex items-center gap-2
         "
       >
@@ -344,8 +299,9 @@ function ConvergenceCallout({
             className="font-serif text-sm text-charcoal/80 leading-relaxed"
           >
             <span className="font-semibold">{branchNames.join(' and ')}</span> share
-            Proto-Indo-European <em className="text-stone-700">*{cp.pieRoot}</em>{' '}
-            <span className="text-stone-500">&ldquo;{cp.meaning}&rdquo;</span>
+            Proto-Indo-European{' '}
+            <em className="text-stone-700 dark:text-stone-300">*{cp.pieRoot}</em>{' '}
+            <span className="text-stone-500 dark:text-stone-400">&ldquo;{cp.meaning}&rdquo;</span>
           </p>
         )
       })}
@@ -391,7 +347,7 @@ function BranchColumn({
         className={`
           px-2 py-1 mb-1
           text-[10px] font-bold uppercase tracking-wider
-          text-charcoal bg-white
+          text-charcoal bg-surface
           border-2 ${branchColor.accent}
           rounded-full shadow-sm
           flex items-center gap-1.5
@@ -404,8 +360,8 @@ function BranchColumn({
           <span
             className="
               w-2 h-2 rounded-full
-              bg-stone-400
-              ring-1 ring-stone-300
+              bg-stone-400 dark:bg-stone-500
+              ring-1 ring-stone-300 dark:ring-stone-600
             "
             title={convergences.map((c) => `Shares PIE *${c.pieRoot} "${c.meaning}"`).join('; ')}
             aria-label={`Shared ancestry with PIE roots: ${convergences.map((c) => c.pieRoot).join(', ')}`}
@@ -548,8 +504,8 @@ export const AncestryTree = memo(function AncestryTree({
               <div
                 className="
                 px-4 py-2 rounded-lg border-2
-                bg-gradient-to-b from-violet-50 to-purple-50
-                border-violet-400
+                bg-gradient-to-b from-violet-50 dark:from-violet-950/40 to-purple-50 dark:to-purple-950/40
+                border-violet-400 dark:border-violet-600
                 text-center shadow-md
                 max-w-sm
                 animate-stage-reveal
@@ -559,7 +515,7 @@ export const AncestryTree = memo(function AncestryTree({
                   animationFillMode: 'backwards',
                 }}
               >
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 mb-0.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400 mb-0.5">
                   Combined
                 </div>
                 <div className="font-serif text-base font-semibold text-charcoal">
@@ -577,7 +533,7 @@ export const AncestryTree = memo(function AncestryTree({
             <div className="flex flex-col items-center">
               {visibleGraph.postMerge!.map((stage, idx) => (
                 <div key={`post-${idx}`} className="flex flex-col items-center w-full max-w-xs">
-                  <VerticalConnector color="bg-violet-300" />
+                  <VerticalConnector color="bg-violet-300 dark:bg-violet-700" />
                   <StageNode
                     stage={stage}
                     isLast={idx === visibleGraph.postMerge!.length - 1}
@@ -591,9 +547,9 @@ export const AncestryTree = memo(function AncestryTree({
 
           {/* Final word */}
           <div className="flex flex-col items-center mt-1">
-            <div className="w-0.5 h-4 bg-violet-400" />
+            <div className="w-0.5 h-4 bg-violet-400 dark:bg-violet-600" />
             <svg
-              className="w-3 h-3 text-violet-500 -mt-0.5"
+              className="w-3 h-3 text-violet-500 dark:text-violet-400 -mt-0.5"
               fill="currentColor"
               viewBox="0 0 12 12"
             >
@@ -605,7 +561,7 @@ export const AncestryTree = memo(function AncestryTree({
             className="
             px-6 py-3
             rounded-lg border-2
-            bg-violet-100 border-violet-500
+            bg-violet-100 dark:bg-violet-900/30 border-violet-500 dark:border-violet-600
             shadow-md
             animate-stage-reveal
           "
@@ -614,7 +570,7 @@ export const AncestryTree = memo(function AncestryTree({
               animationFillMode: 'backwards',
             }}
           >
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 mb-1">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400 mb-1">
               Modern English
             </div>
             <div className="font-serif text-xl font-bold text-charcoal">{word}</div>
