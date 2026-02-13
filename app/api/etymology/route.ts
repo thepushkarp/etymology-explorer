@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { EtymologyResult, ApiResponse, StreamEvent, StageConfidence } from '@/lib/types'
+import {
+  EtymologyResult,
+  ApiResponse,
+  StreamEvent,
+  StageConfidence,
+  ResearchContext,
+} from '@/lib/types'
 import { synthesizeFromResearch, streamSynthesis } from '@/lib/claude'
 import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
@@ -15,18 +21,11 @@ import { CONFIG } from '@/lib/config'
 import { emitSecurityEvent } from '@/lib/telemetry'
 
 function countConfidence(result: EtymologyResult, level: StageConfidence): number {
-  let count = 0
-  for (const branch of result.ancestryGraph.branches) {
-    for (const stage of branch.stages) {
-      if (stage.confidence === level) count++
-    }
-  }
-  if (result.ancestryGraph.postMerge) {
-    for (const stage of result.ancestryGraph.postMerge) {
-      if (stage.confidence === level) count++
-    }
-  }
-  return count
+  const allStages = [
+    ...result.ancestryGraph.branches.flatMap((branch) => branch.stages),
+    ...(result.ancestryGraph.postMerge ?? []),
+  ]
+  return allStages.filter((stage) => stage.confidence === level).length
 }
 
 export async function GET(request: NextRequest) {
@@ -165,6 +164,61 @@ export async function GET(request: NextRequest) {
         )
       }
 
+      const runResearch = async (
+        onProgress?: (event: StreamEvent) => void
+      ): Promise<
+        | { kind: 'ok'; researchContext: ResearchContext }
+        | { kind: 'no_sources'; typoSuggestions?: string[]; fallbackSuggestion?: string }
+      > => {
+        const researchContext = await conductAgenticResearch(
+          normalizedWord,
+          { skipOptionalSources: costMode === 'degraded' },
+          onProgress
+        )
+
+        if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
+          cacheNegative(normalizedWord, 'no_sources').catch((err) => {
+            console.error('[Etymology API] Negative cache store failed:', safeError(err))
+          })
+
+          if (isLikelyTypo(normalizedWord)) {
+            return {
+              kind: 'no_sources',
+              typoSuggestions: getSuggestions(normalizedWord).map((s) => s.word),
+            }
+          }
+
+          return {
+            kind: 'no_sources',
+            fallbackSuggestion: getRandomWord(),
+          }
+        }
+
+        console.log(
+          `[Etymology API] Research complete. Fetched ${researchContext.totalSourcesFetched} sources, ` +
+            `identified ${researchContext.identifiedRoots.length} roots`
+        )
+        return { kind: 'ok', researchContext }
+      }
+
+      const recordUsage = (usage: { inputTokens: number; outputTokens: number }) => {
+        recordSpend(usage).catch((err) => {
+          console.error('[Etymology API] Spend recording failed:', safeError(err))
+        })
+      }
+
+      const cacheAndAudit = (researchContext: ResearchContext, result: EtymologyResult) => {
+        cacheEtymology(normalizedWord, result).catch((err) => {
+          console.error('[Etymology API] Cache store failed:', safeError(err))
+        })
+
+        emitSecurityEvent({
+          type: 'cache_miss',
+          timestamp: Date.now(),
+          detail: { word: normalizedWord, sources: researchContext.totalSourcesFetched },
+        })
+      }
+
       if (shouldStream) {
         const stream = new ReadableStream({
           async start(controller) {
@@ -177,22 +231,12 @@ export async function GET(request: NextRequest) {
               console.log(
                 `[Etymology API] Starting agentic research (streaming) for "${normalizedWord}"`
               )
-              const researchContext = await conductAgenticResearch(
-                normalizedWord,
-                { skipOptionalSources: costMode === 'degraded' },
-                emit
-              )
-
-              if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
-                cacheNegative(normalizedWord, 'no_sources').catch((err) => {
-                  console.error('[Etymology API] Negative cache store failed:', safeError(err))
-                })
-
-                if (isLikelyTypo(normalizedWord)) {
-                  const suggestions = getSuggestions(normalizedWord)
+              const research = await runResearch(emit)
+              if (research.kind === 'no_sources') {
+                if (research.typoSuggestions && research.typoSuggestions.length > 0) {
                   emit({
                     type: 'error',
-                    message: `Hmm, we couldn't find "${word}". Did you mean: ${suggestions.map((s) => s.word).join(', ')}?`,
+                    message: `Hmm, we couldn't find "${word}". Did you mean: ${research.typoSuggestions.join(', ')}?`,
                     errorType: 'unknown',
                   })
                 } else {
@@ -205,11 +249,7 @@ export async function GET(request: NextRequest) {
                 controller.close()
                 return
               }
-
-              console.log(
-                `[Etymology API] Research complete. Fetched ${researchContext.totalSourcesFetched} sources, ` +
-                  `identified ${researchContext.identifiedRoots.length} roots`
-              )
+              const researchContext = research.researchContext
 
               emit({ type: 'synthesis_started' })
 
@@ -217,9 +257,7 @@ export async function GET(request: NextRequest) {
                 emit({ type: 'synthesis_token', token })
               })
 
-              recordSpend(usage).catch((err) => {
-                console.error('[Etymology API] Spend recording failed:', safeError(err))
-              })
+              recordUsage(usage)
 
               emit({
                 type: 'enrichment_done',
@@ -229,15 +267,7 @@ export async function GET(request: NextRequest) {
 
               emit({ type: 'result', data: result })
 
-              cacheEtymology(normalizedWord, result).catch((err) => {
-                console.error('[Etymology API] Cache store failed:', safeError(err))
-              })
-
-              emitSecurityEvent({
-                type: 'cache_miss',
-                timestamp: Date.now(),
-                detail: { word: normalizedWord, sources: researchContext.totalSourcesFetched },
-              })
+              cacheAndAudit(researchContext, result)
 
               controller.close()
             } catch (error) {
@@ -265,58 +295,32 @@ export async function GET(request: NextRequest) {
         })
       } else {
         console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
-        const researchContext = await conductAgenticResearch(normalizedWord, {
-          skipOptionalSources: costMode === 'degraded',
-        })
-
-        if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
-          cacheNegative(normalizedWord, 'no_sources').catch((err) => {
-            console.error('[Etymology API] Negative cache store failed:', safeError(err))
-          })
-
-          if (isLikelyTypo(normalizedWord)) {
-            const suggestions = getSuggestions(normalizedWord)
+        const research = await runResearch()
+        if (research.kind === 'no_sources') {
+          if (research.typoSuggestions && research.typoSuggestions.length > 0) {
             return NextResponse.json<ApiResponse<{ suggestions: string[] }>>(
               {
                 success: false,
                 error: `Hmm, we couldn't find "${word}". Did you mean:`,
-                data: { suggestions: suggestions.map((s) => s.word) },
-              },
-              { status: 404 }
-            )
-          } else {
-            const suggestion = getRandomWord()
-            return NextResponse.json<ApiResponse<{ suggestion: string }>>(
-              {
-                success: false,
-                error: getQuirkyMessage('nonsense'),
-                data: { suggestion },
+                data: { suggestions: research.typoSuggestions },
               },
               { status: 404 }
             )
           }
+          return NextResponse.json<ApiResponse<{ suggestion: string }>>(
+            {
+              success: false,
+              error: getQuirkyMessage('nonsense'),
+              data: { suggestion: research.fallbackSuggestion ?? getRandomWord() },
+            },
+            { status: 404 }
+          )
         }
-
-        console.log(
-          `[Etymology API] Research complete. Fetched ${researchContext.totalSourcesFetched} sources, ` +
-            `identified ${researchContext.identifiedRoots.length} roots`
-        )
+        const researchContext = research.researchContext
 
         const { result, usage } = await synthesizeFromResearch(researchContext)
-
-        recordSpend(usage).catch((err) => {
-          console.error('[Etymology API] Spend recording failed:', safeError(err))
-        })
-
-        cacheEtymology(normalizedWord, result).catch((err) => {
-          console.error('[Etymology API] Cache store failed:', safeError(err))
-        })
-
-        emitSecurityEvent({
-          type: 'cache_miss',
-          timestamp: Date.now(),
-          detail: { word: normalizedWord, sources: researchContext.totalSourcesFetched },
-        })
+        recordUsage(usage)
+        cacheAndAudit(researchContext, result)
 
         return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
           { success: true, data: result, cached: false },
