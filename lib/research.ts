@@ -289,6 +289,10 @@ export async function conductAgenticResearch(
     wiktionaryData?.text ?? null
   )
   context.parsedChains = parsedChains
+  const dateAttested = parsedChains.find((c) => c.dateAttested)?.dateAttested
+  if (dateAttested && context.rawSources) {
+    context.rawSources.dateAttested = dateAttested
+  }
   console.log(
     `[Research] Parsed ${parsedChains.length} chain(s) with ${parsedChains.reduce((sum, c) => sum + c.links.length, 0)} total links`
   )

@@ -65,6 +65,14 @@ export const EtymologyCard = memo(function EtymologyCard({
             </span>
           </div>
 
+          {/* First Attested Date */}
+          {result.rawSources?.dateAttested && (
+            <span className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 bg-cream-dark/40 border border-charcoal/10 rounded-full text-xs font-serif text-charcoal/60">
+              <span className="text-charcoal/40">⏱</span>
+              First attested {result.rawSources.dateAttested}
+            </span>
+          )}
+
           {/* Definition */}
           <p
             className="

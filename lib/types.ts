@@ -145,7 +145,11 @@ export interface EtymologyResult {
   partsOfSpeech?: POSDefinition[] // Definitions per grammatical category
   suggestions?: WordSuggestions // Related words for vocabulary building
   modernUsage?: ModernUsage // Contemporary/slang meanings
-  rawSources?: { wikipedia?: string; urbanDictionary?: string[] } // Raw source data for display
+  rawSources?: {
+    wikipedia?: string
+    urbanDictionary?: string[]
+    dateAttested?: string
+  }
 }
 
 /**
@@ -218,6 +222,7 @@ export interface ResearchContext {
   rawSources?: {
     wikipedia?: string
     urbanDictionary?: string[]
+    dateAttested?: string
   }
 }
 

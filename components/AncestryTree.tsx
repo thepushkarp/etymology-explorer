@@ -105,19 +105,25 @@ function EvidencePanel({ stage }: { stage: AncestryStage }) {
 /**
  * Confidence dot indicator for a stage
  */
-function ConfidenceDot({ confidence }: { confidence?: StageConfidence }) {
+function ConfidenceBadge({ confidence }: { confidence?: StageConfidence }) {
   if (!confidence) return null
 
   const config = confidenceConfig[confidence]
   return (
     <span
       className={`
-        inline-block w-1.5 h-1.5 rounded-full ${config.color}
-        ring-1 ring-white
+        inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full
+        text-[8px] font-semibold uppercase tracking-wider leading-none
+        ${confidence === 'high' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : ''}
+        ${confidence === 'medium' ? 'bg-amber-50 text-amber-700 border border-amber-200' : ''}
+        ${confidence === 'low' ? 'bg-stone-100 text-stone-500 border border-stone-200' : ''}
       `}
       title={config.label}
       aria-label={config.label}
-    />
+    >
+      <span className={`inline-block w-1.5 h-1.5 rounded-full ${config.color}`} />
+      {config.label}
+    </span>
   )
 }
 
@@ -222,7 +228,7 @@ function StageNode({
           >
             {stage.stage}
           </div>
-          <ConfidenceDot confidence={stage.confidence} />
+          <ConfidenceBadge confidence={stage.confidence} />
         </div>
 
         {/* Form */}
@@ -248,9 +254,23 @@ function StageNode({
 
         {/* Source pills */}
         <SourcePills stage={stage} />
+
+        {/* Inline evidence preview (always visible) */}
+        {hasEvidence && !showEvidence && (
+          <div className="mt-1.5 pt-1.5 border-t border-stone-200/60">
+            <p className="font-serif text-[9px] italic text-charcoal/50 leading-snug line-clamp-2">
+              {stage.evidence![0].snippet}
+            </p>
+            {stage.evidence!.length > 1 && (
+              <span className="text-[8px] text-charcoal/40 mt-0.5 block">
+                +{stage.evidence!.length - 1} more source{stage.evidence!.length > 2 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Evidence panel (accordion on mobile) */}
+      {/* Full evidence panel (expanded on click) */}
       {showEvidence && <EvidencePanel stage={stage} />}
     </div>
   )
