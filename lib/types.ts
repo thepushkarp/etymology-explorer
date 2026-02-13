@@ -215,6 +215,10 @@ export interface ResearchContext {
   relatedWordsData: Record<string, SourceData>
   totalSourcesFetched: number
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
+  rawSources?: {
+    wikipedia?: string
+    urbanDictionary?: string[]
+  }
 }
 
 /** Protection states for cost guard — extends the budget degradation ladder */
