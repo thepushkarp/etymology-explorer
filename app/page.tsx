@@ -46,7 +46,7 @@ function HomeContent() {
   // Hooks
   const { history, clearHistory, removeFromHistory } = useHistory()
   const { isSimple, toggleSimple } = useSimpleMode()
-  const { state, events, partialResult, error, search } = useStreamingEtymology()
+  const { state, events, partialResult, error, search, reset } = useStreamingEtymology()
   const currentWord = searchParams.get('q')?.toLowerCase() ?? null
   const [ngramData, setNgramData] = useState<NgramResult | null>(null)
 
@@ -55,14 +55,14 @@ function HomeContent() {
     const q = searchParams.get('q')
     if (q) {
       search(q)
+    } else {
+      reset()
     }
-  }, [searchParams, search])
+  }, [searchParams, search, reset])
 
   useEffect(() => {
     const word = partialResult?.word?.trim()
-    if (!word) {
-      return
-    }
+    if (!word) return
 
     const controller = new AbortController()
 
@@ -85,10 +85,11 @@ function HomeContent() {
     return () => controller.abort()
   }, [partialResult?.word])
 
+  // Only pair ngram data with the result when the word matches; avoids stale data after reset
   const resultWithNgram = partialResult
     ? {
         ...partialResult,
-        ngram: ngramData ?? undefined,
+        ngram: ngramData && ngramData.word === partialResult.word ? ngramData : undefined,
       }
     : null
 
