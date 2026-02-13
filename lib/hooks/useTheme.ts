@@ -4,20 +4,28 @@ import { useState, useEffect, useCallback } from 'react'
 
 export type Theme = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
+export type DarkPalette = 'warm' | 'slate' | 'neutral'
 
 const STORAGE_KEY = 'theme-preference'
+const PALETTE_KEY = 'dark-palette'
+
+const PALETTE_CLASSES: DarkPalette[] = ['warm', 'slate', 'neutral']
 
 function getSystemTheme(): ResolvedTheme {
   if (typeof window === 'undefined') return 'light'
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function applyTheme(resolved: ResolvedTheme) {
+function applyTheme(resolved: ResolvedTheme, palette: DarkPalette) {
   const root = document.documentElement
   if (resolved === 'dark') {
     root.classList.add('dark')
+    // Remove all palette classes, then add the active one
+    PALETTE_CLASSES.forEach((p) => root.classList.remove(`dark-${p}`))
+    root.classList.add(`dark-${palette}`)
   } else {
     root.classList.remove('dark')
+    PALETTE_CLASSES.forEach((p) => root.classList.remove(`dark-${p}`))
   }
 }
 
@@ -30,6 +38,15 @@ function getInitialTheme(): Theme {
   return 'system'
 }
 
+function getInitialPalette(): DarkPalette {
+  if (typeof window === 'undefined') return 'warm'
+  const stored = localStorage.getItem(PALETTE_KEY)
+  if (stored === 'warm' || stored === 'slate' || stored === 'neutral') {
+    return stored
+  }
+  return 'warm'
+}
+
 function getInitialResolved(theme: Theme): ResolvedTheme {
   if (typeof window === 'undefined') return 'light'
   return theme === 'system' ? getSystemTheme() : theme
@@ -37,13 +54,14 @@ function getInitialResolved(theme: Theme): ResolvedTheme {
 
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme)
+  const [darkPalette, setDarkPaletteState] = useState<DarkPalette>(getInitialPalette)
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() =>
     getInitialResolved(getInitialTheme())
   )
 
   useEffect(() => {
-    applyTheme(resolvedTheme)
-  }, [resolvedTheme])
+    applyTheme(resolvedTheme, darkPalette)
+  }, [resolvedTheme, darkPalette])
 
   // Listen for system preference changes
   useEffect(() => {
@@ -63,5 +81,10 @@ export function useTheme() {
     setResolvedTheme(newTheme === 'system' ? getSystemTheme() : newTheme)
   }, [])
 
-  return { theme, resolvedTheme, setTheme }
+  const setDarkPalette = useCallback((palette: DarkPalette) => {
+    setDarkPaletteState(palette)
+    localStorage.setItem(PALETTE_KEY, palette)
+  }, [])
+
+  return { theme, resolvedTheme, darkPalette, setTheme, setDarkPalette }
 }

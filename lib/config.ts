@@ -16,8 +16,8 @@ export const CONFIG = {
 
   // Rate limits (per IP)
   rateLimit: {
-    etymology: { requests: 10, window: '1 m' },
-    etymologyDaily: { requests: 100, window: '24 h' },
+    etymology: { requests: 20, window: '1 m' },
+    etymologyDaily: { requests: 200, window: '24 h' },
     pronunciation: { requests: 20, window: '1 m' },
     general: { requests: 60, window: '1 m' },
   },
