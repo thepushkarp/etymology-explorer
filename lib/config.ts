@@ -9,6 +9,17 @@ export const CONFIG = {
   synthesisMaxTokens: 2048,
   rootExtractionMaxTokens: 100,
 
+  retries: {
+    malformedOutputRetries: 1,
+  },
+
+  grounding: {
+    googleSearchEnabled: process.env.GOOGLE_SEARCH_GROUNDING_ENABLED !== 'false',
+    enableWhenNoParsedChains: true,
+    enableWhenCoreSourcesMissing: true,
+    enableOnMalformedRetry: true,
+  },
+
   // Input validation
   maxWordLength: 35,
   wordPattern: /^[\p{L}][\p{L}'\-]*[\p{L}]$|^[\p{L}]$/u, // Unicode letters + internal '/-
