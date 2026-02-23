@@ -4,7 +4,8 @@
  */
 
 const SECRET_PATTERNS = [
-  /sk-ant-[a-zA-Z0-9\-_]{20,}/g, // Anthropic keys
+  /sk-ant-[a-zA-Z0-9\-_]{20,}/g,
+  /AIza[0-9A-Za-z\-_]{35}/g,
   /Bearer\s+[a-zA-Z0-9._\-]{20,}/gi, // Bearer tokens
   /[a-zA-Z0-9_]*api[_-]?key[:\s="']+\S{20,}/gi, // Generic API key assignments
 ]

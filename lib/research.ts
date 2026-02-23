@@ -12,14 +12,16 @@ import { fetchIncelsWiki } from './incelsWiki'
 import { fetchFreeDictionary } from './freeDictionary'
 import { ResearchContext, RootResearchData, StreamEvent } from './types'
 import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
+import { getEnv } from './env'
 
-/**
- * Extract probable roots from initial source data using a quick LLM call.
- * Uses the server-side API key with the configured model.
- */
+const ROOTS_JSON_SCHEMA = {
+  type: 'array',
+  items: { type: 'string' },
+} as const
+
 export async function extractRootsQuick(
   word: string,
   etymonlineText: string | null,
@@ -43,22 +45,23 @@ Examples:
 - For "cat": ["cat"] (simple words have themselves as root)
 - For "incredible": ["in", "cred"]
 
-Return the JSON array only, no explanation:`
+  Return the JSON array only, no explanation:`
 
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) return []
-
-    const client = new Anthropic({ apiKey })
-    const response = await client.messages.create({
+    const client = new GoogleGenAI({ apiKey: getEnv().GEMINI_API_KEY })
+    const response = await client.models.generateContent({
       model: CONFIG.model,
-      max_tokens: CONFIG.rootExtractionMaxTokens,
-      messages: [{ role: 'user', content: prompt }],
+      contents: prompt,
+      config: {
+        maxOutputTokens: CONFIG.rootExtractionMaxTokens,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        responseMimeType: 'application/json',
+        responseJsonSchema: ROOTS_JSON_SCHEMA,
+      },
     })
 
-    const textContent = response.content.find((block) => block.type === 'text')
-    if (!textContent || textContent.type !== 'text') return []
-    return parseRootsArray(textContent.text)
+    if (!response.text) return []
+    return parseRootsArray(response.text)
   } catch (error) {
     console.error('Root extraction error:', safeError(error))
     return []
@@ -69,19 +72,25 @@ Return the JSON array only, no explanation:`
  * Parse a JSON array of roots from LLM response
  */
 function parseRootsArray(text: string): string[] {
-  try {
-    const jsonMatch = text.match(/\[[\s\S]*?\]/)
-    if (!jsonMatch) return []
-
-    const parsed = JSON.parse(jsonMatch[0])
+  const normalizeRoots = (parsed: unknown): string[] => {
     if (!Array.isArray(parsed)) return []
-
     return parsed
       .filter((item): item is string => typeof item === 'string')
       .map((s) => s.toLowerCase().trim())
       .slice(0, CONFIG.maxRootsToExplore)
+  }
+
+  try {
+    return normalizeRoots(JSON.parse(text))
   } catch {
-    return []
+    const jsonMatch = text.match(/\[[\s\S]*?\]/)
+    if (!jsonMatch) return []
+
+    try {
+      return normalizeRoots(JSON.parse(jsonMatch[0]))
+    } catch {
+      return []
+    }
   }
 }
 

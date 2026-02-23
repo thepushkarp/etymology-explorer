@@ -1,5 +1,5 @@
 /**
- * Prompt templates for Claude Haiku etymology synthesis
+ * Prompt templates for Gemini Flash etymology synthesis
  */
 
 export const SYSTEM_PROMPT = `You are an etymology expert who makes word origins memorable and fascinating. You help vocabulary learners (especially GRE/TOEFL students) understand words deeply through their roots.

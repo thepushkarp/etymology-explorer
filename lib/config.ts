@@ -5,7 +5,7 @@
 
 export const CONFIG = {
   // LLM
-  model: 'claude-haiku-4-5-20251001',
+  model: 'gemini-3-flash-preview',
   synthesisMaxTokens: 2048,
   rootExtractionMaxTokens: 100,
 
@@ -20,12 +20,6 @@ export const CONFIG = {
     etymologyDaily: { requests: 200, window: '24 h' },
     pronunciation: { requests: 20, window: '1 m' },
     general: { requests: 60, window: '1 m' },
-  },
-
-  // Global daily budget caps (across all users)
-  dailyBudget: {
-    etymology: 2000,
-    pronunciation: 500,
   },
 
   // Source data limits (prompt injection defense)
@@ -44,7 +38,7 @@ export const CONFIG = {
   // Timeouts (milliseconds)
   timeouts: {
     source: 4_000,
-    llm: 15_000, // Anthropic API
+    llm: 15_000, // Gemini API
     tts: 8_000, // ElevenLabs
   },
 
@@ -57,8 +51,8 @@ export const CONFIG = {
 
   // USD-based cost tracking
   costTracking: {
-    pricingPerMillionTokens: { input: 1.0, output: 5.0 }, // Haiku 4.5
-    dailyLimitUSD: 15.0,
+    pricingPerMillionTokens: { input: 0.5, output: 3.0 },
+    monthlyLimitUSD: 10.0,
     cacheOnlyAtPercent: 0.9, // serve only cached results at 90%
   },
 

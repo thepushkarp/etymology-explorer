@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 export type CostMode = 'normal' | 'degraded' | 'cache_only' | 'blocked'
 
@@ -33,7 +33,7 @@ export default function CostModeIndicator({ initialMode = 'normal' }: CostModeIn
     },
     blocked: {
       icon: '🚫',
-      label: 'Try tomorrow',
+      label: 'Try next month',
       className: 'bg-rose-100 dark:bg-rose-900/30 text-rose-800 dark:text-rose-300',
     },
   }
@@ -47,8 +47,8 @@ export default function CostModeIndicator({ initialMode = 'normal' }: CostModeIn
         mode === 'degraded'
           ? 'Some sources skipped to save budget'
           : mode === 'cache_only'
-            ? 'Daily budget exhausted, showing cached results'
-            : 'Daily budget exhausted'
+            ? 'Monthly budget exhausted, showing cached results'
+            : 'Monthly budget exhausted'
       }
     >
       {icon && <span>{icon}</span>}

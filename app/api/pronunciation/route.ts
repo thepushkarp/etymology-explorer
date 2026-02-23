@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generatePronunciation, isElevenLabsConfigured } from '@/lib/elevenlabs'
 import { getCachedAudio, cacheAudio } from '@/lib/cache'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
-import { reservePronunciationBudget, getCostMode } from '@/lib/costGuard'
+import { getCostMode } from '@/lib/costGuard'
 import { tryAcquireLock, releaseLock, pollForResult } from '@/lib/singleflight'
 import { safeError } from '@/lib/errorUtils'
 import { CONFIG } from '@/lib/config'
@@ -82,7 +82,6 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // We hold the lock — reserve budget only for the winner (not waiters)
   try {
     // Check cost mode — reject uncached expensive requests when budget is pressured
     const costMode = await getCostMode()
@@ -90,14 +89,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Service temporarily unavailable' },
         { status: 503, headers: { 'X-Protection-Mode': costMode } }
-      )
-    }
-
-    const budgetOk = await reservePronunciationBudget()
-    if (!budgetOk) {
-      return NextResponse.json(
-        { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
-        { status: 503 }
       )
     }
 

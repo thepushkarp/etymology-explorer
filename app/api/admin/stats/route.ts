@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
-import { getBudgetStats, getSpendStats } from '@/lib/costGuard'
+import { getSpendStats } from '@/lib/costGuard'
 
 export async function GET(request: NextRequest) {
   const secret = request.headers.get('x-admin-secret')
@@ -17,9 +17,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
 
-  const [stats, spend] = await Promise.all([getBudgetStats(), getSpendStats()])
+  const spend = await getSpendStats()
 
-  if (!stats) {
+  if (!spend) {
     return NextResponse.json(
       { success: false, error: 'Budget tracking not configured (Redis unavailable)' },
       { status: 503 }
@@ -29,9 +29,8 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     success: true,
     data: {
-      date: new Date().toISOString().slice(0, 10),
-      ...stats,
-      ...(spend && { spend }),
+      month: spend.period,
+      spend,
     },
   })
 }

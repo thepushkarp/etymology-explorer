@@ -10,7 +10,7 @@ import { z } from 'zod'
 const emptyToUndefined = z.preprocess((val) => (val === '' ? undefined : val), z.string())
 
 const ServerEnvSchema = z.object({
-  ANTHROPIC_API_KEY: z.string().min(1, 'ANTHROPIC_API_KEY is required'),
+  GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY is required'),
   ADMIN_SECRET: emptyToUndefined.pipe(z.string().min(16)).optional(),
   ETYMOLOGY_KV_REST_API_URL: emptyToUndefined.pipe(z.string().url()).optional(),
   ETYMOLOGY_KV_REST_API_TOKEN: emptyToUndefined.pipe(z.string().min(1)).optional(),

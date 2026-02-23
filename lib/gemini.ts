@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import { EtymologyResult, SourceReference, ResearchContext } from './types'
 import { SYSTEM_PROMPT, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
@@ -13,45 +13,44 @@ export interface SynthesisResult {
   usage: { inputTokens: number; outputTokens: number }
 }
 
-/**
- * Call Anthropic API with structured output using server-side key.
- * Returns the response text and token usage for cost tracking.
- */
-async function callAnthropic(
+function extractUsage(
+  usage:
+    | {
+        promptTokenCount?: number | null
+        candidatesTokenCount?: number | null
+      }
+    | null
+    | undefined
+): { inputTokens: number; outputTokens: number } {
+  return {
+    inputTokens: usage?.promptTokenCount ?? 0,
+    outputTokens: usage?.candidatesTokenCount ?? 0,
+  }
+}
+
+async function callGemini(
   userPrompt: string
 ): Promise<{ text: string; usage: { inputTokens: number; outputTokens: number } }> {
-  const apiKey = getEnv().ANTHROPIC_API_KEY
-
-  const client = new Anthropic({ apiKey, timeout: CONFIG.timeouts.llm })
-
-  const response = await client.messages.create({
+  const client = new GoogleGenAI({ apiKey: getEnv().GEMINI_API_KEY })
+  const response = await client.models.generateContent({
     model: CONFIG.model,
-    max_tokens: CONFIG.synthesisMaxTokens,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: userPrompt,
-      },
-    ],
-    output_config: {
-      format: {
-        type: 'json_schema',
-        schema: ETYMOLOGY_SCHEMA,
-      },
+    contents: userPrompt,
+    config: {
+      maxOutputTokens: CONFIG.synthesisMaxTokens,
+      systemInstruction: SYSTEM_PROMPT,
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      responseMimeType: 'application/json',
+      responseJsonSchema: ETYMOLOGY_SCHEMA,
     },
   })
 
-  const textContent = response.content.find((block) => block.type === 'text')
-  if (!textContent || textContent.type !== 'text') {
-    throw new Error('No text response from Claude')
+  if (!response.text) {
+    throw new Error('No text response from Gemini')
   }
+
   return {
-    text: textContent.text,
-    usage: {
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-    },
+    text: response.text,
+    usage: extractUsage(response.usageMetadata),
   }
 }
 
@@ -187,18 +186,10 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
   }
 }
 
-/**
- * Generate etymology response via Anthropic structured output.
- * Returns the parsed (but not yet enriched) result and token usage.
- *
- * Note: Zod validation happens later in synthesizeFromResearch(), after
- * source enrichment overwrites the LLM's string[] sources with proper
- * SourceReference[] objects.
- */
 async function generateEtymologyResponse(
   userPrompt: string
 ): Promise<{ result: EtymologyResult; usage: { inputTokens: number; outputTokens: number } }> {
-  const { text, usage } = await callAnthropic(userPrompt)
+  const { text, usage } = await callGemini(userPrompt)
 
   try {
     const raw = JSON.parse(text)
@@ -290,7 +281,7 @@ export async function synthesizeFromResearch(
   if (!validated.success) {
     const issue = validated.error.issues[0]
     console.error(
-      '[Claude] Schema validation failed after enrichment:',
+      '[Gemini] Schema validation failed after enrichment:',
       JSON.stringify({ message: issue?.message, path: issue?.path, code: issue?.code })
     )
     throw new Error(`Schema validation failed: ${issue?.message} at ${issue?.path?.join('.')}`)
@@ -308,8 +299,7 @@ export async function streamSynthesis(
   researchContext: ResearchContext,
   onToken: (token: string) => void
 ): Promise<SynthesisResult> {
-  const apiKey = getEnv().ANTHROPIC_API_KEY
-  const client = new Anthropic({ apiKey, timeout: CONFIG.timeouts.llm })
+  const client = new GoogleGenAI({ apiKey: getEnv().GEMINI_API_KEY })
 
   const researchData = buildResearchPrompt(researchContext)
   const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
@@ -319,34 +309,30 @@ export async function streamSynthesis(
   let outputTokens = 0
 
   try {
-    const stream = await client.messages.stream({
+    const stream = await client.models.generateContentStream({
       model: CONFIG.model,
-      max_tokens: CONFIG.synthesisMaxTokens,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
-      output_config: {
-        format: {
-          type: 'json_schema',
-          schema: ETYMOLOGY_SCHEMA,
-        },
+      contents: userPrompt,
+      config: {
+        maxOutputTokens: CONFIG.synthesisMaxTokens,
+        systemInstruction: SYSTEM_PROMPT,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        responseMimeType: 'application/json',
+        responseJsonSchema: ETYMOLOGY_SCHEMA,
       },
     })
 
     // Accumulate tokens and emit via callback
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        const token = event.delta.text
+    for await (const chunk of stream) {
+      const token = chunk.text
+      if (token) {
         fullText += token
         onToken(token)
-      } else if (event.type === 'message_start' && event.message.usage) {
-        inputTokens = event.message.usage.input_tokens
-      } else if (event.type === 'message_delta' && event.usage) {
-        outputTokens = event.usage.output_tokens
+      }
+
+      if (chunk.usageMetadata) {
+        const usage = extractUsage(chunk.usageMetadata)
+        inputTokens = usage.inputTokens
+        outputTokens = usage.outputTokens
       }
     }
   } catch (e) {
@@ -432,7 +418,7 @@ export async function streamSynthesis(
   if (!validated.success) {
     const issue = validated.error.issues[0]
     console.error(
-      '[Claude] Schema validation failed after streaming enrichment:',
+      '[Gemini] Schema validation failed after streaming enrichment:',
       JSON.stringify({ message: issue?.message, path: issue?.path, code: issue?.code })
     )
     throw new Error(`Schema validation failed: ${issue?.message} at ${issue?.path?.join('.')}`)

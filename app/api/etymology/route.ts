@@ -6,14 +6,14 @@ import {
   StageConfidence,
   ResearchContext,
 } from '@/lib/types'
-import { synthesizeFromResearch, streamSynthesis } from '@/lib/claude'
+import { synthesizeFromResearch, streamSynthesis } from '@/lib/gemini'
 import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
 import { getCachedEtymology, cacheEtymology, getNegativeCache, cacheNegative } from '@/lib/cache'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
-import { reserveEtymologyBudget, getCostMode, recordSpend } from '@/lib/costGuard'
+import { getCostMode, recordSpend } from '@/lib/costGuard'
 import { tryAcquireLock, releaseLock, pollForResult } from '@/lib/singleflight'
 import { safeError } from '@/lib/errorUtils'
 import { getEnv } from '@/lib/env'
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
     // Reject uncached expensive requests when budget is pressured
     if (costMode === 'blocked') {
       return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
+        { success: false, error: 'Service is at monthly capacity. Please try again next month.' },
         { status: 503, headers: { 'X-Protection-Mode': costMode } }
       )
     }
@@ -156,14 +156,6 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      const budgetOk = await reserveEtymologyBudget()
-      if (!budgetOk) {
-        return NextResponse.json<ApiResponse<null>>(
-          { success: false, error: 'Service is at capacity for today. Please try again tomorrow.' },
-          { status: 503 }
-        )
-      }
-
       const runResearch = async (
         onProgress?: (event: StreamEvent) => void
       ): Promise<
@@ -346,7 +338,10 @@ export async function GET(request: NextRequest) {
       if (
         error.message.includes('401') ||
         error.message.includes('invalid_api_key') ||
-        error.message.includes('authentication_error')
+        error.message.includes('authentication_error') ||
+        error.message.includes('API key not valid') ||
+        error.message.includes('UNAUTHENTICATED') ||
+        error.message.includes('PERMISSION_DENIED')
       ) {
         return NextResponse.json<ApiResponse<null>>(
           { success: false, error: 'Service temporarily unavailable' },
