@@ -141,7 +141,7 @@ export const RelatedWordsList = memo(function RelatedWordsList({
                     {/* Word list - styled like a scholarly index */}
                     <ul className="space-y-1">
                       {words.map((word, wordIndex) => (
-                        <li key={word}>
+                        <li key={`${root.root}-${category}-${word}-${wordIndex}`}>
                           <button
                             onClick={() => onWordClick(word)}
                             className="

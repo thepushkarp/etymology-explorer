@@ -1,9 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import { EtymologyResult, SourceReference, ResearchContext } from './types'
 import { SYSTEM_PROMPT, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph } from './etymologyEnricher'
-import { ETYMOLOGY_SCHEMA } from '@/lib/schemas/llm-schema'
 import { EtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
 import { getEnv } from './env'
@@ -13,45 +12,252 @@ export interface SynthesisResult {
   usage: { inputTokens: number; outputTokens: number }
 }
 
-/**
- * Call Anthropic API with structured output using server-side key.
- * Returns the response text and token usage for cost tracking.
- */
-async function callAnthropic(
-  userPrompt: string
-): Promise<{ text: string; usage: { inputTokens: number; outputTokens: number } }> {
-  const apiKey = getEnv().ANTHROPIC_API_KEY
+interface GeminiResponsePart {
+  text?: string | null
+}
 
-  const client = new Anthropic({ apiKey, timeout: CONFIG.timeouts.llm })
-
-  const response = await client.messages.create({
-    model: CONFIG.model,
-    max_tokens: CONFIG.synthesisMaxTokens,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: userPrompt,
-      },
-    ],
-    output_config: {
-      format: {
-        type: 'json_schema',
-        schema: ETYMOLOGY_SCHEMA,
-      },
-    },
-  })
-
-  const textContent = response.content.find((block) => block.type === 'text')
-  if (!textContent || textContent.type !== 'text') {
-    throw new Error('No text response from Claude')
+interface GeminiResponseCandidate {
+  content?: {
+    parts?: GeminiResponsePart[]
   }
+}
+
+interface GeminiResponseLike {
+  text?: string | null
+  candidates?: GeminiResponseCandidate[]
+}
+
+interface GeminiGenerationOptions {
+  useSearchGrounding: boolean
+}
+
+class MalformedModelOutputError extends Error {
+  readonly usage: { inputTokens: number; outputTokens: number }
+
+  constructor(message: string, usage: { inputTokens: number; outputTokens: number }) {
+    super(message)
+    this.name = 'MalformedModelOutputError'
+    this.usage = usage
+  }
+}
+
+function isMalformedModelOutputError(error: unknown): error is MalformedModelOutputError {
+  return error instanceof MalformedModelOutputError
+}
+
+function addUsage(
+  total: { inputTokens: number; outputTokens: number },
+  delta: { inputTokens: number; outputTokens: number }
+): void {
+  total.inputTokens += delta.inputTokens
+  total.outputTokens += delta.outputTokens
+}
+
+function shouldUseSearchGrounding(
+  researchContext: ResearchContext,
+  isRetryAttempt: boolean
+): boolean {
+  if (!CONFIG.grounding.googleSearchEnabled) return false
+
+  if (isRetryAttempt && CONFIG.grounding.enableOnMalformedRetry) {
+    return true
+  }
+
+  const hasNoParsedChains = (researchContext.parsedChains?.length ?? 0) === 0
+  const hasMissingCoreSources =
+    !researchContext.mainWord.etymonline ||
+    !researchContext.mainWord.wiktionary ||
+    !researchContext.mainWord.freeDictionary
+
+  return (
+    (CONFIG.grounding.enableWhenNoParsedChains && hasNoParsedChains) ||
+    (CONFIG.grounding.enableWhenCoreSourcesMissing && hasMissingCoreSources)
+  )
+}
+
+function buildGenerationConfig(useSearchGrounding: boolean) {
   return {
-    text: textContent.text,
-    usage: {
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-    },
+    maxOutputTokens: CONFIG.synthesisMaxTokens,
+    systemInstruction: SYSTEM_PROMPT,
+    thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+    responseMimeType: 'application/json' as const,
+    ...(useSearchGrounding ? { tools: [{ googleSearch: {} }] } : {}),
+  }
+}
+
+function isAbortLikeError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const maybe = error as { name?: unknown; message?: unknown; cause?: unknown }
+  if (maybe.name === 'AbortError') {
+    return true
+  }
+
+  if (typeof maybe.message === 'string' && maybe.message.toLowerCase().includes('abort')) {
+    return true
+  }
+
+  if (maybe.cause && typeof maybe.cause === 'object') {
+    const cause = maybe.cause as { name?: unknown; message?: unknown }
+    if (cause.name === 'AbortError') {
+      return true
+    }
+
+    if (typeof cause.message === 'string' && cause.message.toLowerCase().includes('abort')) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function timeoutErrorMessage(timeoutMs: number): string {
+  return `Gemini request timeout after ${timeoutMs}ms`
+}
+
+function extractUsage(
+  usage:
+    | {
+        promptTokenCount?: number | null
+        candidatesTokenCount?: number | null
+      }
+    | null
+    | undefined
+): { inputTokens: number; outputTokens: number } {
+  return {
+    inputTokens: usage?.promptTokenCount ?? 0,
+    outputTokens: usage?.candidatesTokenCount ?? 0,
+  }
+}
+
+function extractResponseText(response: GeminiResponseLike): string {
+  if (response.text && response.text.trim().length > 0) {
+    return response.text
+  }
+
+  const candidateText = (response.candidates ?? [])
+    .flatMap((candidate) => candidate.content?.parts ?? [])
+    .map((part) => part.text?.trim() ?? '')
+    .filter((part) => part.length > 0)
+    .join('')
+
+  if (candidateText.length > 0) {
+    return candidateText
+  }
+
+  throw new Error('No text response from Gemini')
+}
+
+function extractJsonObjectChunk(text: string): string | null {
+  let start = -1
+  let depth = 0
+  let inString = false
+  let escaped = false
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i]
+
+    if (inString) {
+      if (escaped) {
+        escaped = false
+      } else if (char === '\\') {
+        escaped = true
+      } else if (char === '"') {
+        inString = false
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inString = true
+      continue
+    }
+
+    if (char === '{') {
+      if (depth === 0) {
+        start = i
+      }
+      depth += 1
+      continue
+    }
+
+    if (char === '}') {
+      if (depth === 0) {
+        continue
+      }
+
+      depth -= 1
+      if (depth === 0 && start >= 0) {
+        return text.slice(start, i + 1)
+      }
+    }
+  }
+
+  return null
+}
+
+function parseGeneratedJson(text: string): EtymologyResult {
+  const candidates: string[] = []
+  const trimmed = text.trim()
+  if (trimmed.length > 0) {
+    candidates.push(trimmed)
+  }
+
+  const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
+  if (fencedMatch?.[1]) {
+    candidates.push(fencedMatch[1].trim())
+  }
+
+  const objectChunk = extractJsonObjectChunk(text)
+  if (objectChunk) {
+    candidates.push(objectChunk)
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const raw = JSON.parse(candidate)
+      if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+        return raw as EtymologyResult
+      }
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error('Could not parse a JSON object from model output')
+}
+
+async function callGemini(
+  userPrompt: string,
+  options: GeminiGenerationOptions
+): Promise<{ text: string; usage: { inputTokens: number; outputTokens: number } }> {
+  const client = new GoogleGenAI({ apiKey: getEnv().GEMINI_API_KEY })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), CONFIG.timeouts.llm)
+
+  try {
+    const response = await client.models.generateContent({
+      model: CONFIG.model,
+      contents: userPrompt,
+      config: {
+        ...buildGenerationConfig(options.useSearchGrounding),
+        abortSignal: controller.signal,
+      },
+    })
+
+    return {
+      text: extractResponseText(response),
+      usage: extractUsage(response.usageMetadata),
+    }
+  } catch (error) {
+    if (isAbortLikeError(error)) {
+      throw new Error(timeoutErrorMessage(CONFIG.timeouts.llm))
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -187,31 +393,52 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
   }
 }
 
-/**
- * Generate etymology response via Anthropic structured output.
- * Returns the parsed (but not yet enriched) result and token usage.
- *
- * Note: Zod validation happens later in synthesizeFromResearch(), after
- * source enrichment overwrites the LLM's string[] sources with proper
- * SourceReference[] objects.
- */
 async function generateEtymologyResponse(
-  userPrompt: string
+  userPrompt: string,
+  researchContext: ResearchContext,
+  startInRetryMode = false
 ): Promise<{ result: EtymologyResult; usage: { inputTokens: number; outputTokens: number } }> {
-  const { text, usage } = await callAnthropic(userPrompt)
+  const totalUsage = { inputTokens: 0, outputTokens: 0 }
+  const maxAttempts = CONFIG.retries.malformedOutputRetries + 1
+  let lastMalformedError: MalformedModelOutputError | null = null
 
-  try {
-    const raw = JSON.parse(text)
-    if (typeof raw !== 'object' || raw === null) {
-      throw new Error(`Expected JSON object, got ${typeof raw}`)
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const isRetryAttempt = startInRetryMode || attempt > 0
+    const useSearchGrounding = shouldUseSearchGrounding(researchContext, isRetryAttempt)
+
+    try {
+      const { text, usage } = await callGemini(userPrompt, { useSearchGrounding })
+
+      try {
+        const result = parseGeneratedJson(text)
+        sanitizeSuggestions(result)
+        addUsage(totalUsage, usage)
+        return { result, usage: totalUsage }
+      } catch (e) {
+        const preview = text.slice(0, 200)
+        throw new MalformedModelOutputError(
+          `Failed to parse LLM response: ${e}. Preview: ${preview}`,
+          usage
+        )
+      }
+    } catch (error) {
+      if (!isMalformedModelOutputError(error)) {
+        throw error
+      }
+
+      addUsage(totalUsage, error.usage)
+      lastMalformedError = error
+
+      if (attempt < maxAttempts - 1) {
+        console.warn(
+          '[Gemini] Retrying malformed model output',
+          JSON.stringify({ attempt: attempt + 1, useSearchGrounding })
+        )
+      }
     }
-    const result = raw as EtymologyResult
-    sanitizeSuggestions(result)
-    return { result, usage }
-  } catch (e) {
-    const preview = text.slice(0, 200)
-    throw new Error(`Failed to parse LLM response: ${e}. Preview: ${preview}`)
   }
+
+  throw lastMalformedError ?? new Error('Failed to parse LLM response after retries')
 }
 
 /**
@@ -224,7 +451,7 @@ export async function synthesizeFromResearch(
   const researchData = buildResearchPrompt(researchContext)
   const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
 
-  const { result, usage } = await generateEtymologyResponse(userPrompt)
+  const { result, usage } = await generateEtymologyResponse(userPrompt, researchContext)
 
   sanitizeModernUsage(result, researchContext)
 
@@ -290,7 +517,7 @@ export async function synthesizeFromResearch(
   if (!validated.success) {
     const issue = validated.error.issues[0]
     console.error(
-      '[Claude] Schema validation failed after enrichment:',
+      '[Gemini] Schema validation failed after enrichment:',
       JSON.stringify({ message: issue?.message, path: issue?.path, code: issue?.code })
     )
     throw new Error(`Schema validation failed: ${issue?.message} at ${issue?.path?.join('.')}`)
@@ -308,64 +535,76 @@ export async function streamSynthesis(
   researchContext: ResearchContext,
   onToken: (token: string) => void
 ): Promise<SynthesisResult> {
-  const apiKey = getEnv().ANTHROPIC_API_KEY
-  const client = new Anthropic({ apiKey, timeout: CONFIG.timeouts.llm })
+  const client = new GoogleGenAI({ apiKey: getEnv().GEMINI_API_KEY })
 
   const researchData = buildResearchPrompt(researchContext)
   const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
+  const useSearchGrounding = shouldUseSearchGrounding(researchContext, false)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), CONFIG.timeouts.llm)
 
   let fullText = ''
-  let inputTokens = 0
-  let outputTokens = 0
+  const usage = { inputTokens: 0, outputTokens: 0 }
 
   try {
-    const stream = await client.messages.stream({
+    const stream = await client.models.generateContentStream({
       model: CONFIG.model,
-      max_tokens: CONFIG.synthesisMaxTokens,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
-      output_config: {
-        format: {
-          type: 'json_schema',
-          schema: ETYMOLOGY_SCHEMA,
-        },
+      contents: userPrompt,
+      config: {
+        ...buildGenerationConfig(useSearchGrounding),
+        abortSignal: controller.signal,
       },
     })
 
     // Accumulate tokens and emit via callback
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        const token = event.delta.text
+    for await (const chunk of stream) {
+      const token = chunk.text
+      if (token) {
         fullText += token
         onToken(token)
-      } else if (event.type === 'message_start' && event.message.usage) {
-        inputTokens = event.message.usage.input_tokens
-      } else if (event.type === 'message_delta' && event.usage) {
-        outputTokens = event.usage.output_tokens
+      }
+
+      if (chunk.usageMetadata) {
+        const chunkUsage = extractUsage(chunk.usageMetadata)
+        usage.inputTokens = chunkUsage.inputTokens
+        usage.outputTokens = chunkUsage.outputTokens
       }
     }
   } catch (e) {
-    const errorMsg = e instanceof Error ? e.message : String(e)
+    const errorMsg = isAbortLikeError(e)
+      ? timeoutErrorMessage(CONFIG.timeouts.llm)
+      : e instanceof Error
+        ? e.message
+        : String(e)
     throw new Error(`Streaming failed: ${errorMsg}`)
+  } finally {
+    clearTimeout(timer)
   }
 
   // Parse accumulated response
   let result: EtymologyResult
   try {
-    const raw = JSON.parse(fullText)
-    if (typeof raw !== 'object' || raw === null) {
-      throw new Error(`Expected JSON object, got ${typeof raw}`)
-    }
-    result = raw as EtymologyResult
+    result = parseGeneratedJson(fullText)
     sanitizeSuggestions(result)
   } catch (e) {
     const preview = fullText.slice(0, 200)
-    throw new Error(`Failed to parse streamed LLM response: ${e}. Preview: ${preview}`)
+    const parseError = new MalformedModelOutputError(
+      `Failed to parse streamed LLM response: ${e}. Preview: ${preview}`,
+      usage
+    )
+
+    if (CONFIG.retries.malformedOutputRetries < 1) {
+      throw parseError
+    }
+
+    console.warn(
+      '[Gemini] Streaming output malformed, retrying with unary generation',
+      JSON.stringify({ useSearchGrounding })
+    )
+
+    const recovered = await generateEtymologyResponse(userPrompt, researchContext, true)
+    result = recovered.result
+    addUsage(usage, recovered.usage)
   }
 
   // Enrich ancestry graph with source evidence and confidence levels
@@ -432,7 +671,7 @@ export async function streamSynthesis(
   if (!validated.success) {
     const issue = validated.error.issues[0]
     console.error(
-      '[Claude] Schema validation failed after streaming enrichment:',
+      '[Gemini] Schema validation failed after streaming enrichment:',
       JSON.stringify({ message: issue?.message, path: issue?.path, code: issue?.code })
     )
     throw new Error(`Schema validation failed: ${issue?.message} at ${issue?.path?.join('.')}`)
@@ -440,6 +679,6 @@ export async function streamSynthesis(
 
   return {
     result: validated.data as EtymologyResult,
-    usage: { inputTokens, outputTokens },
+    usage,
   }
 }

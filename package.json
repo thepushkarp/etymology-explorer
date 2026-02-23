@@ -22,7 +22,7 @@
     ]
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.74.0",
+    "@google/genai": "^1.42.0",
     "@heroicons/react": "^2.2.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.36.1",

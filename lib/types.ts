@@ -199,7 +199,7 @@ export interface SourceData {
 }
 
 /**
- * Raw data fetched from external sources before Claude synthesis
+ * Raw data fetched from external sources before LLM synthesis
  */
 export interface RawSourceData {
   etymonline?: SourceData | null

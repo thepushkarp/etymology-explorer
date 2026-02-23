@@ -106,7 +106,7 @@ export function useStreamingEtymology() {
               eventSource.close()
               eventSourceRef.current = null
             }
-          } catch (parseErr) {
+          } catch {
             if (activeRequestRef.current !== requestId) return
 
             if (attempt < MAX_RETRIES) {

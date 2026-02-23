@@ -10,7 +10,7 @@ Users search for a word, and the app:
 
 1. Fetches raw data from 6 sources in parallel (Etymonline, Wiktionary, Free Dictionary always; Wikipedia, Urban Dictionary, Incel Wiki as optional supplemental sources)
 2. Pre-parses etymological chains from source text (CPU-only)
-3. Sends aggregated data to Claude for structured synthesis
+3. Sends aggregated data to Gemini for structured synthesis
 4. Post-processes LLM output to match ancestry stages to parsed evidence and assign programmatic confidence scores
 
 **Live**: https://etymology.thepushkarp.com
@@ -47,14 +47,14 @@ GET /api/etymology?word=X[&stream=true]
     ├── Singleflight lock (lib/singleflight.ts, prevents duplicate concurrent requests)
     ├── Cost guard check (lib/costGuard.ts, 4 modes: normal → protected_503 → cache_only → blocked)
     ├── Agentic Research Pipeline (lib/research.ts):
-    │   ├── Phase 1: Parallel fetch from 6 sources (3 core + 3 optional, timeout: 4s each)
+    │   ├── Phase 1: Parallel fetch from 6 sources (3 core + 3 optional)
     │   ├── Phase 1.5: Pre-parse "from X, from Y" chains (lib/etymologyParser.ts, CPU-only)
     │   ├── Phase 2: LLM call to extract root morphemes
     │   ├── Phase 3: Fetch data for each root (max 3)
     │   └── Phase 4: Fetch related terms (max 10 total fetches)
     ├── Typo check (lib/spellcheck.ts, Levenshtein distance vs GRE wordlist)
-    ├── LLM synthesis (lib/claude.ts, timeout: 15s)
-    │   ├── Structured outputs via Anthropic SDK
+    ├── LLM synthesis (lib/gemini.ts)
+    │   ├── Structured outputs via Gemini JSON mode
     │   └── Post-processing: enrichAncestryGraph() matches stages to evidence, assigns confidence
     ├── Cache result in Redis
     └── Response: EtymologyResult with grounded ancestry stages
@@ -71,14 +71,14 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - CSP headers and security headers
 
 - **`lib/config.ts`** - Centralized configuration:
-  - Daily request caps: etymology 2000/day, pronunciation 500/day
-  - USD daily limit: $15/day (Haiku 4.5 pricing: $1/$5 per M input/output tokens)
-  - Timeouts: source fetches 4s, LLM 15s, TTS 8s
+  - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
+  - USD monthly limit: $10/month (Gemini 3 Flash preview pricing in `costTracking`)
+  - Timeouts: source fetches 5s, LLM 120s, TTS 8s
   - Rate limits, singleflight settings, feature flags
 
-- **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates ANTHROPIC_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
+- **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates GEMINI_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
 
-- **`lib/costGuard.ts`** - Daily budget enforcement via atomic Redis INCR:
+- **`lib/costGuard.ts`** - Monthly USD budget enforcement via atomic Redis accumulation:
   - Normal mode (0-70% budget): allow uncached requests
   - Protected_503 mode (70-90%): reject uncached requests
   - Cache-only mode (90-100%): serve cached results only
@@ -95,7 +95,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/redis.ts`** - Shared Redis client factory (returns null if not configured; all callers fail open)
 
-- **`lib/errorUtils.ts`** - Secret redaction (sk-ant-\*, Bearer tokens, API keys)
+- **`lib/errorUtils.ts`** - Secret redaction (provider keys, Bearer tokens, API keys)
 
 - **`lib/fetchUtils.ts`** - AbortController-based timeout wrapper for all external API calls
 
@@ -128,7 +128,7 @@ Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API cos
 
 ### LLM Integration
 
-The app uses **Anthropic's structured outputs API** for guaranteed valid JSON.
+The app uses **Gemini's structured JSON mode** for guaranteed valid JSON.
 
 **Schema split** (critical for maintainers):
 
@@ -143,7 +143,7 @@ LLM receives:
 3. JSON schema from `lib/schemas/llm-schema.ts`
 4. System prompt from `lib/prompts.ts`
 
-**Note**: Anthropic calls use `output_config` with JSON schema structured outputs.
+**Note**: Gemini calls use `responseMimeType: 'application/json'` with `responseJsonSchema`.
 
 ### State Management
 
@@ -152,7 +152,7 @@ LLM receives:
 - Cached etymology results (30d TTL)
 - TTS audio cache (1yr TTL)
 - Rate limit counters (per-IP, sliding windows)
-- Daily budget counters (atomic INCR)
+- Monthly spend counters (atomic accumulation)
 - Singleflight locks (30s TTL)
 - Negative cache for admitted invalid/no-source words (6hr TTL)
 
@@ -160,7 +160,7 @@ LLM receives:
 
 - Search history (max 50 entries)
 - Theme preferences
-- (No API keys in public mode - server-side ANTHROPIC_API_KEY used)
+- (No API keys in public mode - server-side GEMINI_API_KEY used)
 
 **Key hooks**:
 
@@ -219,7 +219,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `proxy.ts` - Rate limiting, CSP headers
 - `lib/config.ts` - Centralized config (budgets, timeouts, limits)
 - `lib/env.ts` - Zod env validation
-- `lib/costGuard.ts` - Daily budget enforcement with protection modes
+- `lib/costGuard.ts` - Monthly spend enforcement with protection modes
 - `lib/singleflight.ts` - Distributed request deduplication
 - `lib/cache.ts` - Redis caching with versioned keys
 - `lib/redis.ts` - Shared Redis client factory
@@ -232,7 +232,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 **Core Pipeline:**
 
 - `lib/research.ts` - Agentic research orchestrator (6-source parallel fetch)
-- `lib/claude.ts` - LLM client (Anthropic SDK)
+- `lib/gemini.ts` - LLM client (Google Gen AI SDK)
 - `lib/prompts.ts` - System prompt for LLM synthesis
 
 **Schema & Types:**
@@ -254,4 +254,4 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 **Admin:**
 
 - `app/api/admin/stats/route.ts` - Budget monitoring endpoint
-- `.env.example` - Documents all env vars (ANTHROPIC_API_KEY, ADMIN_SECRET, Redis, ElevenLabs)
+- `.env.example` - Documents all env vars (GEMINI_API_KEY, ADMIN_SECRET, Redis, ElevenLabs)
