@@ -47,13 +47,13 @@ GET /api/etymology?word=X[&stream=true]
     ├── Singleflight lock (lib/singleflight.ts, prevents duplicate concurrent requests)
     ├── Cost guard check (lib/costGuard.ts, 4 modes: normal → protected_503 → cache_only → blocked)
     ├── Agentic Research Pipeline (lib/research.ts):
-    │   ├── Phase 1: Parallel fetch from 6 sources (3 core + 3 optional, timeout: 4s each)
+    │   ├── Phase 1: Parallel fetch from 6 sources (3 core + 3 optional)
     │   ├── Phase 1.5: Pre-parse "from X, from Y" chains (lib/etymologyParser.ts, CPU-only)
     │   ├── Phase 2: LLM call to extract root morphemes
     │   ├── Phase 3: Fetch data for each root (max 3)
     │   └── Phase 4: Fetch related terms (max 10 total fetches)
     ├── Typo check (lib/spellcheck.ts, Levenshtein distance vs GRE wordlist)
-    ├── LLM synthesis (lib/gemini.ts, timeout: 60s)
+    ├── LLM synthesis (lib/gemini.ts)
     │   ├── Structured outputs via Gemini JSON mode
     │   └── Post-processing: enrichAncestryGraph() matches stages to evidence, assigns confidence
     ├── Cache result in Redis
@@ -73,7 +73,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/config.ts`** - Centralized configuration:
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
   - USD monthly limit: $10/month (Gemini 3 Flash preview pricing in `costTracking`)
-  - Timeouts: source fetches 4s, LLM 60s, TTS 8s
+  - Timeouts: source fetches 5s, LLM 120s, TTS 8s
   - Rate limits, singleflight settings, feature flags
 
 - **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates GEMINI_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
