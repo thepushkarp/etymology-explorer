@@ -85,6 +85,38 @@ function buildGenerationConfig(useSearchGrounding: boolean) {
   }
 }
 
+function isAbortLikeError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const maybe = error as { name?: unknown; message?: unknown; cause?: unknown }
+  if (maybe.name === 'AbortError') {
+    return true
+  }
+
+  if (typeof maybe.message === 'string' && maybe.message.toLowerCase().includes('abort')) {
+    return true
+  }
+
+  if (maybe.cause && typeof maybe.cause === 'object') {
+    const cause = maybe.cause as { name?: unknown; message?: unknown }
+    if (cause.name === 'AbortError') {
+      return true
+    }
+
+    if (typeof cause.message === 'string' && cause.message.toLowerCase().includes('abort')) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function timeoutErrorMessage(timeoutMs: number): string {
+  return `Gemini request timeout after ${timeoutMs}ms`
+}
+
 function extractUsage(
   usage:
     | {
@@ -202,15 +234,30 @@ async function callGemini(
   options: GeminiGenerationOptions
 ): Promise<{ text: string; usage: { inputTokens: number; outputTokens: number } }> {
   const client = new GoogleGenAI({ apiKey: getEnv().GEMINI_API_KEY })
-  const response = await client.models.generateContent({
-    model: CONFIG.model,
-    contents: userPrompt,
-    config: buildGenerationConfig(options.useSearchGrounding),
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), CONFIG.timeouts.llm)
 
-  return {
-    text: extractResponseText(response),
-    usage: extractUsage(response.usageMetadata),
+  try {
+    const response = await client.models.generateContent({
+      model: CONFIG.model,
+      contents: userPrompt,
+      config: {
+        ...buildGenerationConfig(options.useSearchGrounding),
+        abortSignal: controller.signal,
+      },
+    })
+
+    return {
+      text: extractResponseText(response),
+      usage: extractUsage(response.usageMetadata),
+    }
+  } catch (error) {
+    if (isAbortLikeError(error)) {
+      throw new Error(timeoutErrorMessage(CONFIG.timeouts.llm))
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -493,6 +540,8 @@ export async function streamSynthesis(
   const researchData = buildResearchPrompt(researchContext)
   const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
   const useSearchGrounding = shouldUseSearchGrounding(researchContext, false)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), CONFIG.timeouts.llm)
 
   let fullText = ''
   const usage = { inputTokens: 0, outputTokens: 0 }
@@ -501,7 +550,10 @@ export async function streamSynthesis(
     const stream = await client.models.generateContentStream({
       model: CONFIG.model,
       contents: userPrompt,
-      config: buildGenerationConfig(useSearchGrounding),
+      config: {
+        ...buildGenerationConfig(useSearchGrounding),
+        abortSignal: controller.signal,
+      },
     })
 
     // Accumulate tokens and emit via callback
@@ -519,8 +571,14 @@ export async function streamSynthesis(
       }
     }
   } catch (e) {
-    const errorMsg = e instanceof Error ? e.message : String(e)
+    const errorMsg = isAbortLikeError(e)
+      ? timeoutErrorMessage(CONFIG.timeouts.llm)
+      : e instanceof Error
+        ? e.message
+        : String(e)
     throw new Error(`Streaming failed: ${errorMsg}`)
+  } finally {
+    clearTimeout(timer)
   }
 
   // Parse accumulated response
