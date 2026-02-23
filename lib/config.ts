@@ -49,7 +49,7 @@ export const CONFIG = {
   // Timeouts (milliseconds)
   timeouts: {
     source: 4_000,
-    llm: 15_000, // Gemini API
+    llm: 30_000, // Gemini API
     tts: 8_000, // ElevenLabs
   },
 
