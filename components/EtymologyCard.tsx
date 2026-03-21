@@ -1,6 +1,6 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { EtymologyResult, SourceReference } from '@/lib/types'
 import { RootChip } from './RootChip'
 import { AncestryTree } from './AncestryTree'
@@ -16,6 +16,70 @@ interface EtymologyCardProps {
   ancestryTreeRef?: React.RefObject<HTMLDivElement | null>
 }
 
+interface MobileSectionProps {
+  children: React.ReactNode
+  defaultOpenMobile?: boolean
+  dividerClassName: string
+  title: string
+  titleTextClassName: string
+}
+
+function shortenMeaning(meaning: string): string {
+  return meaning.split(/[;,]/)[0].trim()
+}
+
+function buildOriginHook(result: EtymologyResult): string | null {
+  if (!result.roots || result.roots.length === 0) return null
+
+  const rootSummary = result.roots
+    .slice(0, 3)
+    .map((root) => `${root.root} (${shortenMeaning(root.meaning)})`)
+    .join(' + ')
+
+  const originSummary = [...new Set(result.roots.map((root) => root.origin))].join(' + ')
+
+  return `From ${originSummary} ${rootSummary}.`
+}
+
+function MobileSection({
+  children,
+  defaultOpenMobile = false,
+  dividerClassName,
+  title,
+  titleTextClassName,
+}: MobileSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpenMobile)
+
+  return (
+    <section className={dividerClassName}>
+      <div className="md:hidden">
+        <button
+          type="button"
+          onClick={() => setIsOpen((current) => !current)}
+          className="flex w-full items-center justify-between gap-4 text-left"
+          aria-expanded={isOpen}
+        >
+          <span className={titleTextClassName}>{title}</span>
+          <svg
+            className={`h-5 w-5 text-charcoal-light/70 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {isOpen && <div className="pt-4 animate-fadeIn">{children}</div>}
+      </div>
+
+      <div className="hidden md:block">
+        <h2 className={`mb-4 ${titleTextClassName}`}>{title}</h2>
+        {children}
+      </div>
+    </section>
+  )
+}
+
 export const EtymologyCard = memo(function EtymologyCard({
   result,
   onWordClick,
@@ -23,9 +87,10 @@ export const EtymologyCard = memo(function EtymologyCard({
   headerActions,
   ancestryTreeRef,
 }: EtymologyCardProps) {
-  const sectionTitleClassName =
-    'mb-4 text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/72'
+  const sectionTitleTextClassName =
+    'text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/72'
   const sectionDividerClassName = 'mt-10 border-t border-border-soft pt-10'
+  const originHook = buildOriginHook(result)
 
   return (
     <article
@@ -72,6 +137,10 @@ export const EtymologyCard = memo(function EtymologyCard({
             {result.definition}
           </p>
 
+          {originHook && (
+            <p className="mt-3 max-w-3xl font-serif italic text-charcoal-light">{originHook}</p>
+          )}
+
           {result.partsOfSpeech && result.partsOfSpeech.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2">
               {result.partsOfSpeech.map(({ pos, definition, pronunciation }, idx) => (
@@ -94,25 +163,38 @@ export const EtymologyCard = memo(function EtymologyCard({
           )}
         </header>
 
-        <section className={sectionDividerClassName}>
-          <h2 className={sectionTitleClassName}>Etymological Roots</h2>
-
+        <MobileSection
+          title="Etymological Roots"
+          titleTextClassName={sectionTitleTextClassName}
+          dividerClassName={sectionDividerClassName}
+          defaultOpenMobile
+        >
           <div className="flex flex-wrap gap-3">
             {result.roots.map((root, index) => (
               <RootChip key={`${root.root}-${index}`} root={root} onWordClick={onWordClick} />
             ))}
           </div>
-        </section>
+        </MobileSection>
 
         {result.ancestryGraph?.branches?.length > 0 && (
-          <div ref={ancestryTreeRef} className={sectionDividerClassName}>
-            <AncestryTree graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
+          <div ref={ancestryTreeRef}>
+            <MobileSection
+              title="Etymological Journey"
+              titleTextClassName={sectionTitleTextClassName}
+              dividerClassName={sectionDividerClassName}
+              defaultOpenMobile
+            >
+              <AncestryTree graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
+            </MobileSection>
           </div>
         )}
 
-        <section className={sectionDividerClassName}>
-          <h2 className={sectionTitleClassName}>The Story</h2>
-
+        <MobileSection
+          title="The Story"
+          titleTextClassName={sectionTitleTextClassName}
+          dividerClassName={sectionDividerClassName}
+          defaultOpenMobile
+        >
           <div className="relative pl-6">
             <div className="absolute bottom-0 left-0 top-1 w-px bg-gradient-to-b from-charcoal/35 via-charcoal/18 to-transparent" />
             <span
@@ -127,20 +209,26 @@ export const EtymologyCard = memo(function EtymologyCard({
               {result.lore}
             </p>
           </div>
-        </section>
+        </MobileSection>
 
         {result.ngram && result.ngram.data.length > 0 && (
-          <section className={sectionDividerClassName}>
-            <h2 className={sectionTitleClassName}>Usage over time</h2>
+          <MobileSection
+            title="Usage over time"
+            titleTextClassName={sectionTitleTextClassName}
+            dividerClassName={sectionDividerClassName}
+          >
             <div className="rounded-[1.5rem] border border-border-soft bg-cream-dark/28 p-4 sm:p-5">
               <UsageTimeline data={result.ngram.data} word={result.ngram.word} showYearLabels />
             </div>
-          </section>
+          </MobileSection>
         )}
 
         {result.modernUsage && result.modernUsage.hasSlangMeaning && (
-          <section className={sectionDividerClassName}>
-            <h2 className={sectionTitleClassName}>Modern Usage</h2>
+          <MobileSection
+            title="Modern Usage"
+            titleTextClassName={sectionTitleTextClassName}
+            dividerClassName={sectionDividerClassName}
+          >
             <div className="relative rounded-[1.4rem] border border-border-soft bg-cream-dark/22 p-5">
               {result.modernUsage.slangDefinition && (
                 <p className="mb-3 font-serif text-lg leading-relaxed text-charcoal/82">
@@ -186,12 +274,15 @@ export const EtymologyCard = memo(function EtymologyCard({
                   </div>
                 )}
             </div>
-          </section>
+          </MobileSection>
         )}
 
         {result.suggestions && (
-          <section className={sectionDividerClassName}>
-            <h2 className={sectionTitleClassName}>Related Words</h2>
+          <MobileSection
+            title="Related Words"
+            titleTextClassName={sectionTitleTextClassName}
+            dividerClassName={sectionDividerClassName}
+          >
             <div className="space-y-4">
               {result.suggestions.synonyms && result.suggestions.synonyms.length > 0 && (
                 <SuggestionRow
@@ -235,17 +326,19 @@ export const EtymologyCard = memo(function EtymologyCard({
                 />
               )}
             </div>
-          </section>
+          </MobileSection>
         )}
 
         {!isSimple && result.rawSources?.wikipedia && (
-          <div className={sectionDividerClassName}>
-            <HistoricalContext wikipediaExtract={result.rawSources.wikipedia} />
-          </div>
+          <HistoricalContext wikipediaExtract={result.rawSources.wikipedia} />
         )}
 
         {!isSimple && (
-          <footer className={sectionDividerClassName}>
+          <MobileSection
+            title="Sources"
+            titleTextClassName={sectionTitleTextClassName}
+            dividerClassName={sectionDividerClassName}
+          >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <span
                 className="
@@ -261,7 +354,7 @@ export const EtymologyCard = memo(function EtymologyCard({
                 ))}
               </div>
             </div>
-          </footer>
+          </MobileSection>
         )}
 
         <div
