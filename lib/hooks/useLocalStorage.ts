@@ -7,24 +7,20 @@ export function useLocalStorage<T>(
   initialValue: T
 ): [T, (value: T | ((prev: T) => T)) => void, boolean] {
   const [storedValue, setStoredValue] = useState<T>(initialValue)
-  const [isHydrated, setIsHydrated] = useState(false)
 
-  // Load from localStorage on mount - intentional hydration pattern
   useEffect(() => {
     try {
       const item = window.localStorage.getItem(key)
       if (item) {
+        // Intentional post-mount hydration from localStorage.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setStoredValue(JSON.parse(item))
       }
     } catch (error) {
       console.error(`Error reading localStorage key "${key}":`, error)
     }
-
-    setIsHydrated(true)
   }, [key])
 
-  // Return a wrapped version of useState's setter
   const setValue = useCallback(
     (value: T | ((prev: T) => T)) => {
       try {
@@ -42,5 +38,5 @@ export function useLocalStorage<T>(
     [key]
   )
 
-  return [storedValue, setValue, isHydrated]
+  return [storedValue, setValue, true]
 }

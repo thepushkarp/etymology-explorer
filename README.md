@@ -79,6 +79,9 @@ FORCE_CACHE_ONLY=false
 RATE_LIMIT_ENABLED=true
 ```
 
+`ELEVENLABS_VOICE_ID` must be a voice available to your account in `My Voices`.
+Free-tier accounts cannot use Voice Library/community voices through the API.
+
 See `.env.example` for full documentation.
 
 For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and restart `bun dev`.
