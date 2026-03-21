@@ -12,7 +12,6 @@ interface EtymologyCardProps {
   onWordClick: (word: string) => void
   isSimple?: boolean
   headerActions?: React.ReactNode
-  ancestryTreeRef?: React.RefObject<HTMLDivElement | null>
 }
 
 interface MobileSectionProps {
@@ -84,7 +83,6 @@ export const EtymologyCard = memo(function EtymologyCard({
   onWordClick,
   isSimple = false,
   headerActions,
-  ancestryTreeRef,
 }: EtymologyCardProps) {
   const sectionTitleTextClassName =
     'text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/72'
@@ -163,16 +161,14 @@ export const EtymologyCard = memo(function EtymologyCard({
         </header>
 
         {result.ancestryGraph?.branches?.length > 0 && (
-          <div ref={ancestryTreeRef}>
-            <MobileSection
-              title="Etymological Journey"
-              titleTextClassName={sectionTitleTextClassName}
-              dividerClassName={sectionDividerClassName}
-              defaultOpenMobile
-            >
-              <AncestryTree graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
-            </MobileSection>
-          </div>
+          <MobileSection
+            title="Etymological Journey"
+            titleTextClassName={sectionTitleTextClassName}
+            dividerClassName={sectionDividerClassName}
+            defaultOpenMobile
+          >
+            <AncestryTree graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
+          </MobileSection>
         )}
 
         <MobileSection
@@ -191,7 +187,7 @@ export const EtymologyCard = memo(function EtymologyCard({
               &ldquo;
             </span>
 
-            <p className="max-w-3xl font-serif text-lg leading-relaxed text-charcoal/90 italic">
+            <p className="font-serif text-lg leading-relaxed text-charcoal/90 italic">
               {result.lore}
             </p>
           </div>
@@ -232,7 +228,7 @@ export const EtymologyCard = memo(function EtymologyCard({
                   {result.modernUsage.contexts.map((ctx) => (
                     <span
                       key={ctx}
-                      className="rounded-full border border-violet-300 bg-violet-100 px-2 py-0.5 text-xs text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200"
+                      className="rounded-full border border-[#9c88a2] bg-[#eae2ec] px-2 py-0.5 text-xs text-[#564060] dark:border-[#6a5672] dark:bg-[#262028] dark:text-[#c8b2cc]"
                     >
                       {ctx}
                     </span>
@@ -369,22 +365,22 @@ function SourceBadge({ source }: { source: SourceReference }) {
 
   const colors: Record<string, string> = {
     etymonline:
-      'border-amber-300 bg-amber-100 text-amber-950 hover:bg-amber-200 hover:border-amber-400 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-100 dark:hover:bg-amber-900/55',
+      'border-[#c4a06a] bg-[#f0e8db] text-[#6a5530] hover:bg-[#e8dece] hover:border-[#b89358] dark:border-[#8a6d40] dark:bg-[#262019] dark:text-[#d4b878] dark:hover:bg-[#302818]',
     wiktionary:
-      'border-blue-300 bg-blue-100 text-blue-950 hover:bg-blue-200 hover:border-blue-400 dark:border-blue-700 dark:bg-blue-900/40 dark:text-blue-100 dark:hover:bg-blue-900/55',
+      'border-[#88a0b8] bg-[#e4e8ee] text-[#405468] hover:bg-[#d8dee8] hover:border-[#7892ac] dark:border-[#52687a] dark:bg-[#1f2328] dark:text-[#a8bed0] dark:hover:bg-[#262c32]',
     freeDictionary:
-      'border-emerald-300 bg-emerald-100 text-emerald-950 hover:bg-emerald-200 hover:border-emerald-400 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100 dark:hover:bg-emerald-900/55',
+      'border-[#8fa486] bg-[#e6eae2] text-[#465340] hover:bg-[#dce2d6] hover:border-[#7e9674] dark:border-[#586a50] dark:bg-[#202620] dark:text-[#b4c5a6] dark:hover:bg-[#282e26]',
     urbanDictionary:
-      'border-violet-300 bg-violet-100 text-violet-950 hover:bg-violet-200 hover:border-violet-400 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-100 dark:hover:bg-violet-900/55',
+      'border-[#9c88a2] bg-[#eae2ec] text-[#564060] hover:bg-[#e0d6e2] hover:border-[#8e7894] dark:border-[#6a5672] dark:bg-[#262028] dark:text-[#c8b2cc] dark:hover:bg-[#2e2832]',
     incelsWiki:
-      'border-stone-300 bg-stone-100 text-stone-900 hover:bg-stone-200 hover:border-stone-400 dark:border-stone-600 dark:bg-stone-800/50 dark:text-stone-100 dark:hover:bg-stone-800/70',
+      'border-[#baa88e] bg-[#ece6dc] text-[#5e5040] hover:bg-[#e4dcd0] hover:border-[#ac9a7e] dark:border-[#6a5c48] dark:bg-[#262018] dark:text-[#d0c0a8] dark:hover:bg-[#2e2820]',
     synthesized:
-      'border-purple-300 bg-purple-100 text-purple-950 dark:border-purple-700 dark:bg-purple-900/40 dark:text-purple-100',
+      'border-[#9c88a2] bg-[#eae2ec] text-[#564060] dark:border-[#6a5672] dark:bg-[#262028] dark:text-[#c8b2cc]',
   }
 
   const baseClasses = `
     rounded-full border px-2.5 py-1 text-sm font-serif transition-colors duration-200
-    ${colors[source.name] || 'border-gray-300 bg-gray-100 text-gray-900 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-100'}
+    ${colors[source.name] || 'border-[#baa88e] bg-[#ece6dc] text-[#5e5040] dark:border-[#6a5c48] dark:bg-[#262018] dark:text-[#d0c0a8]'}
   `
 
   const sourceLabel = labels[source.name] || source.name
@@ -485,13 +481,13 @@ function SuggestionRow({
 }) {
   const colorClasses = {
     emerald:
-      'border-emerald-300 bg-emerald-100/95 text-emerald-950 hover:bg-emerald-200 hover:border-emerald-400 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100 dark:hover:bg-emerald-900/58',
-    rose: 'border-rose-300 bg-rose-100/95 text-rose-950 hover:bg-rose-200 hover:border-rose-400 dark:border-rose-700 dark:bg-rose-900/40 dark:text-rose-100 dark:hover:bg-rose-900/58',
+      'border-[#8fa486] bg-[#e6eae2] text-[#465340] hover:bg-[#dce2d6] hover:border-[#7e9674] dark:border-[#586a50] dark:bg-[#202620] dark:text-[#b4c5a6] dark:hover:bg-[#282e26]',
+    rose: 'border-[#bf8a7a] bg-[#ede2dc] text-[#6a4a3c] hover:bg-[#e4d6ce] hover:border-[#b07a6a] dark:border-[#7a5548] dark:bg-[#2a201e] dark:text-[#d4a898] dark:hover:bg-[#322826]',
     amber:
-      'border-amber-300 bg-amber-100/95 text-amber-950 hover:bg-amber-200 hover:border-amber-400 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-100 dark:hover:bg-amber-900/58',
-    blue: 'border-blue-300 bg-blue-100/95 text-blue-950 hover:bg-blue-200 hover:border-blue-400 dark:border-blue-700 dark:bg-blue-900/40 dark:text-blue-100 dark:hover:bg-blue-900/58',
+      'border-[#c4a06a] bg-[#f0e8db] text-[#6a5530] hover:bg-[#e8dece] hover:border-[#b89358] dark:border-[#8a6d40] dark:bg-[#262019] dark:text-[#d4b878] dark:hover:bg-[#302818]',
+    blue: 'border-[#88a0b8] bg-[#e4e8ee] text-[#405468] hover:bg-[#d8dee8] hover:border-[#7892ac] dark:border-[#52687a] dark:bg-[#1f2328] dark:text-[#a8bed0] dark:hover:bg-[#262c32]',
     purple:
-      'border-purple-300 bg-purple-100/95 text-purple-950 hover:bg-purple-200 hover:border-purple-400 dark:border-purple-700 dark:bg-purple-900/40 dark:text-purple-100 dark:hover:bg-purple-900/58',
+      'border-[#9c88a2] bg-[#eae2ec] text-[#564060] hover:bg-[#e0d6e2] hover:border-[#8e7894] dark:border-[#6a5672] dark:bg-[#262028] dark:text-[#c8b2cc] dark:hover:bg-[#2e2832]',
   }
 
   return (

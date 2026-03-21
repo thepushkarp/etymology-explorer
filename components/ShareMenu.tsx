@@ -1,21 +1,14 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import {
-  ArrowTopRightOnSquareIcon,
-  DocumentTextIcon,
-  PhotoIcon,
-  ShareIcon,
-} from '@heroicons/react/24/outline'
+import { ArrowTopRightOnSquareIcon, DocumentTextIcon, ShareIcon } from '@heroicons/react/24/outline'
 import { EtymologyResult } from '@/lib/types'
 
 interface ShareMenuProps {
-  word: string
   result: EtymologyResult
-  ancestryTreeRef?: React.RefObject<HTMLDivElement | null>
 }
 
-export function ShareMenu({ word, result, ancestryTreeRef }: ShareMenuProps) {
+export function ShareMenu({ result }: ShareMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [feedback, setFeedback] = useState<'copied' | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -68,34 +61,6 @@ ${result.lore}`
       setIsOpen(false)
     } catch (err) {
       console.error('Failed to copy text:', err)
-    }
-  }
-
-  const handleShareAsImage = async () => {
-    if (!ancestryTreeRef?.current) {
-      console.warn('Ancestry tree ref not available')
-      return
-    }
-
-    try {
-      const { toPng } = await import('html-to-image')
-      const dataUrl = await toPng(ancestryTreeRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: 'var(--cream)',
-      })
-
-      const link = document.createElement('a')
-      link.href = dataUrl
-      link.download = `${word}-etymology.png`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      showFeedback()
-      setIsOpen(false)
-    } catch (err) {
-      console.error('Failed to capture image:', err)
     }
   }
 
@@ -163,31 +128,11 @@ ${result.lore}`
                text-charcoal/80
                hover:bg-cream-dark/20
                transition-colors
-               border-b border-border-soft
                flex items-center gap-2
              "
           >
             <DocumentTextIcon className="h-4 w-4 text-charcoal/70" />
             Copy as text
-            {feedback === 'copied' && (
-              <span className="ml-auto text-xs text-emerald-600 dark:text-emerald-400">✓</span>
-            )}
-          </button>
-
-          <button
-            onClick={handleShareAsImage}
-            className="
-              w-full text-left
-               px-4 py-2.5
-               text-sm font-serif
-               text-charcoal/80
-               hover:bg-cream-dark/20
-               transition-colors
-               flex items-center gap-2
-             "
-          >
-            <PhotoIcon className="h-4 w-4 text-charcoal/70" />
-            Share as image
             {feedback === 'copied' && (
               <span className="ml-auto text-xs text-emerald-600 dark:text-emerald-400">✓</span>
             )}

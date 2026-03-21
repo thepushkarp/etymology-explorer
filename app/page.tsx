@@ -41,7 +41,6 @@ function HomeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const ancestryTreeRef = useRef<HTMLDivElement>(null)
 
   // Hooks
   const { history, clearHistory, removeFromHistory } = useHistory()
@@ -273,14 +272,7 @@ function HomeContent() {
                 result={resultWithNgram}
                 onWordClick={navigateToWord}
                 isSimple={isSimple}
-                ancestryTreeRef={ancestryTreeRef}
-                headerActions={
-                  <ShareMenu
-                    word={resultWithNgram.word}
-                    result={resultWithNgram}
-                    ancestryTreeRef={ancestryTreeRef}
-                  />
-                }
+                headerActions={<ShareMenu result={resultWithNgram} />}
               />
 
               {/* Related words section */}
