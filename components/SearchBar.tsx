@@ -153,7 +153,7 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
   )
 
   return (
-    <form onSubmit={handleSubmit} className="relative mx-auto w-full max-w-3xl">
+    <form onSubmit={handleSubmit} className="relative z-10 mx-auto w-full max-w-3xl">
       <div
         className={`
           group relative transition-all duration-300 ease-out
