@@ -410,10 +410,6 @@ export const AncestryTree = memo(function AncestryTree({
 
   return (
     <section>
-      <h2 className="mb-5 text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/72">
-        Etymological Journey
-      </h2>
-
       <div className="flex flex-col items-center w-full transition-all duration-300 ease-out">
         {/* Convergence callout - shared PIE ancestry */}
         {hasConvergence && (

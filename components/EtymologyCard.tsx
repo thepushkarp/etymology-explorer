@@ -195,11 +195,11 @@ export const EtymologyCard = memo(function EtymologyCard({
           dividerClassName={sectionDividerClassName}
           defaultOpenMobile
         >
-          <div className="relative pl-6">
-            <div className="absolute bottom-0 left-0 top-1 w-px bg-gradient-to-b from-charcoal/35 via-charcoal/18 to-transparent" />
+          <div className="relative pl-7">
+            <div className="absolute bottom-0 left-1 top-2 w-px bg-gradient-to-b from-charcoal/35 via-charcoal/18 to-transparent" />
             <span
               className="
-              absolute -left-3 -top-2 select-none font-serif text-4xl text-charcoal/20
+              absolute -left-2.5 -top-3 select-none font-serif text-4xl text-charcoal/20
             "
             >
               &ldquo;
