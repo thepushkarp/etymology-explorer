@@ -67,9 +67,9 @@ function ConfidenceBadge({ confidence }: { confidence?: StageConfidence }) {
       className={`
         inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full
         text-[8px] font-semibold uppercase tracking-wider leading-none
-        ${confidence === 'high' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700' : ''}
-        ${confidence === 'medium' ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700' : ''}
-        ${confidence === 'low' ? 'bg-stone-100 dark:bg-stone-900/40 text-stone-500 dark:text-stone-400 border border-stone-200 dark:border-stone-700' : ''}
+        ${confidence === 'high' ? 'border border-[#b89d7e] bg-[#efe7dc] text-[#6b533c] dark:border-[#6f5947] dark:bg-[#2d241e] dark:text-[#dbc3a7]' : ''}
+        ${confidence === 'medium' ? 'border border-[#a5a287] bg-[#ece9df] text-[#59543f] dark:border-[#5e5d49] dark:bg-[#27241f] dark:text-[#d2d1b9]' : ''}
+        ${confidence === 'low' ? 'border border-stone-300 bg-stone-100/92 text-stone-600 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-300' : ''}
       `}
       title={config.label}
       aria-label={config.label}
@@ -80,63 +80,28 @@ function ConfidenceBadge({ confidence }: { confidence?: StageConfidence }) {
   )
 }
 
-/**
- * Source attribution pills shown below stage note
- */
-function SourcePills({ stage }: { stage: AncestryStage }) {
-  if (!stage.confidence) return null
-
-  // If we have evidence, show source pills; otherwise show "AI" pill
-  if (stage.evidence && stage.evidence.length > 0) {
-    const sources = [...new Set(stage.evidence.map((e) => e.source))]
-    return (
-      <div className="flex items-center justify-center gap-1 mt-1">
-        {sources.map((source) => (
-          <span
-            key={source}
-            className={`
-              text-[8px] font-semibold uppercase tracking-wider
-              px-1.5 py-0.5 rounded border leading-none
-              ${sourcePillColors[source] || defaultSourcePillColors}
-            `}
-          >
-            {source}
-          </span>
-        ))}
-      </div>
-    )
-  }
-
-  // Low confidence with no evidence = AI-inferred
-  if (stage.confidence === 'low') {
-    return (
-      <div className="flex items-center justify-center mt-1">
-        <span className="text-[8px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded border bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-700 leading-none">
-          AI
-        </span>
-      </div>
-    )
-  }
-
-  return null
-}
-
 function StageNode({
   stage,
   isLast,
   animationDelay,
   isSimple,
+  isEmphasized,
 }: {
   stage: AncestryStage
   isLast?: boolean
   animationDelay?: number
   isSimple?: boolean
+  isEmphasized?: boolean
 }) {
   const [showEvidence, setShowEvidence] = useState(false)
   const nodeRef = useRef<HTMLDivElement>(null)
   const colors = getStageColors(stage.stage)
   const isReconstructed = stage.isReconstructed
   const hasEvidence = !isSimple && stage.evidence && stage.evidence.length > 0
+  const emphasizedStyles = isEmphasized
+    ? 'bg-[#ebe0f0] border-[#a487af] dark:bg-[#312538] dark:border-[#8f749a]'
+    : ''
+  const emphasizedText = isEmphasized ? 'text-[#60496c] dark:text-[#e4d2ec]' : colors.text
 
   // Close evidence panel on outside click
   useEffect(() => {
@@ -172,7 +137,7 @@ function StageNode({
           ${
             isReconstructed
               ? 'border-stone-300 bg-stone-50/60 dark:border-stone-700 dark:bg-stone-900/40'
-              : `${colors.bg} ${colors.border}`
+              : `${colors.bg} ${colors.border} ${emphasizedStyles}`
           }
           text-center shadow-sm transition-all duration-300
           ${hasEvidence ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md' : ''}
@@ -182,7 +147,7 @@ function StageNode({
         <div className="mb-1 flex items-center justify-center gap-1.5">
           <div
             className={`text-[10px] font-semibold uppercase tracking-wider ${
-              isReconstructed ? 'text-stone-500 dark:text-stone-400' : colors.text
+              isReconstructed ? 'text-stone-500 dark:text-stone-400' : emphasizedText
             }`}
           >
             {stage.stage}
@@ -210,9 +175,6 @@ function StageNode({
 
         {/* Note */}
         <div className="mt-1 text-[10px] leading-tight text-charcoal-light">{stage.note}</div>
-
-        {/* Source pills */}
-        {!isSimple && <SourcePills stage={stage} />}
 
         {/* Inline evidence preview (always visible) */}
         {hasEvidence && !showEvidence && (
@@ -344,9 +306,9 @@ function BranchColumn({
         className={`
           mb-2 flex items-center gap-1.5 rounded-full px-3 py-1.5
           text-[10px] font-bold uppercase tracking-[0.16em]
-          text-charcoal bg-surface
-          border-2 ${branchColor.accent}
-          rounded-full shadow-sm
+          border ${branchColor.accent}
+          bg-surface/92 text-charcoal/88
+          shadow-sm
           animate-stage-reveal
         `}
         style={{ animationDelay: `${baseDelay}ms`, animationFillMode: 'backwards' }}
@@ -490,9 +452,8 @@ export const AncestryTree = memo(function AncestryTree({
             {/* Merge node */}
             <div
               className="
-                max-w-sm rounded-[1.2rem] border-2 border-violet-400 bg-gradient-to-b
-                from-violet-50 to-purple-50 px-4 py-3 text-center shadow-md dark:border-violet-600
-                dark:from-violet-950/40 dark:to-purple-950/40
+                max-w-sm rounded-[1.2rem] border border-[#a487af] bg-[#e8dcf0]
+                px-4 py-3 text-center shadow-sm dark:border-[#8f749a] dark:bg-[#312538]
                 animate-stage-reveal
               "
               style={{
@@ -500,7 +461,7 @@ export const AncestryTree = memo(function AncestryTree({
                 animationFillMode: 'backwards',
               }}
             >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400 mb-0.5">
+              <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#60496c] dark:text-[#e4d2ec]">
                 Combined
               </div>
               <div className="font-serif text-base font-semibold text-charcoal">
@@ -518,12 +479,13 @@ export const AncestryTree = memo(function AncestryTree({
           <div className="flex flex-col items-center">
             {visibleGraph.postMerge!.map((stage, idx) => (
               <div key={`post-${idx}`} className="flex flex-col items-center w-full max-w-xs">
-                <VerticalConnector color="bg-violet-300 dark:bg-violet-700" />
+                <VerticalConnector color="bg-[#c4aecf] dark:bg-[#7f688a]" />
                 <StageNode
                   stage={stage}
                   isLast={idx === visibleGraph.postMerge!.length - 1}
                   animationDelay={(maxStages + 2 + idx) * 100}
                   isSimple={isSimple}
+                  isEmphasized
                 />
               </div>
             ))}
@@ -532,9 +494,9 @@ export const AncestryTree = memo(function AncestryTree({
 
         {/* Final word */}
         <div className="flex flex-col items-center mt-1">
-          <div className="w-0.5 h-4 bg-violet-400 dark:bg-violet-600" />
+          <div className="w-0.5 h-4 bg-[#c4aecf] dark:bg-[#7f688a]" />
           <svg
-            className="w-3 h-3 text-violet-500 dark:text-violet-400 -mt-0.5"
+            className="w-3 h-3 text-[#9d7fa9] dark:text-[#c9afd4] -mt-0.5"
             fill="currentColor"
             viewBox="0 0 12 12"
           >
@@ -545,9 +507,9 @@ export const AncestryTree = memo(function AncestryTree({
         <div
           className="
             px-6 py-3
-            rounded-lg border-2
-            bg-violet-100 dark:bg-violet-900/30 border-violet-500 dark:border-violet-600
-            shadow-md
+            rounded-lg border
+            border-[#a487af] bg-[#ebe0f0] dark:border-[#8f749a] dark:bg-[#312538]
+            shadow-sm shadow-[#a487af]/18 dark:shadow-black/30
             animate-stage-reveal
           "
           style={{
@@ -555,7 +517,7 @@ export const AncestryTree = memo(function AncestryTree({
             animationFillMode: 'backwards',
           }}
         >
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400 mb-1">
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[#60496c] dark:text-[#e4d2ec]">
             Modern English
           </div>
           <div className="font-serif text-xl font-bold text-charcoal">{word}</div>

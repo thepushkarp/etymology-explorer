@@ -1,7 +1,7 @@
 /**
  * Agentic research module for deep etymology exploration.
- * Conducts multi-source lookups to gather rich context about word origins,
- * roots, and related terms.
+ * Conducts multi-source lookups to gather rich context about word origins
+ * and constituent roots.
  */
 
 import { fetchEtymonline } from './etymonline'
@@ -161,7 +161,6 @@ function emitProgress(callback: ((event: StreamEvent) => void) | undefined, even
  * 1. Fetches initial word data
  * 2. Extracts roots using quick LLM call
  * 3. Fetches context for each root
- * 4. Fetches related words (depth-limited)
  */
 export async function conductAgenticResearch(
   word: string,
@@ -316,7 +315,6 @@ export async function conductAgenticResearch(
     },
     identifiedRoots: [],
     rootResearch: [],
-    relatedWordsData: {},
     totalSourcesFetched: totalFetches,
     rawSources: {
       wikipedia: wikipediaData?.text,
@@ -397,25 +395,6 @@ export async function conductAgenticResearch(
           source: 'etymonline+wiktionary',
           status: 'complete',
         })
-
-        // Phase 4: Fetch a couple of related terms for depth
-        for (const relatedTerm of rootData.relatedTerms.slice(0, CONFIG.maxRelatedWordsPerRoot)) {
-          if (totalFetches >= CONFIG.maxTotalFetches) break
-          if (context.relatedWordsData[relatedTerm]) continue
-
-          console.log(`[Research] Fetching related term: "${relatedTerm}"`)
-          const relatedData = await fetchEtymonline(relatedTerm)
-          if (relatedData) {
-            context.relatedWordsData[relatedTerm] = relatedData
-            emitProgress(onProgress, {
-              type: 'root_research',
-              root: relatedTerm,
-              source: 'etymonline',
-              status: 'complete',
-            })
-          }
-          totalFetches += 1
-        }
       } else {
         console.error('[Research] Root fetch failed:', safeError(result.reason))
         emitProgress(onProgress, {
@@ -450,17 +429,6 @@ function sanitizeSourceText(text: string, maxChars: number): string {
   // Neutralize Unicode directional overrides
   sanitized = sanitized.replace(/[\u200E\u200F\u202A-\u202E]/g, '')
   return sanitized.slice(0, maxChars)
-}
-
-/**
- * Escape a string for safe use inside an XML attribute value.
- * Prevents attribute injection in <source_data name="..."> tags.
- */
-function escapeAttr(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c
-  )
 }
 
 /**
@@ -525,17 +493,6 @@ export function buildResearchPrompt(context: ResearchContext): string {
     }
     if (rootData.relatedTerms.length > 0) {
       sections.push(`Related terms found: ${rootData.relatedTerms.join(', ')}`)
-    }
-  }
-
-  // Related words data
-  const relatedEntries = Object.entries(context.relatedWordsData)
-  if (relatedEntries.length > 0) {
-    sections.push(`\n=== Related Words Research ===`)
-    for (const [term, data] of relatedEntries) {
-      sections.push(
-        `\n<source_data name="${escapeAttr(term)}">\n${sanitizeSourceText(data.text, maxChars)}\n</source_data>`
-      )
     }
   }
 

@@ -231,7 +231,6 @@ export interface ResearchContext {
   }
   identifiedRoots: string[]
   rootResearch: RootResearchData[]
-  relatedWordsData: Record<string, SourceData>
   totalSourcesFetched: number
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
   rawSources?: {

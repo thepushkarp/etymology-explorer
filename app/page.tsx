@@ -152,6 +152,9 @@ function HomeContent() {
         <header className="animate-hero-lift mb-12 md:mb-16">
           <div className="mb-10 flex flex-col gap-5 md:mb-14 md:flex-row md:items-center md:justify-between">
             <nav className="order-2 flex justify-center gap-6 text-[11px] uppercase tracking-[0.22em] text-charcoal-light/72 md:order-1 md:justify-start">
+              <Link href="/" className="transition-colors hover:text-charcoal">
+                Home
+              </Link>
               <Link href="/faq" className="transition-colors hover:text-charcoal">
                 FAQ
               </Link>

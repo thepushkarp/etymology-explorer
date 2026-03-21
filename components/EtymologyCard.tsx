@@ -2,7 +2,6 @@
 
 import { memo, useState } from 'react'
 import { EtymologyResult, SourceReference } from '@/lib/types'
-import { RootChip } from './RootChip'
 import { AncestryTree } from './AncestryTree'
 import { PronunciationButton } from './PronunciationButton'
 import HistoricalContext from './HistoricalContext'
@@ -162,19 +161,6 @@ export const EtymologyCard = memo(function EtymologyCard({
             </div>
           )}
         </header>
-
-        <MobileSection
-          title="Etymological Roots"
-          titleTextClassName={sectionTitleTextClassName}
-          dividerClassName={sectionDividerClassName}
-          defaultOpenMobile
-        >
-          <div className="flex flex-wrap gap-3">
-            {result.roots.map((root, index) => (
-              <RootChip key={`${root.root}-${index}`} root={root} onWordClick={onWordClick} />
-            ))}
-          </div>
-        </MobileSection>
 
         {result.ancestryGraph?.branches?.length > 0 && (
           <div ref={ancestryTreeRef}>
