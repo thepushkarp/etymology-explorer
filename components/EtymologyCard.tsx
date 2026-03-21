@@ -23,93 +23,68 @@ export const EtymologyCard = memo(function EtymologyCard({
   headerActions,
   ancestryTreeRef,
 }: EtymologyCardProps) {
+  const sectionTitleClassName =
+    'mb-4 text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/72'
+  const sectionDividerClassName = 'mt-10 border-t border-border-soft pt-10'
+
   return (
     <article
       className="
-        relative
-        bg-surface
-        dark:bg-surface
-        rounded-lg
-        shadow-sm
-        border border-border-soft
-        overflow-hidden
-        animate-fadeIn
+        relative overflow-hidden rounded-[2rem] border border-border-soft bg-surface/92
+        shadow-[0_28px_72px_-42px_var(--shadow-color)] animate-fadeIn
       "
     >
-      {/* Paper texture overlay */}
       <div
-        className="absolute inset-0 opacity-[0.02] pointer-events-none"
+        className="pointer-events-none absolute inset-0 opacity-[0.025]"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
         }}
       />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-cream-dark/45 to-transparent" />
 
-      {/* Main content */}
-      <div className="relative p-5 sm:p-8 md:p-12">
-        {/* Header: Word + Pronunciation */}
-        <header className="mb-8 pb-6 border-b border-border-soft">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div className="flex items-baseline gap-4 flex-wrap">
-              {/* Main word - styled like a dictionary headword */}
-              <h1
-                className="
-                font-serif text-4xl md:text-5xl
-                font-bold text-charcoal
-                tracking-tight
-              "
-              >
-                {result.word}
-              </h1>
+      <div className="relative p-6 sm:p-8 md:p-12">
+        <header className="mb-10">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline gap-3 sm:gap-4">
+                <h1 className="font-serif text-4xl font-bold tracking-[-0.04em] text-charcoal md:text-6xl">
+                  {result.word}
+                </h1>
 
-              {/* Pronunciation in IPA with audio button */}
-              <span
-                className="
-                inline-flex items-center gap-1
-                font-serif text-lg
-                  text-charcoal-light dark:text-charcoal-light italic
-              "
-              >
-                {!isSimple && result.pronunciation}
-                <PronunciationButton word={result.word} />
-              </span>
+                <span className="inline-flex items-center gap-1 text-base italic text-charcoal-light sm:text-lg">
+                  {!isSimple && result.pronunciation}
+                  <PronunciationButton word={result.word} />
+                </span>
+              </div>
+
+              {result.rawSources?.dateAttested && (
+                <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-charcoal/18 bg-charcoal/8 px-2.5 py-1 text-xs text-charcoal/82 dark:border-charcoal/20 dark:bg-cream/12 dark:text-charcoal">
+                  <span className="text-charcoal/40">⏱</span>
+                  First attested {result.rawSources.dateAttested}
+                </span>
+              )}
             </div>
 
-            {headerActions && <div className="pt-1 shrink-0">{headerActions}</div>}
+            {headerActions && <div className="shrink-0 pt-1">{headerActions}</div>}
           </div>
 
-          {/* First Attested Date */}
-          {result.rawSources?.dateAttested && (
-            <span className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 bg-cream-dark/45 border border-border-soft rounded-full text-xs font-serif text-charcoal/70 dark:text-charcoal-light">
-              <span className="text-charcoal/40">⏱</span>
-              First attested {result.rawSources.dateAttested}
-            </span>
-          )}
-
-          {/* Definition */}
-          <p
-            className="
-            mt-4 font-serif text-lg
-            text-charcoal/80
-            leading-relaxed
-          "
-          >
+          <p className="mt-5 max-w-3xl font-serif text-lg leading-relaxed text-charcoal/82 sm:text-xl">
             {result.definition}
           </p>
 
-          {/* POS Tags - after definition */}
           {result.partsOfSpeech && result.partsOfSpeech.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-4">
+            <div className="mt-4 flex flex-wrap gap-2">
               {result.partsOfSpeech.map(({ pos, definition, pronunciation }, idx) => (
                 <div
                   key={`${pos}-${idx}`}
-                  className="group inline-flex items-center gap-2 px-3 py-1.5 bg-cream-dark/50 border border-charcoal/10 rounded-full"
+                  className="group inline-flex items-center gap-2 rounded-full border border-charcoal/18 bg-charcoal/8 px-3 py-1.5 dark:border-charcoal/20 dark:bg-cream/12"
                   title={definition}
                 >
-                  <span className="text-xs font-serif uppercase tracking-wider text-charcoal/60">
+                  <span className="text-xs uppercase tracking-[0.16em] text-charcoal/72 dark:text-charcoal/88">
                     {pos}
                   </span>
                   {pronunciation && pronunciation !== result.pronunciation && (
-                    <span className="text-xs font-serif italic text-charcoal/50">
+                    <span className="text-xs italic text-charcoal/62 dark:text-charcoal/76">
                       {pronunciation}
                     </span>
                   )}
@@ -117,28 +92,10 @@ export const EtymologyCard = memo(function EtymologyCard({
               ))}
             </div>
           )}
-
-          {result.ngram && result.ngram.data.length > 0 && (
-            <div className="mt-4 border-t border-border-soft pt-3">
-              <h4 className="mb-2 font-serif text-xs uppercase tracking-wider text-charcoal/55">
-                Usage over time
-              </h4>
-              <UsageTimeline data={result.ngram.data} word={result.ngram.word} showYearLabels />
-            </div>
-          )}
         </header>
 
-        {/* Roots section */}
-        <section className="mb-8">
-          <h2
-            className="
-            font-serif text-sm uppercase
-            text-charcoal-light tracking-widest
-            mb-4
-          "
-          >
-            Etymological Roots
-          </h2>
+        <section className={sectionDividerClassName}>
+          <h2 className={sectionTitleClassName}>Etymological Roots</h2>
 
           <div className="flex flex-wrap gap-3">
             {result.roots.map((root, index) => (
@@ -147,75 +104,51 @@ export const EtymologyCard = memo(function EtymologyCard({
           </div>
         </section>
 
-        {/* Ancestry graph - visual journey showing root branches merging */}
         {result.ancestryGraph?.branches?.length > 0 && (
-          <div ref={ancestryTreeRef}>
+          <div ref={ancestryTreeRef} className={sectionDividerClassName}>
             <AncestryTree graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
           </div>
         )}
 
-        {/* Lore section - the memorable narrative */}
-        <section className="mb-8">
-          <h2
-            className="
-            font-serif text-sm uppercase
-            text-charcoal-light tracking-widest
-            mb-4
-          "
-          >
-            The Story
-          </h2>
+        <section className={sectionDividerClassName}>
+          <h2 className={sectionTitleClassName}>The Story</h2>
 
-          <div
-            className="
-            relative
-            pl-6
-            border-l-2 border-charcoal/20
-          "
-          >
-            {/* Decorative quotation mark */}
+          <div className="relative pl-6">
+            <div className="absolute bottom-0 left-0 top-1 w-px bg-gradient-to-b from-charcoal/35 via-charcoal/18 to-transparent" />
             <span
               className="
-              absolute -left-3 -top-2
-              text-4xl font-serif
-              text-charcoal/20
-              select-none
+              absolute -left-3 -top-2 select-none font-serif text-4xl text-charcoal/20
             "
             >
               &ldquo;
             </span>
 
-            <p
-              className="
-              font-serif text-lg
-              text-charcoal/90
-              leading-relaxed italic
-            "
-            >
+            <p className="max-w-3xl font-serif text-lg leading-relaxed text-charcoal/90 italic">
               {result.lore}
             </p>
           </div>
         </section>
 
-        {/* Historical Context - Wikipedia extract */}
-        {!isSimple && result.rawSources?.wikipedia && (
-          <HistoricalContext wikipediaExtract={result.rawSources.wikipedia} />
+        {result.ngram && result.ngram.data.length > 0 && (
+          <section className={sectionDividerClassName}>
+            <h2 className={sectionTitleClassName}>Usage over time</h2>
+            <div className="rounded-[1.5rem] border border-border-soft bg-cream-dark/28 p-4 sm:p-5">
+              <UsageTimeline data={result.ngram.data} word={result.ngram.word} showYearLabels />
+            </div>
+          </section>
         )}
 
-        {/* Modern Usage - after lore, before related words */}
         {result.modernUsage && result.modernUsage.hasSlangMeaning && (
-          <section className="mb-8">
-            <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-4">
-              Modern Usage
-            </h2>
-            <div className="relative pl-6 border-l-2 border-violet-200 dark:border-violet-800">
+          <section className={sectionDividerClassName}>
+            <h2 className={sectionTitleClassName}>Modern Usage</h2>
+            <div className="relative rounded-[1.4rem] border border-border-soft bg-cream-dark/22 p-5">
               {result.modernUsage.slangDefinition && (
-                <p className="font-serif text-lg text-charcoal/80 leading-relaxed mb-3">
+                <p className="mb-3 font-serif text-lg leading-relaxed text-charcoal/82">
                   {result.modernUsage.slangDefinition}
                 </p>
               )}
               {result.modernUsage.popularizedBy && (
-                <p className="text-sm text-charcoal/60 mb-2">
+                <p className="mb-2 text-sm text-charcoal/60">
                   <span className="font-medium">Popularized by:</span>{' '}
                   {result.modernUsage.popularizedBy}
                 </p>
@@ -225,7 +158,7 @@ export const EtymologyCard = memo(function EtymologyCard({
                   {result.modernUsage.contexts.map((ctx) => (
                     <span
                       key={ctx}
-                      className="px-2 py-0.5 text-xs font-serif bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-700 rounded-full"
+                      className="rounded-full border border-violet-300 bg-violet-100 px-2 py-0.5 text-xs text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200"
                     >
                       {ctx}
                     </span>
@@ -236,15 +169,15 @@ export const EtymologyCard = memo(function EtymologyCard({
               {!isSimple &&
                 result.modernUsage.notableReferences &&
                 result.modernUsage.notableReferences.length > 0 && (
-                  <div className="mt-4 pt-4 border-t border-violet-100 dark:border-violet-800">
-                    <p className="text-xs font-serif uppercase tracking-wider text-charcoal/50 mb-2">
+                  <div className="mt-5 border-t border-border-soft pt-5">
+                    <p className="mb-2 text-xs uppercase tracking-[0.16em] text-charcoal/50">
                       Notable References
                     </p>
                     <ul className="space-y-1">
                       {result.modernUsage.notableReferences.slice(0, 3).map((reference, idx) => (
                         <li
                           key={`${reference}-${idx}`}
-                          className="text-sm text-charcoal/70 leading-relaxed"
+                          className="text-sm leading-relaxed text-charcoal/70"
                         >
                           {reference}
                         </li>
@@ -256,12 +189,9 @@ export const EtymologyCard = memo(function EtymologyCard({
           </section>
         )}
 
-        {/* Related Words / Suggestions - after modern usage section */}
         {result.suggestions && (
-          <section className="mb-8">
-            <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-4">
-              Related Words
-            </h2>
+          <section className={sectionDividerClassName}>
+            <h2 className={sectionTitleClassName}>Related Words</h2>
             <div className="space-y-4">
               {result.suggestions.synonyms && result.suggestions.synonyms.length > 0 && (
                 <SuggestionRow
@@ -308,19 +238,18 @@ export const EtymologyCard = memo(function EtymologyCard({
           </section>
         )}
 
-        {/* Sources footer */}
+        {!isSimple && result.rawSources?.wikipedia && (
+          <div className={sectionDividerClassName}>
+            <HistoricalContext wikipediaExtract={result.rawSources.wikipedia} />
+          </div>
+        )}
+
         {!isSimple && (
-          <footer
-            className="
-            pt-6
-            border-t border-charcoal/10
-          "
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <footer className={sectionDividerClassName}>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <span
                 className="
-                font-serif text-xs uppercase
-                text-charcoal-light/65 tracking-wider
+                text-xs uppercase tracking-[0.16em] text-charcoal-light/65
                 shrink-0
               "
               >
@@ -335,12 +264,9 @@ export const EtymologyCard = memo(function EtymologyCard({
           </footer>
         )}
 
-        {/* Decorative flourish - centered card ending */}
         <div
           className="
-            flex items-center justify-center gap-2
-            mt-6 pt-2
-            text-charcoal/25
+            mt-6 flex items-center justify-center gap-2 pt-2 text-charcoal/25
           "
         >
           <span className="w-8 h-px bg-current" />
@@ -364,26 +290,22 @@ function SourceBadge({ source }: { source: SourceReference }) {
 
   const colors: Record<string, string> = {
     etymonline:
-      'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700 hover:bg-amber-100 hover:border-amber-300',
+      'border-amber-300 bg-amber-100 text-amber-950 hover:bg-amber-200 hover:border-amber-400 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-100 dark:hover:bg-amber-900/55',
     wiktionary:
-      'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700 hover:bg-blue-100 hover:border-blue-300',
+      'border-blue-300 bg-blue-100 text-blue-950 hover:bg-blue-200 hover:border-blue-400 dark:border-blue-700 dark:bg-blue-900/40 dark:text-blue-100 dark:hover:bg-blue-900/55',
     freeDictionary:
-      'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-700 hover:bg-emerald-100 hover:border-emerald-300',
+      'border-emerald-300 bg-emerald-100 text-emerald-950 hover:bg-emerald-200 hover:border-emerald-400 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100 dark:hover:bg-emerald-900/55',
     urbanDictionary:
-      'bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-700 hover:bg-violet-100 hover:border-violet-300',
+      'border-violet-300 bg-violet-100 text-violet-950 hover:bg-violet-200 hover:border-violet-400 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-100 dark:hover:bg-violet-900/55',
     incelsWiki:
-      'bg-stone-50 dark:bg-stone-950/40 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:bg-stone-100 hover:border-stone-300',
+      'border-stone-300 bg-stone-100 text-stone-900 hover:bg-stone-200 hover:border-stone-400 dark:border-stone-600 dark:bg-stone-800/50 dark:text-stone-100 dark:hover:bg-stone-800/70',
     synthesized:
-      'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700',
+      'border-purple-300 bg-purple-100 text-purple-950 dark:border-purple-700 dark:bg-purple-900/40 dark:text-purple-100',
   }
 
   const baseClasses = `
-    px-2.5 py-1
-    text-sm font-serif
-    rounded-md
-    border
-    transition-colors duration-200
-    ${colors[source.name] || 'bg-gray-50 dark:bg-gray-950/40 text-gray-700 dark:text-gray-300 border-gray-200'}
+    rounded-full border px-2.5 py-1 text-sm font-serif transition-colors duration-200
+    ${colors[source.name] || 'border-gray-300 bg-gray-100 text-gray-900 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-100'}
   `
 
   const sourceLabel = labels[source.name] || source.name
@@ -484,16 +406,18 @@ function SuggestionRow({
 }) {
   const colorClasses = {
     emerald:
-      'border-emerald-200 dark:border-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-300',
-    rose: 'border-rose-200 hover:bg-rose-50 hover:border-rose-300',
-    amber: 'border-amber-200 dark:border-amber-700 hover:bg-amber-50 hover:border-amber-300',
-    blue: 'border-blue-200 dark:border-blue-700 hover:bg-blue-50 hover:border-blue-300',
-    purple: 'border-purple-200 dark:border-purple-700 hover:bg-purple-50 hover:border-purple-300',
+      'border-emerald-300 bg-emerald-100/95 text-emerald-950 hover:bg-emerald-200 hover:border-emerald-400 dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-100 dark:hover:bg-emerald-900/58',
+    rose: 'border-rose-300 bg-rose-100/95 text-rose-950 hover:bg-rose-200 hover:border-rose-400 dark:border-rose-700 dark:bg-rose-900/40 dark:text-rose-100 dark:hover:bg-rose-900/58',
+    amber:
+      'border-amber-300 bg-amber-100/95 text-amber-950 hover:bg-amber-200 hover:border-amber-400 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-100 dark:hover:bg-amber-900/58',
+    blue: 'border-blue-300 bg-blue-100/95 text-blue-950 hover:bg-blue-200 hover:border-blue-400 dark:border-blue-700 dark:bg-blue-900/40 dark:text-blue-100 dark:hover:bg-blue-900/58',
+    purple:
+      'border-purple-300 bg-purple-100/95 text-purple-950 hover:bg-purple-200 hover:border-purple-400 dark:border-purple-700 dark:bg-purple-900/40 dark:text-purple-100 dark:hover:bg-purple-900/58',
   }
 
   return (
-    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1.5 sm:gap-2">
-      <span className="text-xs font-serif uppercase tracking-wider text-charcoal/40 sm:w-32 sm:shrink-0">
+    <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
+      <span className="w-full text-xs uppercase tracking-[0.16em] text-charcoal/42 sm:w-32 sm:shrink-0">
         {label}
       </span>
       {words.map((raw) => {
@@ -504,8 +428,8 @@ function SuggestionRow({
             onClick={() => onWordClick(word)}
             title={annotation}
             className={`
-              px-2.5 py-1 text-sm font-serif text-charcoal/80
-              border rounded-md transition-colors cursor-pointer
+              cursor-pointer rounded-full border px-2.5 py-1 text-sm font-serif
+              transition-colors
               ${colorClasses[color]}
             `}
           >

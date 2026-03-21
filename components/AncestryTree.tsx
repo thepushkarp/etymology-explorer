@@ -32,10 +32,7 @@ function EvidencePanel({ stage }: { stage: AncestryStage }) {
   return (
     <div
       className="
-        mt-2 w-full
-        border-l-4 border-stone-300 dark:border-stone-700
-        bg-stone-50/80 dark:bg-stone-900/40 rounded-r-md
-        px-3 py-2
+        mt-3 w-full rounded-[1rem] border border-border-soft bg-cream-dark/30 px-3 py-3
       "
     >
       {stage.evidence.map((ev, i) => (
@@ -170,15 +167,19 @@ function StageNode({
       <div
         onClick={handleToggle}
         className={`
-          px-3 py-2 rounded-lg w-full
+          w-full rounded-[1.2rem] px-3 py-3
           ${isReconstructed ? 'border-2 border-dashed' : 'border-2'}
-          ${isReconstructed ? 'bg-stone-50/60 dark:bg-stone-900/40 border-stone-300 dark:border-stone-700' : `${colors.bg} ${colors.border}`}
+          ${
+            isReconstructed
+              ? 'border-stone-300 bg-stone-50/60 dark:border-stone-700 dark:bg-stone-900/40'
+              : `${colors.bg} ${colors.border}`
+          }
           text-center shadow-sm transition-all duration-300
-          ${hasEvidence ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}
+          ${hasEvidence ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md' : ''}
         `}
       >
         {/* Header row: language label + confidence dot */}
-        <div className="flex items-center justify-center gap-1.5 mb-0.5">
+        <div className="mb-1 flex items-center justify-center gap-1.5">
           <div
             className={`text-[10px] font-semibold uppercase tracking-wider ${
               isReconstructed ? 'text-stone-500 dark:text-stone-400' : colors.text
@@ -192,7 +193,7 @@ function StageNode({
         {/* Form */}
         <div
           className={`
-            font-serif text-sm
+            font-serif text-sm sm:text-[15px]
             ${isReconstructed ? 'italic text-stone-600 dark:text-stone-400' : ''}
             ${isLast ? 'font-semibold text-charcoal' : 'text-charcoal/90'}
           `}
@@ -208,7 +209,7 @@ function StageNode({
         )}
 
         {/* Note */}
-        <div className="mt-0.5 text-[10px] text-charcoal-light leading-tight">{stage.note}</div>
+        <div className="mt-1 text-[10px] leading-tight text-charcoal-light">{stage.note}</div>
 
         {/* Source pills */}
         {!isSimple && <SourcePills stage={stage} />}
@@ -259,10 +260,7 @@ function ConvergenceCallout({
   return (
     <aside
       className="
-        mb-6 p-4 w-full max-w-lg
-        bg-stone-50/80 dark:bg-stone-900/40
-        border-l-4 border-stone-400 dark:border-stone-600
-        rounded-r-lg
+        mb-6 w-full max-w-xl rounded-[1.4rem] border border-border-soft bg-cream-dark/28 p-4
       "
       role="note"
       aria-label="Shared etymology"
@@ -344,12 +342,11 @@ function BranchColumn({
       {/* Root label with convergence badge */}
       <div
         className={`
-          px-2 py-1 mb-1
-          text-[10px] font-bold uppercase tracking-wider
+          mb-2 flex items-center gap-1.5 rounded-full px-3 py-1.5
+          text-[10px] font-bold uppercase tracking-[0.16em]
           text-charcoal bg-surface
           border-2 ${branchColor.accent}
           rounded-full shadow-sm
-          flex items-center gap-1.5
           animate-stage-reveal
         `}
         style={{ animationDelay: `${baseDelay}ms`, animationFillMode: 'backwards' }}
@@ -412,8 +409,8 @@ export const AncestryTree = memo(function AncestryTree({
   const maxStages = Math.max(...visibleGraph.branches.map((b) => b.stages.length), 0)
 
   return (
-    <section className="mb-8">
-      <h2 className="font-serif text-sm uppercase text-charcoal-light tracking-widest mb-5">
+    <section>
+      <h2 className="mb-5 text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/72">
         Etymological Journey
       </h2>
 
@@ -428,7 +425,7 @@ export const AncestryTree = memo(function AncestryTree({
 
         {/* Branches side by side on md+; stacked on mobile */}
         <div
-          className={`grid gap-4 w-full items-end ${gridColsClass(visibleGraph.branches.length)}`}
+          className={`grid w-full items-end gap-4 ${gridColsClass(visibleGraph.branches.length)}`}
         >
           {visibleGraph.branches.map((branch, idx) => (
             <BranchColumn
@@ -497,11 +494,9 @@ export const AncestryTree = memo(function AncestryTree({
             {/* Merge node */}
             <div
               className="
-                px-4 py-2 rounded-lg border-2
-                bg-gradient-to-b from-violet-50 dark:from-violet-950/40 to-purple-50 dark:to-purple-950/40
-                border-violet-400 dark:border-violet-600
-                text-center shadow-md
-                max-w-sm
+                max-w-sm rounded-[1.2rem] border-2 border-violet-400 bg-gradient-to-b
+                from-violet-50 to-purple-50 px-4 py-3 text-center shadow-md dark:border-violet-600
+                dark:from-violet-950/40 dark:to-purple-950/40
                 animate-stage-reveal
               "
               style={{

@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { StreamEvent } from '@/lib/types'
 
 interface ResearchProgressProps {
@@ -34,6 +35,32 @@ const DEFAULT_SOURCE_ORDER = [
 
 function normalizeSourceKey(source: string): string {
   return source.toLowerCase().replace(/\s+/g, '')
+}
+
+function buildSynthesisLines(tokens: string, maxLineLength = 42): string[] {
+  const normalized = tokens.replace(/\s+/g, ' ').trim()
+  if (!normalized) return []
+
+  const words = normalized.split(' ')
+  const lines: string[] = []
+  let currentLine = ''
+
+  for (const word of words) {
+    const nextLine = currentLine ? `${currentLine} ${word}` : word
+    if (currentLine && nextLine.length > maxLineLength) {
+      lines.push(currentLine)
+      currentLine = word
+      continue
+    }
+
+    currentLine = nextLine
+  }
+
+  if (currentLine) {
+    lines.push(currentLine)
+  }
+
+  return lines
 }
 
 export default function ResearchProgress({ events }: ResearchProgressProps) {
@@ -92,6 +119,12 @@ export default function ResearchProgress({ events }: ResearchProgressProps) {
   }
 
   const collapseSourceChips = parsingComplete
+  const synthesisLines = useMemo(() => buildSynthesisLines(synthesisTokens), [synthesisTokens])
+  const visibleSynthesisLines = synthesisLines.slice(-4)
+  const paddedSynthesisLines = Array.from({ length: 4 }, (_, index) => {
+    const offset = 4 - visibleSynthesisLines.length
+    return visibleSynthesisLines[index - offset] ?? ''
+  })
 
   return (
     <div className="space-y-6 py-4">
@@ -258,9 +291,26 @@ export default function ResearchProgress({ events }: ResearchProgressProps) {
               Synthesizing...
             </div>
 
-            {synthesisTokens && synthesisTokens.length > 0 && (
-              <div className="mt-2 text-xs text-charcoal/55 font-mono max-w-md mx-auto line-clamp-2">
-                {synthesisTokens.slice(-100)}...
+            {visibleSynthesisLines.length > 0 && (
+              <div className="mx-auto mt-4 max-w-md overflow-hidden rounded-[1.25rem] border border-border-soft bg-surface/72 px-4 py-3 shadow-[0_16px_36px_-28px_var(--shadow-color)]">
+                <div
+                  key={synthesisLines.length}
+                  className="flex h-[6.8rem] flex-col justify-end gap-2 animate-stream-roll"
+                >
+                  {paddedSynthesisLines.map((line, index) => (
+                    <div
+                      key={`${index}-${line}`}
+                      className={`
+                        min-h-[1.15rem] pb-1 text-center font-mono text-[11px] leading-relaxed
+                        text-charcoal/72 transition-opacity duration-200
+                        ${line ? '' : 'opacity-0'}
+                      `}
+                      style={{ opacity: line ? [0.28, 0.45, 0.68, 1][index] : 0 }}
+                    >
+                      {line || '\u00a0'}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

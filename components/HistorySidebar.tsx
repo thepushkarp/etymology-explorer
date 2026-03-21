@@ -48,15 +48,9 @@ export function HistorySidebar({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          fixed left-0 top-1/2 -translate-y-1/2
-          z-40
-          flex items-center gap-2
-          px-3 py-4
-          bg-surface border border-l-0 border-charcoal/10
-          rounded-r-lg shadow-sm
-          text-charcoal-light
-          hover:text-charcoal hover:bg-cream-dark/50
-          transition-all duration-300
+          fixed left-0 top-1/2 z-40 flex items-center gap-2 rounded-r-2xl border border-l-0
+          border-border-soft bg-surface/94 px-3 py-4 text-charcoal-light shadow-sm backdrop-blur-sm
+          transition-all duration-300 hover:bg-cream-dark/55 hover:text-charcoal
           ${isOpen ? 'translate-x-72' : 'translate-x-0'}
         `}
         aria-label={isOpen ? 'Close history' : 'Open history'}
@@ -93,9 +87,10 @@ export function HistorySidebar({
           fixed left-0 top-0 bottom-0
           z-30
           w-72
-          bg-surface
-          border-r border-charcoal/10
-          shadow-lg
+          bg-surface/96
+          border-r border-border-soft
+          shadow-[0_24px_60px_-30px_var(--shadow-color)]
+          backdrop-blur-md
           transform transition-transform duration-300 ease-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
@@ -105,7 +100,7 @@ export function HistorySidebar({
           className="
           flex items-center justify-between
           px-6 py-5
-          border-b border-charcoal/10
+          border-b border-border-soft
         "
         >
           <h2 className="font-serif text-lg text-charcoal">Exploration Trail</h2>
@@ -160,8 +155,8 @@ export function HistorySidebar({
                     className="
                     group
                     flex items-center
-                    rounded-md
-                    hover:bg-cream-dark/60
+                    rounded-xl
+                    hover:bg-cream-dark/55
                     transition-colors
                   "
                   >
@@ -235,7 +230,7 @@ export function HistorySidebar({
           className="
           absolute bottom-0 left-0 right-0
           h-16
-          bg-gradient-to-t from-surface to-transparent
+          bg-gradient-to-t from-surface/94 to-transparent
           pointer-events-none
         "
         />

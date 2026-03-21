@@ -28,7 +28,7 @@ export default function ThemeToggle() {
     return (
       <button
         aria-label="Theme selector"
-        className="inline-flex items-center gap-2.5 rounded-full border border-charcoal/25 bg-surface px-4 py-2
+        className="inline-flex items-center gap-2 rounded-full border border-border-soft bg-surface/92 px-3.5 py-2
         text-sm font-semibold text-charcoal shadow-sm"
       >
         <ComputerDesktopIcon className="h-4 w-4" />
@@ -46,9 +46,9 @@ export default function ThemeToggle() {
       onClick={() => setTheme(current.next)}
       aria-label={`Theme: ${current.label}. Click to switch to ${next.label}`}
       title={`Theme: ${current.label} (next: ${next.label})`}
-      className="inline-flex items-center gap-2.5 rounded-full border border-charcoal/25 bg-surface px-4 py-2
-      text-sm font-semibold text-charcoal shadow-sm transition-colors duration-200
-      hover:bg-cream-dark/60 hover:border-charcoal/45"
+      className="inline-flex items-center gap-2 rounded-full border border-border-soft bg-surface/92 px-3.5 py-2
+      text-sm font-semibold text-charcoal shadow-sm transition-all duration-200 hover:-translate-y-px
+      hover:border-border-strong hover:bg-cream-dark/68"
     >
       <Icon className="h-4 w-4" strokeWidth={2} />
       <span>{current.label}</span>

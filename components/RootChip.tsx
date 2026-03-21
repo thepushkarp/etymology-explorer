@@ -13,23 +13,18 @@ export function RootChip({ root, onWordClick }: RootChipProps) {
 
   return (
     <div className="inline-block">
-      {/* Main chip button */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className={`
-          group relative
-          inline-flex items-center gap-2
-          px-4 py-2 rounded-full
-          font-serif text-sm
+          group relative inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm
           transition-all duration-300 ease-out
           ${
             isExpanded
-              ? 'bg-charcoal text-cream shadow-lg'
-              : 'bg-surface border border-charcoal/20 text-charcoal hover:border-charcoal/40 hover:shadow-sm'
+              ? 'border border-charcoal bg-charcoal text-cream shadow-lg'
+              : 'border border-border-soft bg-surface text-charcoal hover:-translate-y-px hover:border-border-strong hover:shadow-sm'
           }
         `}
       >
-        {/* Root name with decorative dot */}
         <span className="font-semibold tracking-wide">{root.root}</span>
         <span
           className={`
@@ -47,7 +42,6 @@ export function RootChip({ root, onWordClick }: RootChipProps) {
           {root.origin}
         </span>
 
-        {/* Chevron indicator */}
         <svg
           className={`
             w-4 h-4 ml-1
@@ -64,24 +58,20 @@ export function RootChip({ root, onWordClick }: RootChipProps) {
         </svg>
       </button>
 
-      {/* Expanded content - styled like a margin note in old books */}
       {isExpanded && (
         <div
           className="
-            mt-3 ml-4 pl-4
-            border-l-2 border-charcoal/20
+            mt-4 rounded-[1.4rem] border border-border-soft bg-cream-dark/24 p-4
             animate-fadeIn
           "
         >
-          {/* Meaning section */}
-          <p className="text-sm text-charcoal-light mb-3 font-serif italic">
+          <p className="mb-3 font-serif text-sm italic text-charcoal-light">
             <span className="not-italic font-medium text-charcoal">Meaning:</span> {root.meaning}
           </p>
 
-          {/* Ancestor Roots section */}
           {root.ancestorRoots && root.ancestorRoots.length > 0 && (
             <div className="mb-4">
-              <p className="text-xs font-medium text-charcoal mb-2 uppercase tracking-wide">
+              <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-charcoal">
                 Ancestor Roots
               </p>
               <div className="flex flex-wrap gap-2">
@@ -89,12 +79,8 @@ export function RootChip({ root, onWordClick }: RootChipProps) {
                   <span
                     key={ancestorRoot}
                     className="
-                      px-3 py-1.5
-                      text-sm font-serif
-                      bg-charcoal/10
-                      rounded
+                      rounded-full border border-charcoal/14 bg-surface px-3 py-1.5 text-sm
                       text-charcoal-light
-                      border border-charcoal/20
                     "
                     style={{
                       animationDelay: `${index * 50}ms`,
@@ -107,9 +93,8 @@ export function RootChip({ root, onWordClick }: RootChipProps) {
             </div>
           )}
 
-          {/* Related words - styled like a scholarly index */}
           <div className="mb-4">
-            <p className="text-xs font-medium text-charcoal mb-2 uppercase tracking-wide">
+            <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-charcoal">
               Related Words
             </p>
             <div className="flex flex-wrap gap-2">
@@ -118,20 +103,14 @@ export function RootChip({ root, onWordClick }: RootChipProps) {
                   key={word}
                   onClick={() => onWordClick(word)}
                   className="
-                    group/word
-                    relative
-                    px-3 py-1.5
-                    text-sm font-serif
-                    bg-cream-dark/60
-                    rounded
-                    hover:bg-charcoal hover:text-cream
-                    transition-all duration-200
+                    group/word relative rounded-full border border-border-soft bg-surface px-3 py-1.5
+                    text-sm font-serif transition-all duration-200 hover:-translate-y-px hover:bg-charcoal
+                    hover:text-cream
                   "
                   style={{
                     animationDelay: `${index * 50}ms`,
                   }}
                 >
-                  {/* Decorative bullet */}
                   <span
                     className="
                     absolute left-1 top-1/2 -translate-y-1/2
@@ -146,10 +125,9 @@ export function RootChip({ root, onWordClick }: RootChipProps) {
             </div>
           </div>
 
-          {/* Descendant Words section */}
           {root.descendantWords && root.descendantWords.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-charcoal mb-2 uppercase tracking-wide">
+              <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-charcoal">
                 Descendant Words
               </p>
               <div className="flex flex-wrap gap-2">
@@ -158,16 +136,9 @@ export function RootChip({ root, onWordClick }: RootChipProps) {
                     key={descendantWord}
                     onClick={() => onWordClick(descendantWord)}
                     className="
-                      group/desc
-                      relative
-                      px-3 py-1.5
-                      text-sm font-serif
-                      bg-cream-dark/40
-                      rounded
-                      text-charcoal-light
+                      group/desc relative rounded-full border border-border-soft bg-surface px-3 py-1.5
+                      text-sm font-serif text-charcoal-light transition-all duration-200 hover:-translate-y-px
                       hover:bg-charcoal hover:text-cream
-                      transition-all duration-200
-                      border border-charcoal/10
                     "
                     style={{
                       animationDelay: `${index * 50}ms`,
