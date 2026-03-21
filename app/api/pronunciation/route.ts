@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generatePronunciation, isElevenLabsConfigured } from '@/lib/elevenlabs'
+import { ElevenLabsApiError, generatePronunciation, isElevenLabsConfigured } from '@/lib/elevenlabs'
 import { getCachedAudio, cacheAudio } from '@/lib/cache'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { getCostMode } from '@/lib/costGuard'
@@ -36,7 +36,13 @@ export async function GET(request: NextRequest) {
 
   if (!isElevenLabsConfigured()) {
     return NextResponse.json(
-      { success: false, error: 'Pronunciation service not configured' },
+      {
+        success: false,
+        error:
+          'Pronunciation service not configured. Set ELEVENLABS_API_KEY and ' +
+          'ELEVENLABS_VOICE_ID to a voice available in your My Voices list. ' +
+          'Free-tier accounts cannot use Voice Library voices via the API.',
+      },
       { status: 503 }
     )
   }
@@ -109,6 +115,14 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[Pronunciation] Generation failed:', safeError(error))
+
+    if (error instanceof ElevenLabsApiError) {
+      return NextResponse.json(
+        { success: false, error: safeError(error.message) },
+        { status: error.status }
+      )
+    }
+
     return NextResponse.json(
       { success: false, error: 'Failed to generate pronunciation' },
       { status: 500 }

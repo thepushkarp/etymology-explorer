@@ -7,15 +7,45 @@ import { fetchWithTimeout } from './fetchUtils'
 import { CONFIG } from './config'
 
 const ELEVENLABS_API = 'https://api.elevenlabs.io/v1'
+const DEFAULT_OUTPUT_FORMAT = 'mp3_44100_128'
 
-// Default voice: Rachel (clear, articulate - good for dictionary pronunciation)
-const DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'
+export class ElevenLabsApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ElevenLabsApiError'
+    this.status = status
+  }
+}
+
+async function readElevenLabsError(response: Response): Promise<string> {
+  const contentType = response.headers.get('content-type') ?? ''
+
+  if (contentType.includes('application/json')) {
+    const payload = (await response.json().catch(() => null)) as {
+      detail?: { message?: string }
+      message?: string
+      error?: string
+    } | null
+
+    return (
+      payload?.detail?.message ??
+      payload?.message ??
+      payload?.error ??
+      `ElevenLabs API error: ${response.status}`
+    )
+  }
+
+  const text = await response.text().catch(() => '')
+  return text || `ElevenLabs API error: ${response.status}`
+}
 
 /**
- * Check if ElevenLabs is configured (API key present)
+ * Check if ElevenLabs is configured (API key + voice ID present)
  */
 export function isElevenLabsConfigured(): boolean {
-  return !!process.env.ELEVENLABS_API_KEY
+  return !!process.env.ELEVENLABS_API_KEY && !!process.env.ELEVENLABS_VOICE_ID
 }
 
 /**
@@ -25,14 +55,18 @@ export function isElevenLabsConfigured(): boolean {
  * @throws Error if API call fails
  */
 export async function generatePronunciation(word: string): Promise<ArrayBuffer> {
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID
+  const voiceId = process.env.ELEVENLABS_VOICE_ID
+  if (!voiceId) {
+    throw new Error('ELEVENLABS_VOICE_ID is required for pronunciation audio')
+  }
 
   const response = await fetchWithTimeout(
-    `${ELEVENLABS_API}/text-to-speech/${voiceId}`,
+    `${ELEVENLABS_API}/text-to-speech/${voiceId}?output_format=${DEFAULT_OUTPUT_FORMAT}`,
     {
       method: 'POST',
       headers: {
         'xi-api-key': process.env.ELEVENLABS_API_KEY!,
+        Accept: 'audio/mpeg',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -48,8 +82,8 @@ export async function generatePronunciation(word: string): Promise<ArrayBuffer> 
   )
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'Unknown error')
-    throw new Error(`ElevenLabs API error: ${response.status} - ${errorText}`)
+    const errorText = await readElevenLabsError(response)
+    throw new ElevenLabsApiError(errorText, response.status)
   }
 
   return response.arrayBuffer()

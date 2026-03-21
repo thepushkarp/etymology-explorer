@@ -3,8 +3,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
-import { useLocalStorage } from '@/lib/hooks/useLocalStorage'
-import type { HistoryEntry } from '@/lib/types'
+import { useHistory } from '@/lib/hooks/useHistory'
 import { SearchSuggestions, getSuggestionItems } from '@/components/SearchSuggestions'
 
 interface SearchBarProps {
@@ -20,7 +19,7 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
   const [isFocused, setIsFocused] = useState(false)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
-  const [historyEntries] = useLocalStorage<HistoryEntry[]>('etymology-history', [])
+  const { history: historyEntries } = useHistory()
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchParams = useSearchParams()
 
