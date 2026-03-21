@@ -32,7 +32,7 @@ export default function UsageTimeline({
   height = 60,
   showYearLabels = false,
 }: UsageTimelineProps) {
-  const { path, areaPath, maxCount, minYear, maxYear } = useMemo(() => {
+  const { path, areaPath, maxCount, minYear, maxYear, maxPoint } = useMemo(() => {
     if (!data || data.length === 0) {
       return {
         path: '',
@@ -40,16 +40,18 @@ export default function UsageTimeline({
         maxCount: 0,
         minYear: 0,
         maxYear: 0,
+        maxPoint: null as { x: number; y: number } | null,
       }
     }
 
-    const width = 200
-    const padding = 4
+    const width = 240
+    const padding = 8
     const effectiveWidth = width - padding * 2
     const effectiveHeight = height - padding * 2
 
     const counts = data.map((d) => d.count)
     const max = Math.max(...counts)
+    const maxIndex = counts.indexOf(max)
     const years = data.map((d) => d.year)
     const minY = Math.min(...years)
     const maxY = Math.max(...years)
@@ -70,18 +72,20 @@ export default function UsageTimeline({
       maxCount: max,
       minYear: minY,
       maxYear: maxY,
+      maxPoint: points[maxIndex] ?? null,
     }
   }, [data, height])
 
   const decadeTicks = useMemo(() => {
     if (minYear === 0 || maxYear === 0 || maxYear <= minYear) return []
 
-    const startDecade = Math.ceil(minYear / 10) * 10
-    const endDecade = Math.floor(maxYear / 10) * 10
     const range = maxYear - minYear
+    const step = range <= 40 ? 10 : range <= 100 ? 20 : range <= 180 ? 25 : 50
+    const startDecade = Math.ceil(minYear / step) * step
+    const endDecade = Math.floor(maxYear / step) * step
     const ticks: Array<{ year: number; offsetPercent: number }> = []
 
-    for (let year = startDecade; year <= endDecade; year += 10) {
+    for (let year = startDecade; year <= endDecade; year += step) {
       ticks.push({
         year,
         offsetPercent: ((year - minYear) / range) * 100,
@@ -96,7 +100,7 @@ export default function UsageTimeline({
   return (
     <div className="relative">
       <svg
-        viewBox={`0 0 200 ${height}`}
+        viewBox={`0 0 240 ${height}`}
         className="w-full h-auto text-charcoal/70"
         preserveAspectRatio="none"
         role="img"
@@ -104,26 +108,48 @@ export default function UsageTimeline({
       >
         <defs>
           <linearGradient id={`ngram-gradient-${word}`} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="currentColor" stopOpacity="0.05" />
+            <stop offset="0%" stopColor="currentColor" stopOpacity="0.32" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0.04" />
           </linearGradient>
         </defs>
 
+        <line
+          x1="8"
+          x2="232"
+          y1={height - 8}
+          y2={height - 8}
+          stroke="currentColor"
+          strokeOpacity="0.12"
+        />
+        <line
+          x1="8"
+          x2="232"
+          y1={height * 0.55}
+          y2={height * 0.55}
+          stroke="currentColor"
+          strokeOpacity="0.08"
+        />
+
         <path d={areaPath} fill={`url(#ngram-gradient-${word})`} />
-        <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" />
+        <path d={path} fill="none" stroke="currentColor" strokeWidth="2" />
+        {maxPoint && (
+          <>
+            <circle cx={maxPoint.x} cy={maxPoint.y} r="3.5" fill="currentColor" />
+            <circle cx={maxPoint.x} cy={maxPoint.y} r="7" fill="currentColor" opacity="0.14" />
+          </>
+        )}
       </svg>
 
       {showYearLabels && decadeTicks.length > 0 && (
-        <div className="mt-1 relative h-8">
-          <div className="absolute inset-x-0 top-0 h-px bg-charcoal/15" />
+        <div className="relative mt-2 h-8">
           {decadeTicks.map((tick) => (
             <div
               key={tick.year}
               className="absolute top-0 -translate-x-1/2"
               style={{ left: `${tick.offsetPercent}%` }}
             >
-              <span className="mx-auto block h-1.5 w-px bg-charcoal/35" />
-              <span className="mt-0.5 block origin-top -rotate-45 text-[9px] leading-none text-charcoal-light/75 font-mono tabular-nums">
+              <span className="mx-auto block h-1.5 w-px bg-charcoal/26" />
+              <span className="mt-1 block text-[9px] leading-none text-charcoal-light/75 font-mono tabular-nums">
                 {tick.year}
               </span>
             </div>
@@ -138,7 +164,7 @@ export default function UsageTimeline({
         </div>
       )}
 
-      <div className="mt-2 text-[11px] text-charcoal-light/75">
+      <div className="mt-3 text-[11px] text-charcoal-light/75">
         Peak usage: {formatPeakUsage(maxCount)}
       </div>
     </div>

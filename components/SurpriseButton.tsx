@@ -33,32 +33,22 @@ export function SurpriseButton({ onWordSelected, disabled }: SurpriseButtonProps
       onClick={handleClick}
       disabled={isLoading || disabled}
       className="
-        group
-        relative
-        inline-flex items-center gap-2
-        px-6 py-3
-        font-serif text-sm
-        bg-surface
-        border border-charcoal/20
-        rounded-full
-        text-charcoal
-        hover:border-charcoal/40 hover:shadow-sm
+        group relative inline-flex items-center gap-2 rounded-full border border-border-soft bg-surface/92
+        px-5 py-2.5 font-serif text-sm text-charcoal shadow-sm transition-all duration-300
+        hover:-translate-y-px hover:border-border-strong
+        hover:shadow-[0_18px_44px_-28px_var(--shadow-color)]
         disabled:opacity-50 disabled:cursor-not-allowed
-        transition-all duration-300
       "
     >
-      {/* Animated sparkle effect on hover */}
       <span
         className="
-        absolute inset-0
-        rounded-full
-        bg-gradient-to-r from-amber-50 dark:from-amber-950/30 via-cream to-amber-50 dark:to-amber-950/30
+        absolute inset-0 rounded-full
+        bg-gradient-to-r from-transparent via-cream-dark/70 to-transparent
         opacity-0 group-hover:opacity-100
         transition-opacity duration-300
       "
       />
 
-      {/* Icon */}
       <span className="relative z-10">
         {isLoading ? (
           <svg
@@ -88,20 +78,7 @@ export function SurpriseButton({ onWordSelected, disabled }: SurpriseButtonProps
         )}
       </span>
 
-      {/* Text */}
       <span className="relative z-10 italic">{isLoading ? 'Finding a gem...' : 'Surprise me'}</span>
-
-      {/* Decorative flourish */}
-      <span
-        className="
-        relative z-10
-        text-charcoal/45
-        group-hover:text-charcoal/70
-        transition-colors duration-300
-      "
-      >
-        ✦
-      </span>
     </button>
   )
 }

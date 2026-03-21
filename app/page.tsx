@@ -41,7 +41,6 @@ function HomeContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const searchInputRef = useRef<HTMLInputElement>(null)
-  const ancestryTreeRef = useRef<HTMLDivElement>(null)
 
   // Hooks
   const { history, clearHistory, removeFromHistory } = useHistory()
@@ -131,12 +130,13 @@ function HomeContent() {
   return (
     <main
       className="
-      min-h-screen
-      bg-cream
-      py-8 md:py-16
-      px-4
+      relative min-h-screen overflow-hidden bg-cream px-4 pb-12 pt-6 sm:px-6 lg:px-8
     "
     >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[34rem] bg-gradient-to-b from-surface/80 via-transparent to-transparent" />
+      <div className="pointer-events-none absolute left-[-12rem] top-24 h-80 w-80 rounded-full bg-accent-sky/8 blur-3xl" />
+      <div className="pointer-events-none absolute right-[-10rem] top-32 h-72 w-72 rounded-full bg-accent-olive/10 blur-3xl" />
+
       {/* History sidebar */}
       <HistorySidebar
         history={history}
@@ -146,55 +146,48 @@ function HomeContent() {
       />
 
       {/* Main content */}
-      <div className="max-w-4xl mx-auto">
+      <div className="relative mx-auto max-w-6xl">
         {/* Header */}
-        <header className="text-center mb-12 md:mb-16">
-          <div className="mb-6 flex justify-center">
-            <ThemeToggle />
+        <header className="animate-hero-lift mb-12 md:mb-16">
+          <div className="mb-10 flex flex-col gap-5 md:mb-14 md:flex-row md:items-center md:justify-between">
+            <nav className="order-2 flex justify-center gap-6 text-[11px] uppercase tracking-[0.22em] text-charcoal-light/72 md:order-1 md:justify-start">
+              <Link href="/" className="transition-colors hover:text-charcoal">
+                Home
+              </Link>
+              <Link href="/faq" className="transition-colors hover:text-charcoal">
+                FAQ
+              </Link>
+              <Link
+                href="/learn/what-is-etymology"
+                className="transition-colors hover:text-charcoal"
+              >
+                Learn
+              </Link>
+            </nav>
+
+            <div className="order-1 flex items-center justify-center gap-3 md:order-2 md:justify-end">
+              <ThemeToggle />
+              <CostModeIndicator />
+            </div>
           </div>
 
-          {/* Navigation links */}
-          <nav className="flex justify-center gap-6 mb-8 text-sm font-serif">
-            <Link href="/faq" className="text-charcoal-light hover:text-charcoal transition-colors">
-              FAQ
-            </Link>
-            <Link
-              href="/learn/what-is-etymology"
-              className="text-charcoal-light hover:text-charcoal transition-colors"
-            >
-              Learn
-            </Link>
-          </nav>
-
-          <h1
-            className="
-            font-serif text-4xl md:text-5xl
-            text-charcoal
-            mb-3
-            tracking-tight
-          "
-          >
-            <Link href="/" className="transition-opacity hover:opacity-85">
-              Etymology Explorer
-            </Link>
-          </h1>
-          <p
-            className="
-            font-serif text-lg
-            text-charcoal-light
-            italic
-          "
-          >
-            Discover the roots and origins of words
-          </p>
-
-          <div className="mt-4 flex justify-center">
-            <CostModeIndicator />
+          <div className="mx-auto max-w-4xl text-center">
+            <h1 className="mb-4 font-serif text-5xl tracking-[-0.04em] text-charcoal sm:text-6xl md:text-7xl">
+              <Link href="/" className="transition-opacity hover:opacity-85">
+                Etymology Explorer
+              </Link>
+            </h1>
+            <p className="font-serif text-lg italic text-charcoal-light sm:text-xl">
+              Discover the roots and origins of words
+            </p>
           </div>
         </header>
 
         {/* Search bar */}
-        <div className="mb-12">
+        <section
+          className="relative z-10 animate-hero-lift mb-12 md:mb-16"
+          style={{ animationDelay: '80ms' }}
+        >
           <SearchBar
             onSearch={navigateToWord}
             isLoading={state === 'loading'}
@@ -202,14 +195,13 @@ function HomeContent() {
             inputRef={searchInputRef}
           />
 
-          {/* Surprise button */}
-          <div className="flex justify-center mt-6">
+          <div className="relative z-0 mt-5 flex justify-center">
             <SurpriseButton onWordSelected={navigateToWord} disabled={state === 'loading'} />
           </div>
-        </div>
+        </section>
 
         {/* Results area */}
-        <div className="min-h-[400px]">
+        <div className="relative z-0 min-h-[400px]">
           {/* Loading state - show research progress */}
           {state === 'loading' && (
             <div className="py-8">
@@ -221,46 +213,39 @@ function HomeContent() {
           {state === 'idle' && (
             <section
               className="
-                relative overflow-hidden
-                rounded-lg border border-border-soft
-                bg-gradient-to-b from-surface to-cream-dark/35
-                p-6 sm:p-8 md:p-10
+                relative overflow-hidden rounded-[2rem] border border-border-soft bg-surface/88
+                p-6 shadow-[0_24px_60px_-34px_var(--shadow-color)] sm:p-8 md:p-10
               "
             >
-              <div className="absolute -top-10 -right-8 h-32 w-32 rounded-full bg-amber-200/25 blur-2xl" />
-              <div className="absolute -bottom-12 -left-10 h-36 w-36 rounded-full bg-emerald-200/20 blur-2xl" />
+              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border-strong to-transparent" />
+              <div className="absolute -top-12 right-10 h-36 w-36 rounded-full bg-accent-soft/12 blur-3xl" />
+              <div className="absolute -bottom-12 left-0 h-40 w-40 rounded-full bg-accent-olive/10 blur-3xl" />
 
               <header className="relative mb-8">
-                <p className="text-xs uppercase tracking-[0.2em] text-charcoal-light/60 mb-3">
+                <p className="mb-3 text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
                   Try these words
                 </p>
-                <h2 className="font-serif text-3xl md:text-4xl text-charcoal tracking-tight">
+                <h2 className="font-serif text-3xl tracking-[-0.03em] text-charcoal md:text-4xl">
                   Explore word origins
                 </h2>
-                <p className="font-serif italic text-charcoal-light mt-3 max-w-2xl">
+                <p className="mt-3 max-w-2xl font-serif italic text-charcoal-light">
                   Wander through curious entries that reveal how meanings drift, split, and return.
                 </p>
               </header>
 
-              <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="relative grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {CURATED_IDLE_WORDS.map((entry, index) => (
                   <button
                     key={entry.word}
                     onClick={() => navigateToWord(entry.word)}
                     className="
-                      group text-left
-                      rounded-md border border-charcoal/10
-                      bg-surface/85 backdrop-blur-[1px]
-                      p-4 sm:p-5
-                      shadow-sm
-                      hover:border-charcoal/25 hover:-translate-y-0.5
-                      hover:shadow-md
-                      transition-all duration-300
-                      animate-fadeIn
+                      group animate-fadeIn rounded-[1.4rem] border border-border-soft bg-surface px-4 py-5
+                      text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5
+                      hover:border-border-strong hover:shadow-[0_18px_44px_-28px_var(--shadow-color)] sm:p-5
                     "
                     style={{ animationDelay: `${index * 70}ms`, animationFillMode: 'backwards' }}
                   >
-                    <span className="font-serif text-xl text-charcoal group-hover:italic transition-all">
+                    <span className="font-serif text-xl text-charcoal transition-all group-hover:italic">
                       {entry.word}
                     </span>
                     <p className="mt-2 text-sm leading-relaxed text-charcoal-light">
@@ -290,30 +275,14 @@ function HomeContent() {
                 result={resultWithNgram}
                 onWordClick={navigateToWord}
                 isSimple={isSimple}
-                ancestryTreeRef={ancestryTreeRef}
-                headerActions={
-                  <ShareMenu
-                    word={resultWithNgram.word}
-                    result={resultWithNgram}
-                    ancestryTreeRef={ancestryTreeRef}
-                  />
-                }
+                headerActions={<ShareMenu result={resultWithNgram} />}
               />
 
               {/* Related words section */}
               {resultWithNgram.roots.length > 0 && (
-                <section>
-                  <h2
-                    className="
-                    font-serif text-lg
-                    text-charcoal
-                    mb-6
-                    flex items-center gap-4
-                  "
-                  >
-                    <span className="w-8 h-px bg-charcoal/20" />
+                <section className="rounded-[2rem] border border-border-soft bg-surface/78 p-6 shadow-[0_22px_50px_-34px_var(--shadow-color)] sm:p-8">
+                  <h2 className="mb-6 text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/72">
                     Related Words
-                    <span className="flex-1 h-px bg-charcoal/20" />
                   </h2>
 
                   <RelatedWordsList roots={resultWithNgram.roots} onWordClick={navigateToWord} />
@@ -333,36 +302,22 @@ function HomeContent() {
         {/* Footer */}
         <footer
           className="
-          mt-24
-          pt-8
-          border-t border-charcoal/10
-          text-center
+          mt-24 border-t border-border-soft pt-8 text-center
         "
         >
-          <p
-            className="
-            text-sm font-serif
-            text-charcoal-light/65
-          "
-          >
+          <p className="text-sm font-serif text-charcoal-light/65">
             Built by{' '}
             <a
               href="https://thepushkarp.com/"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-charcoal transition-colors"
+              className="underline transition-colors hover:text-charcoal"
             >
               thepushkarp
             </a>{' '}
             with Curiosity
           </p>
-          <p
-            className="
-            text-xs
-            text-charcoal-light/50
-            mt-2
-          "
-          >
+          <p className="mt-2 text-xs text-charcoal-light/50">
             Etymology data from Etymonline, Wiktionary, Wikipedia, Urban Dictionary and Free
             Dictionary
           </p>

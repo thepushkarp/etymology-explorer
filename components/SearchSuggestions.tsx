@@ -100,18 +100,14 @@ export function SearchSuggestions({
   return (
     <div
       className="
-        absolute left-0 right-0 top-full z-50
-        bg-cream border border-charcoal/15 border-t-charcoal/20 border-t
-        rounded-b-lg rounded-t-none
-        max-h-80 overflow-y-auto
+        absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-[1.4rem]
+        border border-border-strong bg-surface shadow-[0_24px_60px_-34px_var(--shadow-color)]
         animate-fadeIn
-        opacity-100 translate-y-0
-        transition-all duration-200 ease-out
       "
     >
       {recentCount > 0 && (
-        <section className="px-3 py-2 border-b border-charcoal/10">
-          <h3 className="px-2 pb-2 text-[10px] uppercase tracking-[0.16em] text-charcoal-light/75">
+        <section className="border-b border-border-soft px-4 py-3">
+          <h3 className="px-2 pb-2 text-[10px] uppercase tracking-[0.2em] text-charcoal-light/75">
             Recent
           </h3>
           <ul className="space-y-1">
@@ -122,14 +118,14 @@ export function SearchSuggestions({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => onSelect(item.word)}
                   className={`
-                    w-full flex items-center justify-between gap-3 px-2 py-2
+                    flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5
                     text-left font-serif text-base text-charcoal
                     transition-colors duration-150
-                    ${selectedIndex === index ? 'bg-cream-dark/80' : 'hover:bg-cream-dark/45'}
+                    ${selectedIndex === index ? 'bg-cream-dark/92' : 'hover:bg-cream-dark/45'}
                   `}
                 >
                   <span className="truncate">{item.word}</span>
-                  <span className="text-[10px] uppercase tracking-[0.12em] border border-charcoal/20 px-2 py-0.5 text-charcoal-light/75">
+                  <span className="rounded-full border border-charcoal/14 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-charcoal-light/75">
                     Recent
                   </span>
                 </button>
@@ -140,8 +136,8 @@ export function SearchSuggestions({
       )}
 
       {suggestions.length > recentCount && (
-        <section className="px-3 py-2">
-          <h3 className="px-2 pb-2 text-[10px] uppercase tracking-[0.16em] text-charcoal-light/75">
+        <section className="px-4 py-3">
+          <h3 className="px-2 pb-2 text-[10px] uppercase tracking-[0.2em] text-charcoal-light/75">
             Suggestions
           </h3>
           <ul className="space-y-1">
@@ -155,14 +151,18 @@ export function SearchSuggestions({
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => onSelect(item.word)}
                     className={`
-                      w-full flex items-center justify-between gap-3 px-2 py-2
+                      flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5
                       text-left font-serif text-base text-charcoal
                       transition-colors duration-150
-                      ${selectedIndex === absoluteIndex ? 'bg-cream-dark/80' : 'hover:bg-cream-dark/45'}
+                      ${
+                        selectedIndex === absoluteIndex
+                          ? 'bg-cream-dark/92'
+                          : 'hover:bg-cream-dark/45'
+                      }
                     `}
                   >
                     <span className="truncate">{item.word}</span>
-                    <span className="text-[10px] uppercase tracking-[0.12em] border border-charcoal/20 px-2 py-0.5 text-charcoal-light/75">
+                    <span className="rounded-full border border-charcoal/14 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-charcoal-light/75">
                       Suggested
                     </span>
                   </button>

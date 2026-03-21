@@ -20,92 +20,78 @@ export interface ConfidenceColorSet {
   label: string
 }
 
+// Derived from --accent-soft (#b18b52 / #d0a05d)
+const goldPalette: StageColorSet = {
+  bg: 'bg-[#f0e8db] dark:bg-[#262019]',
+  border: 'border-[#c4a06a] dark:border-[#8a6d40]',
+  text: 'text-[#6a5530] dark:text-[#d4b878]',
+}
+
+// Derived from --accent-sky (#5e7893 / #8fa9c5)
+const steelPalette: StageColorSet = {
+  bg: 'bg-[#e4e8ee] dark:bg-[#1f2328]',
+  border: 'border-[#88a0b8] dark:border-[#52687a]',
+  text: 'text-[#405468] dark:text-[#a8bed0]',
+}
+
+// Derived from --accent-rose (#a6685b / #d08e7f)
+const terracottaPalette: StageColorSet = {
+  bg: 'bg-[#ede2dc] dark:bg-[#2a201e]',
+  border: 'border-[#bf8a7a] dark:border-[#7a5548]',
+  text: 'text-[#6a4a3c] dark:text-[#d4a898]',
+}
+
+// Derived from --accent-plum (#6e5870 / #b59bc0)
+const plumPalette: StageColorSet = {
+  bg: 'bg-[#eae2ec] dark:bg-[#262028]',
+  border: 'border-[#9c88a2] dark:border-[#6a5672]',
+  text: 'text-[#564060] dark:text-[#c8b2cc]',
+}
+
+// Derived from --accent-olive (#6d7d63 / #96a781)
+const sagePalette: StageColorSet = {
+  bg: 'bg-[#e6eae2] dark:bg-[#202620]',
+  border: 'border-[#8fa486] dark:border-[#586a50]',
+  text: 'text-[#465340] dark:text-[#b4c5a6]',
+}
+
+// Neutral palette for merge/final word nodes
+export const mergePalette: StageColorSet = {
+  bg: 'bg-[#ece6dc] dark:bg-[#262018]',
+  border: 'border-[#baa88e] dark:border-[#6a5c48]',
+  text: 'text-[#5e5040] dark:text-[#d0c0a8]',
+}
+
+// Merge connector line and arrow colors
+export const mergeLineColor = 'bg-[#d0c0a8] dark:bg-[#504030]'
+export const mergeArrowColor = 'text-[#baa88e] dark:text-[#a09080]'
+
 // ---------------------------------------------------------------------------
 // Stage colors – one entry per language/period label
 // ---------------------------------------------------------------------------
 
 export const stageColors: Record<string, StageColorSet> = {
-  'Proto-Indo-European': {
-    bg: 'bg-stone-50 dark:bg-stone-950/40',
-    border: 'border-stone-300 dark:border-stone-700',
-    text: 'text-stone-700 dark:text-stone-300',
-  },
-  PIE: {
-    bg: 'bg-stone-50 dark:bg-stone-950/40',
-    border: 'border-stone-300 dark:border-stone-700',
-    text: 'text-stone-700 dark:text-stone-300',
-  },
-  Greek: {
-    bg: 'bg-blue-50 dark:bg-blue-950/40',
-    border: 'border-blue-300 dark:border-blue-700',
-    text: 'text-blue-800 dark:text-blue-200',
-  },
-  Latin: {
-    bg: 'bg-amber-50 dark:bg-amber-950/40',
-    border: 'border-amber-300 dark:border-amber-700',
-    text: 'text-amber-800 dark:text-amber-200',
-  },
-  'Old French': {
-    bg: 'bg-rose-50 dark:bg-rose-950/40',
-    border: 'border-rose-300 dark:border-rose-700',
-    text: 'text-rose-800 dark:text-rose-200',
-  },
-  French: {
-    bg: 'bg-rose-50 dark:bg-rose-950/40',
-    border: 'border-rose-300 dark:border-rose-700',
-    text: 'text-rose-800 dark:text-rose-200',
-  },
-  'Middle English': {
-    bg: 'bg-emerald-50 dark:bg-emerald-950/40',
-    border: 'border-emerald-300 dark:border-emerald-700',
-    text: 'text-emerald-800 dark:text-emerald-200',
-  },
-  'Old English': {
-    bg: 'bg-teal-50 dark:bg-teal-950/40',
-    border: 'border-teal-300 dark:border-teal-700',
-    text: 'text-teal-800 dark:text-teal-200',
-  },
-  English: {
-    bg: 'bg-violet-50 dark:bg-violet-950/40',
-    border: 'border-violet-300 dark:border-violet-700',
-    text: 'text-violet-800 dark:text-violet-200',
-  },
-  Germanic: {
-    bg: 'bg-slate-50 dark:bg-slate-950/40',
-    border: 'border-slate-300 dark:border-slate-700',
-    text: 'text-slate-700 dark:text-slate-300',
-  },
-  'Proto-Germanic': {
-    bg: 'bg-slate-50 dark:bg-slate-950/40',
-    border: 'border-slate-300 dark:border-slate-700',
-    text: 'text-slate-700 dark:text-slate-300',
-  },
-  'Scientific Latin': {
-    bg: 'bg-amber-50 dark:bg-amber-950/40',
-    border: 'border-amber-300 dark:border-amber-700',
-    text: 'text-amber-800 dark:text-amber-200',
-  },
-  Arabic: {
-    bg: 'bg-orange-50 dark:bg-orange-950/40',
-    border: 'border-orange-300 dark:border-orange-700',
-    text: 'text-orange-800 dark:text-orange-200',
-  },
-  Sanskrit: {
-    bg: 'bg-yellow-50 dark:bg-yellow-950/40',
-    border: 'border-yellow-300 dark:border-yellow-700',
-    text: 'text-yellow-800 dark:text-yellow-200',
-  },
-  Hebrew: {
-    bg: 'bg-cyan-50 dark:bg-cyan-950/40',
-    border: 'border-cyan-300 dark:border-cyan-700',
-    text: 'text-cyan-800 dark:text-cyan-200',
-  },
+  'Proto-Indo-European': goldPalette,
+  PIE: goldPalette,
+  Greek: steelPalette,
+  Latin: terracottaPalette,
+  'Old French': plumPalette,
+  French: plumPalette,
+  'Middle English': sagePalette,
+  'Old English': sagePalette,
+  English: goldPalette,
+  Germanic: steelPalette,
+  'Proto-Germanic': goldPalette,
+  'Scientific Latin': terracottaPalette,
+  Arabic: terracottaPalette,
+  Sanskrit: terracottaPalette,
+  Hebrew: steelPalette,
 }
 
 export const defaultStageColors: StageColorSet = {
-  bg: 'bg-gray-50 dark:bg-gray-950/40',
-  border: 'border-gray-300 dark:border-gray-700',
-  text: 'text-gray-700 dark:text-gray-300',
+  bg: 'bg-[#ece6dc] dark:bg-[#262018]',
+  border: 'border-[#baa88e] dark:border-[#6a5c48]',
+  text: 'text-[#5e5040] dark:text-[#d0c0a8]',
 }
 
 // ---------------------------------------------------------------------------
@@ -113,13 +99,10 @@ export const defaultStageColors: StageColorSet = {
 // ---------------------------------------------------------------------------
 
 export const branchColors: BranchColorSet[] = [
-  { accent: 'border-blue-400 dark:border-blue-600', line: 'bg-blue-300 dark:bg-blue-700' },
-  { accent: 'border-rose-400 dark:border-rose-600', line: 'bg-rose-300 dark:bg-rose-700' },
-  {
-    accent: 'border-emerald-400 dark:border-emerald-600',
-    line: 'bg-emerald-300 dark:bg-emerald-700',
-  },
-  { accent: 'border-amber-400 dark:border-amber-600', line: 'bg-amber-300 dark:bg-amber-700' },
+  { accent: 'border-[#88a0b8] dark:border-[#52687a]', line: 'bg-[#bed0de] dark:bg-[#3e5268]' },
+  { accent: 'border-[#8fa486] dark:border-[#586a50]', line: 'bg-[#bed0be] dark:bg-[#465840]' },
+  { accent: 'border-[#bf8a7a] dark:border-[#7a5548]', line: 'bg-[#d8b8aa] dark:bg-[#644838]' },
+  { accent: 'border-[#9c88a2] dark:border-[#6a5672]', line: 'bg-[#c8b2d0] dark:bg-[#584860]' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -127,9 +110,15 @@ export const branchColors: BranchColorSet[] = [
 // ---------------------------------------------------------------------------
 
 export const confidenceConfig: Record<StageConfidence, ConfidenceColorSet> = {
-  high: { color: 'bg-emerald-400 dark:bg-emerald-500', label: 'Verified' },
-  medium: { color: 'bg-amber-400 dark:bg-amber-500', label: 'Single source' },
-  low: { color: 'bg-stone-300 dark:bg-stone-600', label: 'AI-inferred' },
+  high: { color: 'bg-[#6d7d63] dark:bg-[#96a781]', label: 'Verified' },
+  medium: { color: 'bg-[#6d7d63] dark:bg-[#96a781]', label: 'Verified' },
+  low: { color: 'bg-stone-400 dark:bg-stone-500', label: 'AI-inferred' },
+}
+
+export const confidenceBadgeStyles: Record<StageConfidence, string> = {
+  high: `${sagePalette.border} ${sagePalette.bg} ${sagePalette.text}`,
+  medium: `${sagePalette.border} ${sagePalette.bg} ${sagePalette.text}`,
+  low: 'border-stone-300 bg-stone-100/92 text-stone-600 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-300',
 }
 
 // ---------------------------------------------------------------------------
@@ -138,16 +127,16 @@ export const confidenceConfig: Record<StageConfidence, ConfidenceColorSet> = {
 
 export const sourcePillColors: Record<string, string> = {
   etymonline:
-    'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' +
-    ' border-amber-200 dark:border-amber-700',
+    'bg-[#f0e8db] dark:bg-[#262019] text-[#6a5530] dark:text-[#d4b878]' +
+    ' border-[#c4a06a] dark:border-[#8a6d40]',
   wiktionary:
-    'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' +
-    ' border-blue-200 dark:border-blue-700',
+    'bg-[#e4e8ee] dark:bg-[#1f2328] text-[#405468] dark:text-[#a8bed0]' +
+    ' border-[#88a0b8] dark:border-[#52687a]',
 }
 
 export const defaultSourcePillColors =
-  'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' +
-  ' border-purple-200 dark:border-purple-700'
+  'bg-[#ece6dc] dark:bg-[#262018] text-[#5e5040] dark:text-[#d0c0a8]' +
+  ' border-[#baa88e] dark:border-[#6a5c48]'
 
 // ---------------------------------------------------------------------------
 // Helpers

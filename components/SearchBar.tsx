@@ -70,12 +70,9 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
       setInputValue(word)
       setShowSuggestions(false)
       setSelectedIndex(-1)
-
-      if (!isLoading) {
-        onSearch(word)
-      }
+      inputRef?.current?.focus()
     },
-    [isLoading, onSearch]
+    [inputRef]
   )
 
   const handleSubmit = useCallback(
@@ -156,41 +153,31 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
   )
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto">
+    <form onSubmit={handleSubmit} className="relative z-10 mx-auto w-full max-w-3xl">
       <div
         className={`
-          relative group
-          transition-all duration-500 ease-out
-          ${isFocused ? 'transform scale-[1.02]' : ''}
+          group relative transition-all duration-300 ease-out
+          ${isFocused ? 'translate-y-[-1px]' : ''}
         `}
       >
-        {/* Decorative border frame */}
         <div
           className={`
-            absolute -inset-3 rounded-xl
-            border border-border-soft
-            transition-all duration-500
-            ${isFocused ? 'border-charcoal/30 -inset-4' : ''}
+            absolute inset-0 rounded-[1.75rem] border bg-surface/92 shadow-[0_22px_50px_-28px_var(--shadow-color)]
+            backdrop-blur-sm transition-all duration-300
+            ${
+              isFocused
+                ? 'border-border-strong shadow-[0_28px_64px_-30px_var(--shadow-color)]'
+                : 'border-border-soft'
+            }
           `}
         />
 
-        {/* Decorative corners */}
-        <div className="absolute -top-3 -left-3 w-6 h-6 border-l-2 border-t-2 border-charcoal/20 rounded-tl-lg" />
-        <div className="absolute -top-3 -right-3 w-6 h-6 border-r-2 border-t-2 border-charcoal/20 rounded-tr-lg" />
-        <div className="absolute -bottom-3 -left-3 w-6 h-6 border-l-2 border-b-2 border-charcoal/20 rounded-bl-lg" />
-        <div className="absolute -bottom-3 -right-3 w-6 h-6 border-r-2 border-b-2 border-charcoal/20 rounded-br-lg" />
+        <div className="relative rounded-[1.75rem]">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[1.75rem]">
+            <div className="h-full w-full bg-gradient-to-r from-transparent via-cream-dark/55 to-transparent opacity-70" />
+          </div>
 
-        {/* Main input container */}
-        <div className="relative">
-          <div className="relative bg-surface rounded-lg shadow-sm overflow-hidden">
-            {/* Subtle paper texture overlay */}
-            <div
-              className="absolute inset-0 opacity-[0.03] pointer-events-none"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-              }}
-            />
-
+          <div className="relative flex items-center gap-2 rounded-[1.75rem] px-3 py-3 sm:px-4">
             <input
               ref={inputRef}
               type="text"
@@ -202,56 +189,37 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
               placeholder="Enter a word to explore its roots..."
               disabled={isLoading}
               className="
-                w-full px-8 py-5 text-xl
-                bg-transparent
-                border-none outline-none
-                 font-serif text-charcoal
-                 placeholder:text-charcoal-light/70
-                placeholder:italic
-                disabled:opacity-50
-                tracking-wide
+                min-w-0 flex-1 rounded-[1.2rem] border border-transparent bg-transparent px-4 py-4 text-lg
+                font-serif tracking-[0.01em] text-charcoal outline-none placeholder:text-charcoal-light/68
+                placeholder:italic disabled:opacity-50 sm:text-xl
               "
               autoComplete="off"
               spellCheck="false"
             />
 
-            {/* Animated underline */}
-            <div
-              className={`
-                absolute bottom-0 left-1/2 -translate-x-1/2
-                h-px bg-gradient-to-r from-transparent via-charcoal/45 to-transparent
-                transition-all duration-500 ease-out
-                ${isFocused ? 'w-[90%]' : 'w-0'}
-              `}
-            />
-
-            {/* Search button */}
             <button
               type="submit"
               disabled={isLoading || !value.trim()}
               className="
-                absolute right-4 top-1/2 -translate-y-1/2
-                p-3 rounded-full
-                 text-charcoal
-                 hover:text-charcoal hover:bg-cream-dark/50
-                transition-all duration-300
-                disabled:opacity-30 disabled:cursor-not-allowed
-                disabled:hover:bg-transparent
+                inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-charcoal/12
+                bg-charcoal text-cream shadow-sm transition-all duration-300 hover:scale-[1.03]
+                hover:border-charcoal/25 hover:bg-charcoal/92 disabled:cursor-not-allowed disabled:opacity-30
+                disabled:hover:scale-100 disabled:hover:bg-charcoal
               "
               aria-label="Search"
             >
               {isLoading ? <LoadingSpinner /> : <SearchIcon />}
             </button>
           </div>
-
-          <SearchSuggestions
-            query={inputValue}
-            history={historyWords}
-            isVisible={shouldShowSuggestions}
-            onSelect={handleSuggestionSelect}
-            selectedIndex={selectedIndex}
-          />
         </div>
+
+        <SearchSuggestions
+          query={inputValue}
+          history={historyWords}
+          isVisible={shouldShowSuggestions}
+          onSelect={handleSuggestionSelect}
+          selectedIndex={selectedIndex}
+        />
       </div>
     </form>
   )
@@ -259,7 +227,7 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
 
 function SearchIcon() {
   return (
-    <MagnifyingGlassIcon className="h-[22px] w-[22px] transition-transform group-hover:scale-110" />
+    <MagnifyingGlassIcon className="h-[22px] w-[22px] transition-transform group-hover:scale-105" />
   )
 }
 
