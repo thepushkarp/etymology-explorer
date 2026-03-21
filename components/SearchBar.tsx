@@ -175,8 +175,10 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
           `}
         />
 
-        <div className="relative overflow-hidden rounded-[1.75rem]">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-cream-dark/55 to-transparent opacity-70" />
+        <div className="relative rounded-[1.75rem]">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[1.75rem]">
+            <div className="h-full w-full bg-gradient-to-r from-transparent via-cream-dark/55 to-transparent opacity-70" />
+          </div>
 
           <div className="relative flex items-center gap-2 rounded-[1.75rem] px-3 py-3 sm:px-4">
             <input

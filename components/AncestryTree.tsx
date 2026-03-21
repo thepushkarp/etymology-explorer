@@ -11,6 +11,10 @@ import {
 import {
   branchColors,
   confidenceConfig,
+  confidenceBadgeStyles,
+  mergePalette,
+  mergeLineColor,
+  mergeArrowColor,
   sourcePillColors,
   defaultSourcePillColors,
   getStageColors,
@@ -67,8 +71,7 @@ function ConfidenceBadge({ confidence }: { confidence?: StageConfidence }) {
       className={`
         inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full
         text-[8px] font-semibold uppercase tracking-wider leading-none
-        ${confidence === 'high' || confidence === 'medium' ? 'border border-[#8fa486] bg-[#e6eae2] text-[#465340] dark:border-[#586a50] dark:bg-[#202620] dark:text-[#b4c5a6]' : ''}
-        ${confidence === 'low' ? 'border border-stone-300 bg-stone-100/92 text-stone-600 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-300' : ''}
+        border ${confidenceBadgeStyles[confidence]}
       `}
       title={config.label}
       aria-label={config.label}
@@ -97,10 +100,8 @@ function StageNode({
   const colors = getStageColors(stage.stage)
   const isReconstructed = stage.isReconstructed
   const hasEvidence = !isSimple && stage.evidence && stage.evidence.length > 0
-  const emphasizedStyles = isEmphasized
-    ? 'bg-[#ebe4e8] border-[#a8909a] dark:bg-[#28202a] dark:border-[#705a68]'
-    : ''
-  const emphasizedText = isEmphasized ? 'text-[#5a444e] dark:text-[#d2b8c4]' : colors.text
+  const emphasizedStyles = isEmphasized ? `${mergePalette.bg} ${mergePalette.border}` : ''
+  const emphasizedText = isEmphasized ? mergePalette.text : colors.text
 
   // Close evidence panel on outside click
   useEffect(() => {
@@ -450,17 +451,18 @@ export const AncestryTree = memo(function AncestryTree({
 
             {/* Merge node */}
             <div
-              className="
-                max-w-sm rounded-[1.2rem] border border-[#a8909a] bg-[#ebe4e8]
-                px-4 py-3 text-center shadow-sm dark:border-[#705a68] dark:bg-[#28202a]
-                animate-stage-reveal
-              "
+              className={`
+                max-w-sm rounded-[1.2rem] border ${mergePalette.border} ${mergePalette.bg}
+                px-4 py-3 text-center shadow-sm animate-stage-reveal
+              `}
               style={{
                 animationDelay: `${(maxStages + 1) * 100}ms`,
                 animationFillMode: 'backwards',
               }}
             >
-              <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#5a444e] dark:text-[#d2b8c4]">
+              <div
+                className={`mb-0.5 text-[10px] font-semibold uppercase tracking-wider ${mergePalette.text}`}
+              >
                 Combined
               </div>
               <div className="font-serif text-base font-semibold text-charcoal">
@@ -478,7 +480,7 @@ export const AncestryTree = memo(function AncestryTree({
           <div className="flex flex-col items-center">
             {visibleGraph.postMerge!.map((stage, idx) => (
               <div key={`post-${idx}`} className="flex flex-col items-center w-full max-w-xs">
-                <VerticalConnector color="bg-[#c8b0b8] dark:bg-[#60484e]" />
+                <VerticalConnector color={mergeLineColor} />
                 <StageNode
                   stage={stage}
                   isLast={idx === visibleGraph.postMerge!.length - 1}
@@ -493,9 +495,9 @@ export const AncestryTree = memo(function AncestryTree({
 
         {/* Final word */}
         <div className="flex flex-col items-center mt-1">
-          <div className="w-0.5 h-4 bg-[#c8b0b8] dark:bg-[#60484e]" />
+          <div className={`w-0.5 h-4 ${mergeLineColor}`} />
           <svg
-            className="w-3 h-3 text-[#a8909a] dark:text-[#c0a8b0] -mt-0.5"
+            className={`w-3 h-3 ${mergeArrowColor} -mt-0.5`}
             fill="currentColor"
             viewBox="0 0 12 12"
           >
@@ -504,19 +506,19 @@ export const AncestryTree = memo(function AncestryTree({
         </div>
 
         <div
-          className="
-            px-6 py-3
-            rounded-lg border
-            border-[#a8909a] bg-[#ebe4e8] dark:border-[#705a68] dark:bg-[#28202a]
-            shadow-sm shadow-[#a8909a]/18 dark:shadow-black/30
-            animate-stage-reveal
-          "
+          className={`
+            px-6 py-3 rounded-lg border
+            ${mergePalette.border} ${mergePalette.bg}
+            shadow-sm dark:shadow-black/30 animate-stage-reveal
+          `}
           style={{
             animationDelay: `${(maxStages + 3 + (graph.postMerge?.length || 0)) * 100}ms`,
             animationFillMode: 'backwards',
           }}
         >
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[#5a444e] dark:text-[#d2b8c4]">
+          <div
+            className={`mb-1 text-[10px] font-semibold uppercase tracking-wider ${mergePalette.text}`}
+          >
             Modern English
           </div>
           <div className="font-serif text-xl font-bold text-charcoal">{word}</div>

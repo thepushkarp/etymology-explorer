@@ -55,6 +55,17 @@ const sagePalette: StageColorSet = {
   text: 'text-[#465340] dark:text-[#b4c5a6]',
 }
 
+// Neutral palette for merge/final word nodes
+export const mergePalette: StageColorSet = {
+  bg: 'bg-[#ece6dc] dark:bg-[#262018]',
+  border: 'border-[#baa88e] dark:border-[#6a5c48]',
+  text: 'text-[#5e5040] dark:text-[#d0c0a8]',
+}
+
+// Merge connector line and arrow colors
+export const mergeLineColor = 'bg-[#d0c0a8] dark:bg-[#504030]'
+export const mergeArrowColor = 'text-[#baa88e] dark:text-[#a09080]'
+
 // ---------------------------------------------------------------------------
 // Stage colors – one entry per language/period label
 // ---------------------------------------------------------------------------
@@ -102,6 +113,12 @@ export const confidenceConfig: Record<StageConfidence, ConfidenceColorSet> = {
   high: { color: 'bg-[#6d7d63] dark:bg-[#96a781]', label: 'Verified' },
   medium: { color: 'bg-[#6d7d63] dark:bg-[#96a781]', label: 'Verified' },
   low: { color: 'bg-stone-400 dark:bg-stone-500', label: 'AI-inferred' },
+}
+
+export const confidenceBadgeStyles: Record<StageConfidence, string> = {
+  high: `${sagePalette.border} ${sagePalette.bg} ${sagePalette.text}`,
+  medium: `${sagePalette.border} ${sagePalette.bg} ${sagePalette.text}`,
+  low: 'border-stone-300 bg-stone-100/92 text-stone-600 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-300',
 }
 
 // ---------------------------------------------------------------------------
