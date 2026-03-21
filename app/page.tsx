@@ -184,7 +184,10 @@ function HomeContent() {
         </header>
 
         {/* Search bar */}
-        <section className="animate-hero-lift mb-12 md:mb-16" style={{ animationDelay: '80ms' }}>
+        <section
+          className="relative z-10 animate-hero-lift mb-12 md:mb-16"
+          style={{ animationDelay: '80ms' }}
+        >
           <SearchBar
             onSearch={navigateToWord}
             isLoading={state === 'loading'}
