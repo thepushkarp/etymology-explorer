@@ -87,21 +87,17 @@ function StageNode({
   isLast,
   animationDelay,
   isSimple,
-  isEmphasized,
 }: {
   stage: AncestryStage
   isLast?: boolean
   animationDelay?: number
   isSimple?: boolean
-  isEmphasized?: boolean
 }) {
   const [showEvidence, setShowEvidence] = useState(false)
   const nodeRef = useRef<HTMLDivElement>(null)
   const colors = getStageColors(stage.stage)
   const isReconstructed = stage.isReconstructed
   const hasEvidence = !isSimple && stage.evidence && stage.evidence.length > 0
-  const emphasizedStyles = isEmphasized ? `${mergePalette.bg} ${mergePalette.border}` : ''
-  const emphasizedText = isEmphasized ? mergePalette.text : colors.text
 
   // Close evidence panel on outside click
   useEffect(() => {
@@ -137,7 +133,7 @@ function StageNode({
           ${
             isReconstructed
               ? 'border-stone-300 bg-stone-50/60 dark:border-stone-700 dark:bg-stone-900/40'
-              : `${colors.bg} ${colors.border} ${emphasizedStyles}`
+              : `${colors.bg} ${colors.border}`
           }
           text-center shadow-sm transition-[transform,box-shadow] duration-300
           ${hasEvidence ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md' : ''}
@@ -147,7 +143,7 @@ function StageNode({
         <div className="mb-1 flex items-center justify-center gap-1.5">
           <div
             className={`text-[10px] font-semibold uppercase tracking-wider ${
-              isReconstructed ? 'text-stone-500 dark:text-stone-400' : emphasizedText
+              isReconstructed ? 'text-stone-500 dark:text-stone-400' : colors.text
             }`}
           >
             {stage.stage}
@@ -486,7 +482,6 @@ export const AncestryTree = memo(function AncestryTree({
                   isLast={idx === visibleGraph.postMerge!.length - 1}
                   animationDelay={(maxStages + 2 + idx) * 100}
                   isSimple={isSimple}
-                  isEmphasized
                 />
               </div>
             ))}
