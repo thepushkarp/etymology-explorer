@@ -211,15 +211,15 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
               {isLoading ? <LoadingSpinner /> : <SearchIcon />}
             </button>
           </div>
-
-          <SearchSuggestions
-            query={inputValue}
-            history={historyWords}
-            isVisible={shouldShowSuggestions}
-            onSelect={handleSuggestionSelect}
-            selectedIndex={selectedIndex}
-          />
         </div>
+
+        <SearchSuggestions
+          query={inputValue}
+          history={historyWords}
+          isVisible={shouldShowSuggestions}
+          onSelect={handleSuggestionSelect}
+          selectedIndex={selectedIndex}
+        />
       </div>
     </form>
   )

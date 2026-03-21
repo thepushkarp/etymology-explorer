@@ -195,13 +195,13 @@ function HomeContent() {
             inputRef={searchInputRef}
           />
 
-          <div className="mt-5 flex justify-center">
+          <div className="relative z-0 mt-5 flex justify-center">
             <SurpriseButton onWordSelected={navigateToWord} disabled={state === 'loading'} />
           </div>
         </section>
 
         {/* Results area */}
-        <div className="min-h-[400px]">
+        <div className="relative z-0 min-h-[400px]">
           {/* Loading state - show research progress */}
           {state === 'loading' && (
             <div className="py-8">
