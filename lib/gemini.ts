@@ -2,7 +2,7 @@ import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import { EtymologyResult, SourceReference, ResearchContext } from './types'
 import { SYSTEM_PROMPT, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
-import { enrichAncestryGraph } from './etymologyEnricher'
+import { enrichAncestryGraph, pruneUngroundedStages } from './etymologyEnricher'
 import { EtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
 import { getEnv } from './env'
@@ -458,6 +458,12 @@ export async function synthesizeFromResearch(
   // Enrich ancestry graph with source evidence and confidence levels
   if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
     enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
+    const pruned = pruneUngroundedStages(result.ancestryGraph)
+    if (pruned > 0) {
+      console.warn(
+        `[Gemini] Pruned ${pruned} ungrounded reconstructed stage(s) for "${researchContext.mainWord.word}"`
+      )
+    }
   }
 
   // Build sources array with URLs and word info from research context
@@ -612,6 +618,12 @@ export async function streamSynthesis(
 
   if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
     enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
+    const pruned = pruneUngroundedStages(result.ancestryGraph)
+    if (pruned > 0) {
+      console.warn(
+        `[Gemini] Pruned ${pruned} ungrounded reconstructed stage(s) for "${researchContext.mainWord.word}"`
+      )
+    }
   }
 
   // Build sources array with URLs and word info from research context

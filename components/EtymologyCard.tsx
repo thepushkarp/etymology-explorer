@@ -26,17 +26,22 @@ function shortenMeaning(meaning: string): string {
   return meaning.split(/[;,]/)[0].trim()
 }
 
+function shortenOrigin(origin: string): string {
+  return origin.replace(/^Ancient\s+/i, '').replace(/^Old\s+/i, 'O.')
+}
+
 function buildOriginHook(result: EtymologyResult): string | null {
   if (!result.roots || result.roots.length === 0) return null
 
-  const rootSummary = result.roots
-    .slice(0, 3)
-    .map((root) => `${root.root} (${shortenMeaning(root.meaning)})`)
-    .join(' + ')
+  const meaningful = result.roots.filter((r) => !r.root.startsWith('-')).slice(0, 3)
 
-  const originSummary = [...new Set(result.roots.map((root) => root.origin))].join(' + ')
+  if (meaningful.length === 0) return null
 
-  return `From ${originSummary} ${rootSummary}.`
+  const parts = meaningful.map(
+    (root) => `${shortenOrigin(root.origin)} ${root.root} (${shortenMeaning(root.meaning)})`
+  )
+
+  return `From ${parts.join(' + ')}.`
 }
 
 function MobileSection({
