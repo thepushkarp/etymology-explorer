@@ -158,3 +158,71 @@ export function enrichAncestryGraph(graph: AncestryGraph, parsedChains: ParsedEt
     }
   }
 }
+
+/**
+ * Remove reconstructed stages (PIE, Proto-*) that have no source evidence.
+ * Returns count of pruned stages for observability.
+ *
+ * Only targets isReconstructed + confidence === 'low' stages.
+ * Non-reconstructed low-confidence stages are kept — they may be
+ * real forms the parser's regex missed (e.g., variant Latin spellings).
+ *
+ * Must be called after enrichAncestryGraph() — relies on isReconstructed
+ * and confidence fields set by that function.
+ */
+export function pruneUngroundedStages(graph: AncestryGraph): number {
+  if (!graph?.branches) return 0
+  let pruned = 0
+
+  const isUngrounded = (s: AncestryStage) => s.isReconstructed && s.confidence === 'low'
+
+  for (const branch of graph.branches) {
+    const before = branch.stages.length
+    branch.stages = branch.stages.filter((s) => !isUngrounded(s))
+    pruned += before - branch.stages.length
+  }
+
+  if (graph.postMerge) {
+    const before = graph.postMerge.length
+    graph.postMerge = graph.postMerge.filter((s) => !isUngrounded(s))
+    pruned += before - graph.postMerge.length
+  }
+
+  // Track which original indices survive so convergencePoints can be remapped
+  const keptOriginalIndices: number[] = []
+  const filteredBranches = graph.branches.filter((b, i) => {
+    if (b.stages.length > 0) {
+      keptOriginalIndices.push(i)
+      return true
+    }
+    return false
+  })
+  graph.branches = filteredBranches
+
+  // Remap convergencePoints.branchIndices and prune ungrounded pieRoots
+  if (graph.convergencePoints) {
+    const indexRemap = new Map(keptOriginalIndices.map((old, newIdx) => [old, newIdx]))
+
+    // Collect all surviving reconstructed forms for validation
+    const attestedForms = new Set<string>()
+    for (const branch of graph.branches) {
+      for (const stage of branch.stages) {
+        if (stage.isReconstructed) {
+          attestedForms.add(normalize(stage.form))
+        }
+      }
+    }
+
+    graph.convergencePoints = graph.convergencePoints
+      .filter((cp) => attestedForms.has(normalize(cp.pieRoot)))
+      .map((cp) => ({
+        ...cp,
+        branchIndices: cp.branchIndices
+          .filter((i) => indexRemap.has(i))
+          .map((i) => indexRemap.get(i)!),
+      }))
+      .filter((cp) => cp.branchIndices.length >= 2)
+  }
+
+  return pruned
+}

@@ -309,7 +309,7 @@ export function formatParsedChainsForPrompt(chains: ParsedEtymChain[]): string {
 
   const sections: string[] = [
     '=== Pre-Parsed Etymology Chains ===',
-    '(Extracted from source text. Use as ground truth for ancestry stages.)',
+    '(Extracted from source text. These are ground truth — do NOT add PIE or Proto-* stages not listed below.)',
     '',
   ]
 
