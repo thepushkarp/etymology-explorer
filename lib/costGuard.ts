@@ -56,12 +56,7 @@ export async function getCostMode(): Promise<CostMode> {
     const raw = await redis.get<number>(costKey())
     const spent = raw ?? 0
 
-    let mode: CostMode
-    if (spent >= monthlyLimitUSD) mode = 'blocked'
-    else if (spent >= monthlyLimitUSD * cacheOnlyAtPercent) mode = 'cache_only'
-    else if (spent >= monthlyLimitUSD * CONFIG.protection.protected503AtPercent)
-      mode = 'protected_503'
-    else mode = 'normal'
+    const mode: CostMode = spent >= monthlyLimitUSD * cacheOnlyAtPercent ? 'cache_only' : 'normal'
 
     if (mode !== 'normal') {
       emitSecurityEvent({

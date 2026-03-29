@@ -64,7 +64,7 @@ export const CONFIG = {
   costTracking: {
     pricingPerMillionTokens: { input: 0.5, output: 3.0 },
     monthlyLimitUSD: 10.0,
-    cacheOnlyAtPercent: 0.9, // serve only cached results at 90%
+    cacheOnlyAtPercent: 1.0, // serve only cached results at 100%
   },
 
   // Feature flags
@@ -73,12 +73,6 @@ export const CONFIG = {
     pronunciationEnabled: process.env.PRONUNCIATION_ENABLED !== 'false',
     forceCacheOnly: process.env.FORCE_CACHE_ONLY === 'true',
     rateLimitEnabled: process.env.RATE_LIMIT_ENABLED !== 'false',
-  },
-
-  // Protection model (budget-based degradation ladder)
-  protection: {
-    protected503AtPercent: 0.7, // 503 for uncached expensive requests at 70%
-    cooldownWindowMs: 5 * 60_000, // 5 min hysteresis before stepping down
   },
 
   // Cache hardening

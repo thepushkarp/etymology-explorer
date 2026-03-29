@@ -111,21 +111,19 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Reject uncached expensive requests when budget is pressured
-    if (costMode === 'blocked') {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Service is at monthly capacity. Please try again next month.' },
-        { status: 503, headers: { 'X-Protection-Mode': costMode } }
-      )
-    }
-    if (costMode === 'cache_only' || costMode === 'protected_503') {
+    // Reject uncached requests when monthly budget is exhausted
+    if (costMode === 'cache_only') {
       emitSecurityEvent({
         type: 'budget_check',
         timestamp: Date.now(),
         detail: { word: normalizedWord, mode: costMode, action: 'rejected' },
       })
       return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Service temporarily unavailable' },
+        {
+          success: false,
+          error:
+            'Monthly budget reached. Cached words still work — try again next month for new ones.',
+        },
         { status: 503, headers: { 'X-Protection-Mode': costMode } }
       )
     }
@@ -162,11 +160,7 @@ export async function GET(request: NextRequest) {
         | { kind: 'ok'; researchContext: ResearchContext }
         | { kind: 'no_sources'; typoSuggestions?: string[]; fallbackSuggestion?: string }
       > => {
-        const researchContext = await conductAgenticResearch(
-          normalizedWord,
-          { skipOptionalSources: costMode === 'degraded' },
-          onProgress
-        )
+        const researchContext = await conductAgenticResearch(normalizedWord, {}, onProgress)
 
         if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
           cacheNegative(normalizedWord, 'no_sources').catch((err) => {

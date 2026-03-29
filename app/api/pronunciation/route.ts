@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
   try {
     // Check cost mode — reject uncached expensive requests when budget is pressured
     const costMode = await getCostMode()
-    if (costMode === 'blocked' || costMode === 'cache_only' || costMode === 'protected_503') {
+    if (costMode === 'cache_only') {
       return NextResponse.json(
         { success: false, error: 'Service temporarily unavailable' },
         { status: 503, headers: { 'X-Protection-Mode': costMode } }

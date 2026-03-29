@@ -239,8 +239,8 @@ export interface ResearchContext {
   }
 }
 
-/** Protection states for cost guard — extends the budget degradation ladder */
-export type ProtectionMode = 'normal' | 'degraded' | 'cache_only' | 'protected_503' | 'blocked'
+/** Protection states for cost guard budget ladder */
+export type ProtectionMode = 'normal' | 'cache_only'
 
 /** Security telemetry event emitted at key decision points */
 export interface SecurityTelemetryEvent {
