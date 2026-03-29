@@ -6,7 +6,7 @@
 export const CONFIG = {
   // LLM
   model: 'gemini-3-flash-preview',
-  synthesisMaxTokens: 2048,
+  synthesisMaxTokens: 4096,
   rootExtractionMaxTokens: 100,
 
   retries: {
