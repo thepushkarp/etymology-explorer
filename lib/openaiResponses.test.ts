@@ -8,20 +8,20 @@ import {
 } from '@/lib/openaiResponses'
 
 describe('openaiResponses', () => {
-  test('buildSynthesisRequest keeps native OpenAI reasoning defaults on plain text output', () => {
+  test('buildSynthesisRequest uses low reasoning for faster visible synthesis output', () => {
     const request = buildSynthesisRequest('Analyze this word')
 
-    expect(request.model).toBe('gpt-5-mini')
-    expect(request.reasoning).toEqual({ effort: 'medium' })
+    expect(request.model).toBe('gpt-5.4-mini')
+    expect(request.reasoning).toEqual({ effort: 'low' })
     expect(request.max_output_tokens).toBe(9000)
     expect(request.text.format).toEqual({ type: 'text' })
     expect('temperature' in request).toBe(false)
   })
 
-  test('buildRootExtractionRequest keeps the same no-temperature reasoning defaults', () => {
+  test('buildRootExtractionRequest keeps medium reasoning for root extraction stability', () => {
     const request = buildRootExtractionRequest('Analyze roots')
 
-    expect(request.model).toBe('gpt-5-mini')
+    expect(request.model).toBe('gpt-5.4-mini')
     expect(request.reasoning).toEqual({ effort: 'medium' })
     expect(request.max_output_tokens).toBe(100)
     expect(request.text.format).toMatchObject({
@@ -111,6 +111,45 @@ describe('openaiResponses', () => {
         {
           type: 'response.content_part.delta',
           delta: ' world',
+        }
+      )
+    ).toEqual({
+      emittedText: ' world',
+      fullText: 'Hello world',
+      finalResponse: null,
+    })
+  })
+
+  test('reduceStreamEvent captures finalized text when OpenAI sends done events', () => {
+    expect(
+      reduceStreamEvent(
+        {
+          fullText: '',
+          finalResponse: null,
+        },
+        {
+          type: 'response.output_text.done',
+          text: 'Hello world',
+        }
+      )
+    ).toEqual({
+      emittedText: 'Hello world',
+      fullText: 'Hello world',
+      finalResponse: null,
+    })
+
+    expect(
+      reduceStreamEvent(
+        {
+          fullText: 'Hello',
+          finalResponse: null,
+        },
+        {
+          type: 'response.content_part.done',
+          part: {
+            type: 'output_text',
+            text: 'Hello world',
+          },
         }
       )
     ).toEqual({

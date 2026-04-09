@@ -10,7 +10,7 @@ Users search for a word, and the app:
 
 1. Fetches raw data from 6 sources in parallel (Etymonline, Wiktionary, Free Dictionary always; Wikipedia, Urban Dictionary, Incel Wiki as optional supplemental sources)
 2. Pre-parses etymological chains from source text (CPU-only)
-3. Sends aggregated data to OpenAI's Responses API using `gpt-5-mini` for structured synthesis
+3. Sends aggregated data to OpenAI's Responses API using `gpt-5.4-mini` for structured synthesis
 4. Post-processes LLM output to match ancestry stages to parsed evidence and assign programmatic confidence scores
 
 **Live**: https://etymology.thepushkarp.com
@@ -72,7 +72,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/config.ts`** - Centralized configuration:
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
-  - USD monthly limit: $10/month (`gpt-5-mini` pricing in `costTracking`)
+  - USD monthly limit: $10/month (`gpt-5.4-mini` pricing in `costTracking`)
   - Timeouts: source fetches 5s, LLM 120s, TTS 8s
   - Rate limits, singleflight settings, feature flags
 
@@ -232,7 +232,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 **Core Pipeline:**
 
 - `lib/research.ts` - Agentic research orchestrator (6-source parallel fetch)
-- `lib/llm.ts` - LLM client (OpenAI Responses API for `gpt-5-mini`)
+- `lib/llm.ts` - LLM client (OpenAI Responses API for `gpt-5.4-mini`)
 - `lib/prompts.ts` - System prompt for LLM synthesis
 
 **Schema & Types:**

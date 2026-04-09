@@ -55,7 +55,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ### Configuration
 
 The app runs in **public mode** using a server-side OpenAI API key and the
-`gpt-5-mini` model on the Responses API. All searches are rate-limited and
+`gpt-5.4-mini` model on the Responses API. All searches are rate-limited and
 cost-budgeted with a monthly spend cap. Set the `OPENAI_API_KEY` environment variable
 to enable it.
 
@@ -95,7 +95,7 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
 - **Framework**: [Next.js 16.1](https://nextjs.org/) with App Router
 - **UI**: [React 19.2](https://react.dev/) + [Tailwind CSS v4](https://tailwindcss.com/)
 - **LLM**: [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses)
-  using `gpt-5-mini` with structured outputs
+  using `gpt-5.4-mini` with structured outputs
 - **Validation**: [Zod 4.x](https://zod.dev/) for schema validation
 - **Caching/Rate Limiting**: [@upstash/redis](https://upstash.com/) + [@upstash/ratelimit](https://github.com/upstash/ratelimit)
 - **Analytics**: [@vercel/analytics](https://vercel.com/analytics)
@@ -204,96 +204,48 @@ etymology-explorer/
    - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
-6. **Budget Enforcement**: Cost guard tracks monthly spend and enforces protection modes (normal → protected_503 → cache_only → blocked) against a $10/month cap using `gpt-5-mini` pricing
+6. **Budget Enforcement**: Cost guard tracks monthly spend and enforces protection modes (normal → protected_503 → cache_only → blocked) against a $10/month cap using `gpt-5.4-mini` pricing
 7. **Rich Display**: Etymology rendered with expandable roots, ancestry graph with confidence badges, POS tags, modern usage, related words, and source attribution (supplemental sources are only surfaced when significance checks pass)
 
 ### Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              BROWSER (Client)                               │
-│  ┌─────────────┐  ┌───────────────┐  ┌─────────────┐  ┌─────────────────┐  │
-│  │  SearchBar  │  │HistorySidebar │  │ RootChip    │  │  EtymologyCard  │  │
-│  └──────┬──────┘  └───────┬───────┘  └──────┬──────┘  └────────┬────────┘  │
-│         │                │                 │                   │            │
-│         │         localStorage             │                   │            │
-│         │      (search history)            │                   │            │
-│         └────────────────┬─────────────────┴───────────────────┘            │
-└──────────────────────────┼──────────────────────────────────────────────────┘
-                           │ GET /api/etymology?word=... (&stream=true optional)
-                           ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         MIDDLEWARE (Edge)                                   │
-│  ┌───────────────────┐       ┌──────────────────┐                           │
-│  │  Rate Limiting    │  ───▶ │   CSP Headers    │                           │
-│  │  (Upstash Redis)  │       └──────────────────┘                           │
-│  └───────────────────┘                                                      │
-└──────────────────────────────────┬──────────────────────────────────────────┘
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           NEXT.JS SERVER                                    │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │                  CACHING + DEDUPLICATION LAYER                        │  │
-│  │  ┌──────────────┐       ┌──────────────────┐                          │  │
-│  │  │ Singleflight │  ───▶ │   Redis Cache    │                          │  │
-│  │  │ Deduplication│       │ (30d etymology,   │                          │  │
-│  │  │              │       │  1yr audio)       │                          │  │
-│  │  └──────────────┘       └──────────────────┘                          │  │
-│  └─────────────────────────────────┬─────────────────────────────────────┘  │
-│                                    │ Cache miss                             │
-│                                    ▼                                        │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │                   GROUNDED ETYMOLOGY PIPELINE                         │  │
-│  │                                                                       │  │
-│  │  ┌────────────┐      ┌──────────────────────┐      ┌──────────────┐  │  │
-│  │  │   Parser   │  ──▶ │  Agentic Research    │  ──▶ │   Enricher   │  │  │
-│  │  │ (CPU-only) │      │  (6-source parallel) │      │ (CPU-only)   │  │  │
-│  │  │            │      │                      │      │              │  │  │
-│  │  │ Extract    │      │ Phase 1-4 research   │      │ Assign       │  │  │
-│  │  │ "from X,Y" │      │ + LLM synthesis      │      │ confidence   │  │  │
-│  │  │ chains     │      │                      │      │ (h/m/l)      │  │  │
-│  │  └────────────┘      └──────────────────────┘      └──────────────┘  │  │
-│  │                                │                                      │  │
-│  │                                ▼ ResearchContext                       │  │
-│  │                     ┌────────────────────────┐                         │  │
-│  │                     │   LLM SYNTHESIS        │                         │  │
-│  │                     │  (OpenAI Responses)    │                         │  │
-│  │                     │                        │                         │  │
-│  │                     │ Structured JSON output │                         │  │
-│  │                     └────────────────────────┘                         │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-│                                                                             │
-│  ┌───────────────────────────────────────────────────────────────────────┐  │
-│  │                       COST GUARD + BUDGET                             │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌──────────────────┐     │  │
-│  │  │  Normal  │─▶│protected_503│─▶│Cache-only │─▶│     Blocked      │   │  │
-│  │  │  Mode    │  │    Mode     │  │   Mode    │  │ (budget exceeded)│   │  │
-│  │  └──────────┘  └──────────┘  └───────────┘  └──────────────────┘     │  │
-│  └───────────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          EXTERNAL SERVICES                                  │
-│                                                                             │
-│   ┌────────────────┐  ┌────────────────┐  ┌────────────────────────────┐    │
-│   │  etymonline.com│  │ en.wiktionary  │  │ OpenAI `gpt-5-mini`      │    │
-│   │  (HTML scrape) │  │ (MediaWiki API)│  │  (LLM with JSON schema)    │    │
-│   └────────────────┘  └────────────────┘  └────────────────────────────┘    │
-│   ┌────────────────┐  ┌────────────────┐  ┌────────────────────────────┐    │
-│   │  en.wikipedia  │  │ Urban Dict API │  │      ElevenLabs API        │    │
-│   │  (REST API)    │  │ (quality gate) │  │  (pronunciation audio)     │    │
-│   └────────────────┘  └────────────────┘  └────────────────────────────┘    │
-│   ┌────────────────┐  ┌────────────────┐                                     │
-│   │ Free Dict API  │  │ Incel Wiki API │                                     │
-│   │ (dictionaryapi)|  │ (MediaWiki)    │                                     │
-│   └────────────────┘  └────────────────┘                                     │
-│   ┌────────────────┐                                                         │
-│   │ Upstash Redis  │                                                         │
-│   │ (cache + rate) │                                                         │
-│   └────────────────┘                                                         │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────┐
+│         BROWSER UI           │
+│ SearchBar / History / Result  │
+└──────────────┬───────────────┘
+               │ GET /api/etymology?word=X[&stream=true]
+               ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Edge + Route Entry                                                           │
+│ proxy.ts: rate limit + CSP   →   app/api/etymology/route.ts: validate input  │
+└──────────────────────────────┬───────────────────────────────────────────────┘
+                               ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Control Plane                                                                │
+│ cache hit? → return cached result                                            │
+│ singleflight lock → dedupe concurrent lookups                                │
+│ cost guard → normal | protected_503 | cache_only | blocked                  │
+└──────────────────────────────┬───────────────────────────────────────────────┘
+                               │ cache miss
+                               ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Grounded Etymology Pipeline                                                  │
+│ 1) Fetch 6 sources in parallel                                               │
+│ 2) Parse "from X, from Y" chains (CPU-only)                                  │
+│ 3) OpenAI root extraction                                                    │
+│ 4) Fetch root data + related terms                                           │
+│ 5) OpenAI synthesis (stream tokens when stream=true)                         │
+│ 6) Enrich ancestry graph + confidence/evidence                               │
+│ 7) Cache result in Redis                                                     │
+└──────────────────────────────┬───────────────────────────────────────────────┘
+                               ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Response Paths                                                               │
+│ stream=true   → SSE events: source_* → parsing_complete → synthesis_*       │
+│                    → enrichment_done → result / error                        │
+│ default       → JSON response with final EtymologyResult                     │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Development
@@ -332,5 +284,5 @@ MIT
 - Modern slang definitions from [Urban Dictionary](https://www.urbandictionary.com/)
 - Supplemental community slang context from [Incel Wiki](https://incels.wiki/)
 - Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)
-- Powered by [OpenAI](https://platform.openai.com/) `gpt-5-mini`
+- Powered by [OpenAI](https://platform.openai.com/) `gpt-5.4-mini`
 - Rate limiting and caching by [Upstash](https://upstash.com/)

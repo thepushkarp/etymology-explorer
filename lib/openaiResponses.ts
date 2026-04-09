@@ -18,10 +18,12 @@ type JsonSchemaFormat = {
   schema: object
 }
 
+type ReasoningEffort = 'low' | 'medium' | 'high' | 'minimal' | 'none' | 'xhigh'
+
 export type OpenAIRequest = {
   model: string
   input: string
-  reasoning: { effort: 'medium' }
+  reasoning: { effort: ReasoningEffort }
   max_output_tokens: number
   text: { format: JsonSchemaFormat | TextFormat }
   instructions?: string
@@ -64,6 +66,11 @@ export type OpenAIResponseLike = {
 type OpenAIStreamEvent = {
   type?: string
   delta?: string
+  text?: string
+  part?: {
+    type?: string
+    text?: string
+  }
   response?: OpenAIResponseLike
   error?: {
     message?: string
@@ -75,28 +82,34 @@ const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
 function buildRequest(
   input: string,
   maxOutputTokens: number,
-  format: JsonSchemaFormat | TextFormat
+  format: JsonSchemaFormat | TextFormat,
+  reasoningEffort: ReasoningEffort
 ): OpenAIRequest {
   return {
     model: CONFIG.model,
     input,
-    reasoning: { effort: 'medium' },
+    reasoning: { effort: reasoningEffort },
     max_output_tokens: maxOutputTokens,
     text: { format },
   }
 }
 
 export function buildSynthesisRequest(input: string): OpenAIRequest {
-  return buildRequest(input, CONFIG.synthesisMaxTokens, { type: 'text' })
+  return buildRequest(input, CONFIG.synthesisMaxTokens, { type: 'text' }, 'low')
 }
 
 export function buildRootExtractionRequest(input: string): OpenAIRequest {
-  return buildRequest(input, CONFIG.rootExtractionMaxTokens, {
-    type: 'json_schema',
-    name: 'root_array',
-    strict: true,
-    schema: ROOTS_JSON_SCHEMA,
-  })
+  return buildRequest(
+    input,
+    CONFIG.rootExtractionMaxTokens,
+    {
+      type: 'json_schema',
+      name: 'root_array',
+      strict: true,
+      schema: ROOTS_JSON_SCHEMA,
+    },
+    'medium'
+  )
 }
 
 type StreamAccumulator = {
@@ -106,6 +119,39 @@ type StreamAccumulator = {
 
 type StreamReduction = StreamAccumulator & {
   emittedText: string
+}
+
+function finalizeStreamText(state: StreamAccumulator, text: string): StreamReduction {
+  if (!text) {
+    return {
+      emittedText: '',
+      fullText: state.fullText,
+      finalResponse: state.finalResponse,
+    }
+  }
+
+  if (!state.fullText) {
+    return {
+      emittedText: text,
+      fullText: text,
+      finalResponse: state.finalResponse,
+    }
+  }
+
+  if (text.startsWith(state.fullText)) {
+    const suffix = text.slice(state.fullText.length)
+    return {
+      emittedText: suffix,
+      fullText: text,
+      finalResponse: state.finalResponse,
+    }
+  }
+
+  return {
+    emittedText: '',
+    fullText: state.fullText,
+    finalResponse: state.finalResponse,
+  }
 }
 
 export function reduceStreamEvent(
@@ -121,6 +167,18 @@ export function reduceStreamEvent(
       fullText: state.fullText + event.delta,
       finalResponse: state.finalResponse,
     }
+  }
+
+  if (event.type === 'response.output_text.done' && typeof event.text === 'string') {
+    return finalizeStreamText(state, event.text)
+  }
+
+  if (
+    event.type === 'response.content_part.done' &&
+    event.part?.type === 'output_text' &&
+    typeof event.part.text === 'string'
+  ) {
+    return finalizeStreamText(state, event.part.text)
   }
 
   if ((event.type === 'response.completed' || event.type === 'response.done') && event.response) {

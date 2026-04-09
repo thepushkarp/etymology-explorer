@@ -120,11 +120,22 @@ export default function ResearchProgress({ events }: ResearchProgressProps) {
 
   const collapseSourceChips = parsingComplete
   const synthesisLines = useMemo(() => buildSynthesisLines(synthesisTokens), [synthesisTokens])
+  const hasSynthesisTokens = synthesisLines.length > 0
   const visibleSynthesisLines = synthesisLines.slice(-4)
   const paddedSynthesisLines = Array.from({ length: 4 }, (_, index) => {
     const offset = 4 - visibleSynthesisLines.length
     return visibleSynthesisLines[index - offset] ?? ''
   })
+  const synthesisPhaseLabel = enrichmentDone
+    ? 'Finalizing grounded result'
+    : hasSynthesisTokens
+      ? 'Streaming synthesis'
+      : 'Reasoning over sources'
+  const synthesisPhaseDetail = enrichmentDone
+    ? 'Aligning the generated explanation with evidence...'
+    : hasSynthesisTokens
+      ? 'Unfolding the story...'
+      : 'Putting the explanation together...'
 
   return (
     <div className="space-y-6 py-4">
@@ -288,8 +299,12 @@ export default function ResearchProgress({ events }: ResearchProgressProps) {
                   />
                 </svg>
               )}
-              Synthesizing...
+              {synthesisPhaseLabel}
             </div>
+
+            <p className="mx-auto mt-2 max-w-lg px-4 text-center text-xs text-charcoal/52">
+              {synthesisPhaseDetail}
+            </p>
 
             {visibleSynthesisLines.length > 0 && (
               <div className="mx-auto mt-4 max-w-md overflow-hidden rounded-[1.25rem] border border-border-soft bg-surface/72 px-4 py-3 shadow-[0_16px_36px_-28px_var(--shadow-color)]">
