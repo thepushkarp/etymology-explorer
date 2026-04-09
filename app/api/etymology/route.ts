@@ -32,6 +32,8 @@ function countConfidence(result: EtymologyResult, level: StageConfidence): numbe
 
 export async function GET(request: NextRequest) {
   let shouldStream = false
+  const debugProviderErrors =
+    process.env.VERCEL_ENV !== 'production' && request.nextUrl.searchParams.get('debug') === '1'
 
   try {
     // Validate environment (lazy, cached after first call)
@@ -286,10 +288,11 @@ export async function GET(request: NextRequest) {
               controller.close()
             } catch (error) {
               console.error('[Etymology API] Streaming error:', safeError(error))
+              const safeMessage = safeError(error)
               const classified = classifyApiError(error)
               emit({
                 type: 'error',
-                message: classified.message,
+                message: debugProviderErrors ? safeMessage : classified.message,
                 errorType: classified.streamErrorType,
               })
               controller.close()
@@ -355,12 +358,16 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error('Etymology API error:', safeError(error))
+    const safeMessage = safeError(error)
     const classified = classifyApiError(error)
 
     return shouldStream
-      ? streamErrorResponse(classified.message, classified.streamErrorType)
+      ? streamErrorResponse(
+          debugProviderErrors ? safeMessage : classified.message,
+          classified.streamErrorType
+        )
       : NextResponse.json<ApiResponse<null>>(
-          { success: false, error: classified.message },
+          { success: false, error: debugProviderErrors ? safeMessage : classified.message },
           { status: classified.status }
         )
   }
