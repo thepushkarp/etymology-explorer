@@ -31,7 +31,13 @@ export async function extractRootsQuick(
     return []
   }
 
-  const prompt = `Analyze this etymology data and extract the root morphemes/components of the word "${word}".
+  const prompt = `Analyze this etymology data and extract the ETYMOLOGICAL root morphemes of the word "${word}".
+
+Rules:
+- Extract roots that carry independent meaning and have their own etymology worth researching.
+- Include prefixes only when they are productive and meaningfully change the word (for example, "contra-" in "contradict").
+- Exclude inflectional or low-signal suffixes such as -ed, -ing, -ly, -tion, -ible, and -ous unless the source data makes them etymologically central.
+- For single-morpheme words with no compound structure, return just the word itself.
 
 Source data:
 ${sourceText}
@@ -40,10 +46,11 @@ Return ONLY a JSON array of root strings (the actual morphemes, not full words).
 Examples:
 - For "telephone": ["tele", "phone"]
 - For "autobiography": ["auto", "bio", "graph"]
-- For "cat": ["cat"] (simple words have themselves as root)
-- For "incredible": ["in", "cred"]
+- For "incredible": ["cred"]
+- For "contradict": ["contra", "dict"]
+- For "cat": ["cat"]
 
-  Return the JSON array only, no explanation:`
+Return the JSON array only, no explanation:`
 
   try {
     const request = buildRootExtractionRequest(prompt)
