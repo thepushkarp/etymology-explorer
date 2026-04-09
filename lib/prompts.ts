@@ -1,5 +1,5 @@
 /**
- * Prompt templates for Gemini Flash etymology synthesis
+ * Prompt templates for OpenRouter-backed GPT-5.4 mini etymology synthesis
  */
 
 export const SYSTEM_PROMPT = `You are an etymology expert who makes word origins memorable and fascinating. You help vocabulary learners (especially GRE/TOEFL students) understand words deeply through their roots.

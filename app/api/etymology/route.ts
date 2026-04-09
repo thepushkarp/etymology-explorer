@@ -6,7 +6,7 @@ import {
   StageConfidence,
   ResearchContext,
 } from '@/lib/types'
-import { synthesizeFromResearch, streamSynthesis } from '@/lib/gemini'
+import { synthesizeFromResearch, streamSynthesis } from '@/lib/llm'
 import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'

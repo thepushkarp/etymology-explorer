@@ -1,34 +1,20 @@
-import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import { EtymologyResult, SourceReference, ResearchContext } from './types'
 import { SYSTEM_PROMPT, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph, pruneUngroundedStages } from './etymologyEnricher'
 import { EtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
-import { getEnv } from './env'
+import {
+  buildSynthesisRequest,
+  createOpenRouterResponse,
+  extractOutputText,
+  extractUsage,
+  streamOpenRouterResponse,
+} from './openrouterResponses'
 
 export interface SynthesisResult {
   result: EtymologyResult
   usage: { inputTokens: number; outputTokens: number }
-}
-
-interface GeminiResponsePart {
-  text?: string | null
-}
-
-interface GeminiResponseCandidate {
-  content?: {
-    parts?: GeminiResponsePart[]
-  }
-}
-
-interface GeminiResponseLike {
-  text?: string | null
-  candidates?: GeminiResponseCandidate[]
-}
-
-interface GeminiGenerationOptions {
-  useSearchGrounding: boolean
 }
 
 class MalformedModelOutputError extends Error {
@@ -51,38 +37,6 @@ function addUsage(
 ): void {
   total.inputTokens += delta.inputTokens
   total.outputTokens += delta.outputTokens
-}
-
-function shouldUseSearchGrounding(
-  researchContext: ResearchContext,
-  isRetryAttempt: boolean
-): boolean {
-  if (!CONFIG.grounding.googleSearchEnabled) return false
-
-  if (isRetryAttempt && CONFIG.grounding.enableOnMalformedRetry) {
-    return true
-  }
-
-  const hasNoParsedChains = (researchContext.parsedChains?.length ?? 0) === 0
-  const hasMissingCoreSources =
-    !researchContext.mainWord.etymonline ||
-    !researchContext.mainWord.wiktionary ||
-    !researchContext.mainWord.freeDictionary
-
-  return (
-    (CONFIG.grounding.enableWhenNoParsedChains && hasNoParsedChains) ||
-    (CONFIG.grounding.enableWhenCoreSourcesMissing && hasMissingCoreSources)
-  )
-}
-
-function buildGenerationConfig(useSearchGrounding: boolean) {
-  return {
-    maxOutputTokens: CONFIG.synthesisMaxTokens,
-    systemInstruction: SYSTEM_PROMPT,
-    thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-    responseMimeType: 'application/json' as const,
-    ...(useSearchGrounding ? { tools: [{ googleSearch: {} }] } : {}),
-  }
 }
 
 function isAbortLikeError(error: unknown): boolean {
@@ -114,40 +68,7 @@ function isAbortLikeError(error: unknown): boolean {
 }
 
 function timeoutErrorMessage(timeoutMs: number): string {
-  return `Gemini request timeout after ${timeoutMs}ms`
-}
-
-function extractUsage(
-  usage:
-    | {
-        promptTokenCount?: number | null
-        candidatesTokenCount?: number | null
-      }
-    | null
-    | undefined
-): { inputTokens: number; outputTokens: number } {
-  return {
-    inputTokens: usage?.promptTokenCount ?? 0,
-    outputTokens: usage?.candidatesTokenCount ?? 0,
-  }
-}
-
-function extractResponseText(response: GeminiResponseLike): string {
-  if (response.text && response.text.trim().length > 0) {
-    return response.text
-  }
-
-  const candidateText = (response.candidates ?? [])
-    .flatMap((candidate) => candidate.content?.parts ?? [])
-    .map((part) => part.text?.trim() ?? '')
-    .filter((part) => part.length > 0)
-    .join('')
-
-  if (candidateText.length > 0) {
-    return candidateText
-  }
-
-  throw new Error('No text response from Gemini')
+  return `OpenRouter request timeout after ${timeoutMs}ms`
 }
 
 function extractJsonObjectChunk(text: string): string | null {
@@ -229,38 +150,6 @@ function parseGeneratedJson(text: string): EtymologyResult {
   throw new Error('Could not parse a JSON object from model output')
 }
 
-async function callGemini(
-  userPrompt: string,
-  options: GeminiGenerationOptions
-): Promise<{ text: string; usage: { inputTokens: number; outputTokens: number } }> {
-  const client = new GoogleGenAI({ apiKey: getEnv().GEMINI_API_KEY })
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), CONFIG.timeouts.llm)
-
-  try {
-    const response = await client.models.generateContent({
-      model: CONFIG.model,
-      contents: userPrompt,
-      config: {
-        ...buildGenerationConfig(options.useSearchGrounding),
-        abortSignal: controller.signal,
-      },
-    })
-
-    return {
-      text: extractResponseText(response),
-      usage: extractUsage(response.usageMetadata),
-    }
-  } catch (error) {
-    if (isAbortLikeError(error)) {
-      throw new Error(timeoutErrorMessage(CONFIG.timeouts.llm))
-    }
-    throw error
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 /**
  * Sanitize a suggestion word: strip parenthetical annotations, descriptions,
  * em-dashes, and other noise the LLM may include despite instructions.
@@ -269,20 +158,12 @@ async function callGemini(
 function sanitizeSuggestionWord(raw: string): string {
   let text = raw.trim()
 
-  // Strip parenthetical annotations: "affect (verb: to influence)" → "affect"
   text = text.replace(/\s*\([^)]*\).*$/, '')
-
-  // Strip em-dash/en-dash trailing descriptions: "ensure—to make certain" → "ensure"
   text = text.replace(/\s*[—–].*$/, '')
   text = text.replace(/\s+-\s+.*$/, '')
-
-  // Strip colon descriptions: "effect: noun meaning result" → "effect"
   text = text.replace(/:\s*.{5,}$/, '')
-
-  // Strip trailing punctuation
   text = text.replace(/[.,;:!?]+$/, '').trim()
 
-  // If still unreasonably long, take first word-like chunk
   if (text.length > 40) {
     const match = text.match(/^[\w\u00C0-\u024F]+(?:[\s-][\w\u00C0-\u024F]+)?/)
     if (match) text = match[0]
@@ -291,9 +172,6 @@ function sanitizeSuggestionWord(raw: string): string {
   return text || raw.trim()
 }
 
-/**
- * Sanitize all suggestion arrays in an EtymologyResult.
- */
 function sanitizeSuggestions(result: EtymologyResult): void {
   if (!result.suggestions) return
 
@@ -302,7 +180,7 @@ function sanitizeSuggestions(result: EtymologyResult): void {
   for (const field of fields) {
     const arr = result.suggestions[field]
     if (arr) {
-      result.suggestions[field] = arr.map(sanitizeSuggestionWord).filter((w) => w.length > 0)
+      result.suggestions[field] = arr.map(sanitizeSuggestionWord).filter((word) => word.length > 0)
     }
   }
 }
@@ -334,10 +212,6 @@ function getSupplementalSourceSignals(researchContext: ResearchContext): Supplem
   return { urbanDictionary, incelsWiki }
 }
 
-/**
- * Keep modern usage grounded: only surface it when we have clear, high-signal evidence.
- * This prevents vague or speculative slang blurbs from showing up in the UI.
- */
 function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchContext): void {
   const modernUsage = result.modernUsage
   if (!modernUsage) return
@@ -393,31 +267,50 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
   }
 }
 
-async function generateEtymologyResponse(
-  userPrompt: string,
-  researchContext: ResearchContext,
-  startInRetryMode = false
-): Promise<{ result: EtymologyResult; usage: { inputTokens: number; outputTokens: number } }> {
+async function callLlm(userPrompt: string): Promise<{
+  text: string
+  usage: { inputTokens: number; outputTokens: number }
+}> {
+  const request = buildSynthesisRequest(userPrompt)
+  request.instructions = SYSTEM_PROMPT
+
+  let response
+  try {
+    response = await createOpenRouterResponse(request, CONFIG.timeouts.llm)
+  } catch (error) {
+    if (isAbortLikeError(error)) {
+      throw new Error(timeoutErrorMessage(CONFIG.timeouts.llm))
+    }
+    throw error
+  }
+
+  return {
+    text: extractOutputText(response),
+    usage: extractUsage(response),
+  }
+}
+
+async function generateEtymologyResponse(userPrompt: string): Promise<{
+  result: EtymologyResult
+  usage: { inputTokens: number; outputTokens: number }
+}> {
   const totalUsage = { inputTokens: 0, outputTokens: 0 }
   const maxAttempts = CONFIG.retries.malformedOutputRetries + 1
   let lastMalformedError: MalformedModelOutputError | null = null
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const isRetryAttempt = startInRetryMode || attempt > 0
-    const useSearchGrounding = shouldUseSearchGrounding(researchContext, isRetryAttempt)
-
     try {
-      const { text, usage } = await callGemini(userPrompt, { useSearchGrounding })
+      const { text, usage } = await callLlm(userPrompt)
 
       try {
         const result = parseGeneratedJson(text)
         sanitizeSuggestions(result)
         addUsage(totalUsage, usage)
         return { result, usage: totalUsage }
-      } catch (e) {
+      } catch (error) {
         const preview = text.slice(0, 200)
         throw new MalformedModelOutputError(
-          `Failed to parse LLM response: ${e}. Preview: ${preview}`,
+          `Failed to parse LLM response: ${error}. Preview: ${preview}`,
           usage
         )
       }
@@ -431,8 +324,8 @@ async function generateEtymologyResponse(
 
       if (attempt < maxAttempts - 1) {
         console.warn(
-          '[Gemini] Retrying malformed model output',
-          JSON.stringify({ attempt: attempt + 1, useSearchGrounding })
+          '[LLM] Retrying malformed model output',
+          JSON.stringify({ attempt: attempt + 1 })
         )
       }
     }
@@ -441,35 +334,11 @@ async function generateEtymologyResponse(
   throw lastMalformedError ?? new Error('Failed to parse LLM response after retries')
 }
 
-/**
- * Synthesize etymology from rich research context (agentic mode).
- * Returns both the enriched result and token usage for cost tracking.
- */
-export async function synthesizeFromResearch(
-  researchContext: ResearchContext
-): Promise<SynthesisResult> {
-  const researchData = buildResearchPrompt(researchContext)
-  const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
-
-  const { result, usage } = await generateEtymologyResponse(userPrompt, researchContext)
-
-  sanitizeModernUsage(result, researchContext)
-
-  // Enrich ancestry graph with source evidence and confidence levels
-  if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
-    enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
-    const pruned = pruneUngroundedStages(result.ancestryGraph)
-    if (pruned > 0) {
-      console.warn(
-        `[Gemini] Pruned ${pruned} ungrounded reconstructed stage(s) for "${researchContext.mainWord.word}"`
-      )
-    }
-  }
-
-  // Build sources array with URLs and word info from research context
+function attachSources(result: EtymologyResult, researchContext: ResearchContext): EtymologyResult {
   const sources: SourceReference[] = []
   const supplementalSignals = getSupplementalSourceSignals(researchContext)
   const mainWord = researchContext.mainWord.word
+
   if (researchContext.mainWord.etymonline) {
     sources.push({
       name: 'etymonline',
@@ -506,96 +375,113 @@ export async function synthesizeFromResearch(
     })
   }
   for (const rootData of researchContext.rootResearch) {
-    if (rootData.etymonlineData && !sources.some((s) => s.url === rootData.etymonlineData?.url)) {
+    if (
+      rootData.etymonlineData &&
+      !sources.some((source) => source.url === rootData.etymonlineData?.url)
+    ) {
       sources.push({ name: 'etymonline', url: rootData.etymonlineData.url, word: rootData.root })
     }
-    if (rootData.wiktionaryData && !sources.some((s) => s.url === rootData.wiktionaryData?.url)) {
+    if (
+      rootData.wiktionaryData &&
+      !sources.some((source) => source.url === rootData.wiktionaryData?.url)
+    ) {
       sources.push({ name: 'wiktionary', url: rootData.wiktionaryData.url, word: rootData.root })
     }
   }
   if (sources.length === 0) {
     sources.push({ name: 'synthesized' })
   }
-  result.sources = sources
 
-  // Validate the fully enriched result (sources, confidence, evidence all populated)
+  result.sources = sources
+  return result
+}
+
+function finalizeResult(
+  result: EtymologyResult,
+  researchContext: ResearchContext,
+  phase: 'standard' | 'streaming'
+): EtymologyResult {
+  sanitizeModernUsage(result, researchContext)
+
+  if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
+    enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
+    const pruned = pruneUngroundedStages(result.ancestryGraph)
+    if (pruned > 0) {
+      console.warn(
+        `[LLM] Pruned ${pruned} ungrounded reconstructed stage(s) for "${researchContext.mainWord.word}"`
+      )
+    }
+  }
+
+  attachSources(result, researchContext)
+
   const validated = EtymologyResultSchema.safeParse(result)
   if (!validated.success) {
     const issue = validated.error.issues[0]
     console.error(
-      '[Gemini] Schema validation failed after enrichment:',
+      `[LLM] Schema validation failed after ${phase} enrichment:`,
       JSON.stringify({ message: issue?.message, path: issue?.path, code: issue?.code })
     )
     throw new Error(`Schema validation failed: ${issue?.message} at ${issue?.path?.join('.')}`)
   }
 
-  return { result: validated.data as EtymologyResult, usage }
+  return validated.data as EtymologyResult
 }
 
-/**
- * Stream etymology synthesis from research context, emitting tokens via callback.
- * Accumulates the full response and returns enriched result with token usage.
- * Reuses enrichment logic from synthesizeFromResearch().
- */
+export async function synthesizeFromResearch(
+  researchContext: ResearchContext
+): Promise<SynthesisResult> {
+  const researchData = buildResearchPrompt(researchContext)
+  const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
+
+  const { result, usage } = await generateEtymologyResponse(userPrompt)
+
+  return {
+    result: finalizeResult(result, researchContext, 'standard'),
+    usage,
+  }
+}
+
 export async function streamSynthesis(
   researchContext: ResearchContext,
   onToken: (token: string) => void
 ): Promise<SynthesisResult> {
-  const client = new GoogleGenAI({ apiKey: getEnv().GEMINI_API_KEY })
-
   const researchData = buildResearchPrompt(researchContext)
   const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
-  const useSearchGrounding = shouldUseSearchGrounding(researchContext, false)
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), CONFIG.timeouts.llm)
+  const request = buildSynthesisRequest(userPrompt)
+  request.instructions = SYSTEM_PROMPT
 
   let fullText = ''
-  const usage = { inputTokens: 0, outputTokens: 0 }
+  let usage = { inputTokens: 0, outputTokens: 0 }
 
   try {
-    const stream = await client.models.generateContentStream({
-      model: CONFIG.model,
-      contents: userPrompt,
-      config: {
-        ...buildGenerationConfig(useSearchGrounding),
-        abortSignal: controller.signal,
-      },
-    })
-
-    // Accumulate tokens and emit via callback
-    for await (const chunk of stream) {
-      const token = chunk.text
-      if (token) {
+    const response = await streamOpenRouterResponse(
+      request,
+      (token) => {
         fullText += token
         onToken(token)
-      }
+      },
+      CONFIG.timeouts.llm
+    )
 
-      if (chunk.usageMetadata) {
-        const chunkUsage = extractUsage(chunk.usageMetadata)
-        usage.inputTokens = chunkUsage.inputTokens
-        usage.outputTokens = chunkUsage.outputTokens
-      }
+    const responseText = extractOutputText(response)
+    if (!fullText) {
+      fullText = responseText
     }
-  } catch (e) {
-    const errorMsg = isAbortLikeError(e)
-      ? timeoutErrorMessage(CONFIG.timeouts.llm)
-      : e instanceof Error
-        ? e.message
-        : String(e)
-    throw new Error(`Streaming failed: ${errorMsg}`)
-  } finally {
-    clearTimeout(timer)
+    usage = extractUsage(response)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    throw new Error(`Streaming failed: ${errorMessage}`)
   }
 
-  // Parse accumulated response
   let result: EtymologyResult
   try {
     result = parseGeneratedJson(fullText)
     sanitizeSuggestions(result)
-  } catch (e) {
+  } catch (error) {
     const preview = fullText.slice(0, 200)
     const parseError = new MalformedModelOutputError(
-      `Failed to parse streamed LLM response: ${e}. Preview: ${preview}`,
+      `Failed to parse streamed LLM response: ${error}. Preview: ${preview}`,
       usage
     )
 
@@ -603,94 +489,15 @@ export async function streamSynthesis(
       throw parseError
     }
 
-    console.warn(
-      '[Gemini] Streaming output malformed, retrying with unary generation',
-      JSON.stringify({ useSearchGrounding })
-    )
+    console.warn('[LLM] Streaming output malformed, retrying with unary generation')
 
-    const recovered = await generateEtymologyResponse(userPrompt, researchContext, true)
+    const recovered = await generateEtymologyResponse(userPrompt)
     result = recovered.result
     addUsage(usage, recovered.usage)
   }
 
-  // Enrich ancestry graph with source evidence and confidence levels
-  sanitizeModernUsage(result, researchContext)
-
-  if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
-    enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
-    const pruned = pruneUngroundedStages(result.ancestryGraph)
-    if (pruned > 0) {
-      console.warn(
-        `[Gemini] Pruned ${pruned} ungrounded reconstructed stage(s) for "${researchContext.mainWord.word}"`
-      )
-    }
-  }
-
-  // Build sources array with URLs and word info from research context
-  const sources: SourceReference[] = []
-  const supplementalSignals = getSupplementalSourceSignals(researchContext)
-  const mainWord = researchContext.mainWord.word
-  if (researchContext.mainWord.etymonline) {
-    sources.push({
-      name: 'etymonline',
-      url: researchContext.mainWord.etymonline.url,
-      word: mainWord,
-    })
-  }
-  if (researchContext.mainWord.wiktionary) {
-    sources.push({
-      name: 'wiktionary',
-      url: researchContext.mainWord.wiktionary.url,
-      word: mainWord,
-    })
-  }
-  if (researchContext.mainWord.freeDictionary) {
-    sources.push({
-      name: 'freeDictionary',
-      url: `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(mainWord)}`,
-      word: mainWord,
-    })
-  }
-  if (researchContext.mainWord.urbanDictionary && supplementalSignals.urbanDictionary) {
-    sources.push({
-      name: 'urbanDictionary',
-      url: researchContext.mainWord.urbanDictionary.url,
-      word: mainWord,
-    })
-  }
-  if (researchContext.mainWord.incelsWiki && supplementalSignals.incelsWiki) {
-    sources.push({
-      name: 'incelsWiki',
-      url: researchContext.mainWord.incelsWiki.url,
-      word: mainWord,
-    })
-  }
-  for (const rootData of researchContext.rootResearch) {
-    if (rootData.etymonlineData && !sources.some((s) => s.url === rootData.etymonlineData?.url)) {
-      sources.push({ name: 'etymonline', url: rootData.etymonlineData.url, word: rootData.root })
-    }
-    if (rootData.wiktionaryData && !sources.some((s) => s.url === rootData.wiktionaryData?.url)) {
-      sources.push({ name: 'wiktionary', url: rootData.wiktionaryData.url, word: rootData.root })
-    }
-  }
-  if (sources.length === 0) {
-    sources.push({ name: 'synthesized' })
-  }
-  result.sources = sources
-
-  // Validate the fully enriched result
-  const validated = EtymologyResultSchema.safeParse(result)
-  if (!validated.success) {
-    const issue = validated.error.issues[0]
-    console.error(
-      '[Gemini] Schema validation failed after streaming enrichment:',
-      JSON.stringify({ message: issue?.message, path: issue?.path, code: issue?.code })
-    )
-    throw new Error(`Schema validation failed: ${issue?.message} at ${issue?.path?.join('.')}`)
-  }
-
   return {
-    result: validated.data as EtymologyResult,
+    result: finalizeResult(result, researchContext, 'streaming'),
     usage,
   }
 }

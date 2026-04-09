@@ -12,15 +12,13 @@ import { fetchIncelsWiki } from './incelsWiki'
 import { fetchFreeDictionary } from './freeDictionary'
 import { ResearchContext, RootResearchData, StreamEvent } from './types'
 import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
-import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
-import { getEnv } from './env'
-
-const ROOTS_JSON_SCHEMA = {
-  type: 'array',
-  items: { type: 'string' },
-} as const
+import {
+  buildRootExtractionRequest,
+  createOpenRouterResponse,
+  extractOutputText,
+} from './openrouterResponses'
 
 export async function extractRootsQuick(
   word: string,
@@ -48,20 +46,12 @@ Examples:
   Return the JSON array only, no explanation:`
 
   try {
-    const client = new GoogleGenAI({ apiKey: getEnv().GEMINI_API_KEY })
-    const response = await client.models.generateContent({
-      model: CONFIG.model,
-      contents: prompt,
-      config: {
-        maxOutputTokens: CONFIG.rootExtractionMaxTokens,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: 'application/json',
-        responseJsonSchema: ROOTS_JSON_SCHEMA,
-      },
-    })
+    const request = buildRootExtractionRequest(prompt)
+    request.instructions =
+      'Extract root morphemes only. Return a JSON array of lowercase strings with no commentary.'
 
-    if (!response.text) return []
-    return parseRootsArray(response.text)
+    const response = await createOpenRouterResponse(request)
+    return parseRootsArray(extractOutputText(response))
   } catch (error) {
     console.error('Root extraction error:', safeError(error))
     return []

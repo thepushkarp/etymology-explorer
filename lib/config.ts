@@ -5,19 +5,12 @@
 
 export const CONFIG = {
   // LLM
-  model: 'gemini-3-flash-preview',
+  model: 'openai/gpt-5.4-mini',
   synthesisMaxTokens: 4096,
   rootExtractionMaxTokens: 100,
 
   retries: {
     malformedOutputRetries: 1,
-  },
-
-  grounding: {
-    googleSearchEnabled: process.env.GOOGLE_SEARCH_GROUNDING_ENABLED !== 'false',
-    enableWhenNoParsedChains: true,
-    enableWhenCoreSourcesMissing: true,
-    enableOnMalformedRetry: true,
   },
 
   // Input validation
@@ -49,7 +42,7 @@ export const CONFIG = {
   // Timeouts (milliseconds)
   timeouts: {
     source: 5_000,
-    llm: 120_000, // Gemini API
+    llm: 120_000, // OpenRouter Responses API
     tts: 8_000, // ElevenLabs
   },
 
@@ -62,7 +55,7 @@ export const CONFIG = {
 
   // USD-based cost tracking
   costTracking: {
-    pricingPerMillionTokens: { input: 0.5, output: 3.0 },
+    pricingPerMillionTokens: { input: 0.75, output: 4.5 },
     monthlyLimitUSD: 10.0,
     cacheOnlyAtPercent: 1.0, // serve only cached results at 100%
   },

@@ -29,7 +29,7 @@ Try it out at [etymology.thepushkarp.com](https://etymology.thepushkarp.com)
 
 - Node.js 18+
 - For self-hosted deployment:
-  - [Google AI Studio](https://aistudio.google.com/app/apikey) API key (required)
+  - [OpenRouter](https://openrouter.ai/) API key (required)
   - [Upstash Redis](https://upstash.com/) (optional, for rate limiting and caching)
   - [ElevenLabs](https://elevenlabs.io/) (optional, for pronunciation audio)
 
@@ -54,7 +54,10 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ### Configuration
 
-The app runs in **public mode** using a server-side Gemini API key (Gemini 3 Flash Preview). All searches are rate-limited and cost-budgeted with a monthly spend cap. Set the `GEMINI_API_KEY` environment variable to enable it.
+The app runs in **public mode** using a server-side OpenRouter API key and the
+`openai/gpt-5.4-mini` model on the Responses API. All searches are rate-limited and
+cost-budgeted with a monthly spend cap. Set the `OPENROUTER_API_KEY` environment variable
+to enable it.
 
 ### Environment Configuration
 
@@ -62,7 +65,7 @@ For self-hosted deployments, create a `.env.local` file:
 
 ```bash
 # Required for public mode
-GEMINI_API_KEY=your_gemini_key_here
+OPENROUTER_API_KEY=your_openrouter_key_here
 ADMIN_SECRET=your_admin_secret_here
 
 # Optional: Upstash Redis (rate limiting + caching)
@@ -91,7 +94,8 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
 
 - **Framework**: [Next.js 16.1](https://nextjs.org/) with App Router
 - **UI**: [React 19.2](https://react.dev/) + [Tailwind CSS v4](https://tailwindcss.com/)
-- **LLM**: [Google Gen AI SDK](https://googleapis.github.io/js-genai/) with structured outputs
+- **LLM**: [OpenRouter Responses API](https://openrouter.ai/docs/api-reference/overview) using
+  `openai/gpt-5.4-mini` with structured outputs
 - **Validation**: [Zod 4.x](https://zod.dev/) for schema validation
 - **Caching/Rate Limiting**: [@upstash/redis](https://upstash.com/) + [@upstash/ratelimit](https://github.com/upstash/ratelimit)
 - **Analytics**: [@vercel/analytics](https://vercel.com/analytics)
@@ -140,7 +144,7 @@ etymology-explorer/
 │   └── SurpriseButton.tsx  # Random word button
 ├── lib/
 │   ├── research.ts         # Agentic multi-source research pipeline
-│   ├── gemini.ts           # LLM synthesis with structured outputs
+│   ├── llm.ts              # OpenRouter-backed LLM synthesis with structured outputs
 │   ├── etymologyParser.ts  # CPU-only source text parser
 │   ├── etymologyEnricher.ts # Post-LLM confidence enricher
 │   ├── etymonline.ts       # Etymonline HTML scraper
@@ -200,7 +204,7 @@ etymology-explorer/
    - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
-6. **Budget Enforcement**: Cost guard tracks monthly spend and enforces protection modes (normal → protected_503 → cache_only → blocked) against a $10/month cap using Gemini 3 Flash preview rates
+6. **Budget Enforcement**: Cost guard tracks monthly spend and enforces protection modes (normal → protected_503 → cache_only → blocked) against a $10/month cap using `openai/gpt-5.4-mini` pricing
 7. **Rich Display**: Etymology rendered with expandable roots, ancestry graph with confidence badges, POS tags, modern usage, related words, and source attribution (supplemental sources are only surfaced when significance checks pass)
 
 ### Architecture Diagram
@@ -254,7 +258,7 @@ etymology-explorer/
 │  │                                ▼ ResearchContext                       │  │
 │  │                     ┌────────────────────────┐                         │  │
 │  │                     │   LLM SYNTHESIS        │                         │  │
-│  │                     │   (Google Gen AI SDK)  │                         │  │
+│  │                     │ (OpenRouter Responses) │                         │  │
 │  │                     │                        │                         │  │
 │  │                     │ Structured JSON output │                         │  │
 │  │                     └────────────────────────┘                         │  │
@@ -274,7 +278,7 @@ etymology-explorer/
 │                          EXTERNAL SERVICES                                  │
 │                                                                             │
 │   ┌────────────────┐  ┌────────────────┐  ┌────────────────────────────┐    │
-│   │  etymonline.com│  │ en.wiktionary  │  │      Google Gemini API     │    │
+│   │  etymonline.com│  │ en.wiktionary  │  │ OpenRouter `gpt-5.4-mini` │    │
 │   │  (HTML scrape) │  │ (MediaWiki API)│  │  (LLM with JSON schema)    │    │
 │   └────────────────┘  └────────────────┘  └────────────────────────────┘    │
 │   ┌────────────────┐  ┌────────────────┐  ┌────────────────────────────┐    │
@@ -328,5 +332,5 @@ MIT
 - Modern slang definitions from [Urban Dictionary](https://www.urbandictionary.com/)
 - Supplemental community slang context from [Incel Wiki](https://incels.wiki/)
 - Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)
-- Powered by [Gemini](https://ai.google.dev/gemini-api/docs/models/gemini) from Google
+- Powered by [OpenRouter](https://openrouter.ai/) routing `openai/gpt-5.4-mini`
 - Rate limiting and caching by [Upstash](https://upstash.com/)
