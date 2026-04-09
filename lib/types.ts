@@ -196,6 +196,7 @@ export interface HistoryEntry {
 export interface SourceData {
   text: string
   url: string
+  relatedEntries?: string[]
 }
 
 /**
@@ -216,6 +217,12 @@ export interface RootResearchData {
   relatedTerms: string[]
 }
 
+export interface RelatedTermResearchData {
+  term: string
+  etymonlineData: SourceData | null
+  wiktionaryData: SourceData | null
+}
+
 /**
  * Aggregated research context from agentic exploration
  */
@@ -231,6 +238,7 @@ export interface ResearchContext {
   }
   identifiedRoots: string[]
   rootResearch: RootResearchData[]
+  relatedResearch: RelatedTermResearchData[]
   totalSourcesFetched: number
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
   rawSources?: {
@@ -283,5 +291,6 @@ export type StreamEvent =
   | {
       type: 'error'
       message: string
-      errorType: 'rate_limit' | 'budget' | 'network' | 'unknown'
+      errorType: 'rate_limit' | 'budget' | 'network' | 'nonsense' | 'typo' | 'unknown'
+      suggestions?: string[]
     }

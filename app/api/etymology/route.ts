@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
 
     if (!isValidWord(normalizedWord)) {
       return shouldStream
-        ? streamErrorResponse(getQuirkyMessage('nonsense'))
+        ? streamErrorResponse(getQuirkyMessage('nonsense'), 'nonsense')
         : NextResponse.json<ApiResponse<null>>(
             { success: false, error: getQuirkyMessage('nonsense') },
             { status: 400 }
@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
       console.log(`[Etymology API] Negative cache hit for "${normalizedWord}"`)
       const suggestion = getRandomWord()
       return shouldStream
-        ? streamErrorResponse(getQuirkyMessage('nonsense'))
+        ? streamErrorResponse(getQuirkyMessage('nonsense'), 'nonsense')
         : NextResponse.json<ApiResponse<{ suggestion: string }>>(
             {
               success: false,
@@ -250,14 +250,15 @@ export async function GET(request: NextRequest) {
                 if (research.typoSuggestions && research.typoSuggestions.length > 0) {
                   emit({
                     type: 'error',
-                    message: `Hmm, we couldn't find "${word}". Did you mean: ${research.typoSuggestions.join(', ')}?`,
-                    errorType: 'unknown',
+                    message: `Hmm, we couldn't find "${word}".`,
+                    errorType: 'typo',
+                    suggestions: research.typoSuggestions,
                   })
                 } else {
                   emit({
                     type: 'error',
                     message: getQuirkyMessage('nonsense'),
-                    errorType: 'unknown',
+                    errorType: 'nonsense',
                   })
                 }
                 controller.close()

@@ -10,7 +10,7 @@ import { fetchWikipedia } from './wikipedia'
 import { fetchUrbanDictionary } from './urbanDictionary'
 import { fetchIncelsWiki } from './incelsWiki'
 import { fetchFreeDictionary } from './freeDictionary'
-import { ResearchContext, RootResearchData, StreamEvent } from './types'
+import { RelatedTermResearchData, ResearchContext, RootResearchData, StreamEvent } from './types'
 import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
@@ -91,33 +91,97 @@ function parseRootsArray(text: string): string[] {
   }
 }
 
+const TERM_PATTERN = /[\p{L}*][\p{L}*'’.-]*/gu
+const LOW_SIGNAL_TERMS = new Set([
+  'the',
+  'and',
+  'for',
+  'from',
+  'with',
+  'word',
+  'latin',
+  'greek',
+  'english',
+  'french',
+  'german',
+  'middle',
+  'old',
+  'ancient',
+  'proto',
+  'indo-european',
+])
+
+function normalizeCandidateTerm(term: string): string | null {
+  const normalized = term
+    .toLowerCase()
+    .trim()
+    .replace(/[.,;:()]+$/g, '')
+  if (!normalized) return null
+  if (LOW_SIGNAL_TERMS.has(normalized)) return null
+  if (normalized.length < 3 && !normalized.startsWith('*')) return null
+  return normalized
+}
+
 /**
  * Extract related terms mentioned in source text
  */
-function extractRelatedTerms(text: string, excludeWord: string): string[] {
+export function extractRelatedTerms(
+  text: string,
+  excludeWords: string[],
+  seedTerms: string[] = []
+): string[] {
   const patterns = [
-    /related to (\w+)/gi,
-    /cognate with (\w+)/gi,
-    /see also (\w+)/gi,
-    /compare (\w+)/gi,
-    /akin to (\w+)/gi,
-    /from (\w+) ["'](\w+)["']/gi,
+    /related to ([\p{L}*'’.-]+)/giu,
+    /cognate with ([\p{L}*'’.-]+)/giu,
+    /see also ([\p{L}*'’.-]+)/giu,
+    /compare ([\p{L}*'’.-]+)/giu,
+    /akin to ([\p{L}*'’.-]+)/giu,
+    /ultimately (?:derived )?from [^.\n;:]*?([\p{L}*'’.-]+)/giu,
+    /borrowed from [^.\n;:]*?([\p{L}*'’.-]+)/giu,
+    /derived from [^.\n;:]*?([\p{L}*'’.-]+)/giu,
+    /inherited from [^.\n;:]*?([\p{L}*'’.-]+)/giu,
+    /from (\w+) ["']([\p{L}*'’.-]+)["']/giu,
   ]
 
-  const terms = new Set<string>()
-  const excludeLower = excludeWord.toLowerCase()
+  const scores = new Map<string, number>()
+  const excludeLower = new Set(excludeWords.map((word) => word.toLowerCase()))
+
+  const addCandidate = (term: string, score: number) => {
+    const normalized = normalizeCandidateTerm(term)
+    if (!normalized || excludeLower.has(normalized)) return
+    scores.set(normalized, (scores.get(normalized) ?? 0) + score)
+  }
+
+  for (const term of seedTerms) {
+    addCandidate(term, 5)
+  }
 
   for (const pattern of patterns) {
     let match
     while ((match = pattern.exec(text)) !== null) {
-      const term = (match[2] || match[1]).toLowerCase().trim()
-      if (term.length > 2 && term !== excludeLower && !/^(the|and|for|from|with)$/.test(term)) {
-        terms.add(term)
+      for (const candidate of match.slice(1).filter(Boolean)) {
+        for (const token of candidate.match(TERM_PATTERN) ?? []) {
+          addCandidate(token, 3)
+        }
       }
     }
   }
 
-  return Array.from(terms).slice(0, CONFIG.maxRelatedWordsPerRoot)
+  const plusPattern =
+    /(?:equivalent to|modelled after|modeled after)\s+([\p{L}*'’.-]+)\s*\+\s*([\p{L}*'’.-]+)/giu
+  for (const match of text.matchAll(plusPattern)) {
+    addCandidate(match[1], 4)
+    addCandidate(match[2], 4)
+  }
+
+  for (const match of text.matchAll(/\*[\p{L}\d₀-₉ʰʷʸ'-]+/gu)) {
+    addCandidate(match[0], 4)
+  }
+
+  return [...scores.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .map(([term]) => term)
+    .slice(0, CONFIG.maxRelatedWordsPerRoot)
 }
 
 /**
@@ -130,13 +194,30 @@ async function fetchRootResearch(root: string): Promise<RootResearchData> {
   ])
 
   const combinedText = [etymonlineData?.text, wiktionaryData?.text].filter(Boolean).join(' ')
-  const relatedTerms = extractRelatedTerms(combinedText, root)
+  const relatedTerms = extractRelatedTerms(
+    combinedText,
+    [root],
+    etymonlineData?.relatedEntries ?? []
+  )
 
   return {
     root,
     etymonlineData,
     wiktionaryData,
     relatedTerms,
+  }
+}
+
+async function fetchRelatedTermResearch(term: string): Promise<RelatedTermResearchData> {
+  const [etymonlineData, wiktionaryData] = await Promise.all([
+    fetchEtymonline(term),
+    fetchWiktionary(term),
+  ])
+
+  return {
+    term,
+    etymonlineData,
+    wiktionaryData,
   }
 }
 
@@ -312,6 +393,7 @@ export async function conductAgenticResearch(
     },
     identifiedRoots: [],
     rootResearch: [],
+    relatedResearch: [],
     totalSourcesFetched: totalFetches,
     rawSources: {
       wikipedia: wikipediaData?.text,
@@ -406,6 +488,54 @@ export async function conductAgenticResearch(
     console.log('[Research] Skipping roots (budget or no roots found)')
   }
 
+  // Phase 4: Expand breadth with a few related etymology entries
+  console.log('[Research] Phase 4: Researching related terms')
+  const mainCombinedText = [etymonlineData?.text, wiktionaryData?.text].filter(Boolean).join(' ')
+  const mainRelatedTerms = extractRelatedTerms(
+    mainCombinedText,
+    [normalizedWord, ...identifiedRoots],
+    etymonlineData?.relatedEntries ?? []
+  )
+  const relatedCandidates = Array.from(
+    new Set(
+      [
+        ...mainRelatedTerms,
+        ...context.rootResearch.flatMap((rootData) => rootData.relatedTerms),
+      ].filter((term) => !identifiedRoots.includes(term))
+    )
+  )
+  const remainingRelatedBudget = CONFIG.maxTotalFetches - totalFetches
+  const maxRelatedByBudget = Math.floor(remainingRelatedBudget / 2)
+  const relatedTermsToFetch = relatedCandidates.slice(
+    0,
+    Math.min(maxRelatedByBudget, CONFIG.maxRelatedWordsPerRoot)
+  )
+
+  if (relatedTermsToFetch.length > 0) {
+    console.log(
+      `[Research] Fetching ${relatedTermsToFetch.length} related terms in parallel: ${relatedTermsToFetch.join(', ')}`
+    )
+
+    const relatedResults = await Promise.allSettled(
+      relatedTermsToFetch.map((term) => fetchRelatedTermResearch(term))
+    )
+
+    for (const [index, result] of relatedResults.entries()) {
+      if (result.status === 'fulfilled') {
+        context.relatedResearch.push(result.value)
+        totalFetches += 2
+        continue
+      }
+
+      console.error('[Research] Related-term fetch failed:', safeError(result.reason))
+      console.warn(
+        `[Research] Related-term fetch skipped: ${relatedTermsToFetch[index] ?? 'unknown'}`
+      )
+    }
+  } else {
+    console.log('[Research] Skipping related terms (budget or no candidates found)')
+  }
+
   context.totalSourcesFetched = totalFetches
   console.log(`[Research] Complete. Total fetches: ${totalFetches}`)
 
@@ -443,6 +573,11 @@ export function buildResearchPrompt(context: ResearchContext): string {
     sections.push(
       `\n<source_data name="etymonline">\n${sanitizeSourceText(context.mainWord.etymonline.text, maxChars)}\n</source_data>`
     )
+    if (context.mainWord.etymonline.relatedEntries?.length) {
+      sections.push(
+        `Etymonline linked entries: ${context.mainWord.etymonline.relatedEntries.join(', ')}`
+      )
+    }
   }
   if (context.mainWord.wiktionary) {
     sections.push(
@@ -482,6 +617,11 @@ export function buildResearchPrompt(context: ResearchContext): string {
       sections.push(
         `<source_data name="etymonline">\n${sanitizeSourceText(rootData.etymonlineData.text, maxChars)}\n</source_data>`
       )
+      if (rootData.etymonlineData.relatedEntries?.length) {
+        sections.push(
+          `Etymonline linked entries: ${rootData.etymonlineData.relatedEntries.join(', ')}`
+        )
+      }
     }
     if (rootData.wiktionaryData) {
       sections.push(
@@ -490,6 +630,20 @@ export function buildResearchPrompt(context: ResearchContext): string {
     }
     if (rootData.relatedTerms.length > 0) {
       sections.push(`Related terms found: ${rootData.relatedTerms.join(', ')}`)
+    }
+  }
+
+  for (const relatedData of context.relatedResearch) {
+    sections.push(`\n=== Related Term: "${relatedData.term}" ===`)
+    if (relatedData.etymonlineData) {
+      sections.push(
+        `<source_data name="etymonline">\n${sanitizeSourceText(relatedData.etymonlineData.text, maxChars)}\n</source_data>`
+      )
+    }
+    if (relatedData.wiktionaryData) {
+      sections.push(
+        `<source_data name="wiktionary">\n${sanitizeSourceText(relatedData.wiktionaryData.text, maxChars)}\n</source_data>`
+      )
     }
   }
 

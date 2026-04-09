@@ -388,6 +388,28 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
       sources.push({ name: 'wiktionary', url: rootData.wiktionaryData.url, word: rootData.root })
     }
   }
+  for (const relatedData of researchContext.relatedResearch) {
+    if (
+      relatedData.etymonlineData &&
+      !sources.some((source) => source.url === relatedData.etymonlineData?.url)
+    ) {
+      sources.push({
+        name: 'etymonline',
+        url: relatedData.etymonlineData.url,
+        word: relatedData.term,
+      })
+    }
+    if (
+      relatedData.wiktionaryData &&
+      !sources.some((source) => source.url === relatedData.wiktionaryData?.url)
+    ) {
+      sources.push({
+        name: 'wiktionary',
+        url: relatedData.wiktionaryData.url,
+        word: relatedData.term,
+      })
+    }
+  }
   if (sources.length === 0) {
     sources.push({ name: 'synthesized' })
   }

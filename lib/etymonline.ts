@@ -11,7 +11,12 @@ import { CONFIG } from './config'
 export interface EtymonlineResult {
   text: string
   url: string
+  relatedEntries?: string[]
 }
+
+const RELATION_DESC_SIGNALS =
+  /\b(from|root|cognate|latin|greek|french|english|german|proto|pie|borrowed|derived)\b/i
+const STOP_WORDS = new Set(['the', 'and', 'for', 'from', 'with', 'word'])
 
 /**
  * Fetch etymology text from Etymonline
@@ -64,7 +69,11 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
         const text = stripHtml(match[1])
         // Verify this looks like etymology content (has date or language reference)
         if (/\d{4}s?|Latin|Greek|French|Old English|German/i.test(text)) {
-          return { text, url }
+          return {
+            text,
+            url,
+            relatedEntries: extractEtymonlineRelatedEntries(html, normalizedWord),
+          }
         }
       }
     }
@@ -79,7 +88,11 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
         const content = stripHtml(p)
         // Must have a date and "from" to be etymology content
         if (datePattern.test(content) && /\bfrom\b/i.test(content)) {
-          return { text: content, url }
+          return {
+            text: content,
+            url,
+            relatedEntries: extractEtymonlineRelatedEntries(html, normalizedWord),
+          }
         }
       }
     }
@@ -89,6 +102,32 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
     console.error('Etymonline fetch error:', safeError(error))
     return null
   }
+}
+
+export function extractEtymonlineRelatedEntries(html: string, excludeWord: string): string[] {
+  const relatedTerms = new Map<string, number>()
+  const excludeLower = excludeWord.toLowerCase()
+  const pattern = /\\"word\\":\\"([^"]+)\\"[^{}]*?\\"desc\\":\\"([^"]+)\\"/g
+
+  for (const match of html.matchAll(pattern)) {
+    const rawTerm = match[1]?.trim()
+    const desc = match[2] ?? ''
+    const normalizedTerm = rawTerm?.toLowerCase()
+
+    if (!normalizedTerm) continue
+    if (normalizedTerm === excludeLower || STOP_WORDS.has(normalizedTerm)) continue
+    if (normalizedTerm.length < 3 && !normalizedTerm.startsWith('*')) continue
+
+    const score =
+      (relatedTerms.get(normalizedTerm) ?? 0) + (RELATION_DESC_SIGNALS.test(desc) ? 3 : 1)
+
+    relatedTerms.set(normalizedTerm, score)
+  }
+
+  return [...relatedTerms.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .map(([term]) => term)
+    .slice(0, 12)
 }
 
 /**

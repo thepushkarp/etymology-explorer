@@ -36,12 +36,12 @@ export function useEtymologySearch() {
           setState('success')
           setResult(data.data)
           addToHistory(trimmed)
-        } else if (data.suggestions && data.suggestions.length > 0) {
+        } else if (data.data?.suggestions && data.data.suggestions.length > 0) {
           setState('error')
           setError({
             type: 'typo',
             message: `We couldn't find "${trimmed}" in our lexicon.`,
-            suggestions: data.suggestions,
+            suggestions: data.data.suggestions.map((word: string) => ({ word, distance: 0 })),
           })
         } else {
           setState('error')

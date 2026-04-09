@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { EtymologyResult, StreamEvent } from '@/lib/types'
 import { useHistory } from '@/lib/hooks/useHistory'
+import { StreamingUiError, toStreamingUiError } from '@/lib/streamingError'
 
 export type StreamingState = 'idle' | 'loading' | 'success' | 'error'
 
@@ -13,7 +14,7 @@ export function useStreamingEtymology() {
   const [state, setState] = useState<StreamingState>('idle')
   const [events, setEvents] = useState<StreamEvent[]>([])
   const [partialResult, setPartialResult] = useState<EtymologyResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<StreamingUiError | null>(null)
 
   const eventSourceRef = useRef<EventSource | null>(null)
   const activeRequestRef = useRef(0)
@@ -29,7 +30,11 @@ export function useStreamingEtymology() {
 
         if (!response.ok || !payload.success || !payload.data) {
           setState('error')
-          setError(payload.error ?? 'Search failed')
+          setError({
+            type: 'network-error',
+            message: payload.error ?? 'Search failed',
+            suggestions: [],
+          })
           return
         }
 
@@ -39,7 +44,11 @@ export function useStreamingEtymology() {
       } catch {
         if (activeRequestRef.current !== requestId) return
         setState('error')
-        setError('Unable to load etymology right now')
+        setError({
+          type: 'network-error',
+          message: 'Unable to load etymology right now',
+          suggestions: [],
+        })
       }
     },
     [addToHistory]
@@ -102,7 +111,7 @@ export function useStreamingEtymology() {
             // Handle error event
             if (streamEvent.type === 'error') {
               setState('error')
-              setError(streamEvent.message)
+              setError(toStreamingUiError(streamEvent))
               eventSource.close()
               eventSourceRef.current = null
             }

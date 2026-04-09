@@ -10,8 +10,10 @@ Users search for a word, and the app:
 
 1. Fetches raw data from 6 sources in parallel (Etymonline, Wiktionary, Free Dictionary always; Wikipedia, Urban Dictionary, Incel Wiki as optional supplemental sources)
 2. Pre-parses etymological chains from source text (CPU-only)
-3. Sends aggregated data to OpenAI's Responses API using `gpt-5.4-mini` for structured synthesis
-4. Post-processes LLM output to match ancestry stages to parsed evidence and assign programmatic confidence scores
+3. Uses OpenAI to extract root morphemes from the first-pass source bundle
+4. Expands breadth with a bounded second pass over root pages and high-signal related pages from Etymonline and Wiktionary
+5. Sends the enriched research bundle to OpenAI's Responses API using `gpt-5.4-mini` for structured synthesis
+6. Post-processes LLM output to match ancestry stages to parsed evidence and assign programmatic confidence scores
 
 **Live**: https://etymology.thepushkarp.com
 
@@ -50,8 +52,9 @@ GET /api/etymology?word=X[&stream=true]
     │   ├── Phase 1: Parallel fetch from 6 sources (3 core + 3 optional)
     │   ├── Phase 1.5: Pre-parse "from X, from Y" chains (lib/etymologyParser.ts, CPU-only)
     │   ├── Phase 2: LLM call to extract root morphemes
-    │   ├── Phase 3: Fetch data for each root (max 3)
-    │   └── Phase 4: Fetch related terms (max 10 total fetches)
+    │   ├── Phase 3: Fetch data for each root (max 4)
+    │   ├── Phase 4: Mine Etymonline linked entries + Wiktionary derivation formulas
+    │   └── Phase 5: Fetch bounded related-term pages (max 16 total fetches)
     ├── Typo check (lib/spellcheck.ts, Levenshtein distance vs GRE wordlist)
     ├── LLM synthesis (lib/llm.ts)
     │   ├── Structured outputs via OpenAI Responses JSON schema mode
@@ -122,9 +125,9 @@ New optional fields on `AncestryStage`: `isReconstructed`, `confidence`, `eviden
 
 Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API costs:
 
-- `maxRootsToExplore = 3` - Max root morphemes to research
-- `maxRelatedWordsPerRoot = 2` - Related terms per root
-- `maxTotalFetches = 10` - Hard cap on external API calls per search
+- `maxRootsToExplore = 4` - Max root morphemes to research
+- `maxRelatedWordsPerRoot = 4` - Related terms retained from each root or candidate pass
+- `maxTotalFetches = 16` - Hard cap on external API calls per search
 
 ### LLM Integration
 

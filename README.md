@@ -199,8 +199,9 @@ etymology-explorer/
    - **Agentic Research**: Multi-phase research pipeline:
      - Phase 1: Fetch main word data from 6 sources in parallel (Etymonline, Wiktionary, Free Dictionary, Wikipedia, Urban Dictionary, Incel Wiki)
      - Phase 2: Quick LLM call extracts root morphemes (e.g., "telephone" → ["tele", "phone"])
-     - Phase 3: Fetch etymology data for each identified root
-     - Phase 4: Gather related terms for additional context (depth-limited)
+     - Phase 3: Fetch etymology data for each identified root (up to 4 roots)
+     - Phase 4: Mine Etymonline linked entries and Wiktionary derivation formulas for better candidate terms
+     - Phase 5: Fetch a few related-term pages within the remaining fetch budget
    - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
@@ -234,10 +235,11 @@ etymology-explorer/
 │ 1) Fetch 6 sources in parallel                                               │
 │ 2) Parse "from X, from Y" chains (CPU-only)                                  │
 │ 3) OpenAI root extraction                                                    │
-│ 4) Fetch root data + related terms                                           │
-│ 5) OpenAI synthesis (stream tokens when stream=true)                         │
-│ 6) Enrich ancestry graph + confidence/evidence                               │
-│ 7) Cache result in Redis                                                     │
+│ 4) Fetch root data                                                           │
+│ 5) Mine and fetch bounded related-term pages                                 │
+│ 6) OpenAI synthesis (stream tokens when stream=true)                         │
+│ 7) Enrich ancestry graph + confidence/evidence                               │
+│ 8) Cache result in Redis                                                     │
 └──────────────────────────────┬───────────────────────────────────────────────┘
                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐

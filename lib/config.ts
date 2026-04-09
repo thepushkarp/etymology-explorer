@@ -30,9 +30,9 @@ export const CONFIG = {
   maxSourceTextChars: 3000,
 
   // Research pipeline
-  maxRootsToExplore: 3,
-  maxRelatedWordsPerRoot: 2,
-  maxTotalFetches: 10,
+  maxRootsToExplore: 4,
+  maxRelatedWordsPerRoot: 4,
+  maxTotalFetches: 16,
 
   // Cache TTLs (seconds)
   etymologyCacheTTL: 30 * 24 * 60 * 60, // 30 days

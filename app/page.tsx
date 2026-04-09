@@ -260,9 +260,9 @@ function HomeContent() {
           {/* Error state */}
           {state === 'error' && error && (
             <ErrorState
-              type="network-error"
-              message={error}
-              suggestions={[]}
+              type={error.type}
+              message={error.message}
+              suggestions={error.suggestions}
               onSuggestionClick={navigateToWord}
             />
           )}
