@@ -20,6 +20,7 @@ import { getEnv } from '@/lib/env'
 import { CONFIG } from '@/lib/config'
 import { emitSecurityEvent } from '@/lib/telemetry'
 import { streamErrorResponse, streamResultResponse } from '@/lib/streamingResponse'
+import { classifyApiError } from '@/lib/apiError'
 
 function countConfidence(result: EtymologyResult, level: StageConfidence): number {
   const allStages = [
@@ -285,10 +286,11 @@ export async function GET(request: NextRequest) {
               controller.close()
             } catch (error) {
               console.error('[Etymology API] Streaming error:', safeError(error))
+              const classified = classifyApiError(error)
               emit({
                 type: 'error',
-                message: 'An unexpected error occurred. Please try again.',
-                errorType: 'unknown',
+                message: classified.message,
+                errorType: classified.streamErrorType,
               })
               controller.close()
             } finally {
@@ -353,39 +355,13 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error('Etymology API error:', safeError(error))
-
-    // Sanitized error responses — never expose raw error messages
-    if (error instanceof Error) {
-      if (
-        error.message.includes('401') ||
-        error.message.includes('invalid_api_key') ||
-        error.message.includes('authentication_error') ||
-        error.message.includes('API key not valid') ||
-        error.message.includes('UNAUTHENTICATED') ||
-        error.message.includes('PERMISSION_DENIED')
-      ) {
-        return shouldStream
-          ? streamErrorResponse('Service temporarily unavailable')
-          : NextResponse.json<ApiResponse<null>>(
-              { success: false, error: 'Service temporarily unavailable' },
-              { status: 503 }
-            )
-      }
-      if (error.message.includes('429')) {
-        return shouldStream
-          ? streamErrorResponse('Service is busy, please try again shortly', 'rate_limit')
-          : NextResponse.json<ApiResponse<null>>(
-              { success: false, error: 'Service is busy, please try again shortly' },
-              { status: 429 }
-            )
-      }
-    }
+    const classified = classifyApiError(error)
 
     return shouldStream
-      ? streamErrorResponse('An unexpected error occurred. Please try again.')
+      ? streamErrorResponse(classified.message, classified.streamErrorType)
       : NextResponse.json<ApiResponse<null>>(
-          { success: false, error: 'An unexpected error occurred. Please try again.' },
-          { status: 500 }
+          { success: false, error: classified.message },
+          { status: classified.status }
         )
   }
 }
