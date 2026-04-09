@@ -1,12 +1,15 @@
 import { CONFIG } from '@/lib/config'
 import { getEnv } from '@/lib/env'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
-import { ETYMOLOGY_SCHEMA } from '@/lib/schemas/llm-schema'
 
 const ROOTS_JSON_SCHEMA = {
   type: 'array',
   items: { type: 'string' },
 } as const
+
+type TextFormat = {
+  type: 'text'
+}
 
 type JsonSchemaFormat = {
   type: 'json_schema'
@@ -20,7 +23,7 @@ export type OpenRouterRequest = {
   input: string
   reasoning: { effort: 'medium' }
   max_output_tokens: number
-  text: { format: JsonSchemaFormat }
+  text: { format: JsonSchemaFormat | TextFormat }
   instructions?: string
 }
 
@@ -63,7 +66,7 @@ const OPENROUTER_RESPONSES_URL = 'https://openrouter.ai/api/v1/responses'
 function buildRequest(
   input: string,
   maxOutputTokens: number,
-  format: JsonSchemaFormat
+  format: JsonSchemaFormat | TextFormat
 ): OpenRouterRequest {
   return {
     model: CONFIG.model,
@@ -75,12 +78,7 @@ function buildRequest(
 }
 
 export function buildSynthesisRequest(input: string): OpenRouterRequest {
-  return buildRequest(input, CONFIG.synthesisMaxTokens, {
-    type: 'json_schema',
-    name: 'etymology_result',
-    strict: true,
-    schema: ETYMOLOGY_SCHEMA,
-  })
+  return buildRequest(input, CONFIG.synthesisMaxTokens, { type: 'text' })
 }
 
 export function buildRootExtractionRequest(input: string): OpenRouterRequest {
@@ -90,6 +88,52 @@ export function buildRootExtractionRequest(input: string): OpenRouterRequest {
     strict: true,
     schema: ROOTS_JSON_SCHEMA,
   })
+}
+
+type StreamAccumulator = {
+  fullText: string
+  finalResponse: OpenRouterResponseLike | null
+}
+
+type StreamReduction = StreamAccumulator & {
+  emittedText: string
+}
+
+export function reduceStreamEvent(
+  state: StreamAccumulator,
+  event: OpenRouterStreamEvent
+): StreamReduction {
+  if (
+    (event.type === 'response.output_text.delta' || event.type === 'response.content_part.delta') &&
+    typeof event.delta === 'string'
+  ) {
+    return {
+      emittedText: event.delta,
+      fullText: state.fullText + event.delta,
+      finalResponse: state.finalResponse,
+    }
+  }
+
+  if ((event.type === 'response.completed' || event.type === 'response.done') && event.response) {
+    return {
+      emittedText: '',
+      fullText: state.fullText,
+      finalResponse: event.response,
+    }
+  }
+
+  if (
+    (event.type === 'response.failed' || event.type === 'error') &&
+    (event.response?.error?.message || event.error?.message)
+  ) {
+    throw new Error(event.response?.error?.message ?? event.error?.message)
+  }
+
+  return {
+    emittedText: '',
+    fullText: state.fullText,
+    finalResponse: state.finalResponse,
+  }
 }
 
 export function extractOutputText(response: OpenRouterResponseLike): string {
@@ -240,22 +284,19 @@ export async function streamOpenRouterResponse(
         }
 
         const event = JSON.parse(data) as OpenRouterStreamEvent
-        if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
-          fullText += event.delta
-          onText(event.delta)
-          continue
-        }
+        const reduced = reduceStreamEvent(
+          {
+            fullText,
+            finalResponse,
+          },
+          event
+        )
 
-        if (event.type === 'response.completed' && event.response) {
-          finalResponse = event.response
-          continue
-        }
+        fullText = reduced.fullText
+        finalResponse = reduced.finalResponse
 
-        if (
-          (event.type === 'response.failed' || event.type === 'error') &&
-          (event.response?.error?.message || event.error?.message)
-        ) {
-          throw new Error(event.response?.error?.message ?? event.error?.message)
+        if (reduced.emittedText.length > 0) {
+          onText(reduced.emittedText)
         }
       }
     }
