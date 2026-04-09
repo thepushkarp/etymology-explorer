@@ -2,9 +2,9 @@ import { describe, expect, test } from 'bun:test'
 import { classifyApiError } from '@/lib/apiError'
 
 describe('apiError', () => {
-  test('maps OpenRouter timeouts to a retryable network-style message', () => {
+  test('maps OpenAI timeouts to a retryable network-style message', () => {
     const classified = classifyApiError(
-      new Error('Streaming failed: OpenRouter request timeout after 120000ms')
+      new Error('Streaming failed: OpenAI request timeout after 120000ms')
     )
 
     expect(classified).toEqual({

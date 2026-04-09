@@ -6,11 +6,11 @@ import { EtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
 import {
   buildSynthesisRequest,
-  createOpenRouterResponse,
+  createOpenAIResponse,
   extractOutputText,
   extractUsage,
-  streamOpenRouterResponse,
-} from './openrouterResponses'
+  streamOpenAIResponse,
+} from './openaiResponses'
 
 export interface SynthesisResult {
   result: EtymologyResult
@@ -68,7 +68,7 @@ function isAbortLikeError(error: unknown): boolean {
 }
 
 function timeoutErrorMessage(timeoutMs: number): string {
-  return `OpenRouter request timeout after ${timeoutMs}ms`
+  return `OpenAI request timeout after ${timeoutMs}ms`
 }
 
 function extractJsonObjectChunk(text: string): string | null {
@@ -276,7 +276,7 @@ async function callLlm(userPrompt: string): Promise<{
 
   let response
   try {
-    response = await createOpenRouterResponse(request, CONFIG.timeouts.llm)
+    response = await createOpenAIResponse(request, CONFIG.timeouts.llm)
   } catch (error) {
     if (isAbortLikeError(error)) {
       throw new Error(timeoutErrorMessage(CONFIG.timeouts.llm))
@@ -455,7 +455,7 @@ export async function streamSynthesis(
   let usage = { inputTokens: 0, outputTokens: 0 }
 
   try {
-    const response = await streamOpenRouterResponse(
+    const response = await streamOpenAIResponse(
       request,
       (token) => {
         fullText += token

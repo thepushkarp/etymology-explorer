@@ -38,7 +38,7 @@ const MALFORMED_RESPONSE_PATTERNS = [
   'failed to parse streamed llm response',
   'could not parse a json object from model output',
   'schema validation failed',
-  'no text response from openrouter responses api',
+  'no text response from openai responses api',
   'streaming completed without output text',
 ]
 

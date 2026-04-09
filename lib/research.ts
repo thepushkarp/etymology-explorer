@@ -16,9 +16,9 @@ import { CONFIG } from './config'
 import { safeError } from './errorUtils'
 import {
   buildRootExtractionRequest,
-  createOpenRouterResponse,
+  createOpenAIResponse,
   extractOutputText,
-} from './openrouterResponses'
+} from './openaiResponses'
 
 export async function extractRootsQuick(
   word: string,
@@ -50,7 +50,7 @@ Examples:
     request.instructions =
       'Extract root morphemes only. Return a JSON array of lowercase strings with no commentary.'
 
-    const response = await createOpenRouterResponse(request)
+    const response = await createOpenAIResponse(request)
     return parseRootsArray(extractOutputText(response))
   } catch (error) {
     console.error('Root extraction error:', safeError(error))

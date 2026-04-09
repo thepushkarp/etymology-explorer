@@ -5,7 +5,7 @@
 
 export const CONFIG = {
   // LLM
-  model: 'openai/gpt-5.4-mini',
+  model: 'gpt-5-mini',
   synthesisMaxTokens: 9000,
   rootExtractionMaxTokens: 100,
 
@@ -42,7 +42,7 @@ export const CONFIG = {
   // Timeouts (milliseconds)
   timeouts: {
     source: 5_000,
-    llm: 120_000, // OpenRouter Responses API
+    llm: 120_000, // OpenAI Responses API
     tts: 8_000, // ElevenLabs
   },
 
@@ -55,7 +55,7 @@ export const CONFIG = {
 
   // USD-based cost tracking
   costTracking: {
-    pricingPerMillionTokens: { input: 0.75, output: 4.5 },
+    pricingPerMillionTokens: { input: 0.25, output: 2.0 },
     monthlyLimitUSD: 10.0,
     cacheOnlyAtPercent: 1.0, // serve only cached results at 100%
   },

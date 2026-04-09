@@ -5,13 +5,13 @@ import {
   extractOutputText,
   reduceStreamEvent,
   extractUsage,
-} from '@/lib/openrouterResponses'
+} from '@/lib/openaiResponses'
 
-describe('openrouterResponses', () => {
-  test('buildSynthesisRequest keeps gpt-5.4-mini on plain text output for local JSON parsing', () => {
+describe('openaiResponses', () => {
+  test('buildSynthesisRequest keeps native OpenAI reasoning defaults on plain text output', () => {
     const request = buildSynthesisRequest('Analyze this word')
 
-    expect(request.model).toBe('openai/gpt-5.4-mini')
+    expect(request.model).toBe('gpt-5-mini')
     expect(request.reasoning).toEqual({ effort: 'medium' })
     expect(request.max_output_tokens).toBe(9000)
     expect(request.text.format).toEqual({ type: 'text' })
@@ -21,7 +21,7 @@ describe('openrouterResponses', () => {
   test('buildRootExtractionRequest keeps the same no-temperature reasoning defaults', () => {
     const request = buildRootExtractionRequest('Analyze roots')
 
-    expect(request.model).toBe('openai/gpt-5.4-mini')
+    expect(request.model).toBe('gpt-5-mini')
     expect(request.reasoning).toEqual({ effort: 'medium' })
     expect(request.max_output_tokens).toBe(100)
     expect(request.text.format).toMatchObject({
@@ -69,7 +69,7 @@ describe('openrouterResponses', () => {
         ],
       })
     ).toThrow(
-      'No text response from OpenRouter Responses API (status=incomplete, incomplete=max_output_tokens, reasoningTokens=4096, maxOutputTokens=4096, output=message[refusal])'
+      'No text response from OpenAI Responses API (status=incomplete, incomplete=max_output_tokens, reasoningTokens=4096, maxOutputTokens=4096, output=message[refusal])'
     )
   })
 
