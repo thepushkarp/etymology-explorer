@@ -40,6 +40,13 @@ type OpenRouterResponseOutputItem = {
 type OpenRouterUsage = {
   input_tokens?: number
   output_tokens?: number
+  output_tokens_details?: {
+    reasoning_tokens?: number
+  } | null
+}
+
+type OpenRouterIncompleteDetails = {
+  reason?: string | null
 }
 
 export type OpenRouterResponseLike = {
@@ -47,6 +54,8 @@ export type OpenRouterResponseLike = {
   output_text?: string | null
   output?: OpenRouterResponseOutputItem[]
   usage?: OpenRouterUsage | null
+  incomplete_details?: OpenRouterIncompleteDetails | null
+  max_output_tokens?: number | null
   error?: {
     message?: string
   } | null
@@ -152,7 +161,27 @@ export function extractOutputText(response: OpenRouterResponseLike): string {
     return fallbackText
   }
 
-  throw new Error('No text response from OpenRouter Responses API')
+  const outputTypes = (response.output ?? [])
+    .map((item) => {
+      const contentTypes = (item.content ?? [])
+        .map((content) => content.type ?? 'unknown')
+        .join(',')
+      return `${item.type ?? 'unknown'}[${contentTypes}]`
+    })
+    .join(';')
+
+  const incompleteReason = response.incomplete_details?.reason ?? 'none'
+  const reasoningTokens = response.usage?.output_tokens_details?.reasoning_tokens ?? 0
+  const maxOutputTokens = response.max_output_tokens ?? 'unknown'
+
+  throw new Error(
+    `No text response from OpenRouter Responses API ` +
+      `(status=${response.status ?? 'unknown'}, ` +
+      `incomplete=${incompleteReason}, ` +
+      `reasoningTokens=${reasoningTokens}, ` +
+      `maxOutputTokens=${maxOutputTokens}, ` +
+      `output=${outputTypes || 'none'})`
+  )
 }
 
 export function extractUsage(response: OpenRouterResponseLike): {

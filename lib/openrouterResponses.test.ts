@@ -50,6 +50,29 @@ describe('openrouterResponses', () => {
     ).toBe('{"fallback":true}')
   })
 
+  test('extractOutputText includes payload shape details when no text is present', () => {
+    expect(() =>
+      extractOutputText({
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        max_output_tokens: 4096,
+        usage: {
+          output_tokens_details: {
+            reasoning_tokens: 4096,
+          },
+        },
+        output: [
+          {
+            type: 'message',
+            content: [{ type: 'refusal' }],
+          },
+        ],
+      })
+    ).toThrow(
+      'No text response from OpenRouter Responses API (status=incomplete, incomplete=max_output_tokens, reasoningTokens=4096, maxOutputTokens=4096, output=message[refusal])'
+    )
+  })
+
   test('extractUsage normalizes token counts from the responses payload', () => {
     expect(
       extractUsage({
