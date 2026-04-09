@@ -6,7 +6,7 @@
 export const CONFIG = {
   // LLM
   model: 'openai/gpt-5.4-mini',
-  synthesisMaxTokens: 4096,
+  synthesisMaxTokens: 9000,
   rootExtractionMaxTokens: 100,
 
   retries: {

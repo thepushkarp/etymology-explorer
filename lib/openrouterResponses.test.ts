@@ -13,7 +13,7 @@ describe('openrouterResponses', () => {
 
     expect(request.model).toBe('openai/gpt-5.4-mini')
     expect(request.reasoning).toEqual({ effort: 'medium' })
-    expect(request.max_output_tokens).toBe(4096)
+    expect(request.max_output_tokens).toBe(9000)
     expect(request.text.format).toEqual({ type: 'text' })
     expect('temperature' in request).toBe(false)
   })
