@@ -6,7 +6,7 @@ import {
   StageConfidence,
   ResearchContext,
 } from '@/lib/types'
-import { synthesizeFromResearch, streamSynthesis } from '@/lib/gemini'
+import { synthesizeFromResearch, streamSynthesis } from '@/lib/llm'
 import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
@@ -19,6 +19,8 @@ import { safeError } from '@/lib/errorUtils'
 import { getEnv } from '@/lib/env'
 import { CONFIG } from '@/lib/config'
 import { emitSecurityEvent } from '@/lib/telemetry'
+import { streamErrorResponse, streamResultResponse } from '@/lib/streamingResponse'
+import { classifyApiError } from '@/lib/apiError'
 
 function countConfidence(result: EtymologyResult, level: StageConfidence): number {
   const allStages = [
@@ -29,54 +31,66 @@ function countConfidence(result: EtymologyResult, level: StageConfidence): numbe
 }
 
 export async function GET(request: NextRequest) {
+  let shouldStream = false
+
   try {
     // Validate environment (lazy, cached after first call)
     try {
       getEnv()
     } catch {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Service configuration error' },
-        { status: 503 }
-      )
+      return shouldStream
+        ? streamErrorResponse('Service configuration error')
+        : NextResponse.json<ApiResponse<null>>(
+            { success: false, error: 'Service configuration error' },
+            { status: 503 }
+          )
     }
 
     // Feature flags
     if (!CONFIG.features.publicSearchEnabled || CONFIG.features.forceCacheOnly) {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Service temporarily unavailable' },
-        { status: 503 }
-      )
+      return shouldStream
+        ? streamErrorResponse('Service temporarily unavailable')
+        : NextResponse.json<ApiResponse<null>>(
+            { success: false, error: 'Service temporarily unavailable' },
+            { status: 503 }
+          )
     }
 
     const word = request.nextUrl.searchParams.get('word')
-    const shouldStream = request.nextUrl.searchParams.get('stream') === 'true'
+    shouldStream = request.nextUrl.searchParams.get('stream') === 'true'
 
     if (!word || typeof word !== 'string') {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Word is required' },
-        { status: 400 }
-      )
+      return shouldStream
+        ? streamErrorResponse('Word is required')
+        : NextResponse.json<ApiResponse<null>>(
+            { success: false, error: 'Word is required' },
+            { status: 400 }
+          )
     }
 
     const normalizedWord = canonicalizeWord(word)
 
     if (!normalizedWord) {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: getQuirkyMessage('empty') },
-        { status: 400 }
-      )
+      return shouldStream
+        ? streamErrorResponse(getQuirkyMessage('empty'))
+        : NextResponse.json<ApiResponse<null>>(
+            { success: false, error: getQuirkyMessage('empty') },
+            { status: 400 }
+          )
     }
 
     if (!isValidWord(normalizedWord)) {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: getQuirkyMessage('nonsense') },
-        { status: 400 }
-      )
+      return shouldStream
+        ? streamErrorResponse(getQuirkyMessage('nonsense'))
+        : NextResponse.json<ApiResponse<null>>(
+            { success: false, error: getQuirkyMessage('nonsense') },
+            { status: 400 }
+          )
     }
 
     const costMode = await getCostMode()
 
-    // Always return JSON for cache hits (no point streaming cached data)
+    // Honor stream=true even for cached results so EventSource never receives JSON.
     const cached = await getCachedEtymology(normalizedWord)
     if (cached) {
       console.log(`[Etymology API] Cache hit for "${normalizedWord}"`)
@@ -85,15 +99,17 @@ export async function GET(request: NextRequest) {
         timestamp: Date.now(),
         detail: { word: normalizedWord },
       })
-      return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
-        { success: true, data: cached, cached: true },
-        {
-          headers: {
-            'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
-            'X-Protection-Mode': costMode,
-          },
-        }
-      )
+      return shouldStream
+        ? streamResultResponse(cached, { 'X-Protection-Mode': costMode })
+        : NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
+            { success: true, data: cached, cached: true },
+            {
+              headers: {
+                'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+                'X-Protection-Mode': costMode,
+              },
+            }
+          )
     }
 
     // Negative cache — skip source fetches for known gibberish
@@ -101,14 +117,16 @@ export async function GET(request: NextRequest) {
     if (isNegCached) {
       console.log(`[Etymology API] Negative cache hit for "${normalizedWord}"`)
       const suggestion = getRandomWord()
-      return NextResponse.json<ApiResponse<{ suggestion: string }>>(
-        {
-          success: false,
-          error: getQuirkyMessage('nonsense'),
-          data: { suggestion },
-        },
-        { status: 404 }
-      )
+      return shouldStream
+        ? streamErrorResponse(getQuirkyMessage('nonsense'))
+        : NextResponse.json<ApiResponse<{ suggestion: string }>>(
+            {
+              success: false,
+              error: getQuirkyMessage('nonsense'),
+              data: { suggestion },
+            },
+            { status: 404 }
+          )
     }
 
     // Reject uncached requests when monthly budget is exhausted
@@ -118,14 +136,20 @@ export async function GET(request: NextRequest) {
         timestamp: Date.now(),
         detail: { word: normalizedWord, mode: costMode, action: 'rejected' },
       })
-      return NextResponse.json<ApiResponse<null>>(
-        {
-          success: false,
-          error:
+      return shouldStream
+        ? streamErrorResponse(
             'Monthly budget reached. Cached words still work — try again next month for new ones.',
-        },
-        { status: 503, headers: { 'X-Protection-Mode': costMode } }
-      )
+            'budget',
+            { 'X-Protection-Mode': costMode }
+          )
+        : NextResponse.json<ApiResponse<null>>(
+            {
+              success: false,
+              error:
+                'Monthly budget reached. Cached words still work — try again next month for new ones.',
+            },
+            { status: 503, headers: { 'X-Protection-Mode': costMode } }
+          )
     }
 
     // Singleflight: prevent duplicate LLM calls for the same word
@@ -137,20 +161,24 @@ export async function GET(request: NextRequest) {
       console.log(`[Etymology API] Waiting for in-flight result for "${normalizedWord}"`)
       const result = await pollForResult(() => getCachedEtymology(normalizedWord))
       if (result) {
-        return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
-          { success: true, data: result, cached: true },
-          {
-            headers: {
-              'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
-            },
-          }
-        )
+        return shouldStream
+          ? streamResultResponse(result)
+          : NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
+              { success: true, data: result, cached: true },
+              {
+                headers: {
+                  'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+                },
+              }
+            )
       }
       // Timed out waiting — tell client to retry
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Request in progress, please retry in a few seconds.' },
-        { status: 429, headers: { 'Retry-After': '2' } }
-      )
+      return shouldStream
+        ? streamErrorResponse('Request in progress, please retry in a few seconds.', 'rate_limit')
+        : NextResponse.json<ApiResponse<null>>(
+            { success: false, error: 'Request in progress, please retry in a few seconds.' },
+            { status: 429, headers: { 'Retry-After': '2' } }
+          )
     }
 
     try {
@@ -258,10 +286,11 @@ export async function GET(request: NextRequest) {
               controller.close()
             } catch (error) {
               console.error('[Etymology API] Streaming error:', safeError(error))
+              const classified = classifyApiError(error)
               emit({
                 type: 'error',
-                message: 'An unexpected error occurred. Please try again.',
-                errorType: 'unknown',
+                message: classified.message,
+                errorType: classified.streamErrorType,
               })
               controller.close()
             } finally {
@@ -326,33 +355,13 @@ export async function GET(request: NextRequest) {
     }
   } catch (error) {
     console.error('Etymology API error:', safeError(error))
+    const classified = classifyApiError(error)
 
-    // Sanitized error responses — never expose raw error messages
-    if (error instanceof Error) {
-      if (
-        error.message.includes('401') ||
-        error.message.includes('invalid_api_key') ||
-        error.message.includes('authentication_error') ||
-        error.message.includes('API key not valid') ||
-        error.message.includes('UNAUTHENTICATED') ||
-        error.message.includes('PERMISSION_DENIED')
-      ) {
-        return NextResponse.json<ApiResponse<null>>(
-          { success: false, error: 'Service temporarily unavailable' },
-          { status: 503 }
+    return shouldStream
+      ? streamErrorResponse(classified.message, classified.streamErrorType)
+      : NextResponse.json<ApiResponse<null>>(
+          { success: false, error: classified.message },
+          { status: classified.status }
         )
-      }
-      if (error.message.includes('429')) {
-        return NextResponse.json<ApiResponse<null>>(
-          { success: false, error: 'Service is busy, please try again shortly' },
-          { status: 429 }
-        )
-      }
-    }
-
-    return NextResponse.json<ApiResponse<null>>(
-      { success: false, error: 'An unexpected error occurred. Please try again.' },
-      { status: 500 }
-    )
   }
 }
