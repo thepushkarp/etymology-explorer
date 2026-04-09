@@ -18,7 +18,8 @@ Try it out at [etymology.thepushkarp.com](https://etymology.thepushkarp.com)
 - **Search History**: Track your vocabulary exploration with a persistent sidebar
 - **Surprise Me**: Discover random words to expand your vocabulary
 - **Structured Outputs**: Guaranteed valid JSON responses using constrained decoding
-- **Streaming UI**: Optional `?stream=true` server-sent events for source progress and token streaming
+- **Streaming UI**: Optional `?stream=true` server-sent events for source progress,
+  token streaming, cached hits, and early error responses
 - **Smart Caching**: Redis-backed caching reduces costs and improves speed (30d etymology, 1yr audio)
 - **Rate Limiting**: Per-IP protection via Upstash Redis with automatic budget enforcement
 
