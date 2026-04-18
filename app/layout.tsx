@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Libre_Baskerville } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import { JsonLd } from '@/components/JsonLd'
 import './globals.css'
 
@@ -87,6 +88,7 @@ export default function RootLayout({
         <JsonLd />
         {children}
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )
