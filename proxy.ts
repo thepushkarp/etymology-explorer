@@ -11,6 +11,7 @@ let generalLimiter: Ratelimit | null = null
 
 const AGENT_DISCOVERY_LINKS = [
   '</.well-known/api-catalog>; rel="api-catalog"',
+  '</openapi.json>; rel="service-desc"; type="application/openapi+json"',
   '</docs/api>; rel="service-doc"',
   '</.well-known/agent-skills/index.json>; rel="describedby"; type="application/json"',
 ].join(', ')

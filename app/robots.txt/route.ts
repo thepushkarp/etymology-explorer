@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server'
+import { getRequestOrigin } from '@/lib/origin'
 
 export async function GET() {
+  const origin = await getRequestOrigin()
+
   const body = [
     'User-agent: *',
     'Allow: /',
+    'Allow: /api/health',
     'Disallow: /api/',
     'Content-Signal: ai-train=no, search=yes, ai-input=no',
-    'Sitemap: https://etymology.thepushkarp.com/sitemap.xml',
+    `Sitemap: ${origin}/sitemap.xml`,
   ].join('\n')
 
   return new NextResponse(body, {
