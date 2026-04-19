@@ -326,48 +326,50 @@ export const EtymologyCard = memo(function EtymologyCard({
             titleTextClassName={sectionTitleTextClassName}
             dividerClassName={sectionDividerClassName}
           >
-            <div className="space-y-4">
-              {result.suggestions.synonyms && result.suggestions.synonyms.length > 0 && (
-                <SuggestionRow
-                  label="Synonyms"
-                  words={result.suggestions.synonyms}
-                  onWordClick={onWordClick}
-                  color="emerald"
-                />
-              )}
-              {result.suggestions.antonyms && result.suggestions.antonyms.length > 0 && (
-                <SuggestionRow
-                  label="Antonyms"
-                  words={result.suggestions.antonyms}
-                  onWordClick={onWordClick}
-                  color="rose"
-                />
-              )}
-              {result.suggestions.homophones && result.suggestions.homophones.length > 0 && (
-                <SuggestionRow
-                  label="Homophones"
-                  words={result.suggestions.homophones}
-                  onWordClick={onWordClick}
-                  color="amber"
-                />
-              )}
-              {result.suggestions.easilyConfusedWith &&
-                result.suggestions.easilyConfusedWith.length > 0 && (
+            <div className="editorial-card p-4 sm:p-5">
+              <div className="space-y-4">
+                {result.suggestions.synonyms && result.suggestions.synonyms.length > 0 && (
                   <SuggestionRow
-                    label="Often Confused With"
-                    words={result.suggestions.easilyConfusedWith}
+                    label="Synonyms"
+                    words={result.suggestions.synonyms}
                     onWordClick={onWordClick}
-                    color="blue"
+                    color="emerald"
                   />
                 )}
-              {result.suggestions.seeAlso && result.suggestions.seeAlso.length > 0 && (
-                <SuggestionRow
-                  label="See Also"
-                  words={result.suggestions.seeAlso}
-                  onWordClick={onWordClick}
-                  color="purple"
-                />
-              )}
+                {result.suggestions.antonyms && result.suggestions.antonyms.length > 0 && (
+                  <SuggestionRow
+                    label="Antonyms"
+                    words={result.suggestions.antonyms}
+                    onWordClick={onWordClick}
+                    color="rose"
+                  />
+                )}
+                {result.suggestions.homophones && result.suggestions.homophones.length > 0 && (
+                  <SuggestionRow
+                    label="Homophones"
+                    words={result.suggestions.homophones}
+                    onWordClick={onWordClick}
+                    color="amber"
+                  />
+                )}
+                {result.suggestions.easilyConfusedWith &&
+                  result.suggestions.easilyConfusedWith.length > 0 && (
+                    <SuggestionRow
+                      label="Often Confused With"
+                      words={result.suggestions.easilyConfusedWith}
+                      onWordClick={onWordClick}
+                      color="blue"
+                    />
+                  )}
+                {result.suggestions.seeAlso && result.suggestions.seeAlso.length > 0 && (
+                  <SuggestionRow
+                    label="See Also"
+                    words={result.suggestions.seeAlso}
+                    onWordClick={onWordClick}
+                    color="purple"
+                  />
+                )}
+              </div>
             </div>
           </MobileSection>
         )}

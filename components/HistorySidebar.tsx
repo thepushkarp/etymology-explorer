@@ -42,35 +42,40 @@ export function HistorySidebar({
     return () => clearInterval(interval)
   }, [])
 
+  const handleWordClick = (word: string) => {
+    setIsOpen(false)
+    onWordClick(word)
+  }
+
   return (
     <>
       {/* Mobile drawer toggle */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          fixed left-4 top-[5.9rem] z-40 inline-flex items-center gap-2 rounded-full border
-          border-border-soft bg-surface/96 px-3 py-2 text-charcoal-light shadow-[0_18px_44px_-28px_var(--shadow-heavy)]
+          fixed left-0 top-[9.25rem] z-40 inline-flex items-center gap-2 rounded-r-[1rem] border border-l-0
+          border-border-soft bg-surface/96 px-3 py-4 text-charcoal-light shadow-[0_18px_44px_-28px_var(--shadow-heavy)]
           transition-all duration-300 hover:bg-cream-dark/55 hover:text-charcoal md:hidden
-          ${isOpen ? 'pointer-events-none opacity-0' : 'opacity-100'}
+          ${isOpen ? 'pointer-events-none opacity-0' : 'translate-x-0 opacity-100'}
         `}
         aria-label={isOpen ? 'Close history' : 'Open history'}
       >
         <svg
-          className="h-4.5 w-4.5"
+          className={`h-5 w-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
           strokeWidth="1.5"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h10M4 17h16" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
         </svg>
-        <span className="text-[10.5px] uppercase tracking-[0.2em]">History</span>
 
-        {history.length > 0 && (
+        {!isOpen && history.length > 0 && (
           <span
             className="
-            inline-flex h-5 min-w-5 items-center justify-center rounded-full
-            bg-charcoal px-1 text-[10px] font-serif text-cream
+            absolute -top-2 -right-2
+            flex h-5 w-5 items-center justify-center rounded-full
+            bg-charcoal text-xs font-serif text-cream
           "
           >
             {history.length > 9 ? '9+' : history.length}
@@ -120,7 +125,7 @@ export function HistorySidebar({
         className={`
           fixed z-30 flex flex-col bg-surface/97 shadow-[0_24px_60px_-30px_var(--shadow-heavy)]
           transition-transform duration-300 ease-out
-          left-3 bottom-3 top-[9.1rem] right-3 rounded-[1.15rem] border border-border-soft
+          left-3 bottom-3 top-[12rem] right-3 rounded-[1.15rem] border border-border-soft
           md:left-0 md:right-auto md:top-0 md:bottom-0 md:w-72 md:rounded-none md:border-r md:border-l-0 md:border-y-0
           ${isOpen ? 'translate-x-0' : '-translate-x-[105%] md:-translate-x-full'}
         `}
@@ -211,7 +216,7 @@ export function HistorySidebar({
                   "
                   >
                     <button
-                      onClick={() => onWordClick(entry.word)}
+                      onClick={() => handleWordClick(entry.word)}
                       className="
                         flex-1
                         flex items-center justify-between

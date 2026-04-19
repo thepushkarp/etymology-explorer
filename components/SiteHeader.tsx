@@ -58,7 +58,7 @@ export function SiteHeader({ compact = false }: SiteHeaderProps) {
           </div>
         </div>
 
-        <nav className="flex gap-2 overflow-x-auto pb-3 pl-[7.25rem] pr-1 md:hidden">
+        <nav className="flex gap-2 overflow-x-auto pb-3 pr-1 md:hidden">
           {NAV_LINKS.map((link) => {
             const isActive = isActiveLink(link.href)
 
