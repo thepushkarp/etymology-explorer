@@ -33,8 +33,8 @@ export function SurpriseButton({ onWordSelected, disabled }: SurpriseButtonProps
       onClick={handleClick}
       disabled={isLoading || disabled}
       className="
-        group relative inline-flex items-center gap-2 rounded-full border border-border-soft bg-surface/92
-        px-5 py-2.5 font-serif text-sm text-charcoal shadow-sm transition-all duration-300
+        editorial-chip group relative inline-flex items-center gap-3 rounded-full bg-surface/92
+        min-h-[3.45rem] px-9 py-3.5 font-serif text-xl text-charcoal shadow-sm transition-all duration-300
         hover:-translate-y-px hover:border-border-strong
         hover:shadow-[0_18px_44px_-28px_var(--shadow-color)]
         disabled:opacity-50 disabled:cursor-not-allowed
@@ -52,7 +52,7 @@ export function SurpriseButton({ onWordSelected, disabled }: SurpriseButtonProps
       <span className="relative z-10">
         {isLoading ? (
           <svg
-            className="w-5 h-5 animate-spin"
+            className="h-6 w-6 animate-spin"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -63,7 +63,7 @@ export function SurpriseButton({ onWordSelected, disabled }: SurpriseButtonProps
           </svg>
         ) : (
           <svg
-            className="w-5 h-5 group-hover:rotate-12 transition-transform duration-300"
+            className="h-6 w-6 transition-transform duration-300 group-hover:rotate-12"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

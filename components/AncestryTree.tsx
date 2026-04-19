@@ -12,12 +12,10 @@ import {
   branchColors,
   confidenceConfig,
   confidenceBadgeStyles,
-  mergePalette,
   mergeLineColor,
   mergeArrowColor,
   sourcePillColors,
   defaultSourcePillColors,
-  getStageColors,
 } from '@/lib/themeColors'
 
 interface AncestryTreeProps {
@@ -95,7 +93,6 @@ function StageNode({
 }) {
   const [showEvidence, setShowEvidence] = useState(false)
   const nodeRef = useRef<HTMLDivElement>(null)
-  const colors = getStageColors(stage.stage)
   const isReconstructed = stage.isReconstructed
   const hasEvidence = !isSimple && stage.evidence && stage.evidence.length > 0
 
@@ -128,22 +125,22 @@ function StageNode({
       <div
         onClick={handleToggle}
         className={`
-          w-full rounded-[1.2rem] px-3 py-3
+          w-full rounded-[1rem] px-4 py-4
           ${isReconstructed ? 'border-2 border-dashed' : 'border-2'}
           ${
             isReconstructed
               ? 'border-stone-300 bg-stone-50/60 dark:border-stone-700 dark:bg-stone-900/40'
-              : `${colors.bg} ${colors.border}`
+              : `border-border-soft bg-surface/92`
           }
-          text-center shadow-sm transition-[transform,box-shadow] duration-300
+          text-center shadow-[0_14px_28px_-22px_var(--shadow-color)] transition-[transform,box-shadow] duration-300
           ${hasEvidence ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md' : ''}
         `}
       >
-        {/* Header row: language label + confidence dot */}
-        <div className="mb-1 flex items-center justify-center gap-1.5">
+        {/* Header stack: language label above confidence badge */}
+        <div className="mb-1 flex flex-col items-center gap-1">
           <div
             className={`text-[10px] font-semibold uppercase tracking-wider ${
-              isReconstructed ? 'text-stone-500 dark:text-stone-400' : colors.text
+              isReconstructed ? 'text-stone-500 dark:text-stone-400' : 'text-charcoal-light'
             }`}
           >
             {stage.stage}
@@ -302,7 +299,7 @@ function BranchColumn({
         className={`
           mb-2 flex items-center gap-1.5 rounded-full px-3 py-1.5
           text-[10px] font-bold uppercase tracking-[0.16em]
-          border ${branchColor.accent}
+          border border-border-soft
           bg-surface/92 text-charcoal/88
           shadow-sm
           animate-stage-reveal
@@ -314,7 +311,7 @@ function BranchColumn({
           <span
             className="
               w-2 h-2 rounded-full
-              bg-stone-400 dark:bg-stone-500
+              bg-[var(--accent-oxblood)]
               ring-1 ring-stone-300 dark:ring-stone-600
             "
             title={convergences.map((c) => `Shares PIE *${c.pieRoot} "${c.meaning}"`).join('; ')}
@@ -448,7 +445,7 @@ export const AncestryTree = memo(function AncestryTree({
             {/* Merge node */}
             <div
               className={`
-                max-w-sm rounded-[1.2rem] border ${mergePalette.border} ${mergePalette.bg}
+                max-w-sm rounded-[1rem] border border-border-soft bg-surface/92
                 px-4 py-3 text-center shadow-sm animate-stage-reveal
               `}
               style={{
@@ -456,9 +453,7 @@ export const AncestryTree = memo(function AncestryTree({
                 animationFillMode: 'backwards',
               }}
             >
-              <div
-                className={`mb-0.5 text-[10px] font-semibold uppercase tracking-wider ${mergePalette.text}`}
-              >
+              <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-charcoal-light">
                 Combined
               </div>
               <div className="font-serif text-base font-semibold text-charcoal">
@@ -502,8 +497,7 @@ export const AncestryTree = memo(function AncestryTree({
 
         <div
           className={`
-            px-6 py-3 rounded-lg border
-            ${mergePalette.border} ${mergePalette.bg}
+            rounded-[1rem] border border-border-soft bg-surface px-6 py-3
             shadow-sm dark:shadow-black/30 animate-stage-reveal
           `}
           style={{
@@ -511,9 +505,7 @@ export const AncestryTree = memo(function AncestryTree({
             animationFillMode: 'backwards',
           }}
         >
-          <div
-            className={`mb-1 text-[10px] font-semibold uppercase tracking-wider ${mergePalette.text}`}
-          >
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-charcoal-light">
             Modern English
           </div>
           <div className="font-serif text-xl font-bold text-charcoal">{word}</div>

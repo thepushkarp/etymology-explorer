@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { faqs } from '@/data/faq'
-import { FaqSchema } from '@/components/FaqSchema'
+import { EditorialPageFrame } from '@/components/EditorialPageFrame'
 import { FaqAccordion } from '@/components/FaqAccordion'
+import { FaqSchema } from '@/components/FaqSchema'
 
 export const metadata: Metadata = {
   title: 'Frequently Asked Questions',
@@ -23,65 +24,29 @@ export default function FaqPage() {
   return (
     <>
       <FaqSchema faqs={faqs} />
-
-      <main className="min-h-screen bg-cream py-12 md:py-20 px-4">
-        <div className="max-w-2xl mx-auto">
-          {/* Back link */}
-          <Link
-            href="/"
-            className="
-              inline-flex items-center gap-2
-              text-sm font-serif text-charcoal-light
-              hover:text-charcoal
-              transition-colors
-              mb-8
-            "
-          >
-            &larr; Back to Explorer
-          </Link>
-
-          {/* Header */}
-          <header className="mb-12">
-            <h1
-              className="
-                font-serif text-3xl md:text-4xl
-                text-charcoal
-                mb-4
-                tracking-tight
-              "
-            >
-              Frequently Asked Questions
-            </h1>
-            <p className="font-serif text-lg text-charcoal-light">
-              Common questions about etymology and word origins.
-            </p>
-          </header>
-
-          {/* FAQ Accordion */}
-          <section aria-label="Frequently asked questions">
+      <EditorialPageFrame
+        eyebrow="frequently asked"
+        title="Questions about words, and the people who used them."
+        subtitle="The short answers, set out plainly, for curious readers and repeat searchers alike."
+        showHeaderRule={false}
+      >
+        <section className="mx-auto max-w-3xl" aria-label="Frequently asked questions">
+          <div>
             <FaqAccordion faqs={faqs} />
-          </section>
-
-          {/* CTA */}
-          <div className="mt-12 pt-8 border-t border-charcoal/10 text-center">
-            <p className="font-serif text-charcoal-light mb-4">Ready to explore word origins?</p>
-            <Link
-              href="/"
-              className="
-                inline-block
-                px-6 py-3
-                bg-charcoal text-cream
-                font-serif
-                rounded
-                hover:bg-charcoal-light
-                transition-colors
-              "
-            >
-              Start Exploring
+          </div>
+          <div className="editorial-card mt-12 flex flex-col gap-6 p-8 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-serif text-xl italic text-charcoal-light">still curious?</p>
+              <p className="mt-2 font-serif text-3xl tracking-[-0.03em] text-charcoal">
+                Pick a word and start digging.
+              </p>
+            </div>
+            <Link href="/" className="editorial-chip self-start font-serif italic sm:self-center">
+              explore the archive →
             </Link>
           </div>
-        </div>
-      </main>
+        </section>
+      </EditorialPageFrame>
     </>
   )
 }

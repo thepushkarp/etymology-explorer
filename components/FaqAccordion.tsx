@@ -14,15 +14,16 @@ interface FaqAccordionProps {
 
 interface FaqItemProps {
   faq: FaqItem
+  index: number
 }
 
-function FaqAccordionItem({ faq }: FaqItemProps) {
+function FaqAccordionItem({ faq, index }: FaqItemProps) {
   return (
-    <details className="group border-b border-charcoal/10 last:border-b-0">
+    <details className="group border-b border-border-soft" open={index === 0}>
       <summary
         className="
-          flex cursor-pointer items-center justify-between
-          py-5 pr-2
+          flex cursor-pointer items-start gap-5
+          py-7
           font-serif text-lg text-charcoal
           list-none
           hover:text-charcoal-light
@@ -30,10 +31,15 @@ function FaqAccordionItem({ faq }: FaqItemProps) {
           [&::-webkit-details-marker]:hidden
         "
       >
-        <span>{faq.question}</span>
+        <span className="min-w-8 pt-0.5 font-serif text-lg italic text-charcoal-light/72">
+          {String(index + 1).padStart(2, '0')}
+        </span>
+        <span className="flex-1 text-[1.65rem] leading-[1.2] tracking-[-0.02em]">
+          {faq.question}
+        </span>
         <span
           className="
-            ml-4 text-xl text-charcoal/55
+            ml-4 pt-0.5 text-[1.7rem] italic text-charcoal/55
             transition-transform duration-200
             group-open:rotate-45
           "
@@ -43,8 +49,8 @@ function FaqAccordionItem({ faq }: FaqItemProps) {
       </summary>
       <div
         className="
-          pb-5 pr-8
-          font-serif text-base text-charcoal-light
+          pb-6 pl-[3.25rem] pr-8
+          font-serif text-[1.05rem] text-charcoal-light
           leading-relaxed
         "
       >
@@ -53,7 +59,7 @@ function FaqAccordionItem({ faq }: FaqItemProps) {
           <p className="mt-3 text-sm">
             <Link
               href={`/?q=${encodeURIComponent(faq.searchExample)}`}
-              className="text-charcoal underline hover:text-charcoal-light"
+              className="editorial-link text-charcoal hover:text-charcoal-light"
             >
               Try searching for &ldquo;{faq.searchExample}&rdquo; &rarr;
             </Link>
@@ -66,9 +72,9 @@ function FaqAccordionItem({ faq }: FaqItemProps) {
 
 export function FaqAccordion({ faqs }: FaqAccordionProps) {
   return (
-    <div className="border-t border-charcoal/10">
-      {faqs.map((faq) => (
-        <FaqAccordionItem key={faq.question} faq={faq} />
+    <div>
+      {faqs.map((faq, index) => (
+        <FaqAccordionItem key={faq.question} faq={faq} index={index} />
       ))}
     </div>
   )

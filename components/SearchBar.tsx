@@ -153,7 +153,7 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
   )
 
   return (
-    <form onSubmit={handleSubmit} className="relative z-10 mx-auto w-full max-w-3xl">
+    <form onSubmit={handleSubmit} className="relative z-10 w-full">
       <div
         className={`
           group relative transition-all duration-300 ease-out
@@ -162,22 +162,25 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
       >
         <div
           className={`
-            absolute inset-0 rounded-[1.75rem] border bg-surface/92 shadow-[0_22px_50px_-28px_var(--shadow-color)]
-            backdrop-blur-sm transition-all duration-300
+            absolute inset-0 rounded-[1.25rem] border bg-surface/96 shadow-[0_22px_60px_-34px_var(--shadow-heavy)]
+            transition-all duration-300
             ${
               isFocused
-                ? 'border-border-strong shadow-[0_28px_64px_-30px_var(--shadow-color)]'
+                ? 'border-border-strong shadow-[0_26px_80px_-28px_var(--shadow-heavy)]'
                 : 'border-border-soft'
             }
           `}
         />
 
-        <div className="relative rounded-[1.75rem]">
-          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[1.75rem]">
-            <div className="h-full w-full bg-gradient-to-r from-transparent via-cream-dark/55 to-transparent opacity-70" />
+        <div className="relative rounded-[1.25rem]">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[1.25rem]">
+            <div className="h-px w-full bg-gradient-to-r from-transparent via-border-strong/80 to-transparent" />
           </div>
 
-          <div className="relative flex items-center gap-2 rounded-[1.75rem] px-3 py-3 sm:px-4">
+          <div className="relative flex items-center gap-2 rounded-[1.25rem] px-3 py-3 sm:px-4">
+            <span className="pl-2 text-charcoal-light/58">
+              <MagnifyingGlassIcon className="h-5 w-5" />
+            </span>
             <input
               ref={inputRef}
               type="text"
@@ -189,9 +192,9 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
               placeholder="Enter a word to explore its roots..."
               disabled={isLoading}
               className="
-                min-w-0 flex-1 rounded-[1.2rem] border border-transparent bg-transparent px-4 py-4 text-lg
+                min-w-0 flex-1 rounded-[1rem] border border-transparent bg-transparent px-2 py-4 text-lg
                 font-serif tracking-[0.01em] text-charcoal outline-none placeholder:text-charcoal-light/68
-                placeholder:italic disabled:opacity-50 sm:text-xl
+                placeholder:italic disabled:opacity-50 sm:text-[1.45rem]
               "
               autoComplete="off"
               spellCheck="false"

@@ -42,21 +42,60 @@ export function HistorySidebar({
     return () => clearInterval(interval)
   }, [])
 
+  const handleWordClick = (word: string) => {
+    setIsOpen(false)
+    onWordClick(word)
+  }
+
   return (
     <>
-      {/* Toggle button - fixed to left edge */}
+      {/* Mobile drawer toggle */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          fixed left-0 top-1/2 z-40 flex items-center gap-2 rounded-r-2xl border border-l-0
-          border-border-soft bg-surface/94 px-3 py-4 text-charcoal-light shadow-sm backdrop-blur-sm
-          transition-all duration-300 hover:bg-cream-dark/55 hover:text-charcoal
+          fixed left-0 top-[9.25rem] z-40 inline-flex items-center gap-2 rounded-r-[1rem] border border-l-0
+          border-border-soft bg-surface/96 px-3 py-4 text-charcoal-light shadow-[0_18px_44px_-28px_var(--shadow-heavy)]
+          transition-all duration-300 hover:bg-cream-dark/55 hover:text-charcoal md:hidden
+          ${isOpen ? 'pointer-events-none opacity-0' : 'translate-x-0 opacity-100'}
+        `}
+        aria-label={isOpen ? 'Close history' : 'Open history'}
+      >
+        <svg
+          className={`h-5 w-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+
+        {!isOpen && history.length > 0 && (
+          <span
+            className="
+            absolute -top-2 -right-2
+            flex h-5 w-5 items-center justify-center rounded-full
+            bg-charcoal text-xs font-serif text-cream
+          "
+          >
+            {history.length > 9 ? '9+' : history.length}
+          </span>
+        )}
+      </button>
+
+      {/* Desktop rail toggle */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`
+          fixed left-0 top-1/2 z-40 hidden items-center gap-2 rounded-r-[1rem] border border-l-0
+          border-border-soft bg-surface/96 px-3 py-4 text-charcoal-light shadow-[0_18px_44px_-28px_var(--shadow-heavy)]
+          transition-all duration-300 hover:bg-cream-dark/55 hover:text-charcoal md:flex
           ${isOpen ? 'translate-x-72' : 'translate-x-0'}
         `}
         aria-label={isOpen ? 'Close history' : 'Open history'}
       >
         <svg
-          className={`w-5 h-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
+          className={`h-5 w-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -81,18 +120,14 @@ export function HistorySidebar({
         )}
       </button>
 
-      {/* Sidebar panel */}
+      {/* Drawer panel */}
       <aside
         className={`
-          fixed left-0 top-0 bottom-0
-          z-30
-          w-72
-          bg-surface/96
-          border-r border-border-soft
-          shadow-[0_24px_60px_-30px_var(--shadow-color)]
-          backdrop-blur-md
-          transform transition-transform duration-300 ease-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+          fixed z-30 flex flex-col bg-surface/97 shadow-[0_24px_60px_-30px_var(--shadow-heavy)]
+          transition-transform duration-300 ease-out
+          left-3 bottom-3 top-[12rem] right-3 rounded-[1.15rem] border border-border-soft
+          md:left-0 md:right-auto md:top-0 md:bottom-0 md:w-72 md:rounded-none md:border-r md:border-l-0 md:border-y-0
+          ${isOpen ? 'translate-x-0' : '-translate-x-[105%] md:-translate-x-full'}
         `}
       >
         {/* Header */}
@@ -103,7 +138,29 @@ export function HistorySidebar({
           border-b border-border-soft
         "
         >
-          <h2 className="font-serif text-lg text-charcoal">Exploration Trail</h2>
+          <div className="flex items-start gap-3">
+            <button
+              onClick={() => setIsOpen(false)}
+              className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border-soft bg-surface text-charcoal-light transition-colors hover:bg-cream-dark/55 hover:text-charcoal md:hidden"
+              aria-label="Collapse history drawer"
+            >
+              <svg
+                className="h-4.5 w-4.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+                history
+              </p>
+              <h2 className="mt-2 font-serif text-lg text-charcoal">Exploration Trail</h2>
+            </div>
+          </div>
 
           {history.length > 0 && (
             <button
@@ -123,17 +180,14 @@ export function HistorySidebar({
         {/* History list */}
         <div
           className="
-          overflow-y-auto
-          h-[calc(100vh-80px)]
+          min-h-0 flex-1 overflow-y-auto
           px-4 py-4
         "
         >
           {history.length === 0 ? (
             <div
               className="
-              text-center py-12
-              text-charcoal-light/50
-              font-serif italic
+              py-12 text-center font-serif italic text-charcoal-light/50
             "
             >
               <p className="mb-2">No words explored yet</p>
@@ -155,13 +209,14 @@ export function HistorySidebar({
                     className="
                     group
                     flex items-center
-                    rounded-xl
-                    hover:bg-cream-dark/55
+                    rounded-[0.9rem]
+                    border border-transparent
+                    hover:border-border-soft hover:bg-cream-dark/45
                     transition-colors
                   "
                   >
                     <button
-                      onClick={() => onWordClick(entry.word)}
+                      onClick={() => handleWordClick(entry.word)}
                       className="
                         flex-1
                         flex items-center justify-between
