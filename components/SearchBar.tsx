@@ -11,9 +11,16 @@ interface SearchBarProps {
   isLoading?: boolean
   initialValue?: string
   inputRef?: React.RefObject<HTMLInputElement | null>
+  onSuggestionsVisibilityChange?: (visible: boolean) => void
 }
 
-export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: SearchBarProps) {
+export function SearchBar({
+  onSearch,
+  isLoading,
+  initialValue = '',
+  inputRef,
+  onSuggestionsVisibilityChange,
+}: SearchBarProps) {
   const [value, setValue] = useState(initialValue)
   const [inputValue, setInputValue] = useState(initialValue)
   const [isFocused, setIsFocused] = useState(false)
@@ -54,6 +61,10 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
       setSelectedIndex(-1)
     }
   }, [selectedIndex, suggestionItems.length])
+
+  useEffect(() => {
+    onSuggestionsVisibilityChange?.(shouldShowSuggestions)
+  }, [shouldShowSuggestions, onSuggestionsVisibilityChange])
 
   useEffect(
     () => () => {
