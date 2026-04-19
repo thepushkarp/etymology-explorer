@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { EditorialPageFrame } from '@/components/EditorialPageFrame'
 
 export const metadata: Metadata = {
   title: 'What is Etymology? A Complete Guide to Word Origins',
@@ -16,340 +17,309 @@ export const metadata: Metadata = {
   },
 }
 
+const CONTENTS = [
+  { id: 'meaning', label: 'What etymology means' },
+  { id: 'origins', label: 'Where English words come from' },
+  { id: 'change', label: 'How words change' },
+  { id: 'pie', label: 'Proto-Indo-European' },
+  { id: 'matter', label: 'Why it matters' },
+  { id: 'sources', label: 'Sources' },
+]
+
+const WORD_CHANGE_PATTERNS = [
+  {
+    title: 'Semantic shift',
+    description:
+      'Meanings broaden, narrow, or reverse. Nice once meant foolish before settling into pleasant.',
+  },
+  {
+    title: 'Borrowing',
+    description:
+      'English takes freely from its neighbors: algorithm from Arabic, piano from Italian, tsunami from Japanese.',
+  },
+  {
+    title: 'Compounding',
+    description:
+      'Fresh words arise by joining older ones, from smartphone today to nostril as nose-hole centuries ago.',
+  },
+  {
+    title: 'Back-formation',
+    description:
+      'Sometimes a newer-looking root gets imagined backward: edit from editor, burgle from burglar.',
+  },
+]
+
+function OriginsBar() {
+  const origins = [
+    { label: 'Latin', share: 29, color: 'var(--accent-oxblood)' },
+    { label: 'French', share: 29, color: 'var(--accent-soft)' },
+    { label: 'Germanic', share: 26, color: 'var(--accent-olive)' },
+    { label: 'Greek', share: 6, color: 'var(--accent-sky)' },
+    { label: 'Other', share: 10, color: 'var(--accent-plum)' },
+  ]
+
+  return (
+    <div className="editorial-panel mt-8 p-6">
+      <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+        a rough share of english vocabulary
+      </p>
+      <div className="mt-4 flex h-4 overflow-hidden rounded-full bg-surface-muted">
+        {origins.map((origin) => (
+          <div
+            key={origin.label}
+            className="h-full"
+            style={{ width: `${origin.share}%`, backgroundColor: origin.color }}
+          />
+        ))}
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {origins.map((origin) => (
+          <div key={origin.label} className="flex items-center justify-between gap-3 text-sm">
+            <span className="flex items-center gap-2 font-serif text-charcoal">
+              <span
+                aria-hidden="true"
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: origin.color }}
+              />
+              {origin.label}
+            </span>
+            <span className="text-charcoal-light">{origin.share}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SectionHeading({ id, number, title }: { id: string; number: string; title: string }) {
+  return (
+    <div id={id} className="scroll-mt-24 border-t border-border-soft pt-8">
+      <p className="font-serif text-lg italic text-charcoal-light/72">{number}</p>
+      <h2 className="mt-1 font-serif text-3xl tracking-[-0.03em] text-charcoal sm:text-[2.35rem]">
+        {title}
+      </h2>
+    </div>
+  )
+}
+
 export default function WhatIsEtymologyPage() {
   return (
-    <main className="min-h-screen bg-cream py-12 md:py-20 px-4">
-      <article className="max-w-2xl mx-auto">
-        {/* Back link */}
-        <Link
-          href="/"
-          className="
-            inline-flex items-center gap-2
-            text-sm font-serif text-charcoal-light
-            hover:text-charcoal
-            transition-colors
-            mb-8
-          "
-        >
-          &larr; Back to Explorer
-        </Link>
+    <EditorialPageFrame
+      eyebrow="essay · 8 min read"
+      title="What is Etymology?"
+      subtitle="A complete guide to word origins, how meanings move, and why old forms still matter."
+    >
+      <article className="grid gap-10 xl:grid-cols-[190px_minmax(0,680px)_260px]">
+        <nav className="editorial-panel h-fit p-5 xl:sticky xl:top-24">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">contents</p>
+          <ol className="mt-4 space-y-3 text-sm text-charcoal-light">
+            {CONTENTS.map((item) => (
+              <li key={item.id}>
+                <a href={`#${item.id}`} className="transition-colors hover:text-charcoal">
+                  {item.label}
+                </a>
+              </li>
+            ))}
+          </ol>
+        </nav>
 
-        {/* Header */}
-        <header className="mb-12">
-          <h1
-            className="
-              font-serif text-3xl md:text-4xl
-              text-charcoal
-              mb-4
-              tracking-tight
-              leading-tight
-            "
-          >
-            What is Etymology?
-            <span className="block text-xl md:text-2xl text-charcoal-light mt-2 font-normal">
-              A Complete Guide to Word Origins
-            </span>
-          </h1>
-        </header>
+        <div className="max-w-[680px]">
+          <section id="meaning" className="mb-12">
+            <p className="editorial-dropcap font-serif text-[1.14rem] leading-relaxed text-charcoal sm:text-[1.22rem]">
+              <strong>Etymology</strong> is the study of the origin of words and the historical
+              development of their meanings. It traces words through time and across languages,
+              revealing how sounds, spellings, and meanings have shifted from ancient roots to
+              modern usage. The word &ldquo;etymology&rdquo; itself comes from the Greek{' '}
+              <em>etymologia</em>, combining <em>etymon</em> (true sense) and <em>logia</em> (study
+              of), literally meaning &ldquo;the study of the true meaning of words.&rdquo;
+            </p>
+            <p className="mt-6 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
+              Understanding etymology helps us see language not as a static system but as a living,
+              evolving organism shaped by migration, conquest, trade, and cultural exchange over
+              thousands of years.
+            </p>
+          </section>
 
-        {/* Introduction with definition - AI citation optimized first paragraph */}
-        <section className="mb-10">
-          <p className="font-serif text-lg text-charcoal leading-relaxed mb-4">
-            <strong>Etymology</strong> is the study of the origin of words and the historical
-            development of their meanings. It traces words through time and across languages,
-            revealing how sounds, spellings, and meanings have shifted from ancient roots to modern
-            usage. The word &ldquo;etymology&rdquo; itself comes from the Greek <em>etymologia</em>,
-            combining <em>etymon</em> (true sense) and <em>logia</em> (study of)—literally meaning
-            &ldquo;the study of the true meaning of words.&rdquo;
-          </p>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed">
-            Understanding etymology helps us see language not as a static system but as a living,
-            evolving organism shaped by migration, conquest, trade, and cultural exchange over
-            thousands of years.
-          </p>
-        </section>
-
-        {/* Origins of English Words - Statistics section */}
-        <section className="mb-10">
-          <h2
-            className="
-              font-serif text-2xl text-charcoal
-              mb-4 pb-2
-              border-b border-charcoal/10
-            "
-          >
-            The Origins of English Words
-          </h2>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed mb-4">
-            The English language contains approximately 170,000 words in current use, drawing from a
-            remarkably diverse set of source languages. According to linguistic research:
-          </p>
-          <ul className="font-serif text-base text-charcoal-light leading-relaxed space-y-2 ml-6 list-disc mb-4">
-            <li>
-              <strong>29% from Latin</strong> — primarily through scholarly, legal, and religious
-              texts
-            </li>
-            <li>
-              <strong>29% from French</strong> — largely from the Norman Conquest of 1066
-            </li>
-            <li>
-              <strong>26% from Germanic languages</strong> — the original Anglo-Saxon foundation
-            </li>
-            <li>
-              <strong>6% from Greek</strong> — especially scientific and philosophical terms
-            </li>
-            <li>
-              <strong>10% from other languages</strong> — including Arabic, Hindi, Japanese, and
-              hundreds more
-            </li>
-          </ul>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed">
-            This means that roughly 58% of English vocabulary has Latin roots, either directly or
-            through French. Yet the most frequently used words in everyday speech—
-            <Link href="/?q=the" className="text-charcoal underline hover:text-charcoal-light">
-              the
-            </Link>
-            ,{' '}
-            <Link href="/?q=be" className="text-charcoal underline hover:text-charcoal-light">
-              be
-            </Link>
-            ,{' '}
-            <Link href="/?q=have" className="text-charcoal underline hover:text-charcoal-light">
-              have
-            </Link>
-            ,{' '}
-            <Link href="/?q=do" className="text-charcoal underline hover:text-charcoal-light">
-              do
-            </Link>
-            —remain predominantly Germanic.
-          </p>
-        </section>
-
-        {/* Expert quote */}
-        <section className="mb-10">
-          <blockquote
-            className="
-              border-l-4 border-charcoal/20
-              pl-6 py-2
-              font-serif italic text-charcoal
-              text-lg
-            "
-          >
-            &ldquo;Etymology is the study of words at rest, as it were, without which the study of
-            words in motion would be impossible.&rdquo;
-          </blockquote>
-          <p className="font-serif text-sm text-charcoal-light mt-2 pl-6">
-            — <cite>Ernest Weekley, British philologist and etymologist (1865–1954)</cite>
-          </p>
-        </section>
-
-        {/* How Words Change Over Time */}
-        <section className="mb-10">
-          <h2
-            className="
-              font-serif text-2xl text-charcoal
-              mb-4 pb-2
-              border-b border-charcoal/10
-            "
-          >
-            How Words Change Over Time
-          </h2>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed mb-4">
-            Words are not fixed entities—they shift in meaning, pronunciation, and spelling across
-            generations. Linguists have identified several primary mechanisms of change:
-          </p>
-
-          <h3 className="font-serif text-lg text-charcoal mb-2 mt-6">1. Semantic Shift</h3>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed mb-4">
-            Words can broaden, narrow, or completely reverse their meanings. The word{' '}
-            <Link href="/?q=nice" className="text-charcoal underline hover:text-charcoal-light">
-              nice
-            </Link>{' '}
-            originally meant &ldquo;ignorant&rdquo; or &ldquo;foolish&rdquo; in Latin (
-            <em>nescius</em>). Over centuries, it evolved through &ldquo;precise&rdquo; and
-            &ldquo;particular&rdquo; to its modern meaning of &ldquo;pleasant.&rdquo;
-          </p>
-
-          <h3 className="font-serif text-lg text-charcoal mb-2 mt-6">2. Borrowing</h3>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed mb-4">
-            Languages constantly borrow words from each other. English has adopted{' '}
-            <Link
-              href="/?q=algorithm"
-              className="text-charcoal underline hover:text-charcoal-light"
-            >
-              algorithm
-            </Link>{' '}
-            from Arabic (after mathematician al-Khwarizmi),{' '}
-            <Link href="/?q=piano" className="text-charcoal underline hover:text-charcoal-light">
-              piano
-            </Link>{' '}
-            from Italian, and{' '}
-            <Link href="/?q=tsunami" className="text-charcoal underline hover:text-charcoal-light">
-              tsunami
-            </Link>{' '}
-            from Japanese.
-          </p>
-
-          <h3 className="font-serif text-lg text-charcoal mb-2 mt-6">3. Compounding</h3>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed mb-4">
-            New words form by combining existing ones. Modern examples include <em>smartphone</em>,{' '}
-            <em>livestream</em>, and <em>cryptocurrency</em>. This process has ancient roots—the
-            word{' '}
-            <Link href="/?q=nostril" className="text-charcoal underline hover:text-charcoal-light">
-              nostril
-            </Link>{' '}
-            comes from Old English <em>nosþyrl</em> (&ldquo;nose-hole&rdquo;).
-          </p>
-
-          <h3 className="font-serif text-lg text-charcoal mb-2 mt-6">4. Back-formation</h3>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed">
-            Sometimes words are created by removing what appears to be a suffix. The verb{' '}
-            <Link href="/?q=edit" className="text-charcoal underline hover:text-charcoal-light">
-              edit
-            </Link>{' '}
-            was derived from <em>editor</em> (not the other way around), and <em>burgle</em> came
-            from <em>burglar</em>.
-          </p>
-        </section>
-
-        {/* Proto-Indo-European */}
-        <section className="mb-10">
-          <h2
-            className="
-              font-serif text-2xl text-charcoal
-              mb-4 pb-2
-              border-b border-charcoal/10
-            "
-          >
-            Proto-Indo-European: The Common Ancestor
-          </h2>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed mb-4">
-            Proto-Indo-European (PIE) is the reconstructed common ancestor of the Indo-European
-            language family, believed to have been spoken approximately 4500–2500 BCE, likely in the
-            Pontic-Caspian steppe region of Eastern Europe.
-          </p>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed mb-4">
-            PIE is the linguistic root connecting roughly half of the world&apos;s population
-            through languages as diverse as:
-          </p>
-          <ul className="font-serif text-base text-charcoal-light leading-relaxed space-y-1 ml-6 list-disc mb-4">
-            <li>English, German, Dutch (Germanic branch)</li>
-            <li>Spanish, French, Italian, Portuguese (Romance branch)</li>
-            <li>Hindi, Urdu, Bengali (Indo-Aryan branch)</li>
-            <li>Russian, Polish, Czech (Slavic branch)</li>
-            <li>Greek (Hellenic branch)</li>
-            <li>Persian, Kurdish (Iranian branch)</li>
-          </ul>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed">
-            When you trace many English words back far enough, you reach reconstructed PIE roots.
-            For example, the English word{' '}
-            <Link href="/?q=mother" className="text-charcoal underline hover:text-charcoal-light">
-              mother
-            </Link>{' '}
-            derives from PIE <em>*méh₂tēr</em>, which also gave rise to Latin <em>māter</em>, Greek{' '}
-            <em>mḗtēr</em>, and Sanskrit <em>mātṛ́</em>—all meaning the same thing across thousands
-            of miles and millennia.
-          </p>
-        </section>
-
-        {/* Why Etymology Matters */}
-        <section className="mb-10">
-          <h2
-            className="
-              font-serif text-2xl text-charcoal
-              mb-4 pb-2
-              border-b border-charcoal/10
-            "
-          >
-            Why Etymology Matters
-          </h2>
-          <p className="font-serif text-base text-charcoal-light leading-relaxed mb-4">
-            Studying etymology offers practical benefits beyond historical curiosity:
-          </p>
-          <ul className="font-serif text-base text-charcoal-light leading-relaxed space-y-2 ml-6 list-disc">
-            <li>
-              <strong>Vocabulary expansion</strong> — Understanding roots helps you decode
-              unfamiliar words
-            </li>
-            <li>
-              <strong>Spelling improvement</strong> — Knowing a word&apos;s origin explains
-              irregularities
-            </li>
-            <li>
-              <strong>Cultural literacy</strong> — Word origins reveal historical connections
-              between cultures
-            </li>
-            <li>
-              <strong>Critical thinking</strong> — Etymology shows how meaning is constructed and
-              shifts
-            </li>
-          </ul>
-        </section>
-
-        {/* Sources */}
-        <section className="mb-12">
-          <h2
-            className="
-              font-serif text-lg text-charcoal
-              mb-3 pb-2
-              border-b border-charcoal/10
-            "
-          >
-            Sources
-          </h2>
-          <ul className="font-serif text-sm text-charcoal-light space-y-1">
-            <li>
-              <a
-                href="https://www.etymonline.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-charcoal"
+          <section className="mb-12">
+            <SectionHeading id="origins" number="01" title="Where English words come from" />
+            <p className="mt-5 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
+              The English language contains approximately 170,000 words in current use, drawing from
+              a remarkably diverse set of source languages.
+            </p>
+            <OriginsBar />
+            <p className="mt-6 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
+              Roughly 58% of English vocabulary has Latin roots, either directly or through French.
+              Yet the most frequently used words in everyday speech, like{' '}
+              <Link
+                href="/?q=the"
+                className="underline decoration-border-strong underline-offset-4"
               >
-                Online Etymology Dictionary
-              </a>{' '}
-              — Douglas Harper
-            </li>
-            <li>
-              <a
-                href="https://en.wiktionary.org"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-charcoal"
+                the
+              </Link>
+              ,{' '}
+              <Link href="/?q=be" className="underline decoration-border-strong underline-offset-4">
+                be
+              </Link>
+              ,{' '}
+              <Link
+                href="/?q=have"
+                className="underline decoration-border-strong underline-offset-4"
               >
-                Wiktionary
-              </a>{' '}
-              — Wikimedia Foundation
-            </li>
-            <li>
-              <em>The Oxford Dictionary of English Etymology</em> — C.T. Onions (1966)
-            </li>
-            <li>
-              <em>A Short Etymological Dictionary of Modern English</em> — Ernest Weekley (1921)
-            </li>
-          </ul>
-        </section>
+                have
+              </Link>
+              , and{' '}
+              <Link href="/?q=do" className="underline decoration-border-strong underline-offset-4">
+                do
+              </Link>{' '}
+              remain predominantly Germanic.
+            </p>
+          </section>
 
-        {/* CTA */}
-        <div className="pt-8 border-t border-charcoal/10 text-center">
-          <p className="font-serif text-charcoal-light mb-4">
-            Ready to explore the origins of any word?
-          </p>
-          <Link
-            href="/"
-            className="
-              inline-block
-              px-6 py-3
-              bg-charcoal text-cream
-              font-serif
-              rounded
-              hover:bg-charcoal-light
-              transition-colors
-            "
-          >
-            Start Exploring
-          </Link>
+          <section className="editorial-panel mb-12 px-6 py-6">
+            <blockquote className="border-l-2 border-[var(--accent-oxblood)] py-2 pl-6 font-serif text-lg italic text-charcoal">
+              &ldquo;Etymology is the study of words at rest, as it were, without which the study of
+              words in motion would be impossible.&rdquo;
+            </blockquote>
+            <p className="mt-2 pl-6 font-serif text-sm text-charcoal-light">
+              — <cite>Ernest Weekley, British philologist and etymologist (1865–1954)</cite>
+            </p>
+          </section>
+
+          <section className="mb-12">
+            <SectionHeading id="change" number="02" title="How words change over time" />
+            <p className="mt-5 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
+              Words are not fixed entities. They shift in meaning, pronunciation, and spelling
+              across generations. Linguists often group those changes into a few recurring patterns.
+            </p>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              {WORD_CHANGE_PATTERNS.map((pattern) => (
+                <article key={pattern.title} className="editorial-panel p-5">
+                  <h3 className="font-serif text-[1.55rem] tracking-[-0.02em] text-charcoal">
+                    {pattern.title}
+                  </h3>
+                  <p className="mt-3 font-serif italic leading-relaxed text-charcoal-light">
+                    {pattern.description}
+                  </p>
+                </article>
+              ))}
+            </div>
+            <p className="mt-6 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
+              A borrowed word can shift in meaning, gain a local spelling, and then seed a new
+              family of compounds inside English. That overlap is what makes etymology feel less
+              like a glossary and more like a living record.
+            </p>
+          </section>
+
+          <section className="mb-12">
+            <SectionHeading id="pie" number="03" title="Proto-Indo-European, the common ancestor" />
+            <p className="mt-5 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
+              Proto-Indo-European (PIE) is the reconstructed common ancestor of the Indo-European
+              language family, believed to have been spoken approximately 4500–2500 BCE, likely in
+              the Pontic-Caspian steppe region of Eastern Europe.
+            </p>
+            <p className="mt-4 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
+              PIE connects roughly half of the world&apos;s population through languages as diverse
+              as English, German, Spanish, Hindi, Russian, Greek, and Persian.
+            </p>
+            <p className="mt-4 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
+              When you trace many English words back far enough, you reach reconstructed PIE roots.
+              For example,{' '}
+              <Link
+                href="/?q=mother"
+                className="underline decoration-border-strong underline-offset-4"
+              >
+                mother
+              </Link>{' '}
+              derives from PIE <em>*méh₂tēr</em>, which also gave rise to Latin <em>māter</em>,
+              Greek <em>mḗtēr</em>, and Sanskrit <em>mātṛ́</em>.
+            </p>
+          </section>
+
+          <section className="mb-12">
+            <SectionHeading id="matter" number="04" title="Why etymology matters" />
+            <ul className="mt-5 ml-6 list-disc space-y-2 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
+              <li>
+                <strong>Vocabulary expansion</strong> by helping you decode unfamiliar words
+              </li>
+              <li>
+                <strong>Spelling improvement</strong> by explaining irregular forms
+              </li>
+              <li>
+                <strong>Cultural literacy</strong> through the historical contact between languages
+              </li>
+              <li>
+                <strong>Critical thinking</strong> by showing how meaning shifts over time
+              </li>
+            </ul>
+
+            <div className="editorial-panel mt-8 p-6">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+                try a word from this essay
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                {['nice', 'algorithm', 'mother', 'window'].map((word) => (
+                  <Link
+                    key={word}
+                    href={`/?q=${encodeURIComponent(word)}`}
+                    className="rounded-full border border-border-soft px-4 py-2 font-serif italic text-charcoal-light transition-colors hover:border-border-strong hover:text-charcoal"
+                  >
+                    {word}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section id="sources">
+            <SectionHeading id="sources-heading" number="05" title="Sources" />
+            <ul className="mt-5 space-y-2 font-serif text-sm leading-relaxed text-charcoal-light">
+              <li>
+                <a
+                  href="https://www.etymonline.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-border-strong underline-offset-4"
+                >
+                  Online Etymology Dictionary
+                </a>{' '}
+                — Douglas Harper
+              </li>
+              <li>
+                <a
+                  href="https://en.wiktionary.org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline decoration-border-strong underline-offset-4"
+                >
+                  Wiktionary
+                </a>
+              </li>
+              <li>The Oxford Dictionary of English Etymology</li>
+            </ul>
+          </section>
         </div>
+
+        <aside className="hidden xl:block">
+          <div className="editorial-panel sticky top-24 p-6">
+            <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+              marginalia
+            </p>
+            <p className="mt-4 font-serif text-[1.6rem] tracking-[-0.03em] text-charcoal">
+              Start with an ordinary word. The older life is usually stranger than the modern one.
+            </p>
+            <p className="mt-4 font-serif italic leading-relaxed text-charcoal-light">
+              The ancestry map in the explorer is best read top to bottom: reconstructed forms,
+              borrowings, convergences, and the modern arrival.
+            </p>
+            <Link
+              href="/"
+              className="mt-6 inline-flex items-center text-sm uppercase tracking-[0.18em] text-charcoal-light transition-colors hover:text-charcoal"
+            >
+              Back to explorer
+            </Link>
+          </div>
+        </aside>
       </article>
-    </main>
+    </EditorialPageFrame>
   )
 }

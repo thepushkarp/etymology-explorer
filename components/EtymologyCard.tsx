@@ -90,74 +90,64 @@ export const EtymologyCard = memo(function EtymologyCard({
   headerActions,
 }: EtymologyCardProps) {
   const sectionTitleTextClassName =
-    'text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/72'
-  const sectionDividerClassName = 'mt-10 border-t border-border-soft pt-10'
+    'text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/66'
+  const sectionDividerClassName = 'mt-12 border-t border-border-soft pt-10'
+  const firstSectionClassName = 'mt-12 pt-2'
   const originHook = buildOriginHook(result)
 
   return (
-    <article
-      className="
-        relative overflow-hidden rounded-[2rem] border border-border-soft bg-surface/92
-        shadow-[0_28px_72px_-42px_var(--shadow-color)] animate-fadeIn
-      "
-    >
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.025]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
-        }}
-      />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-cream-dark/45 to-transparent" />
-
-      <div className="relative p-6 sm:p-8 md:p-12">
-        <header className="mb-10">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+    <article className="editorial-panel animate-fadeIn p-6 sm:p-8 md:p-12">
+      <div className="relative">
+        <header className="border-b border-border-soft pb-10">
+          <div className="flex flex-wrap items-start justify-between gap-6">
             <div className="min-w-0 flex-1">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+                entry
+              </p>
               <div className="flex flex-wrap items-baseline gap-3 sm:gap-4">
-                <h1 className="font-serif text-4xl font-bold tracking-[-0.04em] text-charcoal md:text-6xl">
+                <h1 className="mt-3 font-serif text-5xl font-bold tracking-[-0.05em] text-charcoal md:text-7xl">
                   {result.word}
                 </h1>
 
-                <span className="inline-flex items-center gap-1 text-base italic text-charcoal-light sm:text-lg">
+                <span className="inline-flex items-center gap-1 pt-2 text-base italic text-charcoal-light sm:text-lg">
                   {!isSimple && result.pronunciation}
                   <PronunciationButton word={result.word} />
                 </span>
               </div>
 
               {result.rawSources?.dateAttested && (
-                <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-charcoal/18 bg-charcoal/8 px-2.5 py-1 text-xs text-charcoal/82 dark:border-charcoal/20 dark:bg-cream/12 dark:text-charcoal">
-                  <span className="text-charcoal/40">⏱</span>
+                <span className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-border-soft bg-surface px-3 py-1 text-xs uppercase tracking-[0.16em] text-charcoal/72">
                   First attested {result.rawSources.dateAttested}
                 </span>
               )}
             </div>
 
-            {headerActions && <div className="shrink-0 pt-1">{headerActions}</div>}
+            {headerActions && <div className="shrink-0 pt-1 md:pt-4">{headerActions}</div>}
           </div>
 
-          <p className="mt-5 max-w-3xl font-serif text-lg leading-relaxed text-charcoal/82 sm:text-xl">
+          <p className="mt-6 max-w-3xl font-serif text-xl leading-relaxed text-charcoal/84 sm:text-2xl">
             {result.definition}
           </p>
 
           {originHook && (
-            <p className="mt-3 max-w-3xl font-serif italic text-charcoal-light">{originHook}</p>
+            <p className="mt-4 max-w-3xl font-serif italic leading-relaxed text-charcoal-light">
+              {originHook}
+            </p>
           )}
 
           {result.partsOfSpeech && result.partsOfSpeech.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="mt-5 flex flex-wrap gap-2">
               {result.partsOfSpeech.map(({ pos, definition, pronunciation }, idx) => (
                 <div
                   key={`${pos}-${idx}`}
-                  className="group inline-flex items-center gap-2 rounded-full border border-charcoal/18 bg-charcoal/8 px-3 py-1.5 dark:border-charcoal/20 dark:bg-cream/12"
+                  className="group inline-flex items-center gap-2 rounded-full border border-border-soft bg-surface px-3 py-1.5"
                   title={definition}
                 >
-                  <span className="text-xs uppercase tracking-[0.16em] text-charcoal/72 dark:text-charcoal/88">
+                  <span className="text-xs uppercase tracking-[0.16em] text-charcoal/72">
                     {pos}
                   </span>
                   {pronunciation && pronunciation !== result.pronunciation && (
-                    <span className="text-xs italic text-charcoal/62 dark:text-charcoal/76">
-                      {pronunciation}
-                    </span>
+                    <span className="text-xs italic text-charcoal/62">{pronunciation}</span>
                   )}
                 </div>
               ))}
@@ -167,12 +157,25 @@ export const EtymologyCard = memo(function EtymologyCard({
 
         {result.ancestryGraph?.branches?.length > 0 && (
           <MobileSection
-            title="Etymological Journey"
+            title="Ancestry"
             titleTextClassName={sectionTitleTextClassName}
-            dividerClassName={sectionDividerClassName}
+            dividerClassName={firstSectionClassName}
             defaultOpenMobile
           >
-            <AncestryTree graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
+            <div className="editorial-panel mt-2 p-5 sm:p-6">
+              <div className="border-b border-border-soft pb-4">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+                  ancestry map
+                </p>
+                <p className="mt-3 max-w-2xl font-serif text-lg italic leading-relaxed text-charcoal-light">
+                  The main line of descent comes first: roots, convergences, and the point where the
+                  modern word emerges.
+                </p>
+              </div>
+              <div className="pt-6">
+                <AncestryTree graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
+              </div>
+            </div>
           </MobileSection>
         )}
 
@@ -182,17 +185,17 @@ export const EtymologyCard = memo(function EtymologyCard({
           dividerClassName={sectionDividerClassName}
           defaultOpenMobile
         >
-          <div className="relative pl-7">
-            <div className="absolute bottom-0 left-1 top-2 w-px bg-gradient-to-b from-charcoal/35 via-charcoal/18 to-transparent" />
+          <div className="relative rounded-[1rem] bg-surface/58 px-6 py-6">
+            <div className="absolute bottom-6 left-4 top-6 w-px bg-gradient-to-b from-charcoal/35 via-charcoal/18 to-transparent" />
             <span
               className="
-              absolute -left-2.5 -top-3 select-none font-serif text-4xl text-charcoal/20
+              absolute left-1 top-2 select-none font-serif text-4xl text-charcoal/20
             "
             >
               &ldquo;
             </span>
 
-            <p className="font-serif text-lg leading-relaxed text-charcoal/90 italic">
+            <p className="pl-4 font-serif text-lg leading-relaxed text-charcoal/90 italic">
               {result.lore}
             </p>
           </div>
@@ -204,7 +207,7 @@ export const EtymologyCard = memo(function EtymologyCard({
             titleTextClassName={sectionTitleTextClassName}
             dividerClassName={sectionDividerClassName}
           >
-            <div className="rounded-[1.5rem] border border-border-soft bg-cream-dark/28 p-4 sm:p-5">
+            <div className="rounded-[1rem] border border-border-soft bg-surface/62 p-4 sm:p-5">
               <UsageTimeline data={result.ngram.data} word={result.ngram.word} showYearLabels />
             </div>
           </MobileSection>
@@ -216,7 +219,7 @@ export const EtymologyCard = memo(function EtymologyCard({
             titleTextClassName={sectionTitleTextClassName}
             dividerClassName={sectionDividerClassName}
           >
-            <div className="relative rounded-[1.4rem] border border-border-soft bg-cream-dark/22 p-5">
+            <div className="relative rounded-[1rem] border border-border-soft bg-surface/62 p-5">
               {result.modernUsage.slangDefinition && (
                 <p className="mb-3 font-serif text-lg leading-relaxed text-charcoal/82">
                   {result.modernUsage.slangDefinition}
@@ -326,16 +329,16 @@ export const EtymologyCard = memo(function EtymologyCard({
             titleTextClassName={sectionTitleTextClassName}
             dividerClassName={sectionDividerClassName}
           >
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <span
-                className="
-                text-xs uppercase tracking-[0.16em] text-charcoal-light/65
-                shrink-0
-              "
-              >
-                Sources
-              </span>
-              <div className="flex flex-col sm:flex-row sm:flex-wrap gap-1.5 sm:gap-2">
+            <div className="rounded-[1rem] border border-border-soft bg-surface/62 p-4 sm:p-5">
+              <div className="mb-4">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+                  References
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-charcoal-light">
+                  These are the source pages used to ground the reading above.
+                </p>
+              </div>
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-2">
                 {result.sources.map((source, index) => (
                   <SourceBadge key={`${source.name}-${source.word || index}`} source={source} />
                 ))}

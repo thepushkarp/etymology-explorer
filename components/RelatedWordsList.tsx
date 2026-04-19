@@ -92,7 +92,7 @@ export const RelatedWordsList = memo(function RelatedWordsList({
         return (
           <div
             key={`${root.root}-${rootIndex}`}
-            className="animate-fadeIn rounded-[1.6rem] border border-border-soft bg-cream-dark/18 p-5"
+            className="animate-fadeIn rounded-[1rem] border border-border-soft bg-surface/62 p-5"
             style={{ animationDelay: `${rootIndex * 100}ms` }}
           >
             <h3
@@ -135,8 +135,8 @@ export const RelatedWordsList = memo(function RelatedWordsList({
                           <button
                             onClick={() => onWordClick(word)}
                             className="
-                              group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left font-serif
-                              transition-all duration-200 hover:bg-surface hover:shadow-sm
+                              group flex w-full items-center gap-3 rounded-[0.8rem] px-3 py-2 text-left font-serif
+                              transition-all duration-200 hover:bg-cream-dark/36
                             "
                             style={{
                               animationDelay: `${

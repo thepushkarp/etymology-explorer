@@ -12,7 +12,7 @@ export default function HistoricalContext({ wikipediaExtract }: HistoricalContex
   if (!wikipediaExtract?.trim()) return null
 
   return (
-    <section className="mt-8 pt-8 border-t border-charcoal/10">
+    <section className="mt-12 border-t border-border-soft pt-10">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="
@@ -25,7 +25,7 @@ export default function HistoricalContext({ wikipediaExtract }: HistoricalContex
         aria-controls="historical-context-content"
       >
         <div className="flex items-center gap-3">
-          <span className="text-2xl font-serif text-charcoal/45 select-none">\u00a7</span>
+          <span className="select-none font-serif text-2xl text-charcoal/45">\u00a7</span>
           <h2 className="font-serif text-xl font-semibold text-charcoal/80 group-hover:text-charcoal">
             Historical Context
           </h2>
@@ -48,22 +48,8 @@ export default function HistoricalContext({ wikipediaExtract }: HistoricalContex
 
       {isExpanded && (
         <div id="historical-context-content" className="mt-6 animate-fadeIn">
-          <div
-            className="
-            bg-charcoal/[0.02] 
-            rounded-md 
-            p-6
-            border-l-4 border-charcoal/10
-          "
-          >
-            <p
-              className="
-              font-serif 
-              text-base 
-              leading-relaxed 
-              text-charcoal/80
-            "
-            >
+          <div className="rounded-[1rem] border border-border-soft bg-surface/62 p-6">
+            <p className="font-serif text-base leading-relaxed text-charcoal/80">
               {wikipediaExtract}
             </p>
           </div>

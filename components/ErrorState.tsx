@@ -11,123 +11,61 @@ interface ErrorStateProps {
 
 export function ErrorState({ type, message, suggestions, onSuggestionClick }: ErrorStateProps) {
   return (
-    <div
-      className="
-      w-full max-w-2xl mx-auto
-      animate-fadeIn
-    "
-    >
-      <div
-        className="
-        relative
-        bg-surface
-        rounded-lg
-        border border-charcoal/10
-        shadow-sm
-        p-8 md:p-10
-        text-center
-      "
-      >
-        {/* Decorative element */}
-        <div
-          className="
-          absolute top-4 left-4 right-4
-          flex justify-between
-          text-charcoal/10
-          font-serif text-lg
-        "
-        >
-          <span>❧</span>
-          <span>❧</span>
-        </div>
+    <section className="editorial-panel mx-auto w-full max-w-3xl animate-fadeIn p-8 text-center md:p-10">
+      <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+        {type === 'typo'
+          ? 'not found'
+          : type === 'network-error'
+            ? 'connection issue'
+            : 'unknown word'}
+      </p>
 
-        {/* Icon */}
-        <div
-          className="
-          w-16 h-16 mx-auto mb-6
-          rounded-full
-          bg-cream-dark
-          flex items-center justify-center
-        "
-        >
+      <div className="mx-auto mt-6 flex h-16 w-16 items-center justify-center rounded-full border border-border-soft bg-surface">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-cream-dark/75">
           <ErrorIcon type={type} />
         </div>
-
-        {/* Message */}
-        <p
-          className="
-          font-serif text-xl
-          text-charcoal
-          mb-4
-          italic
-        "
-        >
-          {message || getDefaultMessage(type)}
-        </p>
-
-        {/* Typo suggestions */}
-        {type === 'typo' && suggestions && suggestions.length > 0 && (
-          <div className="mt-6">
-            <p
-              className="
-              text-sm font-serif
-              text-charcoal-light
-              mb-4
-            "
-            >
-              Perhaps you meant:
-            </p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {suggestions.map((suggestion) => (
-                <button
-                  key={suggestion.word}
-                  onClick={() => onSuggestionClick?.(suggestion.word)}
-                  className="
-                    px-4 py-2
-                    font-serif
-                    bg-cream-dark/60
-                    rounded-full
-                    border border-charcoal/10
-                    hover:border-charcoal/30
-                    hover:bg-cream-dark
-                    transition-all duration-200
-                  "
-                >
-                  {suggestion.word}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Network error - retry hint */}
-        {type === 'network-error' && (
-          <p
-            className="
-            mt-4
-            text-sm font-serif
-            text-charcoal-light/70
-          "
-          >
-            Check your connection and try again
-          </p>
-        )}
-
-        {/* Decorative footer */}
-        <div
-          className="
-          mt-8 pt-6
-          border-t border-charcoal/5
-          text-charcoal/35
-          flex items-center justify-center gap-3
-        "
-        >
-          <span className="w-12 h-px bg-current" />
-          <span className="text-sm font-serif">§</span>
-          <span className="w-12 h-px bg-current" />
-        </div>
       </div>
-    </div>
+
+      <h2 className="mx-auto mt-6 max-w-2xl font-serif text-3xl tracking-[-0.04em] text-charcoal md:text-4xl">
+        {message || getDefaultMessage(type)}
+      </h2>
+
+      <p className="mx-auto mt-4 max-w-xl font-serif text-lg italic leading-relaxed text-charcoal-light">
+        The dictionaries are useful precisely because they are willing to say when they do not know.
+      </p>
+
+      {type === 'typo' && suggestions && suggestions.length > 0 && (
+        <div className="mx-auto mt-8 max-w-2xl border-t border-border-soft pt-6">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-charcoal-light/62">
+            Perhaps you meant
+          </p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            {suggestions.map((suggestion) => (
+              <button
+                key={suggestion.word}
+                onClick={() => onSuggestionClick?.(suggestion.word)}
+                className="rounded-full border border-border-soft bg-surface px-4 py-2 font-serif italic text-charcoal transition-colors hover:border-border-strong hover:bg-cream-dark/55"
+              >
+                {suggestion.word}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {type === 'network-error' && (
+        <p className="mt-6 text-sm leading-relaxed text-charcoal-light">
+          Check your connection and try again. If the problem keeps returning, one of the upstream
+          sources may simply be having a bad day.
+        </p>
+      )}
+
+      <div className="mt-8 flex items-center justify-center gap-3 text-charcoal/35">
+        <span className="h-px w-12 bg-current" />
+        <span className="font-serif text-sm">§</span>
+        <span className="h-px w-12 bg-current" />
+      </div>
+    </section>
   )
 }
 
@@ -191,11 +129,11 @@ function ErrorIcon({ type }: { type: string }) {
 function getDefaultMessage(type: string): string {
   switch (type) {
     case 'nonsense':
-      return "That's not a word — though it does have a certain Proto-Keyboard charm."
+      return "That doesn't appear in the record."
     case 'network-error':
-      return 'Something went awry in the ether...'
+      return 'The trail went cold for a moment.'
     case 'typo':
-      return "We couldn't find that word in our lexicon."
+      return "We couldn't find that exact word."
     default:
       return 'Something unexpected happened.'
   }

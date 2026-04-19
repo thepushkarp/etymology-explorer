@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { EditorialPageFrame } from '@/components/EditorialPageFrame'
 
 const ENDPOINTS = [
   {
@@ -39,30 +39,35 @@ export const metadata = {
 
 export default function ApiDocsPage() {
   return (
-    <main className="mx-auto min-h-screen max-w-4xl px-6 py-12 text-charcoal">
-      <h1 className="font-serif text-4xl tracking-tight">Etymology Explorer API</h1>
-      <p className="mt-4 text-charcoal-light">
-        Machine-friendly documentation for core API endpoints. You can also inspect the
-        OpenAPI-compatible descriptor at <code>/openapi.json</code>.
-      </p>
+    <EditorialPageFrame
+      eyebrow="developer reference"
+      title="Etymology Explorer API"
+      subtitle="Machine-friendly documentation for the core endpoints behind the explorer."
+    >
+      <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
+        <aside className="editorial-panel h-fit p-6">
+          <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">notes</p>
+          <p className="mt-4 text-sm leading-relaxed text-charcoal-light">
+            You can also inspect the OpenAPI-compatible descriptor at{' '}
+            <code className="rounded bg-cream-dark/70 px-1.5 py-0.5 text-charcoal">
+              /openapi.json
+            </code>
+            .
+          </p>
+        </aside>
 
-      <ul className="mt-10 space-y-4">
-        {ENDPOINTS.map((endpoint) => (
-          <li key={endpoint.path} className="rounded-xl border border-border-soft bg-surface p-5">
-            <p className="text-xs uppercase tracking-widest text-charcoal-light">
-              {endpoint.method}
-            </p>
-            <p className="mt-2 font-mono text-sm">{endpoint.path}</p>
-            <p className="mt-2 text-sm text-charcoal-light">{endpoint.description}</p>
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-8 text-sm text-charcoal-light">
-        <Link href="/" className="underline decoration-border-strong underline-offset-4">
-          Return to homepage
-        </Link>
+        <ul className="space-y-4">
+          {ENDPOINTS.map((endpoint) => (
+            <li key={endpoint.path} className="editorial-panel p-5">
+              <p className="text-xs uppercase tracking-widest text-charcoal-light">
+                {endpoint.method}
+              </p>
+              <p className="mt-2 font-mono text-sm">{endpoint.path}</p>
+              <p className="mt-2 text-sm text-charcoal-light">{endpoint.description}</p>
+            </li>
+          ))}
+        </ul>
       </div>
-    </main>
+    </EditorialPageFrame>
   )
 }

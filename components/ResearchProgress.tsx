@@ -5,6 +5,7 @@ import { StreamEvent } from '@/lib/types'
 
 interface ResearchProgressProps {
   events: StreamEvent[]
+  query?: string
 }
 
 type SourceStatus = 'pending' | 'complete' | 'failed'
@@ -63,7 +64,7 @@ function buildSynthesisLines(tokens: string, maxLineLength = 42): string[] {
   return lines
 }
 
-export default function ResearchProgress({ events }: ResearchProgressProps) {
+export default function ResearchProgress({ events, query }: ResearchProgressProps) {
   // Build source states from events
   const sources: Record<string, SourceState> = {}
   const sourceOrder: string[] = []
@@ -138,220 +139,190 @@ export default function ResearchProgress({ events }: ResearchProgressProps) {
       : 'Putting the explanation together...'
 
   return (
-    <div className="space-y-6 py-4">
-      {/* Source cards */}
-      <div
-        className={`
-          overflow-hidden
-          transition-all duration-500 ease-out
-          ${collapseSourceChips ? 'max-h-0 opacity-0 -translate-y-1' : 'max-h-64 opacity-100'}
-        `}
-      >
-        <div className="flex flex-wrap gap-3 justify-center">
-          {sourceOrder.map((key, index) => {
-            const source = sources[key]
-            return (
-              <div
-                key={key}
-                className={`
-              inline-flex items-center gap-2 px-4 py-2
-              rounded-full border
-              text-sm font-sans
-              transition-all duration-300
-              animate-fadeIn
-              ${
-                source.status === 'complete'
-                  ? 'border-charcoal/20 bg-charcoal/[0.03]'
-                  : source.status === 'failed'
-                    ? 'border-red-500/30 bg-red-500/[0.05]'
-                    : 'border-charcoal/10 bg-transparent'
-              }
-            `}
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                {source.status === 'pending' && (
-                  <svg
-                    className="w-4 h-4 animate-spin text-charcoal/55"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                )}
-                {source.status === 'complete' && (
-                  <svg
-                    className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                )}
-                {source.status === 'failed' && (
-                  <svg
-                    className="w-4 h-4 text-red-600 dark:text-red-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                )}
+    <section className="editorial-panel animate-fadeIn p-6 sm:p-8 lg:p-10">
+      <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr]">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+            researching
+          </p>
+          <h2 className="mt-3 font-serif text-4xl tracking-[-0.05em] text-charcoal sm:text-5xl lg:text-6xl">
+            {query || 'your word'}
+          </h2>
+          <p className="mt-4 max-w-xl font-serif text-lg italic leading-relaxed text-charcoal-light">
+            Consulting the archive, cross-checking the sources, and assembling the line of descent.
+          </p>
 
-                <span
-                  className={`
-              font-medium
-              ${
-                source.status === 'complete'
-                  ? 'text-charcoal/80'
-                  : source.status === 'failed'
-                    ? 'text-red-600/80 dark:text-red-400/80'
-                    : 'text-charcoal/50'
-              }
-            `}
-                >
-                  {source.name}
-                </span>
+          <div className="mt-8 space-y-4">
+            {parsingComplete && (
+              <div className="inline-flex items-center gap-2 text-sm text-charcoal/60">
+                <StatusMark complete />
+                <span className="font-serif italic">Parsing etymology chains</span>
+              </div>
+            )}
 
-                {source.status === 'complete' && source.timing && (
-                  <span className="text-xs text-charcoal/55 font-mono">
-                    {(source.timing / 1000).toFixed(1)}s
-                  </span>
+            {synthesisStarted && (
+              <div className="animate-fadeIn">
+                <div className="inline-flex items-center gap-2 text-sm text-charcoal/60">
+                  {enrichmentDone ? <StatusMark complete /> : <StatusMark />}
+                  <span className="font-serif italic">{synthesisPhaseLabel}</span>
+                </div>
+                <p className="mt-2 max-w-lg text-sm leading-relaxed text-charcoal-light">
+                  {synthesisPhaseDetail}
+                </p>
+
+                {visibleSynthesisLines.length > 0 && (
+                  <div className="mt-5 max-w-xl overflow-hidden rounded-[1rem] border border-border-soft bg-surface/78 px-4 py-4 shadow-[0_18px_38px_-28px_var(--shadow-color)]">
+                    <div
+                      key={synthesisLines.length}
+                      className="flex h-[6.8rem] flex-col justify-center gap-2 animate-stream-roll"
+                    >
+                      {paddedSynthesisLines.map((line, index) => (
+                        <div
+                          key={`${index}-${line}`}
+                          className={`
+                            min-h-[1.15rem] text-center font-mono text-[11px] leading-relaxed
+                            text-charcoal/72 transition-opacity duration-200
+                            ${line ? '' : 'opacity-0'}
+                          `}
+                          style={{ opacity: line ? [0.28, 0.45, 0.68, 1][index] : 0 }}
+                        >
+                          {line || '\u00a0'}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
-            )
-          })}
-        </div>
-      </div>
+            )}
 
-      {/* Phase indicators */}
-      <div className="space-y-3 text-center">
-        {parsingComplete && (
-          <div className="animate-fadeIn">
-            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 font-serif italic">
-              <svg
-                className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-              Parsing etymology chains
-            </div>
-          </div>
-        )}
-
-        {synthesisStarted && (
-          <div className="animate-fadeIn">
-            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 font-serif italic">
-              {!enrichmentDone && (
-                <svg
-                  className="w-4 h-4 animate-pulse text-violet-600 dark:text-violet-400"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                >
-                  <circle cx="4" cy="12" r="2" />
-                  <circle cx="12" cy="12" r="2" />
-                  <circle cx="20" cy="12" r="2" />
-                </svg>
-              )}
-              {enrichmentDone && (
-                <svg
-                  className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              )}
-              {synthesisPhaseLabel}
-            </div>
-
-            <p className="mx-auto mt-2 max-w-lg px-4 text-center text-xs text-charcoal/52">
-              {synthesisPhaseDetail}
-            </p>
-
-            {visibleSynthesisLines.length > 0 && (
-              <div className="mx-auto mt-4 max-w-md overflow-hidden rounded-[1.25rem] border border-border-soft bg-surface/72 px-4 py-3 shadow-[0_16px_36px_-28px_var(--shadow-color)]">
-                <div
-                  key={synthesisLines.length}
-                  className="flex h-[6.8rem] flex-col justify-end gap-2 animate-stream-roll"
-                >
-                  {paddedSynthesisLines.map((line, index) => (
-                    <div
-                      key={`${index}-${line}`}
-                      className={`
-                        min-h-[1.15rem] pb-1 text-center font-mono text-[11px] leading-relaxed
-                        text-charcoal/72 transition-opacity duration-200
-                        ${line ? '' : 'opacity-0'}
-                      `}
-                      style={{ opacity: line ? [0.28, 0.45, 0.68, 1][index] : 0 }}
-                    >
-                      {line || '\u00a0'}
-                    </div>
-                  ))}
-                </div>
+            {enrichmentDone && (
+              <div className="inline-flex items-center gap-2 text-sm text-charcoal/60">
+                <StatusMark complete />
+                <span className="font-serif italic">Matching evidence to the final reading</span>
               </div>
             )}
           </div>
-        )}
+        </div>
 
-        {enrichmentDone && (
-          <div className="animate-fadeIn">
-            <div className="inline-flex items-center gap-2 text-sm text-charcoal/60 font-serif italic">
-              <svg
-                className="w-4 h-4 text-emerald-600 dark:text-emerald-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-              Matching evidence
+        <aside className="editorial-panel p-5 sm:p-6">
+          <div className="border-b border-border-soft pb-4">
+            <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+              sources
+            </p>
+          </div>
+
+          <div
+            className={`
+              mt-5 overflow-hidden transition-all duration-500 ease-out
+              ${collapseSourceChips ? 'opacity-85' : 'opacity-100'}
+            `}
+          >
+            <div className="space-y-3">
+              {sourceOrder.map((key, index) => {
+                const source = sources[key]
+                return (
+                  <div
+                    key={key}
+                    className={`
+                      animate-fadeIn rounded-[0.95rem] border px-4 py-3
+                      ${
+                        source.status === 'complete'
+                          ? 'border-border-strong bg-surface'
+                          : source.status === 'failed'
+                            ? 'border-red-500/25 bg-red-500/[0.04]'
+                            : 'border-border-soft bg-transparent'
+                      }
+                    `}
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <SourceIcon status={source.status} />
+                      <span
+                        className={
+                          source.status === 'failed'
+                            ? 'font-medium text-red-700/85 dark:text-red-300/85'
+                            : 'font-medium text-charcoal/82'
+                        }
+                      >
+                        {source.name}
+                      </span>
+                      <span className="ml-auto text-xs uppercase tracking-[0.16em] text-charcoal-light/56">
+                        {source.status === 'complete'
+                          ? source.timing
+                            ? `${(source.timing / 1000).toFixed(1)}s`
+                            : 'done'
+                          : source.status}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
-        )}
+        </aside>
       </div>
-    </div>
+    </section>
+  )
+}
+
+function StatusMark({ complete = false }: { complete?: boolean }) {
+  if (complete) {
+    return (
+      <svg
+        className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg
+      className="h-4 w-4 animate-pulse text-[var(--accent-oxblood)]"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+    >
+      <circle cx="4" cy="12" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="20" cy="12" r="2" />
+    </svg>
+  )
+}
+
+function SourceIcon({ status }: { status: SourceStatus }) {
+  if (status === 'complete') {
+    return <StatusMark complete />
+  }
+
+  if (status === 'failed') {
+    return (
+      <svg
+        className="h-4 w-4 text-red-600 dark:text-red-400"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M6 18L18 6M6 6l12 12"
+        />
+      </svg>
+    )
+  }
+
+  return (
+    <svg className="h-4 w-4 animate-spin text-charcoal/55" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+      />
+    </svg>
   )
 }

@@ -48,8 +48,8 @@ export function HistorySidebar({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          fixed left-0 top-1/2 z-40 flex items-center gap-2 rounded-r-2xl border border-l-0
-          border-border-soft bg-surface/94 px-3 py-4 text-charcoal-light shadow-sm backdrop-blur-sm
+          fixed left-0 top-1/2 z-40 flex items-center gap-2 rounded-r-[1rem] border border-l-0
+          border-border-soft bg-surface/96 px-3 py-4 text-charcoal-light shadow-[0_14px_34px_-22px_var(--shadow-color)]
           transition-all duration-300 hover:bg-cream-dark/55 hover:text-charcoal
           ${isOpen ? 'translate-x-72' : 'translate-x-0'}
         `}
@@ -87,10 +87,9 @@ export function HistorySidebar({
           fixed left-0 top-0 bottom-0
           z-30
           w-72
-          bg-surface/96
+          bg-surface/97
           border-r border-border-soft
           shadow-[0_24px_60px_-30px_var(--shadow-color)]
-          backdrop-blur-md
           transform transition-transform duration-300 ease-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
@@ -103,7 +102,12 @@ export function HistorySidebar({
           border-b border-border-soft
         "
         >
-          <h2 className="font-serif text-lg text-charcoal">Exploration Trail</h2>
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+              history
+            </p>
+            <h2 className="mt-2 font-serif text-lg text-charcoal">Exploration Trail</h2>
+          </div>
 
           {history.length > 0 && (
             <button
@@ -131,9 +135,7 @@ export function HistorySidebar({
           {history.length === 0 ? (
             <div
               className="
-              text-center py-12
-              text-charcoal-light/50
-              font-serif italic
+              py-12 text-center font-serif italic text-charcoal-light/50
             "
             >
               <p className="mb-2">No words explored yet</p>
@@ -155,8 +157,9 @@ export function HistorySidebar({
                     className="
                     group
                     flex items-center
-                    rounded-xl
-                    hover:bg-cream-dark/55
+                    rounded-[0.9rem]
+                    border border-transparent
+                    hover:border-border-soft hover:bg-cream-dark/45
                     transition-colors
                   "
                   >
