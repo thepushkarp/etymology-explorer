@@ -42,6 +42,7 @@ export function ExploreExperience() {
   const { state, events, partialResult, error, search, reset } = useStreamingEtymology()
   const currentWord = searchParams.get('q')?.toLowerCase() ?? null
   const [ngramData, setNgramData] = useState<NgramResult | null>(null)
+  const [suggestionsVisible, setSuggestionsVisible] = useState(false)
 
   useEffect(() => {
     const q = searchParams.get('q')
@@ -167,10 +168,16 @@ export function ExploreExperience() {
                   isLoading={state === 'loading'}
                   initialValue={searchParams.get('q') || ''}
                   inputRef={searchInputRef}
+                  onSuggestionsVisibilityChange={setSuggestionsVisible}
                 />
-                <div className="mt-5 flex justify-center">
-                  <SurpriseButton onWordSelected={navigateToWord} disabled={state === 'loading'} />
-                </div>
+                {!suggestionsVisible && (
+                  <div className="mt-5 flex justify-center">
+                    <SurpriseButton
+                      onWordSelected={navigateToWord}
+                      disabled={state === 'loading'}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </section>
