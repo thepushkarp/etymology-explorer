@@ -120,7 +120,6 @@ export function ExploreExperience() {
 
   const isIdle = state === 'idle'
   const hasSearchContext = !isIdle
-  const heroTitle = hasSearchContext ? 'Follow the word back.' : 'Trace any word back to its root.'
   const heroSubtitle = hasSearchContext
     ? 'The map comes first, then the story, then the wider family of meanings around it.'
     : 'A quiet field guide to the lives of words: their migrations, their ancestors, and the slow turns of meaning.'
@@ -139,21 +138,30 @@ export function ExploreExperience() {
       <main className="relative overflow-hidden">
         <div className="mx-auto max-w-[1180px] px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pt-14">
           <section className="border-b border-border-soft pb-12">
-            <div className="max-w-[1120px]">
-              <h1
-                className={`font-serif tracking-[-0.05em] text-charcoal ${
-                  hasSearchContext
-                    ? 'text-5xl sm:text-6xl lg:text-7xl'
-                    : 'text-6xl sm:text-7xl lg:text-[5.8rem]'
-                }`}
-              >
-                {heroTitle}
-              </h1>
-              <p className="mt-6 max-w-2xl font-serif text-xl italic leading-relaxed text-charcoal-light sm:text-[1.7rem]">
-                {heroSubtitle}
-              </p>
+            <div className="w-full">
+              <div className="max-w-4xl">
+                <h1
+                  className={`font-serif tracking-[-0.05em] text-charcoal ${
+                    hasSearchContext
+                      ? 'text-5xl sm:text-6xl lg:text-7xl'
+                      : 'text-6xl sm:text-7xl lg:text-[5.8rem]'
+                  }`}
+                >
+                  {hasSearchContext ? (
+                    'Follow the word back.'
+                  ) : (
+                    <>
+                      Trace any <span className="text-accent-soft">word</span> back to its{' '}
+                      <span className="text-accent-soft">root</span>.
+                    </>
+                  )}
+                </h1>
+                <p className="mt-6 max-w-2xl font-serif text-xl italic leading-relaxed text-charcoal-light sm:text-[1.7rem]">
+                  {heroSubtitle}
+                </p>
+              </div>
 
-              <div className="mt-8">
+              <div className="mt-8 w-full">
                 <SearchBar
                   onSearch={navigateToWord}
                   isLoading={state === 'loading'}

@@ -18,8 +18,18 @@ interface MobileSectionProps {
   children: React.ReactNode
   defaultOpenMobile?: boolean
   dividerClassName: string
+  id?: string
   title: string
   titleTextClassName: string
+}
+
+const SOURCE_LABELS: Record<string, string> = {
+  etymonline: 'Etymonline',
+  wiktionary: 'Wiktionary',
+  freeDictionary: 'Free Dictionary',
+  urbanDictionary: 'Urban Dictionary',
+  incelsWiki: 'Incels Wiki',
+  synthesized: 'AI Synthesis',
 }
 
 function shortenMeaning(meaning: string): string {
@@ -44,17 +54,46 @@ function buildOriginHook(result: EtymologyResult): string | null {
   return `From ${parts.join(' + ')}.`
 }
 
+function compareSourceReferences(a: SourceReference, b: SourceReference): number {
+  const left = (a.word || a.url || SOURCE_LABELS[a.name] || a.name).toLocaleLowerCase()
+  const right = (b.word || b.url || SOURCE_LABELS[b.name] || b.name).toLocaleLowerCase()
+
+  return left.localeCompare(right)
+}
+
+function groupSourcesByOrigin(sources: SourceReference[]) {
+  const grouped = new Map<string, SourceReference[]>()
+
+  for (const source of sources) {
+    const bucket = grouped.get(source.name)
+    if (bucket) {
+      bucket.push(source)
+      continue
+    }
+    grouped.set(source.name, [source])
+  }
+
+  return Array.from(grouped.entries())
+    .map(([name, entries]) => ({
+      name,
+      label: SOURCE_LABELS[name] || name,
+      entries: [...entries].sort(compareSourceReferences),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label))
+}
+
 function MobileSection({
   children,
   defaultOpenMobile = false,
   dividerClassName,
+  id,
   title,
   titleTextClassName,
 }: MobileSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpenMobile)
 
   return (
-    <section className={dividerClassName}>
+    <section id={id} className={dividerClassName}>
       <div className="md:hidden">
         <button
           type="button"
@@ -94,9 +133,20 @@ export const EtymologyCard = memo(function EtymologyCard({
   const sectionDividerClassName = 'mt-12 border-t border-border-soft pt-10'
   const firstSectionClassName = 'mt-12 pt-2'
   const originHook = buildOriginHook(result)
+  const groupedSources = groupSourcesByOrigin(result.sources)
+  const sectionLinks: Array<{ label: string; href: string }> = [
+    { label: 'Ancestry', href: '#entry-ancestry' },
+    { label: 'Story', href: '#entry-story' },
+    ...(result.ngram?.data.length ? [{ label: 'Usage', href: '#entry-usage' }] : []),
+    ...(result.suggestions ? [{ label: 'Related', href: '#entry-related' }] : []),
+    ...(!isSimple && result.rawSources?.wikipedia
+      ? [{ label: 'Context', href: '#entry-context' }]
+      : []),
+    ...(!isSimple ? [{ label: 'Sources', href: '#entry-sources' }] : []),
+  ]
 
   return (
-    <article className="editorial-panel animate-fadeIn p-6 sm:p-8 md:p-12">
+    <article className="editorial-shell animate-fadeIn p-6 sm:p-8 md:p-12">
       <div className="relative">
         <header className="border-b border-border-soft pb-10">
           <div className="flex flex-wrap items-start justify-between gap-6">
@@ -105,7 +155,7 @@ export const EtymologyCard = memo(function EtymologyCard({
                 entry
               </p>
               <div className="flex flex-wrap items-baseline gap-3 sm:gap-4">
-                <h1 className="mt-3 font-serif text-5xl font-bold tracking-[-0.05em] text-charcoal md:text-7xl">
+                <h1 className="mt-3 font-serif text-5xl font-semibold tracking-[-0.06em] text-charcoal md:text-7xl">
                   {result.word}
                 </h1>
 
@@ -116,7 +166,7 @@ export const EtymologyCard = memo(function EtymologyCard({
               </div>
 
               {result.rawSources?.dateAttested && (
-                <span className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-border-soft bg-surface px-3 py-1 text-xs uppercase tracking-[0.16em] text-charcoal/72">
+                <span className="editorial-chip mt-4 inline-flex items-center gap-1.5 bg-surface px-3 py-1 text-xs uppercase tracking-[0.16em] text-charcoal/72">
                   First attested {result.rawSources.dateAttested}
                 </span>
               )}
@@ -140,7 +190,7 @@ export const EtymologyCard = memo(function EtymologyCard({
               {result.partsOfSpeech.map(({ pos, definition, pronunciation }, idx) => (
                 <div
                   key={`${pos}-${idx}`}
-                  className="group inline-flex items-center gap-2 rounded-full border border-border-soft bg-surface px-3 py-1.5"
+                  className="editorial-chip group inline-flex items-center gap-2 bg-surface px-3 py-1.5"
                   title={definition}
                 >
                   <span className="text-xs uppercase tracking-[0.16em] text-charcoal/72">
@@ -153,26 +203,26 @@ export const EtymologyCard = memo(function EtymologyCard({
               ))}
             </div>
           )}
+
+          <nav className="mt-7 flex flex-wrap gap-2">
+            {sectionLinks.map(({ label, href }) => (
+              <a key={href} href={href} className="editorial-chip font-serif italic">
+                {label}
+              </a>
+            ))}
+          </nav>
         </header>
 
         {result.ancestryGraph?.branches?.length > 0 && (
           <MobileSection
-            title="Ancestry"
+            id="entry-ancestry"
+            title="Word Ancestry"
             titleTextClassName={sectionTitleTextClassName}
             dividerClassName={firstSectionClassName}
             defaultOpenMobile
           >
-            <div className="editorial-panel mt-2 p-5 sm:p-6">
-              <div className="border-b border-border-soft pb-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
-                  ancestry map
-                </p>
-                <p className="mt-3 max-w-2xl font-serif text-lg italic leading-relaxed text-charcoal-light">
-                  The main line of descent comes first: roots, convergences, and the point where the
-                  modern word emerges.
-                </p>
-              </div>
-              <div className="pt-6">
+            <div className="editorial-card editorial-grid mt-2 p-5 sm:p-6">
+              <div className="pt-1">
                 <AncestryTree graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
               </div>
             </div>
@@ -180,12 +230,13 @@ export const EtymologyCard = memo(function EtymologyCard({
         )}
 
         <MobileSection
+          id="entry-story"
           title="The Story"
           titleTextClassName={sectionTitleTextClassName}
           dividerClassName={sectionDividerClassName}
           defaultOpenMobile
         >
-          <div className="relative rounded-[1rem] bg-surface/58 px-6 py-6">
+          <div className="editorial-inset relative px-6 py-6">
             <div className="absolute bottom-6 left-4 top-6 w-px bg-gradient-to-b from-charcoal/35 via-charcoal/18 to-transparent" />
             <span
               className="
@@ -203,11 +254,12 @@ export const EtymologyCard = memo(function EtymologyCard({
 
         {result.ngram && result.ngram.data.length > 0 && (
           <MobileSection
+            id="entry-usage"
             title="Usage over time"
             titleTextClassName={sectionTitleTextClassName}
             dividerClassName={sectionDividerClassName}
           >
-            <div className="rounded-[1rem] border border-border-soft bg-surface/62 p-4 sm:p-5">
+            <div className="editorial-card p-4 sm:p-5">
               <UsageTimeline data={result.ngram.data} word={result.ngram.word} showYearLabels />
             </div>
           </MobileSection>
@@ -269,6 +321,7 @@ export const EtymologyCard = memo(function EtymologyCard({
 
         {result.suggestions && (
           <MobileSection
+            id="entry-related"
             title="Related Words"
             titleTextClassName={sectionTitleTextClassName}
             dividerClassName={sectionDividerClassName}
@@ -325,22 +378,27 @@ export const EtymologyCard = memo(function EtymologyCard({
 
         {!isSimple && (
           <MobileSection
+            id="entry-sources"
             title="Sources"
             titleTextClassName={sectionTitleTextClassName}
             dividerClassName={sectionDividerClassName}
           >
-            <div className="rounded-[1rem] border border-border-soft bg-surface/62 p-4 sm:p-5">
-              <div className="mb-4">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
-                  References
-                </p>
-                <p className="mt-2 text-sm leading-relaxed text-charcoal-light">
-                  These are the source pages used to ground the reading above.
-                </p>
-              </div>
-              <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-2">
-                {result.sources.map((source, index) => (
-                  <SourceBadge key={`${source.name}-${source.word || index}`} source={source} />
+            <div className="editorial-card p-4 sm:p-5">
+              <div className="space-y-4">
+                {groupedSources.map((group) => (
+                  <div key={group.name}>
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-charcoal-light/58">
+                      {group.label}
+                    </p>
+                    <div className="mt-2 flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-2">
+                      {group.entries.map((source, index) => (
+                        <SourceBadge
+                          key={`${group.name}-${source.word || source.url || index}`}
+                          source={source}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -362,36 +420,26 @@ export const EtymologyCard = memo(function EtymologyCard({
 })
 
 function SourceBadge({ source }: { source: SourceReference }) {
-  const labels: Record<string, string> = {
-    etymonline: 'Etymonline',
-    wiktionary: 'Wiktionary',
-    freeDictionary: 'Free Dictionary',
-    urbanDictionary: 'Urban Dictionary',
-    incelsWiki: 'Incels Wiki',
-    synthesized: 'AI Synthesis',
-  }
-
   const colors: Record<string, string> = {
     etymonline:
-      'border-[#c4a06a] bg-[#f0e8db] text-[#6a5530] hover:bg-[#e8dece] hover:border-[#b89358] dark:border-[#8a6d40] dark:bg-[#262019] dark:text-[#d4b878] dark:hover:bg-[#302818]',
+      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
     wiktionary:
-      'border-[#88a0b8] bg-[#e4e8ee] text-[#405468] hover:bg-[#d8dee8] hover:border-[#7892ac] dark:border-[#52687a] dark:bg-[#1f2328] dark:text-[#a8bed0] dark:hover:bg-[#262c32]',
+      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
     freeDictionary:
-      'border-[#8fa486] bg-[#e6eae2] text-[#465340] hover:bg-[#dce2d6] hover:border-[#7e9674] dark:border-[#586a50] dark:bg-[#202620] dark:text-[#b4c5a6] dark:hover:bg-[#282e26]',
+      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
     urbanDictionary:
-      'border-[#9c88a2] bg-[#eae2ec] text-[#564060] hover:bg-[#e0d6e2] hover:border-[#8e7894] dark:border-[#6a5672] dark:bg-[#262028] dark:text-[#c8b2cc] dark:hover:bg-[#2e2832]',
+      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
     incelsWiki:
-      'border-[#baa88e] bg-[#ece6dc] text-[#5e5040] hover:bg-[#e4dcd0] hover:border-[#ac9a7e] dark:border-[#6a5c48] dark:bg-[#262018] dark:text-[#d0c0a8] dark:hover:bg-[#2e2820]',
-    synthesized:
-      'border-[#9c88a2] bg-[#eae2ec] text-[#564060] dark:border-[#6a5672] dark:bg-[#262028] dark:text-[#c8b2cc]',
+      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
+    synthesized: 'border-border-soft bg-surface text-charcoal-light',
   }
 
   const baseClasses = `
-    rounded-full border px-2.5 py-1 text-sm font-serif transition-colors duration-200
-    ${colors[source.name] || 'border-[#baa88e] bg-[#ece6dc] text-[#5e5040] dark:border-[#6a5c48] dark:bg-[#262018] dark:text-[#d0c0a8]'}
+    rounded-full border px-2.5 py-1 text-sm font-serif italic transition-colors duration-200
+    ${colors[source.name] || 'border-border-soft bg-surface text-charcoal-light'}
   `
 
-  const sourceLabel = labels[source.name] || source.name
+  const sourceLabel = SOURCE_LABELS[source.name] || source.name
 
   if (source.url) {
     return (
@@ -489,13 +537,13 @@ function SuggestionRow({
 }) {
   const colorClasses = {
     emerald:
-      'border-[#8fa486] bg-[#e6eae2] text-[#465340] hover:bg-[#dce2d6] hover:border-[#7e9674] dark:border-[#586a50] dark:bg-[#202620] dark:text-[#b4c5a6] dark:hover:bg-[#282e26]',
-    rose: 'border-[#bf8a7a] bg-[#ede2dc] text-[#6a4a3c] hover:bg-[#e4d6ce] hover:border-[#b07a6a] dark:border-[#7a5548] dark:bg-[#2a201e] dark:text-[#d4a898] dark:hover:bg-[#322826]',
+      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
+    rose: 'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
     amber:
-      'border-[#c4a06a] bg-[#f0e8db] text-[#6a5530] hover:bg-[#e8dece] hover:border-[#b89358] dark:border-[#8a6d40] dark:bg-[#262019] dark:text-[#d4b878] dark:hover:bg-[#302818]',
-    blue: 'border-[#88a0b8] bg-[#e4e8ee] text-[#405468] hover:bg-[#d8dee8] hover:border-[#7892ac] dark:border-[#52687a] dark:bg-[#1f2328] dark:text-[#a8bed0] dark:hover:bg-[#262c32]',
+      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
+    blue: 'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
     purple:
-      'border-[#9c88a2] bg-[#eae2ec] text-[#564060] hover:bg-[#e0d6e2] hover:border-[#8e7894] dark:border-[#6a5672] dark:bg-[#262028] dark:text-[#c8b2cc] dark:hover:bg-[#2e2832]',
+      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
   }
 
   return (

@@ -84,7 +84,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${libreBaskerville.variable} min-h-screen`}>
+      <body className={`${libreBaskerville.variable} min-h-screen`} suppressHydrationWarning>
         <JsonLd />
         {children}
         <Analytics />

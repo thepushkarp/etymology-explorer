@@ -162,22 +162,22 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
       >
         <div
           className={`
-            absolute inset-0 rounded-[1.6rem] border bg-surface/96 shadow-[0_24px_52px_-30px_var(--shadow-color)]
+            absolute inset-0 rounded-[1.25rem] border bg-surface/96 shadow-[0_22px_60px_-34px_var(--shadow-heavy)]
             transition-all duration-300
             ${
               isFocused
-                ? 'border-border-strong shadow-[0_28px_62px_-30px_var(--shadow-color)]'
+                ? 'border-border-strong shadow-[0_26px_80px_-28px_var(--shadow-heavy)]'
                 : 'border-border-soft'
             }
           `}
         />
 
-        <div className="relative rounded-[1.6rem]">
-          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[1.6rem]">
+        <div className="relative rounded-[1.25rem]">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[1.25rem]">
             <div className="h-px w-full bg-gradient-to-r from-transparent via-border-strong/80 to-transparent" />
           </div>
 
-          <div className="relative flex items-center gap-2 rounded-[1.6rem] px-3 py-3 sm:px-4">
+          <div className="relative flex items-center gap-2 rounded-[1.25rem] px-3 py-3 sm:px-4">
             <span className="pl-2 text-charcoal-light/58">
               <MagnifyingGlassIcon className="h-5 w-5" />
             </span>
@@ -192,7 +192,7 @@ export function SearchBar({ onSearch, isLoading, initialValue = '', inputRef }: 
               placeholder="Enter a word to explore its roots..."
               disabled={isLoading}
               className="
-                min-w-0 flex-1 rounded-[1.2rem] border border-transparent bg-transparent px-2 py-4 text-lg
+                min-w-0 flex-1 rounded-[1rem] border border-transparent bg-transparent px-2 py-4 text-lg
                 font-serif tracking-[0.01em] text-charcoal outline-none placeholder:text-charcoal-light/68
                 placeholder:italic disabled:opacity-50 sm:text-[1.45rem]
               "

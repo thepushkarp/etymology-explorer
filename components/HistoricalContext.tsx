@@ -12,7 +12,7 @@ export default function HistoricalContext({ wikipediaExtract }: HistoricalContex
   if (!wikipediaExtract?.trim()) return null
 
   return (
-    <section className="mt-12 border-t border-border-soft pt-10">
+    <section id="entry-context" className="mt-12 border-t border-border-soft pt-10">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         className="
@@ -48,8 +48,9 @@ export default function HistoricalContext({ wikipediaExtract }: HistoricalContex
 
       {isExpanded && (
         <div id="historical-context-content" className="mt-6 animate-fadeIn">
-          <div className="rounded-[1rem] border border-border-soft bg-surface/62 p-6">
-            <p className="font-serif text-base leading-relaxed text-charcoal/80">
+          <div className="editorial-card p-6">
+            <p className="editorial-kicker">meanwhile, in the wider world</p>
+            <p className="mt-4 font-serif text-base leading-relaxed text-charcoal/80">
               {wikipediaExtract}
             </p>
           </div>
@@ -60,7 +61,7 @@ export default function HistoricalContext({ wikipediaExtract }: HistoricalContex
               href={`https://en.wikipedia.org/wiki/${wikipediaExtract.split(' ')[0]}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-charcoal/60 transition-colors"
+              className="editorial-link transition-colors hover:text-charcoal/60"
             >
               Wikipedia
             </a>

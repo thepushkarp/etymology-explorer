@@ -59,15 +59,15 @@ function OriginsBar() {
   ]
 
   return (
-    <div className="editorial-panel mt-8 p-6">
-      <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+    <div className="editorial-card mt-8 p-6">
+      <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/82">
         a rough share of english vocabulary
       </p>
-      <div className="mt-4 flex h-4 overflow-hidden rounded-full bg-surface-muted">
+      <div className="mt-4 flex h-4 overflow-hidden rounded-full bg-surface-strong/75">
         {origins.map((origin) => (
           <div
             key={origin.label}
-            className="h-full"
+            className="h-full first:rounded-l-full last:rounded-r-full"
             style={{ width: `${origin.share}%`, backgroundColor: origin.color }}
           />
         ))}
@@ -75,15 +75,15 @@ function OriginsBar() {
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {origins.map((origin) => (
           <div key={origin.label} className="flex items-center justify-between gap-3 text-sm">
-            <span className="flex items-center gap-2 font-serif text-charcoal">
+            <span className="flex items-center gap-2.5 font-serif text-[1.1rem] text-charcoal">
               <span
                 aria-hidden="true"
-                className="h-2.5 w-2.5 rounded-full"
+                className="h-3 w-3 rounded-full ring-1 ring-white/18"
                 style={{ backgroundColor: origin.color }}
               />
               {origin.label}
             </span>
-            <span className="text-charcoal-light">{origin.share}%</span>
+            <span className="font-serif tabular-nums text-charcoal-light/92">{origin.share}%</span>
           </div>
         ))}
       </div>
@@ -109,13 +109,16 @@ export default function WhatIsEtymologyPage() {
       title="What is Etymology?"
       subtitle="A complete guide to word origins, how meanings move, and why old forms still matter."
     >
-      <article className="grid gap-10 xl:grid-cols-[190px_minmax(0,680px)_260px]">
-        <nav className="editorial-panel h-fit p-5 xl:sticky xl:top-24">
+      <article className="grid gap-10 xl:grid-cols-[170px_minmax(0,680px)_220px]">
+        <nav className="h-fit xl:sticky xl:top-24">
           <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">contents</p>
           <ol className="mt-4 space-y-3 text-sm text-charcoal-light">
             {CONTENTS.map((item) => (
               <li key={item.id}>
-                <a href={`#${item.id}`} className="transition-colors hover:text-charcoal">
+                <a
+                  href={`#${item.id}`}
+                  className="editorial-link transition-colors hover:text-charcoal"
+                >
                   {item.label}
                 </a>
               </li>
@@ -150,32 +153,26 @@ export default function WhatIsEtymologyPage() {
             <p className="mt-6 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
               Roughly 58% of English vocabulary has Latin roots, either directly or through French.
               Yet the most frequently used words in everyday speech, like{' '}
-              <Link
-                href="/?q=the"
-                className="underline decoration-border-strong underline-offset-4"
-              >
+              <Link href="/?q=the" className="editorial-link">
                 the
               </Link>
               ,{' '}
-              <Link href="/?q=be" className="underline decoration-border-strong underline-offset-4">
+              <Link href="/?q=be" className="editorial-link">
                 be
               </Link>
               ,{' '}
-              <Link
-                href="/?q=have"
-                className="underline decoration-border-strong underline-offset-4"
-              >
+              <Link href="/?q=have" className="editorial-link">
                 have
               </Link>
               , and{' '}
-              <Link href="/?q=do" className="underline decoration-border-strong underline-offset-4">
+              <Link href="/?q=do" className="editorial-link">
                 do
               </Link>{' '}
               remain predominantly Germanic.
             </p>
           </section>
 
-          <section className="editorial-panel mb-12 px-6 py-6">
+          <section className="editorial-card mb-12 px-6 py-6">
             <blockquote className="border-l-2 border-[var(--accent-oxblood)] py-2 pl-6 font-serif text-lg italic text-charcoal">
               &ldquo;Etymology is the study of words at rest, as it were, without which the study of
               words in motion would be impossible.&rdquo;
@@ -193,7 +190,7 @@ export default function WhatIsEtymologyPage() {
             </p>
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
               {WORD_CHANGE_PATTERNS.map((pattern) => (
-                <article key={pattern.title} className="editorial-panel p-5">
+                <article key={pattern.title} className="editorial-card p-5">
                   <h3 className="font-serif text-[1.55rem] tracking-[-0.02em] text-charcoal">
                     {pattern.title}
                   </h3>
@@ -224,10 +221,7 @@ export default function WhatIsEtymologyPage() {
             <p className="mt-4 font-serif text-[1.08rem] leading-relaxed text-charcoal-light">
               When you trace many English words back far enough, you reach reconstructed PIE roots.
               For example,{' '}
-              <Link
-                href="/?q=mother"
-                className="underline decoration-border-strong underline-offset-4"
-              >
+              <Link href="/?q=mother" className="editorial-link">
                 mother
               </Link>{' '}
               derives from PIE <em>*méh₂tēr</em>, which also gave rise to Latin <em>māter</em>,
@@ -252,7 +246,7 @@ export default function WhatIsEtymologyPage() {
               </li>
             </ul>
 
-            <div className="editorial-panel mt-8 p-6">
+            <div className="editorial-card mt-8 p-6">
               <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
                 try a word from this essay
               </p>
@@ -261,7 +255,7 @@ export default function WhatIsEtymologyPage() {
                   <Link
                     key={word}
                     href={`/?q=${encodeURIComponent(word)}`}
-                    className="rounded-full border border-border-soft px-4 py-2 font-serif italic text-charcoal-light transition-colors hover:border-border-strong hover:text-charcoal"
+                    className="editorial-chip rounded-full px-4 py-2 font-serif italic text-charcoal-light transition-colors hover:border-border-strong hover:text-charcoal"
                   >
                     {word}
                   </Link>
@@ -278,7 +272,7 @@ export default function WhatIsEtymologyPage() {
                   href="https://www.etymonline.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline decoration-border-strong underline-offset-4"
+                  className="editorial-link"
                 >
                   Online Etymology Dictionary
                 </a>{' '}
@@ -289,7 +283,7 @@ export default function WhatIsEtymologyPage() {
                   href="https://en.wiktionary.org"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="underline decoration-border-strong underline-offset-4"
+                  className="editorial-link"
                 >
                   Wiktionary
                 </a>
@@ -300,7 +294,7 @@ export default function WhatIsEtymologyPage() {
         </div>
 
         <aside className="hidden xl:block">
-          <div className="editorial-panel sticky top-24 p-6">
+          <div className="sticky top-24">
             <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
               marginalia
             </p>
@@ -313,7 +307,7 @@ export default function WhatIsEtymologyPage() {
             </p>
             <Link
               href="/"
-              className="mt-6 inline-flex items-center text-sm uppercase tracking-[0.18em] text-charcoal-light transition-colors hover:text-charcoal"
+              className="editorial-link mt-6 inline-flex items-center text-sm uppercase tracking-[0.18em] text-charcoal-light transition-colors hover:text-charcoal"
             >
               Back to explorer
             </Link>

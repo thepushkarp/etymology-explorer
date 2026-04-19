@@ -139,7 +139,7 @@ export default function ResearchProgress({ events, query }: ResearchProgressProp
       : 'Putting the explanation together...'
 
   return (
-    <section className="editorial-panel animate-fadeIn p-6 sm:p-8 lg:p-10">
+    <section className="editorial-shell animate-fadeIn p-6 sm:p-8 lg:p-10">
       <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr]">
         <div>
           <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
@@ -166,12 +166,12 @@ export default function ResearchProgress({ events, query }: ResearchProgressProp
                   {enrichmentDone ? <StatusMark complete /> : <StatusMark />}
                   <span className="font-serif italic">{synthesisPhaseLabel}</span>
                 </div>
-                <p className="mt-2 max-w-lg text-sm leading-relaxed text-charcoal-light">
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-charcoal-light">
                   {synthesisPhaseDetail}
                 </p>
 
                 {visibleSynthesisLines.length > 0 && (
-                  <div className="mt-5 max-w-xl overflow-hidden rounded-[1rem] border border-border-soft bg-surface/78 px-4 py-4 shadow-[0_18px_38px_-28px_var(--shadow-color)]">
+                  <div className="editorial-inset mt-5 w-full max-w-none overflow-hidden px-4 py-4">
                     <div
                       key={synthesisLines.length}
                       className="flex h-[6.8rem] flex-col justify-center gap-2 animate-stream-roll"
@@ -204,7 +204,7 @@ export default function ResearchProgress({ events, query }: ResearchProgressProp
           </div>
         </div>
 
-        <aside className="editorial-panel p-5 sm:p-6">
+        <aside className="editorial-card p-5 sm:p-6">
           <div className="border-b border-border-soft pb-4">
             <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
               sources
@@ -230,7 +230,7 @@ export default function ResearchProgress({ events, query }: ResearchProgressProp
                           ? 'border-border-strong bg-surface'
                           : source.status === 'failed'
                             ? 'border-red-500/25 bg-red-500/[0.04]'
-                            : 'border-border-soft bg-transparent'
+                            : 'border-border-soft bg-paper-deep/45'
                       }
                     `}
                     style={{ animationDelay: `${index * 50}ms` }}

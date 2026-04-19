@@ -5,43 +5,53 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --cream: #f6f0e4;
-  --cream-dark: #e8ddca;
-  --charcoal: #1f1a16;
-  --charcoal-light: #665c50;
-  --surface: #fcf8ef;
-  --surface-muted: #f0e7d8;
-  --surface-strong: #e4d6c2;
-  --border: rgba(60, 44, 28, 0.14);
-  --border-strong: rgba(60, 44, 28, 0.26);
-  --accent-soft: #b88a4c;
-  --accent-olive: #66785c;
-  --accent-rose: #9f6654;
-  --accent-plum: #7f6d72;
-  --accent-sky: #6c7f96;
-  --accent-oxblood: #7a2f23;
+  --cream: #f6f1e6;
+  --cream-dark: #ede5d3;
+  --charcoal: #1b1a17;
+  --charcoal-light: #6f6a5d;
+  --surface: #fbf7ec;
+  --surface-muted: #f3ecdb;
+  --surface-strong: #e7dcc8;
+  --paper-deep: #ede4d1;
+  --paper-frame: #f8f2e5;
+  --border: #d9d0bb;
+  --border-strong: #c5b99e;
+  --accent-soft: #b35a4a;
+  --accent-olive: #4a6b5c;
+  --accent-rose: #9d5c49;
+  --accent-plum: #786b74;
+  --accent-sky: #7e95aa;
+  --accent-amber: #b8862b;
+  --accent-oxblood: #7e2a1f;
+  --highlight: #f4e6b8;
   --shadow-color: rgba(37, 25, 15, 0.12);
-  --shadow-heavy: rgba(37, 25, 15, 0.2);
+  --shadow-heavy: rgba(37, 25, 15, 0.28);
+  --grain: rgba(40, 30, 15, 0.03);
 }
 
 .dark {
-  --cream: #181410;
-  --cream-dark: #241c16;
-  --charcoal: #efe4d4;
-  --charcoal-light: #bdae98;
-  --surface: #201913;
-  --surface-muted: #2a2119;
-  --surface-strong: #35281e;
-  --border: rgba(243, 234, 220, 0.12);
-  --border-strong: rgba(243, 234, 220, 0.24);
-  --accent-soft: #d0a15f;
-  --accent-olive: #8ea180;
-  --accent-rose: #cb8b77;
-  --accent-plum: #a8949d;
-  --accent-sky: #93abc2;
-  --accent-oxblood: #d78e71;
+  --cream: #13141a;
+  --cream-dark: #0d0e13;
+  --charcoal: #ebe3cf;
+  --charcoal-light: #908875;
+  --surface: #1b1d25;
+  --surface-muted: #232631;
+  --surface-strong: #2c303b;
+  --paper-deep: #171920;
+  --paper-frame: #161820;
+  --border: #2c2e3a;
+  --border-strong: #3a3c4a;
+  --accent-soft: #c47352;
+  --accent-olive: #8db09f;
+  --accent-rose: #c97c62;
+  --accent-plum: #988695;
+  --accent-sky: #91a9c3;
+  --accent-amber: #d4a574;
+  --accent-oxblood: #e08a5a;
+  --highlight: #5a4218;
   --shadow-color: rgba(0, 0, 0, 0.32);
-  --shadow-heavy: rgba(0, 0, 0, 0.48);
+  --shadow-heavy: rgba(0, 0, 0, 0.72);
+  --grain: rgba(255, 248, 220, 0.025);
 }
 
 @theme inline {
@@ -52,6 +62,8 @@
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
   --color-surface-strong: var(--surface-strong);
+  --color-paper-deep: var(--paper-deep);
+  --color-paper-frame: var(--paper-frame);
   --color-border-soft: var(--border);
   --color-border-strong: var(--border-strong);
   --color-accent-soft: var(--accent-soft);
@@ -59,7 +71,9 @@
   --color-accent-rose: var(--accent-rose);
   --color-accent-plum: var(--accent-plum);
   --color-accent-sky: var(--accent-sky);
+  --color-accent-amber: var(--accent-amber);
   --color-accent-oxblood: var(--accent-oxblood);
+  --color-highlight: var(--highlight);
   --font-serif: var(--font-libre-baskerville);
 }
 
@@ -73,12 +87,14 @@ html {
 
 body {
   background:
+    radial-gradient(1200px 600px at 80% -10%, var(--grain), transparent 60%),
+    radial-gradient(800px 400px at -10% 110%, var(--grain), transparent 60%),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--surface) 68%, transparent) 0%,
-      color-mix(in srgb, var(--surface) 24%, transparent) 18%,
+      color-mix(in srgb, var(--surface) 66%, transparent) 0%,
+      color-mix(in srgb, var(--surface) 22%, transparent) 18%,
       transparent 45%,
-      color-mix(in srgb, var(--surface-muted) 34%, transparent) 100%
+      color-mix(in srgb, var(--surface-muted) 32%, transparent) 100%
     ),
     linear-gradient(
       90deg,
@@ -172,14 +188,14 @@ body {
 .editorial-panel {
   position: relative;
   overflow: hidden;
-  border-radius: 1rem;
-  border: 1px solid color-mix(in srgb, var(--border-strong) 78%, transparent);
+  border-radius: 1.15rem;
+  border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--surface) 94%, transparent) 0%,
-    color-mix(in srgb, var(--surface) 86%, transparent) 100%
+    color-mix(in srgb, var(--surface) 96%, transparent) 0%,
+    color-mix(in srgb, var(--surface) 90%, transparent) 100%
   );
-  box-shadow: 0 24px 54px -36px var(--shadow-heavy);
+  box-shadow: 0 22px 60px -34px var(--shadow-heavy);
 }
 
 .editorial-panel::before {
@@ -193,6 +209,54 @@ body {
     transparent 24%
   );
   opacity: 0.75;
+}
+
+.editorial-shell {
+  background:
+    radial-gradient(1200px 600px at 80% -10%, var(--grain), transparent 60%),
+    radial-gradient(800px 400px at -10% 110%, var(--grain), transparent 60%), var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
+  border-radius: 1.3rem;
+  box-shadow: 0 22px 60px -34px var(--shadow-heavy);
+}
+
+.editorial-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1.15rem;
+  border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface) 95%, transparent) 0%,
+    color-mix(in srgb, var(--surface) 88%, transparent) 100%
+  );
+  box-shadow: 0 22px 60px -34px var(--shadow-heavy);
+}
+
+.editorial-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-strong) 18%, transparent) 0%,
+    transparent 26%
+  );
+  opacity: 0.72;
+}
+
+.editorial-inset {
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 92%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--paper-deep) 92%, transparent) 0%,
+    color-mix(in srgb, var(--paper-deep) 76%, transparent) 100%
+  );
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 22%, transparent);
 }
 
 .editorial-rule {
@@ -221,4 +285,71 @@ body {
   font-size: 4.4em;
   line-height: 0.82;
   color: var(--accent-oxblood);
+}
+
+.editorial-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 1.65rem;
+  padding: 0 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  font-size: 0.78rem;
+  color: color-mix(in srgb, var(--charcoal-light) 92%, transparent);
+  transition:
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease,
+    background-color 0.18s ease;
+}
+
+.editorial-chip:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--border-strong) 100%, transparent);
+  color: var(--charcoal);
+}
+
+.editorial-chip-dot {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: var(--accent-oxblood);
+}
+
+.editorial-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
+  border-radius: 0.4rem;
+  padding: 0.15rem 0.45rem;
+  background: color-mix(in srgb, var(--cream) 45%, var(--surface));
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--charcoal-light) 92%, transparent);
+}
+
+.editorial-link {
+  color: var(--charcoal);
+  text-decoration: none;
+  background-image: linear-gradient(var(--border-strong), var(--border-strong));
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: 0 100%;
+  transition: background-image 0.2s ease;
+}
+
+.editorial-link:hover {
+  background-image: linear-gradient(var(--accent-oxblood), var(--accent-oxblood));
+}
+
+.editorial-grid {
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--border) 90%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 12px 12px;
 }

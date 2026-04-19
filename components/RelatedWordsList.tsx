@@ -92,7 +92,7 @@ export const RelatedWordsList = memo(function RelatedWordsList({
         return (
           <div
             key={`${root.root}-${rootIndex}`}
-            className="animate-fadeIn rounded-[1rem] border border-border-soft bg-surface/62 p-5"
+            className="editorial-card animate-fadeIn p-5"
             style={{ animationDelay: `${rootIndex * 100}ms` }}
           >
             <h3
@@ -129,13 +129,13 @@ export const RelatedWordsList = memo(function RelatedWordsList({
                       <p className="text-xs text-charcoal/55 italic">{meta.description}</p>
                     </div>
 
-                    <ul className="space-y-1">
+                    <ul className="flex flex-wrap gap-2">
                       {words.map((word, wordIndex) => (
                         <li key={`${root.root}-${category}-${word}-${wordIndex}`}>
                           <button
                             onClick={() => onWordClick(word)}
                             className="
-                              group flex w-full items-center gap-3 rounded-[0.8rem] px-3 py-2 text-left font-serif
+                              editorial-chip group rounded-full px-3 py-2 text-left font-serif italic
                               transition-all duration-200 hover:bg-cream-dark/36
                             "
                             style={{
@@ -144,23 +144,7 @@ export const RelatedWordsList = memo(function RelatedWordsList({
                               }ms`,
                             }}
                           >
-                            <span
-                              className="
-                              text-charcoal-light/55 transition-all duration-200 group-hover:translate-x-1
-                              group-hover:text-charcoal
-                            "
-                            >
-                              →
-                            </span>
-
-                            <span
-                              className="
-                              transition-colors duration-200 group-hover:text-charcoal group-hover:underline
-                              decoration-charcoal/30 underline-offset-4
-                            "
-                            >
-                              {word}
-                            </span>
+                            {word}
                           </button>
                         </li>
                       ))}

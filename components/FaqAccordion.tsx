@@ -19,11 +19,11 @@ interface FaqItemProps {
 
 function FaqAccordionItem({ faq, index }: FaqItemProps) {
   return (
-    <details className="group border-b border-border-soft">
+    <details className="group border-b border-border-soft" open={index === 0}>
       <summary
         className="
           flex cursor-pointer items-start gap-5
-          py-6
+          py-7
           font-serif text-lg text-charcoal
           list-none
           hover:text-charcoal-light
@@ -59,7 +59,7 @@ function FaqAccordionItem({ faq, index }: FaqItemProps) {
           <p className="mt-3 text-sm">
             <Link
               href={`/?q=${encodeURIComponent(faq.searchExample)}`}
-              className="text-charcoal underline hover:text-charcoal-light"
+              className="editorial-link text-charcoal hover:text-charcoal-light"
             >
               Try searching for &ldquo;{faq.searchExample}&rdquo; &rarr;
             </Link>

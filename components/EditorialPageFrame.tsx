@@ -8,6 +8,7 @@ interface EditorialPageFrameProps {
   eyebrow: string
   subtitle?: string
   children: ReactNode
+  showHeaderRule?: boolean
 }
 
 export function EditorialPageFrame({
@@ -15,6 +16,7 @@ export function EditorialPageFrame({
   eyebrow,
   subtitle,
   children,
+  showHeaderRule = true,
 }: EditorialPageFrameProps) {
   return (
     <div className="min-h-screen bg-cream text-charcoal">
@@ -22,7 +24,7 @@ export function EditorialPageFrame({
       <main className="mx-auto max-w-[1180px] px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pt-14">
         <Link
           href="/"
-          className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-charcoal-light/72 transition-colors hover:text-charcoal"
+          className="editorial-link inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-charcoal-light/72 transition-colors hover:text-charcoal"
         >
           <span aria-hidden="true">←</span>
           <span>Back to explorer</span>
@@ -40,7 +42,7 @@ export function EditorialPageFrame({
               {subtitle}
             </p>
           )}
-          <div className="editorial-double-rule mt-8" />
+          {showHeaderRule && <div className="editorial-double-rule mt-8" />}
         </header>
 
         <div className="pt-10">{children}</div>

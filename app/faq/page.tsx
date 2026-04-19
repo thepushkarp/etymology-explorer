@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { faqs } from '@/data/faq'
 import { EditorialPageFrame } from '@/components/EditorialPageFrame'
 import { FaqAccordion } from '@/components/FaqAccordion'
@@ -27,15 +28,22 @@ export default function FaqPage() {
         eyebrow="frequently asked"
         title="Questions about words, and the people who used them."
         subtitle="The short answers, set out plainly, for curious readers and repeat searchers alike."
+        showHeaderRule={false}
       >
         <section className="mx-auto max-w-3xl" aria-label="Frequently asked questions">
-          <p className="max-w-2xl font-serif text-xl italic leading-relaxed text-charcoal-light sm:text-[1.45rem]">
-            Wondering what etymology can and cannot tell you, how the explorer chooses its sources,
-            or why meanings drift so much over time? Start here.
-          </p>
-          <div className="editorial-double-rule mt-8" />
-          <div className="mt-8">
+          <div>
             <FaqAccordion faqs={faqs} />
+          </div>
+          <div className="editorial-card mt-12 flex flex-col gap-6 p-8 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-serif text-xl italic text-charcoal-light">still curious?</p>
+              <p className="mt-2 font-serif text-3xl tracking-[-0.03em] text-charcoal">
+                Pick a word and start digging.
+              </p>
+            </div>
+            <Link href="/" className="editorial-chip self-start font-serif italic sm:self-center">
+              explore the archive →
+            </Link>
           </div>
         </section>
       </EditorialPageFrame>
