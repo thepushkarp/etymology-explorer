@@ -16,9 +16,9 @@ import { CONFIG } from './config'
 import { safeError } from './errorUtils'
 import {
   buildRootExtractionRequest,
-  createOpenAIResponse,
+  createOpenRouterResponse,
   extractOutputText,
-} from './openaiResponses'
+} from './openrouterResponses'
 
 export async function extractRootsQuick(
   word: string,
@@ -42,7 +42,7 @@ Rules:
 Source data:
 ${sourceText}
 
-Return ONLY a JSON array of root strings (the actual morphemes, not full words).
+Return ONLY a JSON object with a "roots" array of root strings (the actual morphemes, not full words).
 Examples:
 - For "telephone": ["tele", "phone"]
 - For "autobiography": ["auto", "bio", "graph"]
@@ -50,14 +50,14 @@ Examples:
 - For "contradict": ["contra", "dict"]
 - For "cat": ["cat"]
 
-Return the JSON array only, no explanation:`
+Return the JSON object only, no explanation:`
 
   try {
     const request = buildRootExtractionRequest(prompt)
     request.instructions =
-      'Extract root morphemes only. Return a JSON array of lowercase strings with no commentary.'
+      'Extract root morphemes only. Return {"roots":["root"]} with lowercase strings and no commentary.'
 
-    const response = await createOpenAIResponse(request)
+    const response = await createOpenRouterResponse(request)
     return parseRootsArray(extractOutputText(response))
   } catch (error) {
     console.error('Root extraction error:', safeError(error))
@@ -70,6 +70,15 @@ Return the JSON array only, no explanation:`
  */
 function parseRootsArray(text: string): string[] {
   const normalizeRoots = (parsed: unknown): string[] => {
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      Array.isArray((parsed as { roots?: unknown }).roots)
+    ) {
+      return normalizeRoots((parsed as { roots: unknown[] }).roots)
+    }
+
     if (!Array.isArray(parsed)) return []
     return parsed
       .filter((item): item is string => typeof item === 'string')
