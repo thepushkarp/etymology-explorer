@@ -10,9 +10,9 @@ Users search for a word, and the app:
 
 1. Fetches raw data from 6 sources in parallel (Etymonline, Wiktionary, Free Dictionary always; Wikipedia, Urban Dictionary, Incel Wiki as optional supplemental sources)
 2. Pre-parses etymological chains from source text (CPU-only)
-3. Uses OpenAI to extract root morphemes from the first-pass source bundle
+3. Uses OpenRouter to extract root morphemes from the first-pass source bundle
 4. Expands breadth with a bounded second pass over root pages and high-signal related pages from Etymonline and Wiktionary
-5. Sends the enriched research bundle to OpenAI's Responses API using `gpt-5.4-mini` for structured synthesis
+5. Sends the enriched research bundle to OpenRouter's Responses API using `openai/gpt-5.4-mini` for structured synthesis
 6. Post-processes LLM output to match ancestry stages to parsed evidence and assign programmatic confidence scores
 
 **Live**: https://etymology.thepushkarp.com
@@ -57,7 +57,7 @@ GET /api/etymology?word=X[&stream=true]
     │   └── Phase 5: Fetch bounded related-term pages (max 16 total fetches)
     ├── Typo check (lib/spellcheck.ts, Levenshtein distance vs GRE wordlist)
     ├── LLM synthesis (lib/llm.ts)
-    │   ├── Structured outputs via OpenAI Responses JSON schema mode
+    │   ├── Structured outputs via OpenRouter Responses JSON schema mode
     │   └── Post-processing: enrichAncestryGraph() matches stages to evidence, assigns confidence
     ├── Cache result in Redis
     └── Response: EtymologyResult with grounded ancestry stages
@@ -75,11 +75,11 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/config.ts`** - Centralized configuration:
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
-  - USD monthly limit: $10/month (`gpt-5.4-mini` pricing in `costTracking`)
+  - USD monthly limit: $10/month (`openai/gpt-5.4-mini` pricing in `costTracking`)
   - Timeouts: source fetches 5s, LLM 120s, TTS 8s
   - Rate limits, singleflight settings, feature flags
 
-- **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENAI_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
+- **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENROUTER_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
 
 - **`lib/costGuard.ts`** - Monthly USD budget enforcement via atomic Redis accumulation:
   - Normal mode (0-70% budget): allow uncached requests
@@ -131,7 +131,7 @@ Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API cos
 
 ### LLM Integration
 
-The app uses **OpenAI Responses structured JSON schema mode** for guaranteed valid JSON.
+The app uses **OpenRouter Responses structured JSON schema mode** for guaranteed valid JSON.
 
 **Schema split** (critical for maintainers):
 
@@ -146,7 +146,7 @@ LLM receives:
 3. JSON schema from `lib/schemas/llm-schema.ts`
 4. System prompt from `lib/prompts.ts`
 
-**Note**: OpenAI Responses calls use `text.format = { type: 'json_schema', ... }`.
+**Note**: OpenRouter Responses calls use `text.format = { type: 'json_schema', ... }`.
 
 ### State Management
 
@@ -163,7 +163,7 @@ LLM receives:
 
 - Search history (max 50 entries)
 - Theme preferences
-- (No API keys in public mode - server-side OPENAI_API_KEY used)
+- (No API keys in public mode - server-side OPENROUTER_API_KEY used)
 
 **Key hooks**:
 
@@ -235,7 +235,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 **Core Pipeline:**
 
 - `lib/research.ts` - Agentic research orchestrator (6-source parallel fetch)
-- `lib/llm.ts` - LLM client (OpenAI Responses API for `gpt-5.4-mini`)
+- `lib/llm.ts` - LLM client (OpenRouter Responses API for `openai/gpt-5.4-mini`)
 - `lib/prompts.ts` - System prompt for LLM synthesis
 
 **Schema & Types:**
@@ -257,4 +257,4 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 **Admin:**
 
 - `app/api/admin/stats/route.ts` - Budget monitoring endpoint
-- `.env.example` - Documents all env vars (OPENAI_API_KEY, ADMIN_SECRET, Redis, ElevenLabs)
+- `.env.example` - Documents all env vars (OPENROUTER_API_KEY, ADMIN_SECRET, Redis, ElevenLabs)

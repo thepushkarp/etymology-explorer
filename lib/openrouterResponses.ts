@@ -3,8 +3,15 @@ import { getEnv } from '@/lib/env'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
 
 const ROOTS_JSON_SCHEMA = {
-  type: 'array',
-  items: { type: 'string' },
+  type: 'object',
+  additionalProperties: false,
+  required: ['roots'],
+  properties: {
+    roots: {
+      type: 'array',
+      items: { type: 'string' },
+    },
+  },
 } as const
 
 type TextFormat = {
@@ -20,7 +27,7 @@ type JsonSchemaFormat = {
 
 type ReasoningEffort = 'low' | 'medium' | 'high' | 'minimal' | 'none' | 'xhigh'
 
-export type OpenAIRequest = {
+export type OpenRouterRequest = {
   model: string
   input: string
   reasoning: { effort: ReasoningEffort }
@@ -29,17 +36,17 @@ export type OpenAIRequest = {
   instructions?: string
 }
 
-type OpenAIResponseContentItem = {
+type OpenRouterResponseContentItem = {
   type?: string
   text?: string
 }
 
-type OpenAIResponseOutputItem = {
+type OpenRouterResponseOutputItem = {
   type?: string
-  content?: OpenAIResponseContentItem[]
+  content?: OpenRouterResponseContentItem[]
 }
 
-type OpenAIUsage = {
+type OpenRouterUsage = {
   input_tokens?: number
   output_tokens?: number
   output_tokens_details?: {
@@ -47,23 +54,23 @@ type OpenAIUsage = {
   } | null
 }
 
-type OpenAIIncompleteDetails = {
+type OpenRouterIncompleteDetails = {
   reason?: string | null
 }
 
-export type OpenAIResponseLike = {
+export type OpenRouterResponseLike = {
   status?: string | null
   output_text?: string | null
-  output?: OpenAIResponseOutputItem[]
-  usage?: OpenAIUsage | null
-  incomplete_details?: OpenAIIncompleteDetails | null
+  output?: OpenRouterResponseOutputItem[]
+  usage?: OpenRouterUsage | null
+  incomplete_details?: OpenRouterIncompleteDetails | null
   max_output_tokens?: number | null
   error?: {
     message?: string
   } | null
 }
 
-type OpenAIStreamEvent = {
+type OpenRouterStreamEvent = {
   type?: string
   delta?: string
   text?: string
@@ -71,20 +78,20 @@ type OpenAIStreamEvent = {
     type?: string
     text?: string
   }
-  response?: OpenAIResponseLike
+  response?: OpenRouterResponseLike
   error?: {
     message?: string
   }
 }
 
-const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses'
+const OPENROUTER_RESPONSES_URL = 'https://openrouter.ai/api/v1/responses'
 
 function buildRequest(
   input: string,
   maxOutputTokens: number,
   format: JsonSchemaFormat | TextFormat,
   reasoningEffort: ReasoningEffort
-): OpenAIRequest {
+): OpenRouterRequest {
   return {
     model: CONFIG.model,
     input,
@@ -94,27 +101,27 @@ function buildRequest(
   }
 }
 
-export function buildSynthesisRequest(input: string): OpenAIRequest {
+export function buildSynthesisRequest(input: string): OpenRouterRequest {
   return buildRequest(input, CONFIG.synthesisMaxTokens, { type: 'text' }, 'low')
 }
 
-export function buildRootExtractionRequest(input: string): OpenAIRequest {
+export function buildRootExtractionRequest(input: string): OpenRouterRequest {
   return buildRequest(
     input,
     CONFIG.rootExtractionMaxTokens,
     {
       type: 'json_schema',
-      name: 'root_array',
+      name: 'root_object',
       strict: true,
       schema: ROOTS_JSON_SCHEMA,
     },
-    'medium'
+    'none'
   )
 }
 
 type StreamAccumulator = {
   fullText: string
-  finalResponse: OpenAIResponseLike | null
+  finalResponse: OpenRouterResponseLike | null
 }
 
 type StreamReduction = StreamAccumulator & {
@@ -156,7 +163,7 @@ function finalizeStreamText(state: StreamAccumulator, text: string): StreamReduc
 
 export function reduceStreamEvent(
   state: StreamAccumulator,
-  event: OpenAIStreamEvent
+  event: OpenRouterStreamEvent
 ): StreamReduction {
   if (
     (event.type === 'response.output_text.delta' || event.type === 'response.content_part.delta') &&
@@ -196,6 +203,10 @@ export function reduceStreamEvent(
     throw new Error(event.response?.error?.message ?? event.error?.message)
   }
 
+  if (event.error?.message) {
+    throw new Error(event.error.message)
+  }
+
   return {
     emittedText: '',
     fullText: state.fullText,
@@ -203,7 +214,7 @@ export function reduceStreamEvent(
   }
 }
 
-export function extractOutputText(response: OpenAIResponseLike): string {
+export function extractOutputText(response: OpenRouterResponseLike): string {
   if (response.output_text && response.output_text.trim().length > 0) {
     return response.output_text
   }
@@ -233,7 +244,7 @@ export function extractOutputText(response: OpenAIResponseLike): string {
   const maxOutputTokens = response.max_output_tokens ?? 'unknown'
 
   throw new Error(
-    `No text response from OpenAI Responses API ` +
+    `No text response from OpenRouter Responses API ` +
       `(status=${response.status ?? 'unknown'}, ` +
       `incomplete=${incompleteReason}, ` +
       `reasoningTokens=${reasoningTokens}, ` +
@@ -242,7 +253,7 @@ export function extractOutputText(response: OpenAIResponseLike): string {
   )
 }
 
-export function extractUsage(response: OpenAIResponseLike): {
+export function extractUsage(response: OpenRouterResponseLike): {
   inputTokens: number
   outputTokens: number
 } {
@@ -270,22 +281,22 @@ function extractErrorMessage(payload: unknown, status: number): string {
     }
   }
 
-  return `OpenAI request failed with status ${status}`
+  return `OpenRouter request failed with status ${status}`
 }
 
 function buildHeaders(): HeadersInit {
   return {
-    Authorization: `Bearer ${getEnv().OPENAI_API_KEY}`,
+    Authorization: `Bearer ${getEnv().OPENROUTER_API_KEY}`,
     'Content-Type': 'application/json',
   }
 }
 
-export async function createOpenAIResponse(
-  request: OpenAIRequest,
+export async function createOpenRouterResponse(
+  request: OpenRouterRequest,
   timeoutMs = CONFIG.timeouts.llm
-): Promise<OpenAIResponseLike> {
+): Promise<OpenRouterResponseLike> {
   const response = await fetchWithTimeout(
-    OPENAI_RESPONSES_URL,
+    OPENROUTER_RESPONSES_URL,
     {
       method: 'POST',
       headers: buildHeaders(),
@@ -294,7 +305,7 @@ export async function createOpenAIResponse(
     timeoutMs
   )
 
-  const payload = (await response.json()) as OpenAIResponseLike
+  const payload = (await response.json()) as OpenRouterResponseLike
   if (!response.ok) {
     throw new Error(extractErrorMessage(payload, response.status))
   }
@@ -319,13 +330,13 @@ function parseSseDataBlocks(chunk: string): string[] {
     .filter((block) => block.length > 0)
 }
 
-export async function streamOpenAIResponse(
-  request: OpenAIRequest,
+export async function streamOpenRouterResponse(
+  request: OpenRouterRequest,
   onText: (delta: string) => void,
   timeoutMs = CONFIG.timeouts.llm
-): Promise<OpenAIResponseLike> {
+): Promise<OpenRouterResponseLike> {
   const response = await fetchWithTimeout(
-    OPENAI_RESPONSES_URL,
+    OPENROUTER_RESPONSES_URL,
     {
       method: 'POST',
       headers: buildHeaders(),
@@ -345,14 +356,14 @@ export async function streamOpenAIResponse(
   }
 
   if (!response.body) {
-    throw new Error('OpenAI streaming response body was empty')
+    throw new Error('OpenRouter streaming response body was empty')
   }
 
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
   let fullText = ''
-  let finalResponse: OpenAIResponseLike | null = null
+  let finalResponse: OpenRouterResponseLike | null = null
 
   while (true) {
     const { done, value } = await reader.read()
@@ -368,7 +379,7 @@ export async function streamOpenAIResponse(
           continue
         }
 
-        const event = JSON.parse(data) as OpenAIStreamEvent
+        const event = JSON.parse(data) as OpenRouterStreamEvent
         const reduced = reduceStreamEvent(
           {
             fullText,
@@ -399,5 +410,5 @@ export async function streamOpenAIResponse(
     return { output_text: fullText, usage: null }
   }
 
-  throw new Error('OpenAI streaming completed without output text')
+  throw new Error('OpenRouter streaming completed without output text')
 }

@@ -5,29 +5,40 @@ import {
   extractOutputText,
   reduceStreamEvent,
   extractUsage,
-} from '@/lib/openaiResponses'
+} from '@/lib/openrouterResponses'
 
-describe('openaiResponses', () => {
+describe('openrouterResponses', () => {
   test('buildSynthesisRequest uses low reasoning for faster visible synthesis output', () => {
     const request = buildSynthesisRequest('Analyze this word')
 
-    expect(request.model).toBe('gpt-5.4-mini')
+    expect(request.model).toBe('openai/gpt-5.4-mini')
     expect(request.reasoning).toEqual({ effort: 'low' })
     expect(request.max_output_tokens).toBe(9000)
     expect(request.text.format).toEqual({ type: 'text' })
     expect('temperature' in request).toBe(false)
   })
 
-  test('buildRootExtractionRequest keeps medium reasoning for root extraction stability', () => {
+  test('buildRootExtractionRequest disables reasoning for tiny root extraction output', () => {
     const request = buildRootExtractionRequest('Analyze roots')
 
-    expect(request.model).toBe('gpt-5.4-mini')
-    expect(request.reasoning).toEqual({ effort: 'medium' })
+    expect(request.model).toBe('openai/gpt-5.4-mini')
+    expect(request.reasoning).toEqual({ effort: 'none' })
     expect(request.max_output_tokens).toBe(100)
     expect(request.text.format).toMatchObject({
       type: 'json_schema',
-      name: 'root_array',
+      name: 'root_object',
       strict: true,
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['roots'],
+        properties: {
+          roots: {
+            type: 'array',
+            items: { type: 'string' },
+          },
+        },
+      },
     })
     expect('temperature' in request).toBe(false)
   })
@@ -69,7 +80,7 @@ describe('openaiResponses', () => {
         ],
       })
     ).toThrow(
-      'No text response from OpenAI Responses API (status=incomplete, incomplete=max_output_tokens, reasoningTokens=4096, maxOutputTokens=4096, output=message[refusal])'
+      'No text response from OpenRouter Responses API (status=incomplete, incomplete=max_output_tokens, reasoningTokens=4096, maxOutputTokens=4096, output=message[refusal])'
     )
   })
 
@@ -120,7 +131,7 @@ describe('openaiResponses', () => {
     })
   })
 
-  test('reduceStreamEvent captures finalized text when OpenAI sends done events', () => {
+  test('reduceStreamEvent captures finalized text when OpenRouter sends done events', () => {
     expect(
       reduceStreamEvent(
         {
@@ -195,5 +206,21 @@ describe('openaiResponses', () => {
       fullText: '',
       finalResponse: response,
     })
+  })
+
+  test('reduceStreamEvent throws OpenRouter top-level stream errors', () => {
+    expect(() =>
+      reduceStreamEvent(
+        {
+          fullText: 'partial',
+          finalResponse: null,
+        },
+        {
+          error: {
+            message: 'Provider disconnected unexpectedly',
+          },
+        }
+      )
+    ).toThrow('Provider disconnected unexpectedly')
   })
 })
