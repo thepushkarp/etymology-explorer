@@ -8,7 +8,6 @@ import { useSimpleMode } from '@/lib/hooks/useSimpleMode'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { SearchBar } from '@/components/SearchBar'
 import { EtymologyCard } from '@/components/EtymologyCard'
-import { RelatedWordsList } from '@/components/RelatedWordsList'
 import { SurpriseButton } from '@/components/SurpriseButton'
 import { ErrorState } from '@/components/ErrorState'
 import ResearchProgress from '@/components/ResearchProgress'
@@ -123,7 +122,7 @@ export function ExploreExperience() {
   const hasSearchContext = !isIdle
   const heroSubtitle = hasSearchContext
     ? 'The map comes first, then the story, then the wider family of meanings around it.'
-    : 'A quiet field guide to the lives of words: their migrations, their ancestors, and the slow turns of meaning.'
+    : 'Trace words through older forms, borrowed meanings, and hidden roots.'
 
   return (
     <div className="min-h-screen bg-cream text-charcoal">
@@ -137,15 +136,15 @@ export function ExploreExperience() {
       />
 
       <main className="relative overflow-hidden">
-        <div className="mx-auto max-w-[1180px] px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pt-14">
-          <section className="border-b border-border-soft pb-12">
+        <div className="mx-auto max-w-[1180px] px-4 pb-16 pt-8 sm:px-6 sm:pt-10 lg:px-8 lg:pt-14">
+          <section className="border-b border-border-soft pb-10 sm:pb-12">
             <div className="w-full">
               <div className="max-w-4xl">
                 <h1
-                  className={`font-serif tracking-[-0.05em] text-charcoal ${
+                  className={`font-serif leading-[0.98] tracking-[-0.04em] text-charcoal sm:tracking-[-0.05em] ${
                     hasSearchContext
-                      ? 'text-5xl sm:text-6xl lg:text-7xl'
-                      : 'text-6xl sm:text-7xl lg:text-[5.8rem]'
+                      ? 'text-[clamp(3.1rem,13.4vw,4.5rem)] lg:text-7xl'
+                      : 'text-[clamp(3.35rem,14.8vw,5.8rem)]'
                   }`}
                 >
                   {hasSearchContext ? (
@@ -157,9 +156,15 @@ export function ExploreExperience() {
                     </>
                   )}
                 </h1>
-                <p className="mt-6 max-w-2xl font-serif text-xl italic leading-relaxed text-charcoal-light sm:text-[1.7rem]">
-                  {heroSubtitle}
-                </p>
+                {heroSubtitle && (
+                  <p
+                    className={`mt-6 max-w-2xl font-serif italic leading-relaxed text-charcoal-light ${
+                      hasSearchContext ? 'text-xl sm:text-[1.7rem]' : 'text-lg sm:text-[1.35rem]'
+                    }`}
+                  >
+                    {heroSubtitle}
+                  </p>
+                )}
               </div>
 
               <div className="mt-8 w-full">
@@ -236,31 +241,12 @@ export function ExploreExperience() {
             )}
 
             {state === 'success' && resultWithNgram && (
-              <div className="space-y-10">
-                <EtymologyCard
-                  result={resultWithNgram}
-                  onWordClick={navigateToWord}
-                  isSimple={isSimple}
-                  headerActions={<ShareMenu result={resultWithNgram} />}
-                />
-
-                {resultWithNgram.roots.length > 0 && (
-                  <section className="editorial-panel p-6 sm:p-8">
-                    <div className="mb-6 border-b border-border-soft pb-4">
-                      <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
-                        kin & kindred
-                      </p>
-                      <h2 className="mt-3 font-serif text-3xl tracking-[-0.04em] text-charcoal">
-                        Other words from the same roots
-                      </h2>
-                      <p className="mt-3 max-w-2xl font-serif italic leading-relaxed text-charcoal-light">
-                        A small family album of cognates, descendants, and neighboring meanings.
-                      </p>
-                    </div>
-                    <RelatedWordsList roots={resultWithNgram.roots} onWordClick={navigateToWord} />
-                  </section>
-                )}
-              </div>
+              <EtymologyCard
+                result={resultWithNgram}
+                onWordClick={navigateToWord}
+                isSimple={isSimple}
+                headerActions={<ShareMenu result={resultWithNgram} />}
+              />
             )}
           </section>
         </div>

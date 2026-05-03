@@ -1,23 +1,22 @@
 import type { MetadataRoute } from 'next'
+import { SITE_ORIGIN } from '@/lib/site'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://etymology.thepushkarp.com'
-
   return [
     {
-      url: baseUrl,
+      url: SITE_ORIGIN,
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 1,
     },
     {
-      url: `${baseUrl}/faq`,
+      url: `${SITE_ORIGIN}/faq`,
       lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
-      url: `${baseUrl}/learn/what-is-etymology`,
+      url: `${SITE_ORIGIN}/learn/what-is-etymology`,
       lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.7,

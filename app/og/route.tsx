@@ -1,6 +1,5 @@
 import { ImageResponse } from 'next/og'
-
-export const runtime = 'edge'
+import { SITE_HOST, SITE_SHORT_NAME } from '@/lib/site'
 
 export async function GET() {
   return new ImageResponse(
@@ -69,7 +68,7 @@ export async function GET() {
           letterSpacing: '-0.02em',
         }}
       >
-        Etymology Explorer
+        {SITE_SHORT_NAME}
       </div>
 
       {/* Subtitle */}
@@ -94,7 +93,7 @@ export async function GET() {
           opacity: 0.4,
         }}
       >
-        etymology.thepushkarp.com
+        {SITE_HOST}
       </div>
     </div>,
     {

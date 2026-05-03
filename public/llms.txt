@@ -1,14 +1,14 @@
-# Etymology Explorer
+# EtymEx
 
 > A visual tool for exploring word origins, etymological trees, and linguistic connections across languages.
 
 ## About
 
-Etymology Explorer helps you understand where words come from. Enter any word to see its historical roots, language family connections, and semantic evolution over time.
+EtymEx helps you understand where words come from. Enter any word to see its historical roots, language family connections, and semantic evolution over time.
 
 ## Key Features
 
-- **Word Search**: Search etymology for any English word at https://etymology.thepushkarp.com/?q={word}
+- **Word Search**: Search etymology for any English word at https://etymex.com/?q={word}
 - **Etymology Trees**: Visual representation of word derivations showing parent languages and cognates
 - **Language Families**: Explore Proto-Indo-European, Latin, Greek, and Germanic roots
 - **Historical Context**: See how word meanings evolved across centuries
@@ -24,9 +24,9 @@ The tool aggregates data from multiple etymological databases and presents word 
 
 ## Example Searches
 
-- Search "algorithm" at https://etymology.thepushkarp.com/?q=algorithm -> Shows Persian/Arabic origins from al-Khwarizmi
-- Search "nice" at https://etymology.thepushkarp.com/?q=nice -> Shows semantic shift from Latin 'nescius' (ignorant)
-- Search "mother" at https://etymology.thepushkarp.com/?q=mother -> Explore Proto-Indo-European roots
+- Search "algorithm" at https://etymex.com/?q=algorithm -> Shows Persian/Arabic origins from al-Khwarizmi
+- Search "nice" at https://etymex.com/?q=nice -> Shows semantic shift from Latin 'nescius' (ignorant)
+- Search "mother" at https://etymex.com/?q=mother -> Explore Proto-Indo-European roots
 
 ## Technical Details
 

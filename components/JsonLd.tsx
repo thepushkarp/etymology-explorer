@@ -4,14 +4,16 @@
  * Renders WebApplication schema with SearchAction for sitelinks search box.
  * Content is static/hardcoded - no user input, safe for dangerouslySetInnerHTML.
  */
+import { SITE_ORIGIN, SITE_SEARCH_URL_TEMPLATE, SITE_SHORT_NAME } from '@/lib/site'
+
 export function JsonLd() {
   const schema = {
     '@context': 'https://schema.org',
     '@type': 'WebApplication',
-    name: 'Etymology Explorer',
+    name: SITE_SHORT_NAME,
     description:
       'Interactive tool for exploring word origins, etymological trees, and linguistic connections',
-    url: 'https://etymology.thepushkarp.com',
+    url: SITE_ORIGIN,
     applicationCategory: 'WebApplication',
     operatingSystem: 'Any',
     offers: {
@@ -29,7 +31,7 @@ export function JsonLd() {
       '@type': 'SearchAction',
       target: {
         '@type': 'EntryPoint',
-        urlTemplate: 'https://etymology.thepushkarp.com/?q={search_term_string}',
+        urlTemplate: SITE_SEARCH_URL_TEMPLATE,
       },
       'query-input': 'required name=search_term_string',
     },

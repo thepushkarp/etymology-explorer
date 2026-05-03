@@ -200,7 +200,7 @@ export function SearchBar({
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
               onKeyDown={handleInputKeyDown}
-              placeholder="Enter a word to explore its roots..."
+              placeholder="Enter a word..."
               disabled={isLoading}
               className="
                 min-w-0 flex-1 rounded-[1rem] border border-transparent bg-transparent px-2 py-4 text-lg

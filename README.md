@@ -1,8 +1,8 @@
-# Etymology Explorer
+# EtymEx
 
-A beautiful, interactive web app that helps you discover the origins and roots of words. Perfect for vocabulary enthusiasts who want to understand words deeply through their etymological roots.
+EtymEx is a beautiful, interactive Etymology Explorer that helps you discover the origins and roots of words. Perfect for vocabulary enthusiasts who want to understand words deeply through their etymological roots.
 
-Try it out at [etymology.thepushkarp.com](https://etymology.thepushkarp.com)
+Try it out at [etymex.com](https://etymex.com)
 
 ## Features
 
