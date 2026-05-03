@@ -1,7 +1,18 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { ImageResponse } from 'next/og'
 import { SITE_HOST, SITE_SHORT_NAME } from '@/lib/site'
 
+const fontDirectory = join(process.cwd(), 'public/fonts')
+
+const brandFontData = Promise.all([
+  readFile(join(fontDirectory, 'LibreBaskerville-Regular.ttf')),
+  readFile(join(fontDirectory, 'LibreBaskerville-Italic.ttf')),
+])
+
 export async function GET() {
+  const [regularFont, italicFont] = await brandFontData
+
   return new ImageResponse(
     <div
       style={{
@@ -12,7 +23,7 @@ export async function GET() {
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#F6F1E6',
-        fontFamily: 'serif',
+        fontFamily: 'Libre Baskerville',
       }}
     >
       <div
@@ -28,7 +39,8 @@ export async function GET() {
           style={{
             display: 'flex',
             fontSize: 96,
-            fontWeight: 700,
+            fontStyle: 'italic',
+            fontWeight: 400,
             color: '#1B1A17',
             letterSpacing: '-0.06em',
           }}
@@ -39,7 +51,8 @@ export async function GET() {
           style={{
             display: 'flex',
             fontSize: 96,
-            fontWeight: 700,
+            fontStyle: 'italic',
+            fontWeight: 400,
             color: '#1B1A17',
             letterSpacing: '-0.06em',
           }}
@@ -74,6 +87,20 @@ export async function GET() {
     {
       width: 1200,
       height: 630,
+      fonts: [
+        {
+          name: 'Libre Baskerville',
+          data: regularFont,
+          weight: 400,
+          style: 'normal',
+        },
+        {
+          name: 'Libre Baskerville',
+          data: italicFont,
+          weight: 400,
+          style: 'italic',
+        },
+      ],
     }
   )
 }
