@@ -1,13 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="EtymEx">
-  <rect width="128" height="128" fill="#F6F1E6"/>
+  <style>
+    @font-face {
+      font-family: 'Libre Baskerville';
+      src: url('/fonts/LibreBaskerville-Italic.woff2') format('woff2');
+      font-style: italic;
+      font-weight: 400;
+    }
+  </style>
+  <rect width="128" height="128" fill="#F6F1E6" />
   <text
     x="64"
     y="55"
     fill="#1B1A17"
-    font-family="Georgia, 'Times New Roman', serif"
+    font-family="'Libre Baskerville', Georgia, 'Times New Roman', serif"
     font-size="23"
     font-style="italic"
-    font-weight="700"
+    font-weight="400"
     letter-spacing="-1.4"
     text-anchor="middle"
   >
@@ -17,10 +25,10 @@
     x="64"
     y="87"
     fill="#1B1A17"
-    font-family="Georgia, 'Times New Roman', serif"
+    font-family="'Libre Baskerville', Georgia, 'Times New Roman', serif"
     font-size="29"
     font-style="italic"
-    font-weight="700"
+    font-weight="400"
     letter-spacing="-1.8"
     text-anchor="middle"
   >

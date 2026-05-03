@@ -1,7 +1,18 @@
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { ImageResponse } from 'next/og'
 import { SITE_HOST, SITE_SHORT_NAME } from '@/lib/site'
 
+const fontDirectory = join(process.cwd(), 'public/fonts')
+
+const brandFontData = Promise.all([
+  readFile(join(fontDirectory, 'LibreBaskerville-Regular.ttf')),
+  readFile(join(fontDirectory, 'LibreBaskerville-Italic.ttf')),
+])
+
 export async function GET() {
+  const [regularFont, italicFont] = await brandFontData
+
   return new ImageResponse(
     <div
       style={{
@@ -11,94 +22,87 @@ export async function GET() {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#FDFBF7',
-        fontFamily: 'serif',
+        backgroundColor: '#F6F1E6',
+        fontFamily: 'Libre Baskerville',
       }}
     >
-      {/* Decorative border */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 24,
-          left: 24,
-          right: 24,
-          bottom: 24,
-          border: '2px solid #2C2C2C',
-          borderRadius: 8,
-          opacity: 0.1,
-        }}
-      />
-
-      {/* Book icon */}
       <div
         style={{
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          marginBottom: 32,
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          lineHeight: 1,
+          marginBottom: 34,
         }}
       >
-        <svg width="80" height="80" viewBox="0 0 32 32" fill="none" style={{ opacity: 0.7 }}>
-          <circle cx="16" cy="16" r="15" fill="#2C2C2C" />
-          <path
-            d="M8 10C8 9.44772 8.44772 9 9 9H14C14.5523 9 15 9.44772 15 10V22C15 22.5523 14.5523 23 14 23H9C8.44772 23 8 22.5523 8 22V10Z"
-            fill="#FDFBF7"
-          />
-          <path
-            d="M17 10C17 9.44772 17.4477 9 18 9H23C23.5523 9 24 9.44772 24 10V22C24 22.5523 23.5523 23 23 23H18C17.4477 23 17 22.5523 17 22V10Z"
-            fill="#FDFBF7"
-          />
-          <path d="M15 10V23H17V10H15Z" fill="#2C2C2C" opacity="0.3" />
-          <line x1="10" y1="12" x2="13" y2="12" stroke="#2C2C2C" strokeWidth="0.5" opacity="0.3" />
-          <line x1="10" y1="14" x2="13" y2="14" stroke="#2C2C2C" strokeWidth="0.5" opacity="0.3" />
-          <line x1="10" y1="16" x2="12" y2="16" stroke="#2C2C2C" strokeWidth="0.5" opacity="0.3" />
-          <line x1="19" y1="12" x2="22" y2="12" stroke="#2C2C2C" strokeWidth="0.5" opacity="0.3" />
-          <line x1="19" y1="14" x2="22" y2="14" stroke="#2C2C2C" strokeWidth="0.5" opacity="0.3" />
-          <line x1="19" y1="16" x2="21" y2="16" stroke="#2C2C2C" strokeWidth="0.5" opacity="0.3" />
-        </svg>
+        <div
+          style={{
+            display: 'flex',
+            fontSize: 96,
+            fontStyle: 'italic',
+            fontWeight: 400,
+            color: '#1B1A17',
+            letterSpacing: '-0.06em',
+            lineHeight: 1,
+          }}
+        >
+          <span style={{ color: '#7E2A1F' }}>Etym</span>ology
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            fontSize: 96,
+            fontStyle: 'italic',
+            fontWeight: 400,
+            color: '#1B1A17',
+            letterSpacing: '-0.06em',
+            lineHeight: 1,
+            marginTop: -18,
+          }}
+        >
+          <span style={{ color: '#7E2A1F' }}>Ex</span>plorer
+        </div>
       </div>
-
-      {/* Title */}
-      <div
-        style={{
-          fontSize: 64,
-          fontWeight: 700,
-          color: '#2C2C2C',
-          marginBottom: 16,
-          letterSpacing: '-0.02em',
-        }}
-      >
-        {SITE_SHORT_NAME}
-      </div>
-
-      {/* Subtitle */}
       <div
         style={{
           fontSize: 28,
-          color: '#2C2C2C',
-          opacity: 0.6,
+          color: '#1B1A17',
+          opacity: 0.68,
           fontStyle: 'italic',
+          marginBottom: 20,
         }}
       >
         Discover the roots and origins of words
       </div>
-
-      {/* URL */}
       <div
         style={{
           position: 'absolute',
           bottom: 48,
           fontSize: 18,
-          color: '#2C2C2C',
-          opacity: 0.4,
+          color: '#1B1A17',
+          opacity: 0.48,
         }}
       >
-        {SITE_HOST}
+        {`${SITE_SHORT_NAME} · ${SITE_HOST}`}
       </div>
     </div>,
     {
       width: 1200,
       height: 630,
+      fonts: [
+        {
+          name: 'Libre Baskerville',
+          data: regularFont,
+          weight: 400,
+          style: 'normal',
+        },
+        {
+          name: 'Libre Baskerville',
+          data: italicFont,
+          weight: 400,
+          style: 'italic',
+        },
+      ],
     }
   )
 }

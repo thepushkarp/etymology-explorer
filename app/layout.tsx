@@ -1,16 +1,30 @@
 import type { Metadata } from 'next'
-import { Libre_Baskerville } from 'next/font/google'
+import localFont from 'next/font/local'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import { JsonLd } from '@/components/JsonLd'
 import { SITE_SHORT_NAME, SITE_ORIGIN } from '@/lib/site'
 import './globals.css'
 
-const libreBaskerville = Libre_Baskerville({
+const libreBaskerville = localFont({
   variable: '--font-libre-baskerville',
-  subsets: ['latin'],
-  weight: ['400', '700'],
-  style: ['normal', 'italic'],
+  src: [
+    {
+      path: '../public/fonts/LibreBaskerville-Regular.ttf',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/LibreBaskerville-Bold.ttf',
+      weight: '700',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/LibreBaskerville-Italic.ttf',
+      weight: '400',
+      style: 'italic',
+    },
+  ],
 })
 
 export const metadata: Metadata = {
