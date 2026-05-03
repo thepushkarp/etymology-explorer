@@ -31,7 +31,7 @@ export async function GET() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'flex-start',
-          lineHeight: 0.88,
+          lineHeight: 1,
           marginBottom: 34,
         }}
       >
@@ -43,6 +43,7 @@ export async function GET() {
             fontWeight: 400,
             color: '#1B1A17',
             letterSpacing: '-0.06em',
+            lineHeight: 1,
           }}
         >
           <span style={{ color: '#7E2A1F' }}>Etym</span>ology
@@ -55,6 +56,8 @@ export async function GET() {
             fontWeight: 400,
             color: '#1B1A17',
             letterSpacing: '-0.06em',
+            lineHeight: 1,
+            marginTop: -18,
           }}
         >
           <span style={{ color: '#7E2A1F' }}>Ex</span>plorer
@@ -73,7 +76,6 @@ export async function GET() {
       </div>
       <div
         style={{
-          display: 'flex',
           position: 'absolute',
           bottom: 48,
           fontSize: 18,
@@ -81,7 +83,7 @@ export async function GET() {
           opacity: 0.48,
         }}
       >
-        {SITE_SHORT_NAME} · {SITE_HOST}
+        {`${SITE_SHORT_NAME} · ${SITE_HOST}`}
       </div>
     </div>,
     {
