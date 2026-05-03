@@ -3,6 +3,7 @@ import { Libre_Baskerville } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 import { JsonLd } from '@/components/JsonLd'
+import { SITE_SHORT_NAME, SITE_ORIGIN } from '@/lib/site'
 import './globals.css'
 
 const libreBaskerville = Libre_Baskerville({
@@ -13,10 +14,10 @@ const libreBaskerville = Libre_Baskerville({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://etymology.thepushkarp.com'),
+  metadataBase: new URL(SITE_ORIGIN),
   title: {
-    default: 'Etymology Explorer - Discover Word Origins',
-    template: '%s | Etymology Explorer',
+    default: `${SITE_SHORT_NAME} - Discover Word Origins`,
+    template: `%s | ${SITE_SHORT_NAME}`,
   },
   description:
     'Explore the fascinating origins and history of English words. Visual etymology trees, linguistic connections, and historical context for thousands of words.',
@@ -45,11 +46,11 @@ export const metadata: Metadata = {
     canonical: '/',
   },
   openGraph: {
-    title: 'Etymology Explorer - Discover Word Origins',
+    title: `${SITE_SHORT_NAME} - Discover Word Origins`,
     description:
       'Visual etymology explorer with word history, linguistic roots, and historical connections.',
     url: '/',
-    siteName: 'Etymology Explorer',
+    siteName: SITE_SHORT_NAME,
     type: 'website',
     locale: 'en_US',
     images: [
@@ -57,13 +58,13 @@ export const metadata: Metadata = {
         url: '/og',
         width: 1200,
         height: 630,
-        alt: 'Etymology Explorer - Discover Word Origins',
+        alt: `${SITE_SHORT_NAME} - Discover Word Origins`,
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Etymology Explorer - Discover Word Origins',
+    title: `${SITE_SHORT_NAME} - Discover Word Origins`,
     description:
       'Visual etymology explorer with word history, linguistic roots, and historical connections.',
     images: ['/og'],

@@ -4,6 +4,7 @@ import { memo, useState } from 'react'
 import { EtymologyResult, SourceReference } from '@/lib/types'
 import { AncestryTree } from './AncestryTree'
 import { PronunciationButton } from './PronunciationButton'
+import { RelatedWordsList } from './RelatedWordsList'
 import HistoricalContext from './HistoricalContext'
 import UsageTimeline from './UsageTimeline'
 
@@ -139,6 +140,7 @@ export const EtymologyCard = memo(function EtymologyCard({
     { label: 'Story', href: '#entry-story' },
     ...(result.ngram?.data.length ? [{ label: 'Usage', href: '#entry-usage' }] : []),
     ...(result.suggestions ? [{ label: 'Related', href: '#entry-related' }] : []),
+    ...(result.roots.length > 0 ? [{ label: 'Kin', href: '#entry-kin' }] : []),
     ...(!isSimple && result.rawSources?.wikipedia
       ? [{ label: 'Context', href: '#entry-context' }]
       : []),
@@ -376,6 +378,17 @@ export const EtymologyCard = memo(function EtymologyCard({
 
         {!isSimple && result.rawSources?.wikipedia && (
           <HistoricalContext wikipediaExtract={result.rawSources.wikipedia} />
+        )}
+
+        {result.roots.length > 0 && (
+          <MobileSection
+            id="entry-kin"
+            title="Kin & Kindred"
+            titleTextClassName={sectionTitleTextClassName}
+            dividerClassName={sectionDividerClassName}
+          >
+            <RelatedWordsList roots={result.roots} onWordClick={onWordClick} />
+          </MobileSection>
         )}
 
         {!isSimple && (

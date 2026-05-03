@@ -8,14 +8,13 @@ import { FaqSchema } from '@/components/FaqSchema'
 export const metadata: Metadata = {
   title: 'Frequently Asked Questions',
   description:
-    'Common questions about etymology, word origins, and how to use Etymology Explorer. Learn what etymology is, how words change over time, and more.',
+    'Common questions about etymology, word origins, and how to use EtymEx. Learn what etymology is, how words change over time, and more.',
   alternates: {
     canonical: '/faq',
   },
   openGraph: {
-    title: 'FAQ - Etymology Explorer',
-    description:
-      'Common questions about etymology, word origins, and how to use Etymology Explorer.',
+    title: 'FAQ - EtymEx',
+    description: 'Common questions about etymology, word origins, and how to use EtymEx.',
     url: '/faq',
   },
 }

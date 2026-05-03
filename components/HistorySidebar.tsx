@@ -53,8 +53,8 @@ export function HistorySidebar({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          fixed left-0 top-[9.25rem] z-40 inline-flex items-center gap-2 rounded-r-[1rem] border border-l-0
-          border-border-soft bg-surface/96 px-3 py-4 text-charcoal-light shadow-[0_18px_44px_-28px_var(--shadow-heavy)]
+          fixed bottom-24 left-0 z-40 inline-flex items-center gap-2 rounded-r-[1rem] border border-l-0
+          border-border-soft bg-surface/96 px-2.5 py-3 text-charcoal-light shadow-[0_18px_44px_-28px_var(--shadow-heavy)]
           transition-all duration-300 hover:bg-cream-dark/55 hover:text-charcoal md:hidden
           ${isOpen ? 'pointer-events-none opacity-0' : 'translate-x-0 opacity-100'}
         `}
@@ -71,13 +71,7 @@ export function HistorySidebar({
         </svg>
 
         {!isOpen && history.length > 0 && (
-          <span
-            className="
-            absolute -top-2 -right-2
-            flex h-5 w-5 items-center justify-center rounded-full
-            bg-charcoal text-xs font-serif text-cream
-          "
-          >
+          <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-charcoal text-xs font-serif text-cream">
             {history.length > 9 ? '9+' : history.length}
           </span>
         )}

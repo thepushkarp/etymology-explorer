@@ -34,14 +34,14 @@ const ENDPOINTS = [
 ]
 
 export const metadata = {
-  title: 'API Docs | Etymology Explorer',
+  title: 'API Docs | EtymEx',
 }
 
 export default function ApiDocsPage() {
   return (
     <EditorialPageFrame
       eyebrow="developer reference"
-      title="Etymology Explorer API"
+      title="EtymEx API"
       subtitle="Machine-friendly documentation for the core endpoints behind the explorer."
     >
       <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">

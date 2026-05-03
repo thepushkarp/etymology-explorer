@@ -4,7 +4,7 @@ This file provides guidance to AI Coding Agents when working with code in this r
 
 ## Project Overview
 
-Etymology Explorer is a Next.js web app that helps users discover word origins through an LLM-powered synthesis pipeline with grounded etymological evidence. The app runs in **public mode** by default (server-side API key) with rate limiting, cost budgets, caching, and distributed request deduplication.
+EtymEx is a Next.js Etymology Explorer web app that helps users discover word origins through an LLM-powered synthesis pipeline with grounded etymological evidence. The app runs in **public mode** by default (server-side API key) with rate limiting, cost budgets, caching, and distributed request deduplication.
 
 Users search for a word, and the app:
 
@@ -15,7 +15,7 @@ Users search for a word, and the app:
 5. Sends the enriched research bundle to OpenRouter's Responses API using `openai/gpt-5.4-mini` for structured synthesis
 6. Post-processes LLM output to match ancestry stages to parsed evidence and assign programmatic confidence scores
 
-**Live**: https://etymology.thepushkarp.com
+**Live**: https://etymex.com
 
 ## Commands
 

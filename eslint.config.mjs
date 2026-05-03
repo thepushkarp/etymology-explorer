@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     'out/**',
     'build/**',
     'next-env.d.ts',
+    '.pnp.cjs',
+    '.pnp.loader.mjs',
     '.worktrees/**',
     'design-mockups/**',
   ]),

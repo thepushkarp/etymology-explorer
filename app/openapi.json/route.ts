@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getRequestOrigin } from '@/lib/origin'
+import { SITE_SHORT_NAME } from '@/lib/site'
 
 export async function GET() {
   const origin = await getRequestOrigin()
@@ -7,9 +8,9 @@ export async function GET() {
   const openApiDoc = {
     openapi: '3.0.3',
     info: {
-      title: 'Etymology Explorer API',
+      title: `${SITE_SHORT_NAME} API`,
       version: '1.0.0',
-      description: 'Public endpoints powering Etymology Explorer.',
+      description: `Public endpoints powering ${SITE_SHORT_NAME}.`,
     },
     servers: [{ url: origin }],
     paths: {
