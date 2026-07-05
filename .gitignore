@@ -47,3 +47,6 @@ next-env.d.ts
 # docs
 docs/brainstorms/
 docs/plans/
+
+# benchmark results
+bench-results/
