@@ -107,7 +107,7 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
   - [Urban Dictionary](https://www.urbandictionary.com/) - Modern slang (quality-filtered)
   - [Incel Wiki](https://incels.wiki/) - Supplemental community slang context
 - **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
-- **Typography**: Libre Baskerville (serif)
+- **Typography**: Libre Baskerville (display serif) + Alegreya Sans (body), self-hosted woff2 subsets
 
 ## Project Structure
 

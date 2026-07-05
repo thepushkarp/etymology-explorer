@@ -10,17 +10,38 @@ const libreBaskerville = localFont({
   variable: '--font-libre-baskerville',
   src: [
     {
-      path: '../public/fonts/LibreBaskerville-Regular.ttf',
+      path: '../public/fonts/LibreBaskerville-Regular.woff2',
       weight: '400',
       style: 'normal',
     },
     {
-      path: '../public/fonts/LibreBaskerville-Bold.ttf',
+      path: '../public/fonts/LibreBaskerville-Bold.woff2',
       weight: '700',
       style: 'normal',
     },
     {
-      path: '../public/fonts/LibreBaskerville-Italic.ttf',
+      path: '../public/fonts/LibreBaskerville-Italic.woff2',
+      weight: '400',
+      style: 'italic',
+    },
+  ],
+})
+
+const alegreyaSans = localFont({
+  variable: '--font-alegreya-sans',
+  src: [
+    {
+      path: '../public/fonts/AlegreyaSans-Regular.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/AlegreyaSans-Bold.woff2',
+      weight: '700',
+      style: 'normal',
+    },
+    {
+      path: '../public/fonts/AlegreyaSans-Italic.woff2',
       weight: '400',
       style: 'italic',
     },
@@ -99,7 +120,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={`${libreBaskerville.variable} min-h-screen`} suppressHydrationWarning>
+      <body
+        className={`${libreBaskerville.variable} ${alegreyaSans.variable} min-h-screen`}
+        suppressHydrationWarning
+      >
         <JsonLd />
         {children}
         <Analytics />
