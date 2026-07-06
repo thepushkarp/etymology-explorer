@@ -26,15 +26,25 @@ const DESCRIPTION_MAX_CHARS = 155
 
 // Redis reads go through unstable_cache: the Upstash client issues no-store
 // fetches, which would otherwise flip this ISR route to dynamic at runtime
-// (app-static-to-dynamic-error). Entries revalidate daily alongside the page.
-const loadCachedEtymology = unstable_cache(getCachedEtymology, ['word-page-etymology'], {
-  revalidate: 86400,
-})
+// (app-static-to-dynamic-error). The data layer revalidates hourly so a
+// cached miss doesn't compound with the 24h page ISR window once a word is
+// traced live; the per-word tag lets the trace-write path call
+// revalidateTag(`etymology-word:${word}`) to surface new entries immediately.
+function loadCachedEtymology(word: string): Promise<EtymologyResult | null> {
+  return unstable_cache(() => getCachedEtymology(word), ['word-page-etymology', word], {
+    revalidate: 3600,
+    tags: [`etymology-word:${word}`],
+  })()
+}
 
 interface WordPageProps {
   params: Promise<{ word: string }>
 }
 
+// Next.js has changed whether dynamic params arrive percent-encoded across
+// versions (vercel/next.js#54916), so decode defensively: decoding an
+// already-decoded word is a no-op for every valid word ('%' never passes
+// isValidWord), and malformed sequences 404 via the catch.
 function resolveWord(rawParam: string): string | null {
   let decoded: string
   try {

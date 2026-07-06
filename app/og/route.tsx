@@ -6,12 +6,30 @@ import { canonicalizeWord, isValidWord } from '@/lib/validation'
 
 const fontDirectory = join(process.cwd(), 'public/fonts')
 
-const brandFontData = Promise.all([
-  readFile(join(fontDirectory, 'LibreBaskerville-Regular.ttf')),
-  readFile(join(fontDirectory, 'LibreBaskerville-Italic.ttf')),
-])
+// Lazy + memoized so a failed read rejects inside the request handler
+// (500 for that request) instead of as an unhandled rejection at module load
+let brandFontData: Promise<[Buffer, Buffer]> | null = null
+
+function loadBrandFonts(): Promise<[Buffer, Buffer]> {
+  brandFontData ??= Promise.all([
+    readFile(join(fontDirectory, 'LibreBaskerville-Regular.ttf')),
+    readFile(join(fontDirectory, 'LibreBaskerville-Italic.ttf')),
+  ]).catch((error) => {
+    brandFontData = null // allow retry on transient failures
+    throw error
+  })
+  return brandFontData
+}
 
 const IMAGE_OPTIONS = { width: 1200, height: 630 }
+
+/** Split off the first grapheme (accent-colored) without breaking surrogate
+ *  pairs or detaching combining diacritics from their base letter. */
+function splitLeadingGrapheme(word: string): [string, string] {
+  const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  const graphemes = Array.from(segmenter.segment(word), (segment) => segment.segment)
+  return [graphemes[0] ?? '', graphemes.slice(1).join('')]
+}
 
 function wordFontSize(word: string): number {
   if (word.length <= 10) return 148
@@ -98,6 +116,7 @@ function BrandCard() {
 }
 
 function WordCard({ word }: { word: string }) {
+  const [initial, rest] = splitLeadingGrapheme(word)
   return (
     <div
       style={{
@@ -136,8 +155,8 @@ function WordCard({ word }: { word: string }) {
           maxWidth: 1040,
         }}
       >
-        <span style={{ color: '#7E2A1F' }}>{word.slice(0, 1)}</span>
-        <span>{word.slice(1)}</span>
+        <span style={{ color: '#7E2A1F' }}>{initial}</span>
+        <span>{rest}</span>
       </div>
       <div
         style={{
@@ -169,7 +188,7 @@ function WordCard({ word }: { word: string }) {
 }
 
 export async function GET(request: Request) {
-  const [regularFont, italicFont] = await brandFontData
+  const [regularFont, italicFont] = await loadBrandFonts()
 
   const fonts = [
     {

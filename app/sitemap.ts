@@ -75,7 +75,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ]
 
   const words = await getCachedWords()
-  const wordEntries: MetadataRoute.Sitemap = words.sort().map((word) => ({
+  // Copy before sorting: unstable_cache may hand back a shared in-memory array
+  const wordEntries: MetadataRoute.Sitemap = [...words].sort().map((word) => ({
     url: `${SITE_ORIGIN}/word/${encodeURIComponent(word)}`,
     lastModified: new Date(),
     changeFrequency: 'monthly',
