@@ -31,7 +31,10 @@ export const MIN_QUERY_LENGTH = 2
  */
 export function useSuggestionItems(query: string, history: string[]): SuggestionItem[] {
   const normalizedQuery = query.toLowerCase().trim()
-  const [fetchedWords, setFetchedWords] = useState<string[]>([])
+  const [fetched, setFetched] = useState<{ query: string; words: string[] }>({
+    query: '',
+    words: [],
+  })
 
   useEffect(() => {
     if (normalizedQuery.length < MIN_QUERY_LENGTH) {
@@ -49,7 +52,10 @@ export function useSuggestionItems(query: string, history: string[]): Suggestion
       })
       .then((payload) => {
         if (payload?.success && payload.data) {
-          setFetchedWords(payload.data.suggestions.map((suggestion) => suggestion.word))
+          setFetched({
+            query: normalizedQuery,
+            words: payload.data.suggestions.map((suggestion) => suggestion.word),
+          })
         }
       })
       .catch((fetchError) => {
@@ -75,14 +81,22 @@ export function useSuggestionItems(query: string, history: string[]): Suggestion
       category: 'recent' as const,
     }))
 
+    // Results for the current query are shown as-is (they may be typo
+    // corrections that don't contain the query); results still in flight from
+    // a previous query are only shown while they literally match the new one.
+    const sourceWords =
+      fetched.query === normalizedQuery
+        ? fetched.words
+        : fetched.words.filter((word) => word.includes(normalizedQuery))
+
     const recentWords = new Set(recent.map((item) => item.word))
-    const suggested = fetchedWords
-      .filter((word) => !recentWords.has(word) && word.includes(normalizedQuery))
+    const suggested = sourceWords
+      .filter((word) => !recentWords.has(word))
       .slice(0, SUGGESTED_LIMIT)
       .map((word) => ({ word, category: 'suggested' as const }))
 
     return [...recent, ...suggested]
-  }, [normalizedQuery, history, fetchedWords])
+  }, [normalizedQuery, history, fetched])
 }
 
 export function SearchSuggestions({
