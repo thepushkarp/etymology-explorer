@@ -136,7 +136,9 @@ export async function GET(request: NextRequest) {
     )
   } finally {
     if (lockToken) {
-      releaseLock(lockKey, lockToken).catch(() => {})
+      // Awaited: on serverless the context can freeze once the response
+      // returns, which would leave the lock held until its TTL expires.
+      await releaseLock(lockKey, lockToken)
     }
   }
 }
