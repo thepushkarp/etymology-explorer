@@ -9,7 +9,7 @@ import { fetchWiktionary } from './wiktionary'
 import { fetchWikipedia } from './wikipedia'
 import { fetchUrbanDictionary } from './urbanDictionary'
 import { fetchIncelsWiki } from './incelsWiki'
-import { fetchFreeDictionary } from './freeDictionary'
+import { fetchFreeDictionary, compactFreeDictionary } from './freeDictionary'
 import {
   LlmUsage,
   RelatedTermResearchData,
@@ -17,7 +17,11 @@ import {
   RootResearchData,
   StreamEvent,
 } from './types'
-import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
+import {
+  parseSourceTexts,
+  formatParsedChainsForPrompt,
+  type ParsedEtymChain,
+} from './etymologyParser'
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
 import {
@@ -35,9 +39,16 @@ export interface RootExtraction {
 export async function extractRootsQuick(
   word: string,
   etymonlineText: string | null,
-  wiktionaryText: string | null
+  wiktionaryText: string | null,
+  signal?: AbortSignal
 ): Promise<RootExtraction> {
-  const sourceText = [etymonlineText, wiktionaryText].filter(Boolean).join('\n\n')
+  // A 100-token extraction doesn't need the full source pages; the
+  // morphological breakdown is always near the top of the entry.
+  const maxChars = CONFIG.promptBudget.rootExtractionSourceChars
+  const sourceText = [etymonlineText, wiktionaryText]
+    .filter((text): text is string => Boolean(text))
+    .map((text) => text.slice(0, maxChars))
+    .join('\n\n')
 
   if (!sourceText) {
     return { roots: [], usage: null }
@@ -70,8 +81,9 @@ Return the JSON object only, no explanation:`
     request.instructions =
       'Extract root morphemes only. Return {"roots":["root"]} with lowercase strings and no commentary.'
 
-    response = await createOpenRouterResponse(request)
+    response = await createOpenRouterResponse(request, CONFIG.timeouts.rootExtraction, signal)
   } catch (error) {
+    if (signal?.aborted) throw error
     console.error('Root extraction error:', safeError(error))
     return { roots: [], usage: null }
   }
@@ -141,6 +153,118 @@ const LOW_SIGNAL_TERMS = new Set([
   'indo-european',
 ])
 
+/**
+ * Inflectional and low-signal derivational suffixes that are not worth a
+ * dedicated root-research fetch (mirrors the LLM extraction prompt rules).
+ */
+const LOW_SIGNAL_AFFIXES = new Set([
+  's',
+  'es',
+  'ed',
+  'en',
+  'ing',
+  'ly',
+  'er',
+  'est',
+  'y',
+  'ie',
+  'ness',
+  'ment',
+  'tion',
+  'sion',
+  'ible',
+  'able',
+  'ous',
+  'al',
+  'ish',
+  'ity',
+])
+
+/**
+ * Matches explicit derivation formulas in source text, e.g.
+ *   "From doom +\u200E scrolling"
+ *   "equivalent to in- +\u200E credible"
+ *   "By surface analysis, tele- +\u200E -phone"
+ * Wiktionary inserts U+200E LEFT-TO-RIGHT MARK after "+" — strip it before
+ * matching (the callers do this via extractDerivationParts).
+ */
+const DERIVATION_FORMULA_PATTERN =
+  /\b(?:from|equivalent to|modelled after|modeled after|surface analysis[,:]?|compound of)\s+((?:[\p{L}*'’.-]+\s*\+\s*)+[\p{L}*'’.-]+)/giu
+
+/**
+ * Extract the individual morphemes of every "X + Y (+ Z)" derivation formula
+ * in the text. Returns raw parts — callers normalize/filter them.
+ */
+function extractDerivationParts(text: string): string[] {
+  const cleaned = text.replace(/[\u200E\u200F]/g, '')
+  const parts: string[] = []
+  for (const match of cleaned.matchAll(DERIVATION_FORMULA_PATTERN)) {
+    for (const part of match[1].split(/\s*\+\s*/)) {
+      if (part) parts.push(part)
+    }
+  }
+  return parts
+}
+
+/**
+ * Normalize a raw CPU root candidate: trim affix hyphens and punctuation,
+ * lowercase, and reject reconstructed forms, the word itself, and
+ * inflectional suffixes. Returns null when the candidate is not researchable.
+ */
+function normalizeRootCandidate(term: string, word: string): string | null {
+  const normalized = term
+    .toLowerCase()
+    .replace(/[\u200E\u200F]/g, '')
+    .replace(/^[-.,;:'’]+/, '')
+    .replace(/[-.,;:'’]+$/, '')
+    .trim()
+
+  if (!normalized || normalized.includes('*')) return null
+  if (/\s/.test(normalized)) return null
+  if (normalized.length < 2) return null
+  if (normalized === word) return null
+  if (LOW_SIGNAL_AFFIXES.has(normalized)) return null
+  return normalized
+}
+
+/**
+ * CPU-only root extraction: derivation formulas ("From X + Y",
+ * "equivalent to X + Y") plus hyphen-marked affix morphemes from the
+ * pre-parsed chains. When this finds at least one root, the LLM
+ * extraction call is skipped entirely.
+ */
+export function extractRootsCpu(
+  word: string,
+  etymonlineText: string | null,
+  wiktionaryText: string | null,
+  parsedChains: ParsedEtymChain[]
+): string[] {
+  const normalizedWord = word.toLowerCase().trim()
+  const combinedText = [etymonlineText, wiktionaryText].filter(Boolean).join('\n')
+  const candidates = extractDerivationParts(combinedText)
+
+  for (const chain of parsedChains) {
+    for (const link of chain.links) {
+      if (link.isReconstructed) continue
+      const form = link.form.replace(/[\u200E\u200F]/g, '')
+      // Affix notation ("tele-", "-phone") marks a morpheme worth researching
+      if (/^-\p{L}/u.test(form) || /\p{L}-$/u.test(form)) {
+        candidates.push(form)
+      }
+    }
+  }
+
+  const roots: string[] = []
+  for (const candidate of candidates) {
+    const normalized = normalizeRootCandidate(candidate, normalizedWord)
+    if (normalized && !roots.includes(normalized)) {
+      roots.push(normalized)
+    }
+  }
+
+  return roots.slice(0, CONFIG.maxRootsToExplore)
+}
+
 function normalizeCandidateTerm(term: string): string | null {
   const normalized = term
     .toLowerCase()
@@ -197,11 +321,11 @@ export function extractRelatedTerms(
     }
   }
 
-  const plusPattern =
-    /(?:equivalent to|modelled after|modeled after)\s+([\p{L}*'’.-]+)\s*\+\s*([\p{L}*'’.-]+)/giu
-  for (const match of text.matchAll(plusPattern)) {
-    addCandidate(match[1], 4)
-    addCandidate(match[2], 4)
+  // Derivation formulas ("From X + Y", "equivalent to X + Y") are high-signal
+  for (const part of extractDerivationParts(text)) {
+    const trimmed = part.replace(/^-+|-+$/g, '')
+    if (LOW_SIGNAL_AFFIXES.has(trimmed.toLowerCase())) continue
+    addCandidate(trimmed, 4)
   }
 
   for (const match of text.matchAll(/\*[\p{L}\d₀-₉ʰʷʸ'-]+/gu)) {
@@ -217,10 +341,10 @@ export function extractRelatedTerms(
 /**
  * Fetch research data for a single root
  */
-async function fetchRootResearch(root: string): Promise<RootResearchData> {
+async function fetchRootResearch(root: string, signal?: AbortSignal): Promise<RootResearchData> {
   const [etymonlineData, wiktionaryData] = await Promise.all([
-    fetchEtymonline(root),
-    fetchWiktionary(root),
+    fetchEtymonline(root, signal),
+    fetchWiktionary(root, signal),
   ])
 
   const combinedText = [etymonlineData?.text, wiktionaryData?.text].filter(Boolean).join(' ')
@@ -238,10 +362,13 @@ async function fetchRootResearch(root: string): Promise<RootResearchData> {
   }
 }
 
-async function fetchRelatedTermResearch(term: string): Promise<RelatedTermResearchData> {
+async function fetchRelatedTermResearch(
+  term: string,
+  signal?: AbortSignal
+): Promise<RelatedTermResearchData> {
   const [etymonlineData, wiktionaryData] = await Promise.all([
-    fetchEtymonline(term),
-    fetchWiktionary(term),
+    fetchEtymonline(term, signal),
+    fetchWiktionary(term, signal),
   ])
 
   return {
@@ -266,18 +393,24 @@ function emitProgress(callback: ((event: StreamEvent) => void) | undefined, even
 /**
  * Conduct agentic research to gather rich etymology context.
  * This is the main orchestrator that:
- * 1. Fetches initial word data
- * 2. Extracts roots using quick LLM call
- * 3. Fetches context for each root
+ * 1. Fires all source fetches in parallel; only etymonline + wiktionary gate
+ *    the next phase, the remaining sources join before this returns
+ * 2. Identifies roots on-CPU from derivation formulas / parsed chains,
+ *    falling back to a quick LLM call
+ * 3. Fetches root pages and related-term pages in one parallel wave
+ *
+ * An aborted `options.signal` (e.g. client disconnect) cancels in-flight
+ * fetches and stops the pipeline at the next phase boundary.
  */
 export async function conductAgenticResearch(
   word: string,
-  options?: { skipOptionalSources?: boolean },
+  options?: { skipOptionalSources?: boolean; signal?: AbortSignal },
   onProgress?: (event: StreamEvent) => void
 ): Promise<ResearchContext> {
   let totalFetches = 0
   const normalizedWord = word.toLowerCase().trim()
   const skipOptional = options?.skipOptionalSources ?? false
+  const signal = options?.signal
 
   // Every source fails soft: a throwing client must not reject the whole
   // Promise.all and lose the other five sources. The no-etymonline-AND-no-
@@ -309,7 +442,9 @@ export async function conductAgenticResearch(
       })
   }
 
-  // Phase 1: Initial fetch for main word
+  // Phase 1: fire ALL source fetches at once. Only etymonline + wiktionary
+  // gate chain parsing and root extraction; the other sources join before
+  // this function returns (each is already capped by CONFIG.timeouts.source).
   console.log(
     `[Research] Phase 1: Fetching main word "${normalizedWord}"${skipOptional ? ' (skip optional sources)' : ''}`
   )
@@ -325,76 +460,85 @@ export async function conductAgenticResearch(
   }
 
   const startTime = Date.now()
-  const [
-    etymonlineData,
-    wiktionaryData,
-    freeDictionaryData,
-    urbanDictionaryData,
-    wikipediaData,
-    incelsWikiData,
-  ] = await Promise.all([
-    runSource(
-      'etymonline',
-      startTime,
-      () => fetchEtymonline(normalizedWord),
-      (data) => data?.text.slice(0, 100)
-    ),
-    runSource(
-      'wiktionary',
-      startTime,
-      () => fetchWiktionary(normalizedWord),
-      (data) => data?.text.slice(0, 100)
-    ),
-    runSource(
-      'freeDictionary',
-      startTime,
-      () => fetchFreeDictionary(normalizedWord),
-      (data) => data?.origin?.slice(0, 100)
-    ),
-    skipOptional
-      ? Promise.resolve(null)
-      : runSource(
-          'urbanDictionary',
-          startTime,
-          () => fetchUrbanDictionary(normalizedWord),
-          (data) => data?.text.slice(0, 100)
-        ),
-    skipOptional
-      ? Promise.resolve(null)
-      : runSource(
-          'wikipedia',
-          startTime,
-          () => fetchWikipedia(normalizedWord),
-          (data) => data?.text.slice(0, 100)
-        ),
-    skipOptional
-      ? Promise.resolve(null)
-      : runSource(
-          'incelsWiki',
-          startTime,
-          () => fetchIncelsWiki(normalizedWord),
-          (data) => data?.text.slice(0, 100)
-        ),
-  ])
+  const etymonlinePromise = runSource(
+    'etymonline',
+    startTime,
+    () => fetchEtymonline(normalizedWord, signal),
+    (data) => data?.text.slice(0, 100)
+  )
+  const wiktionaryPromise = runSource(
+    'wiktionary',
+    startTime,
+    () => fetchWiktionary(normalizedWord, signal),
+    (data) => data?.text.slice(0, 100)
+  )
+  const freeDictionaryPromise = runSource(
+    'freeDictionary',
+    startTime,
+    () => fetchFreeDictionary(normalizedWord, CONFIG.timeouts.source, signal),
+    (data) => data?.origin?.slice(0, 100)
+  )
+  const urbanDictionaryPromise = skipOptional
+    ? Promise.resolve(null)
+    : runSource(
+        'urbanDictionary',
+        startTime,
+        () => fetchUrbanDictionary(normalizedWord, signal),
+        (data) => data?.text.slice(0, 100)
+      )
+  const wikipediaPromise = skipOptional
+    ? Promise.resolve(null)
+    : runSource(
+        'wikipedia',
+        startTime,
+        () => fetchWikipedia(normalizedWord, signal),
+        (data) => data?.text.slice(0, 100)
+      )
+  const incelsWikiPromise = skipOptional
+    ? Promise.resolve(null)
+    : runSource(
+        'incelsWiki',
+        startTime,
+        () => fetchIncelsWiki(normalizedWord, signal),
+        (data) => data?.text.slice(0, 100)
+      )
   totalFetches += 3 + (skipOptional ? 0 : 3)
+
+  const [etymonlineData, wiktionaryData] = await Promise.all([etymonlinePromise, wiktionaryPromise])
+  signal?.throwIfAborted()
 
   const context: ResearchContext = {
     mainWord: {
       word: normalizedWord,
       etymonline: etymonlineData,
       wiktionary: wiktionaryData,
-      freeDictionary: freeDictionaryData,
-      urbanDictionary: urbanDictionaryData,
-      wikipedia: wikipediaData,
-      incelsWiki: incelsWikiData,
+      freeDictionary: null,
+      urbanDictionary: null,
+      wikipedia: null,
+      incelsWiki: null,
     },
     identifiedRoots: [],
     rootResearch: [],
     relatedResearch: [],
     totalSourcesFetched: totalFetches,
-    rawSources: {
-      wikipedia: wikipediaData?.text,
-    },
+    rawSources: {},
+  }
+
+  const joinRemainingSources = async (): Promise<void> => {
+    const [freeDictionaryData, urbanDictionaryData, wikipediaData, incelsWikiData] =
+      await Promise.all([
+        freeDictionaryPromise,
+        urbanDictionaryPromise,
+        wikipediaPromise,
+        incelsWikiPromise,
+      ])
+    context.mainWord.freeDictionary = freeDictionaryData
+    context.mainWord.urbanDictionary = urbanDictionaryData
+    context.mainWord.wikipedia = wikipediaData
+    context.mainWord.incelsWiki = incelsWikiData
+    if (wikipediaData?.text && context.rawSources) {
+      context.rawSources.wikipedia = wikipediaData.text
+    }
   }
 
   // Phase 1.5: Pre-parse etymology chains from source text (CPU-only, no API calls)
@@ -417,21 +561,35 @@ export async function conductAgenticResearch(
     chainCount: parsedChains.length,
   })
 
-  // If no data found at all, return early
+  // If no data found at all, return early (still join the in-flight sources)
   if (!etymonlineData && !wiktionaryData) {
     console.log('[Research] No source data found for main word')
+    await joinRemainingSources()
     return context
   }
 
-  // Phase 2: Extract roots from initial data
-  console.log('[Research] Phase 2: Extracting roots')
-  const { roots: identifiedRoots, usage: extractionUsage } = await extractRootsQuick(
+  // Phase 2: Identify roots — CPU first, LLM fallback
+  const cpuRoots = extractRootsCpu(
     normalizedWord,
     etymonlineData?.text ?? null,
-    wiktionaryData?.text ?? null
+    wiktionaryData?.text ?? null,
+    parsedChains
   )
-  if (extractionUsage) {
-    context.llmUsage = extractionUsage
+  let identifiedRoots = cpuRoots
+  if (cpuRoots.length > 0) {
+    console.log(`[Research] Phase 2: CPU-derived roots: ${cpuRoots.join(', ')} (no LLM call)`)
+  } else {
+    console.log('[Research] Phase 2: No CPU roots found, falling back to LLM extraction')
+    const { roots, usage } = await extractRootsQuick(
+      normalizedWord,
+      etymonlineData?.text ?? null,
+      wiktionaryData?.text ?? null,
+      signal
+    )
+    identifiedRoots = roots
+    if (usage) {
+      context.llmUsage = usage
+    }
   }
   context.identifiedRoots = identifiedRoots
   console.log(`[Research] Identified roots: ${identifiedRoots.join(', ') || 'none'}`)
@@ -439,38 +597,53 @@ export async function conductAgenticResearch(
     type: 'roots_identified',
     roots: identifiedRoots,
   })
+  signal?.throwIfAborted()
 
-  // Phase 3: Fetch data for each root (if different from main word)
-  console.log('[Research] Phase 3: Researching roots')
+  // Phase 3: ONE parallel wave — root pages and related-term pages together.
+  // Related terms are mined from the main word's text only, so they never
+  // wait on root results.
   const rootsToResearch = identifiedRoots.filter(
     (root) => root !== normalizedWord && root.length > 1
   )
-
-  const remainingBudget = CONFIG.maxTotalFetches - totalFetches
-  const maxRootsByBudget = Math.floor(remainingBudget / 2)
-  const rootsToFetch = rootsToResearch.slice(
-    0,
-    Math.min(maxRootsByBudget, CONFIG.maxRootsToExplore)
+  const mainCombinedText = [etymonlineData?.text, wiktionaryData?.text].filter(Boolean).join(' ')
+  const mainRelatedTerms = extractRelatedTerms(
+    mainCombinedText,
+    [normalizedWord, ...identifiedRoots],
+    etymonlineData?.relatedEntries ?? []
   )
 
-  if (rootsToFetch.length > 0) {
+  const remainingBudget = CONFIG.maxTotalFetches - totalFetches
+  const maxPairsByBudget = Math.floor(remainingBudget / 2)
+  const rootsToFetch = rootsToResearch.slice(
+    0,
+    Math.min(maxPairsByBudget, CONFIG.maxRootsToExplore)
+  )
+  const relatedTermsToFetch = mainRelatedTerms
+    .filter((term) => !rootsToFetch.includes(term))
+    .slice(
+      0,
+      Math.max(0, Math.min(maxPairsByBudget - rootsToFetch.length, CONFIG.maxRelatedWordsPerRoot))
+    )
+
+  if (rootsToFetch.length > 0 || relatedTermsToFetch.length > 0) {
     console.log(
-      `[Research] Fetching ${rootsToFetch.length} roots in parallel: ${rootsToFetch.join(', ')}`
+      `[Research] Phase 3: Parallel wave — roots: [${rootsToFetch.join(', ')}], ` +
+        `related terms: [${relatedTermsToFetch.join(', ')}]`
     )
 
-    const rootResults = await Promise.allSettled(
-      rootsToFetch.map((root) => fetchRootResearch(root))
-    )
+    const [rootResults, relatedResults] = await Promise.all([
+      Promise.allSettled(rootsToFetch.map((root) => fetchRootResearch(root, signal))),
+      Promise.allSettled(relatedTermsToFetch.map((term) => fetchRelatedTermResearch(term, signal))),
+    ])
 
-    for (const result of rootResults) {
+    for (const [index, result] of rootResults.entries()) {
       if (result.status === 'fulfilled') {
-        const rootData = result.value
-        context.rootResearch.push(rootData)
+        context.rootResearch.push(result.value)
         totalFetches += 2
 
         emitProgress(onProgress, {
           type: 'root_research',
-          root: rootData.root,
+          root: result.value.root,
           source: 'etymonline+wiktionary',
           status: 'complete',
         })
@@ -478,47 +651,12 @@ export async function conductAgenticResearch(
         console.error('[Research] Root fetch failed:', safeError(result.reason))
         emitProgress(onProgress, {
           type: 'root_research',
-          root: rootsToFetch[rootResults.indexOf(result)],
+          root: rootsToFetch[index] ?? 'unknown',
           source: 'unknown',
           status: 'failed',
         })
       }
     }
-  } else {
-    console.log('[Research] Skipping roots (budget or no roots found)')
-  }
-
-  // Phase 4: Expand breadth with a few related etymology entries
-  console.log('[Research] Phase 4: Researching related terms')
-  const mainCombinedText = [etymonlineData?.text, wiktionaryData?.text].filter(Boolean).join(' ')
-  const mainRelatedTerms = extractRelatedTerms(
-    mainCombinedText,
-    [normalizedWord, ...identifiedRoots],
-    etymonlineData?.relatedEntries ?? []
-  )
-  const relatedCandidates = Array.from(
-    new Set(
-      [
-        ...mainRelatedTerms,
-        ...context.rootResearch.flatMap((rootData) => rootData.relatedTerms),
-      ].filter((term) => !identifiedRoots.includes(term))
-    )
-  )
-  const remainingRelatedBudget = CONFIG.maxTotalFetches - totalFetches
-  const maxRelatedByBudget = Math.floor(remainingRelatedBudget / 2)
-  const relatedTermsToFetch = relatedCandidates.slice(
-    0,
-    Math.min(maxRelatedByBudget, CONFIG.maxRelatedWordsPerRoot)
-  )
-
-  if (relatedTermsToFetch.length > 0) {
-    console.log(
-      `[Research] Fetching ${relatedTermsToFetch.length} related terms in parallel: ${relatedTermsToFetch.join(', ')}`
-    )
-
-    const relatedResults = await Promise.allSettled(
-      relatedTermsToFetch.map((term) => fetchRelatedTermResearch(term))
-    )
 
     for (const [index, result] of relatedResults.entries()) {
       if (result.status === 'fulfilled') {
@@ -533,8 +671,11 @@ export async function conductAgenticResearch(
       )
     }
   } else {
-    console.log('[Research] Skipping related terms (budget or no candidates found)')
+    console.log('[Research] Phase 3: Skipping expansion (budget or no candidates found)')
   }
+
+  await joinRemainingSources()
+  signal?.throwIfAborted()
 
   context.totalSourcesFetched = totalFetches
   console.log(`[Research] Complete. Total fetches: ${totalFetches}`)
@@ -560,18 +701,21 @@ function sanitizeSourceText(text: string, maxChars: number): string {
 
 /**
  * Build a rich prompt from research context for final synthesis.
- * Source data is wrapped in <source_data> XML tags for prompt injection defense
- * and truncated to CONFIG.maxSourceTextChars.
+ * Source data is wrapped in <source_data> XML tags for prompt injection
+ * defense and truncated to the tiered CONFIG.promptBudget caps (main
+ * sources carry the chains, so root/related/supplemental blocks get
+ * smaller budgets).
  */
 export function buildResearchPrompt(context: ResearchContext): string {
   const sections: string[] = []
-  const maxChars = CONFIG.maxSourceTextChars
+  const { mainSourceChars, supplementalSourceChars, rootSourceChars, relatedSourceChars } =
+    CONFIG.promptBudget
 
   // Main word section
   sections.push(`=== Main Word: "${context.mainWord.word}" ===`)
   if (context.mainWord.etymonline) {
     sections.push(
-      `\n<source_data name="etymonline">\n${sanitizeSourceText(context.mainWord.etymonline.text, maxChars)}\n</source_data>`
+      `\n<source_data name="etymonline">\n${sanitizeSourceText(context.mainWord.etymonline.text, mainSourceChars)}\n</source_data>`
     )
     if (context.mainWord.etymonline.relatedEntries?.length) {
       sections.push(
@@ -581,27 +725,27 @@ export function buildResearchPrompt(context: ResearchContext): string {
   }
   if (context.mainWord.wiktionary) {
     sections.push(
-      `\n<source_data name="wiktionary">\n${sanitizeSourceText(context.mainWord.wiktionary.text, maxChars)}\n</source_data>`
+      `\n<source_data name="wiktionary">\n${sanitizeSourceText(context.mainWord.wiktionary.text, mainSourceChars)}\n</source_data>`
     )
   }
   if (context.mainWord.wikipedia) {
     sections.push(
-      `\n<source_data name="wikipedia">\n${sanitizeSourceText(context.mainWord.wikipedia.text, maxChars)}\n</source_data>`
+      `\n<source_data name="wikipedia">\n${sanitizeSourceText(context.mainWord.wikipedia.text, supplementalSourceChars)}\n</source_data>`
     )
   }
   if (context.mainWord.freeDictionary) {
     sections.push(
-      `\n<source_data name="free_dictionary">\n${sanitizeSourceText(JSON.stringify(context.mainWord.freeDictionary), maxChars)}\n</source_data>`
+      `\n<source_data name="free_dictionary">\n${sanitizeSourceText(compactFreeDictionary(context.mainWord.freeDictionary), supplementalSourceChars)}\n</source_data>`
     )
   }
   if (context.mainWord.urbanDictionary) {
     sections.push(
-      `\n<source_data name="urban_dictionary">\n${sanitizeSourceText(context.mainWord.urbanDictionary.text, maxChars)}\n</source_data>`
+      `\n<source_data name="urban_dictionary">\n${sanitizeSourceText(context.mainWord.urbanDictionary.text, supplementalSourceChars)}\n</source_data>`
     )
   }
   if (context.mainWord.incelsWiki) {
     sections.push(
-      `\n<source_data name="incels_wiki">\n${sanitizeSourceText(context.mainWord.incelsWiki.text, maxChars)}\n</source_data>`
+      `\n<source_data name="incels_wiki">\n${sanitizeSourceText(context.mainWord.incelsWiki.text, supplementalSourceChars)}\n</source_data>`
     )
   }
 
@@ -615,7 +759,7 @@ export function buildResearchPrompt(context: ResearchContext): string {
     sections.push(`\n=== Root: "${rootData.root}" ===`)
     if (rootData.etymonlineData) {
       sections.push(
-        `<source_data name="etymonline">\n${sanitizeSourceText(rootData.etymonlineData.text, maxChars)}\n</source_data>`
+        `<source_data name="etymonline">\n${sanitizeSourceText(rootData.etymonlineData.text, rootSourceChars)}\n</source_data>`
       )
       if (rootData.etymonlineData.relatedEntries?.length) {
         sections.push(
@@ -625,7 +769,7 @@ export function buildResearchPrompt(context: ResearchContext): string {
     }
     if (rootData.wiktionaryData) {
       sections.push(
-        `<source_data name="wiktionary">\n${sanitizeSourceText(rootData.wiktionaryData.text, maxChars)}\n</source_data>`
+        `<source_data name="wiktionary">\n${sanitizeSourceText(rootData.wiktionaryData.text, rootSourceChars)}\n</source_data>`
       )
     }
     if (rootData.relatedTerms.length > 0) {
@@ -637,12 +781,12 @@ export function buildResearchPrompt(context: ResearchContext): string {
     sections.push(`\n=== Related Term: "${relatedData.term}" ===`)
     if (relatedData.etymonlineData) {
       sections.push(
-        `<source_data name="etymonline">\n${sanitizeSourceText(relatedData.etymonlineData.text, maxChars)}\n</source_data>`
+        `<source_data name="etymonline">\n${sanitizeSourceText(relatedData.etymonlineData.text, relatedSourceChars)}\n</source_data>`
       )
     }
     if (relatedData.wiktionaryData) {
       sections.push(
-        `<source_data name="wiktionary">\n${sanitizeSourceText(relatedData.wiktionaryData.text, maxChars)}\n</source_data>`
+        `<source_data name="wiktionary">\n${sanitizeSourceText(relatedData.wiktionaryData.text, relatedSourceChars)}\n</source_data>`
       )
     }
   }

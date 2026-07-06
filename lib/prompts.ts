@@ -164,33 +164,6 @@ DISPUTED OR UNCERTAIN ORIGINS:
 - Output ONLY valid JSON, no markdown or explanation`
 
 /**
- * Build the user prompt with source data (legacy simple format)
- */
-export function buildUserPrompt(
-  word: string,
-  etymonlineData: string | null,
-  wiktionaryData: string | null
-): string {
-  let prompt = `Analyze the etymology of: "${word}"\n\n`
-
-  if (etymonlineData) {
-    prompt += `=== Etymonline data ===\n${etymonlineData}\n\n`
-  }
-
-  if (wiktionaryData) {
-    prompt += `=== Wiktionary data ===\n${wiktionaryData}\n\n`
-  }
-
-  if (!etymonlineData && !wiktionaryData) {
-    prompt += `(No source data available - synthesize from your training knowledge)\n\n`
-  }
-
-  prompt += `Extract the etymology following the JSON schema in your instructions.`
-
-  return prompt
-}
-
-/**
  * Build a rich user prompt from agentic research context
  */
 export function buildRichUserPrompt(word: string, researchData: string): string {

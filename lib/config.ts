@@ -25,8 +25,15 @@ export const CONFIG = {
     general: { requests: 60, window: '1 m' },
   },
 
-  // Source data limits (prompt injection defense)
-  maxSourceTextChars: 3000,
+  // Per-block character budgets for synthesis prompt source data
+  // (prompt injection defense + token diet — tiered by evidentiary value)
+  promptBudget: {
+    mainSourceChars: 2000, // etymonline/wiktionary text for the searched word
+    supplementalSourceChars: 1200, // wikipedia / freeDictionary / urban / incels
+    rootSourceChars: 1000, // per-source text for each explored root
+    relatedSourceChars: 700, // per-source text for each related term
+    rootExtractionSourceChars: 1200, // per-source input to the LLM root-extraction fallback
+  },
 
   // Research pipeline
   maxRootsToExplore: 4,
@@ -37,11 +44,13 @@ export const CONFIG = {
   etymologyCacheTTL: 30 * 24 * 60 * 60, // 30 days
   audioCacheTTL: 365 * 24 * 60 * 60, // 1 year
   negativeCacheTTL: 6 * 60 * 60, // 6 hours — prevents repeated fetches for gibberish
+  sourceCacheTTL: 7 * 24 * 60 * 60, // 7 days — raw etymonline/wiktionary page data
 
   // Timeouts (milliseconds)
   timeouts: {
     source: 5_000,
-    llm: 120_000, // OpenRouter Responses API
+    llm: 90_000, // synthesis call — benchmark p95 is ~22s, 90s leaves retry room in maxDuration
+    rootExtraction: 15_000, // ~100-token output; no reason to inherit the synthesis timeout
     tts: 8_000, // ElevenLabs
   },
 
