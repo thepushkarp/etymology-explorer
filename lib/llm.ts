@@ -267,11 +267,14 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
   }
 }
 
-async function callLlm(userPrompt: string): Promise<{
+async function callLlm(
+  userPrompt: string,
+  model?: string
+): Promise<{
   text: string
   usage: LlmUsage
 }> {
-  const request = buildSynthesisRequest(userPrompt)
+  const request = buildSynthesisRequest(userPrompt, model)
   request.instructions = SYSTEM_PROMPT
 
   let response
@@ -290,7 +293,10 @@ async function callLlm(userPrompt: string): Promise<{
   }
 }
 
-async function generateEtymologyResponse(userPrompt: string): Promise<{
+async function generateEtymologyResponse(
+  userPrompt: string,
+  model?: string
+): Promise<{
   result: EtymologyResult
   usage: LlmUsage
 }> {
@@ -300,7 +306,7 @@ async function generateEtymologyResponse(userPrompt: string): Promise<{
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const { text, usage } = await callLlm(userPrompt)
+      const { text, usage } = await callLlm(userPrompt, model)
 
       try {
         const result = parseGeneratedJson(text)
@@ -451,12 +457,13 @@ function finalizeResult(
 }
 
 export async function synthesizeFromResearch(
-  researchContext: ResearchContext
+  researchContext: ResearchContext,
+  options?: { model?: string }
 ): Promise<SynthesisResult> {
   const researchData = buildResearchPrompt(researchContext)
   const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
 
-  const { result, usage } = await generateEtymologyResponse(userPrompt)
+  const { result, usage } = await generateEtymologyResponse(userPrompt, options?.model)
 
   return {
     result: finalizeResult(result, researchContext, 'standard'),
