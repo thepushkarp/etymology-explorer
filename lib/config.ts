@@ -16,7 +16,6 @@ export const CONFIG = {
   // Input validation
   maxWordLength: 35,
   wordPattern: /^[\p{L}][\p{L}'\-]*[\p{L}]$|^[\p{L}]$/u, // Unicode letters + internal '/-
-  maxRequestBodyBytes: 1024,
 
   // Rate limits (per IP)
   rateLimit: {

@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'crypto'
 import { getSpendStats } from '@/lib/costGuard'
+import { getCounters } from '@/lib/counters'
+import { getEnv } from '@/lib/env'
 
 export async function GET(request: NextRequest) {
+  let adminSecret: string | undefined
+  try {
+    adminSecret = getEnv().ADMIN_SECRET
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Service configuration error' },
+      { status: 503 }
+    )
+  }
+
   const secret = request.headers.get('x-admin-secret')
-  const adminSecret = process.env.ADMIN_SECRET
 
   // Timing-safe comparison prevents timing attacks on the secret
   const authorized =
@@ -17,7 +28,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
 
-  const spend = await getSpendStats()
+  const [spend, counters] = await Promise.all([getSpendStats(), getCounters()])
 
   if (!spend) {
     return NextResponse.json(
@@ -31,6 +42,7 @@ export async function GET(request: NextRequest) {
     data: {
       month: spend.period,
       spend,
+      counters,
     },
   })
 }
