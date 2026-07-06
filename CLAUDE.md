@@ -60,9 +60,11 @@ GET /api/etymology?word=X[&stream=true]   (maxDuration 300s)
     │               wiktionary) + main-word related-term pages (etymonline only),
     │               max 16 total fetches
     ├── Typo check (lib/spellcheck.ts, Levenshtein distance vs GRE wordlist)
-    ├── LLM synthesis (lib/llm.ts)
-    │   ├── Structured outputs via OpenRouter Responses JSON schema mode
-    │   └── Post-processing: enrichAncestryGraph() matches stages to evidence, assigns confidence
+    ├── LLM synthesis (lib/llm.ts — one entrypoint for streaming and unary)
+    │   ├── OpenRouter Responses json_schema STRICT mode (schema in lib/schemas/llm-schema.ts)
+    │   ├── stream=true: synthesis_section SSE event per closed top-level field (render order)
+    │   └── Post-processing: null-stripping, enrichAncestryGraph() matches stages to evidence,
+    │       assigns confidence, attachSources() writes real source attributions
     ├── Cache result in Redis
     └── Response: EtymologyResult with grounded ancestry stages
 ```
@@ -142,22 +144,32 @@ Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API cos
 
 ### LLM Integration
 
-The app uses **OpenRouter Responses structured JSON schema mode** for guaranteed valid JSON.
+Both LLM calls (root extraction and synthesis) use **OpenRouter Responses `json_schema` strict
+mode** (`text.format = { type: 'json_schema', strict: true, ... }`) with
+`provider: { require_parameters: true }`, so requests only route to hosts that honor the schema
+and the output is guaranteed-shape JSON.
 
 **Schema split** (critical for maintainers):
 
-- `lib/schemas/llm-schema.ts` - JSON Schema sent to LLM (defines structure for generation)
+- `lib/schemas/llm-schema.ts` - Strict-mode JSON Schema sent to the LLM. Every property is
+  required, `additionalProperties: false` everywhere, optionality expressed as null unions, and
+  top-level properties declared in **render order** (word → sources) — strict mode emits keys in
+  schema order, which the section scanner and progressive rendering depend on.
 - `lib/schemas/etymology.ts` - Zod schema for cache validation. Uses `.passthrough()` for forward compat.
-- **Must stay in sync manually** - post-processing fields (confidence, evidence) only exist in Zod schema, not LLM schema
+- **Sync is enforced mechanically**: `lib/schemas/llm-schema.test.ts` walks both schemas and fails
+  on drift (key sets, required lists, null unions, leaf types). Post-processing fields
+  (confidence, evidence, isReconstructed, source url/word) are exempted explicitly in that test.
 
-LLM receives:
+**Synthesis flow** (`lib/llm.ts`, single `synthesizeFromResearch` entrypoint):
 
-1. Aggregated source data from research pipeline
-2. Pre-parsed etymological chains from etymologyParser.ts
-3. JSON schema from `lib/schemas/llm-schema.ts`
-4. System prompt from `lib/prompts.ts`
-
-**Note**: OpenRouter Responses calls use `text.format = { type: 'json_schema', ... }`.
+1. Prompt: aggregated source data + pre-parsed chains (research pipeline) + system prompt
+   from `lib/prompts.ts` (content/grounding rules only — shape is enforced by the schema)
+2. Transport: passing an `onSection` callback streams the response and fires once per closed
+   top-level field (via `lib/sectionScanner.ts`); omitting it makes a unary call
+3. Parse: `parseGeneratedJson` fallback parse, then `stripNullsDeep` converts strict-mode nulls
+   back to absent fields before sanitizers and Zod validation
+4. Retry: malformed output retries once on the unary path, never on the streaming path
+   (sections already on the wire cannot be retracted)
 
 ### State Management
 
@@ -178,7 +190,7 @@ LLM receives:
 
 **Key hooks**:
 
-- `lib/hooks/useStreamingEtymology.ts` - Main streaming search state management (SSE progress + token streaming)
+- `lib/hooks/useStreamingEtymology.ts` - Main streaming search state management (SSE progress + synthesis_section events)
 - `lib/hooks/useEtymologySearch.ts` - Non-streaming search state management (idle/loading/success/error)
 - `lib/hooks/useLocalStorage.ts` - Persistent client state
 - `lib/hooks/useHistory.ts` - Search history management
@@ -250,13 +262,15 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 **Core Pipeline:**
 
 - `lib/research.ts` - Agentic research orchestrator (6-source parallel fetch)
-- `lib/llm.ts` - LLM client (OpenRouter Responses API for `openai/gpt-5.4-mini`)
-- `lib/prompts.ts` - System prompt for LLM synthesis
+- `lib/llm.ts` - LLM client (OpenRouter Responses API for `openai/gpt-5.4-mini`; unified streaming/unary synthesis)
+- `lib/sectionScanner.ts` - Incremental scanner emitting each top-level JSON field as it closes (powers synthesis_section SSE events)
+- `lib/responseAdapter.ts` - SSE/JSON response adapter for the etymology route's early returns
+- `lib/prompts.ts` - System prompt for LLM synthesis (content/grounding rules; shape enforced by schema)
 
 **Schema & Types:**
 
-- `lib/schemas/llm-schema.ts` - JSON Schema for LLM structured outputs
-- `lib/schemas/etymology.ts` - Zod schema for cache validation (must stay in sync with LLM schema manually)
+- `lib/schemas/llm-schema.ts` - Strict-mode JSON Schema for LLM structured outputs (render-order keys, null-union optionality)
+- `lib/schemas/etymology.ts` - Zod schema for cache validation (sync with the LLM schema is enforced by `lib/schemas/llm-schema.test.ts`)
 - `lib/types.ts` - All TypeScript interfaces
 
 **Data Sources:**
