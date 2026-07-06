@@ -92,10 +92,11 @@ function buildRequest(
   input: string,
   maxOutputTokens: number,
   format: JsonSchemaFormat | TextFormat,
-  reasoningEffort: ReasoningEffort
+  reasoningEffort: ReasoningEffort,
+  model?: string
 ): OpenRouterRequest {
   return {
-    model: CONFIG.model,
+    model: model ?? CONFIG.model,
     input,
     reasoning: { effort: reasoningEffort },
     max_output_tokens: maxOutputTokens,
@@ -103,8 +104,8 @@ function buildRequest(
   }
 }
 
-export function buildSynthesisRequest(input: string): OpenRouterRequest {
-  return buildRequest(input, CONFIG.synthesisMaxTokens, { type: 'text' }, 'low')
+export function buildSynthesisRequest(input: string, model?: string): OpenRouterRequest {
+  return buildRequest(input, CONFIG.synthesisMaxTokens, { type: 'text' }, 'low', model)
 }
 
 export function buildRootExtractionRequest(input: string): OpenRouterRequest {
