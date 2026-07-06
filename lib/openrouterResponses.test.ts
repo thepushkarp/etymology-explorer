@@ -29,6 +29,9 @@ describe('openrouterResponses', () => {
 
     expect(request.model).toBe('openai/gpt-5.4-mini')
     expect(request.reasoning).toEqual({ effort: 'none' })
+    // require_parameters is synthesis-only: adding it here slow-routed the
+    // ~100-token extraction call from ~1s to 15s+ in live tests.
+    expect('provider' in request).toBe(false)
     expect(request.max_output_tokens).toBe(100)
     expect(request.text.format).toMatchObject({
       type: 'json_schema',

@@ -37,7 +37,9 @@ export type OpenRouterRequest = {
   text: { format: JsonSchemaFormat | TextFormat }
   // Route only to providers that support every request parameter — without
   // this, OpenRouter may silently drop text.format on non-supporting hosts.
-  provider: { require_parameters: true }
+  // Synthesis-only: on the root-extraction call this measurably slow-routed
+  // (~1s → 15s+), and a dropped format there is already caught downstream.
+  provider?: { require_parameters: true }
   instructions?: string
 }
 
@@ -105,12 +107,11 @@ function buildRequest(
     reasoning: { effort: reasoningEffort },
     max_output_tokens: maxOutputTokens,
     text: { format },
-    provider: { require_parameters: true },
   }
 }
 
 export function buildSynthesisRequest(input: string, model?: string): OpenRouterRequest {
-  return buildRequest(
+  const request = buildRequest(
     input,
     CONFIG.synthesisMaxTokens,
     {
@@ -122,6 +123,8 @@ export function buildSynthesisRequest(input: string, model?: string): OpenRouter
     'low',
     model
   )
+  request.provider = { require_parameters: true }
+  return request
 }
 
 export function buildRootExtractionRequest(input: string): OpenRouterRequest {
