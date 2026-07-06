@@ -207,7 +207,7 @@ When adding UI: _"Would this feel at home in a beautifully typeset etymology dic
 | Endpoint             | Method | Purpose                                                                           |
 | -------------------- | ------ | --------------------------------------------------------------------------------- |
 | `/api/etymology`     | GET    | Main synthesis - `?word=X`; optional `?stream=true` for SSE (server-side API key) |
-| `/api/suggestions`   | GET    | Typo correction - `?q=word`                                                       |
+| `/api/suggestions`   | GET    | Autocomplete + typo suggestions - `?q=word`                                       |
 | `/api/random-word`   | GET    | Random GRE word (crypto randomness)                                               |
 | `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, 8s timeout)                                 |
 | `/api/admin/stats`   | GET    | Budget usage stats (requires `x-admin-secret` header)                             |

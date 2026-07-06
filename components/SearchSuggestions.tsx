@@ -1,10 +1,11 @@
 'use client'
 
-import greWordsData from '@/data/gre-words.json'
+import { useEffect, useMemo, useState } from 'react'
+import { rankMatches } from '@/lib/suggestionRanking'
+import type { ApiResponse, WordSuggestion } from '@/lib/types'
 
 interface SearchSuggestionsProps {
-  query: string
-  history: string[]
+  items: SuggestionItem[]
   isVisible: boolean
   onSelect: (word: string) => void
   selectedIndex: number
@@ -19,83 +20,82 @@ export interface SuggestionItem {
 
 const RECENT_LIMIT = 3
 const SUGGESTED_LIMIT = 5
-const MIN_QUERY_LENGTH = 2
-const WORDLIST: string[] = greWordsData.words
+export const MIN_QUERY_LENGTH = 2
 
-function rankMatches(words: string[], normalizedQuery: string, limit: number): string[] {
-  const seen = new Set<string>()
-  const prefixMatches: string[] = []
-  const substringMatches: string[] = []
-
-  for (const word of words) {
-    if (seen.has(word)) {
-      continue
-    }
-
-    if (word.startsWith(normalizedQuery)) {
-      prefixMatches.push(word)
-      seen.add(word)
-    }
-  }
-
-  for (const word of words) {
-    if (seen.has(word)) {
-      continue
-    }
-
-    if (word.includes(normalizedQuery)) {
-      substringMatches.push(word)
-      seen.add(word)
-    }
-  }
-
-  return [...prefixMatches, ...substringMatches].slice(0, limit)
-}
-
-export function getSuggestionItems(query: string, history: string[]): SuggestionItem[] {
+/**
+ * Suggestion items for a query: recent searches matched locally, wordlist
+ * matches fetched from /api/suggestions (keeps the GRE wordlist out of the
+ * client bundle). Callers pass an already-debounced query; stale requests
+ * are cancelled, and previously fetched words that still match the query are
+ * kept visible while the fresh response is in flight.
+ */
+export function useSuggestionItems(query: string, history: string[]): SuggestionItem[] {
   const normalizedQuery = query.toLowerCase().trim()
+  const [fetchedWords, setFetchedWords] = useState<string[]>([])
 
-  if (normalizedQuery.length < MIN_QUERY_LENGTH) {
-    return []
-  }
+  useEffect(() => {
+    if (normalizedQuery.length < MIN_QUERY_LENGTH) {
+      return
+    }
 
-  const normalizedHistory = history
-    .map((word) => word.toLowerCase().trim())
-    .filter((word, index, allWords) => word.length > 0 && allWords.indexOf(word) === index)
+    const controller = new AbortController()
 
-  const recent = rankMatches(normalizedHistory, normalizedQuery, RECENT_LIMIT).map((word) => ({
-    word,
-    category: 'recent' as const,
-  }))
+    fetch(`/api/suggestions?q=${encodeURIComponent(normalizedQuery)}`, {
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) return null
+        return response.json() as Promise<ApiResponse<{ suggestions: WordSuggestion[] }>>
+      })
+      .then((payload) => {
+        if (payload?.success && payload.data) {
+          setFetchedWords(payload.data.suggestions.map((suggestion) => suggestion.word))
+        }
+      })
+      .catch((fetchError) => {
+        if ((fetchError as Error).name !== 'AbortError') {
+          console.error('Failed to fetch search suggestions:', fetchError)
+        }
+      })
 
-  const recentWords = new Set(recent.map((item) => item.word))
-  const filteredWordlist = WORDLIST.filter((word) => !recentWords.has(word))
+    return () => controller.abort()
+  }, [normalizedQuery])
 
-  const suggested = rankMatches(filteredWordlist, normalizedQuery, SUGGESTED_LIMIT).map((word) => ({
-    word,
-    category: 'suggested' as const,
-  }))
+  return useMemo(() => {
+    if (normalizedQuery.length < MIN_QUERY_LENGTH) {
+      return []
+    }
 
-  return [...recent, ...suggested]
+    const normalizedHistory = history
+      .map((word) => word.toLowerCase().trim())
+      .filter((word, index, allWords) => word.length > 0 && allWords.indexOf(word) === index)
+
+    const recent = rankMatches(normalizedHistory, normalizedQuery, RECENT_LIMIT).map((word) => ({
+      word,
+      category: 'recent' as const,
+    }))
+
+    const recentWords = new Set(recent.map((item) => item.word))
+    const suggested = fetchedWords
+      .filter((word) => !recentWords.has(word) && word.includes(normalizedQuery))
+      .slice(0, SUGGESTED_LIMIT)
+      .map((word) => ({ word, category: 'suggested' as const }))
+
+    return [...recent, ...suggested]
+  }, [normalizedQuery, history, fetchedWords])
 }
 
 export function SearchSuggestions({
-  query,
-  history,
+  items,
   isVisible,
   onSelect,
   selectedIndex,
 }: SearchSuggestionsProps) {
-  if (!isVisible) {
+  if (!isVisible || items.length === 0) {
     return null
   }
 
-  const suggestions = getSuggestionItems(query, history)
-  if (suggestions.length === 0) {
-    return null
-  }
-
-  const recentCount = suggestions.filter((item) => item.category === 'recent').length
+  const recentCount = items.filter((item) => item.category === 'recent').length
 
   return (
     <div
@@ -111,7 +111,7 @@ export function SearchSuggestions({
             Recent
           </h3>
           <ul className="space-y-1">
-            {suggestions.slice(0, recentCount).map((item, index) => (
+            {items.slice(0, recentCount).map((item, index) => (
               <li key={`recent-${item.word}`}>
                 <button
                   type="button"
@@ -135,13 +135,13 @@ export function SearchSuggestions({
         </section>
       )}
 
-      {suggestions.length > recentCount && (
+      {items.length > recentCount && (
         <section className="px-4 py-3">
           <h3 className="px-2 pb-2 text-[10px] uppercase tracking-[0.2em] text-charcoal-light/75">
             Suggestions
           </h3>
           <ul className="space-y-1">
-            {suggestions.slice(recentCount).map((item, index) => {
+            {items.slice(recentCount).map((item, index) => {
               const absoluteIndex = recentCount + index
 
               return (

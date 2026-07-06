@@ -119,7 +119,7 @@ etymology-explorer/
 │   │   ├── etymology/      # Main etymology synthesis endpoint (GET)
 │   │   ├── pronunciation/  # TTS audio endpoint (ElevenLabs)
 │   │   ├── random-word/    # Random word selection
-│   │   └── suggestions/    # Typo correction suggestions
+│   │   └── suggestions/    # Autocomplete + typo suggestions
 │   ├── faq/                # FAQ page with structured data
 │   ├── learn/              # Educational content pages
 │   │   └── what-is-etymology/
@@ -184,7 +184,7 @@ etymology-explorer/
 | -------------------- | ------ | ------------------------------------------------------------- | ----------------- |
 | `/api/etymology`     | GET    | Synthesize etymology (`?word=X`, optional `?stream=true` SSE) | No (rate-limited) |
 | `/api/pronunciation` | GET    | Get pronunciation audio                                       | No                |
-| `/api/suggestions`   | GET    | Get typo correction suggestions                               | No                |
+| `/api/suggestions`   | GET    | Get autocomplete and typo suggestions                         | No                |
 | `/api/random-word`   | GET    | Get a random word                                             | No                |
 | `/api/admin/stats`   | GET    | Get budget/usage statistics                                   | Admin secret      |
 
