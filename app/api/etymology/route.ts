@@ -272,6 +272,13 @@ export async function GET(request: NextRequest) {
       while (Date.now() - startedAt < streamWaiterMaxWaitMs) {
         await sleep(waiterPollIntervalMs)
 
+        // A disconnected client can't receive the result — stop polling
+        // (and never promote) so the function isn't kept alive for up to
+        // 150s; the stream's abort handling closes things out.
+        if (request.signal.aborted) {
+          throw new DOMException('The operation was aborted', 'AbortError')
+        }
+
         const result = await getCachedEtymology(normalizedWord)
         if (result) {
           return { kind: 'result', result }
