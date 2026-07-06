@@ -69,27 +69,14 @@ export async function getCachedEtymology(word: string): Promise<EtymologyResult 
 }
 
 /**
- * Cache etymology result for future lookups
+ * Cache etymology result for future lookups.
+ * No write-side schema validation: every result passing through here was
+ * already validated by finalizeResult in lib/llm.ts, and reads re-validate
+ * for forward compatibility.
  */
 export async function cacheEtymology(word: string, result: EtymologyResult): Promise<void> {
   const redis = getRedis()
   if (!redis) return
-
-  // Validate before writing to prevent caching invalid data
-  const validated = EtymologyResultSchema.safeParse(result)
-  if (!validated.success) {
-    console.error(
-      '[Cache] Refusing to cache invalid result for "%s":',
-      word,
-      validated.error.issues[0]?.message
-    )
-    emitSecurityEvent({
-      type: 'schema_validation_fail',
-      timestamp: Date.now(),
-      detail: { word, source: 'cache_write', issue: validated.error.issues[0]?.message },
-    })
-    return
-  }
 
   const key = `${ETYMOLOGY_PREFIX}${word.toLowerCase().trim()}`
   try {
