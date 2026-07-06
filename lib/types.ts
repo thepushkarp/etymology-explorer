@@ -24,6 +24,7 @@ export interface SourceReference {
     | 'freeDictionary'
     | 'urbanDictionary'
     | 'incelsWiki'
+    | 'wikipedia'
     | 'synthesized'
   url?: string // URL of the actual page used (undefined for 'synthesized')
   word?: string // The specific word/root that was looked up (undefined for 'synthesized')

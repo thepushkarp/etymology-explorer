@@ -5,7 +5,7 @@ import { EtymologyResult, SourceReference } from '@/lib/types'
 import { AncestryTree } from './AncestryTree'
 import { PronunciationButton } from './PronunciationButton'
 import { RelatedWordsList } from './RelatedWordsList'
-import HistoricalContext from './HistoricalContext'
+import HistoricalContext, { wikipediaSourceUrl } from './HistoricalContext'
 import UsageTimeline from './UsageTimeline'
 
 interface EtymologyCardProps {
@@ -30,6 +30,7 @@ const SOURCE_LABELS: Record<string, string> = {
   freeDictionary: 'Free Dictionary',
   urbanDictionary: 'Urban Dictionary',
   incelsWiki: 'Incels Wiki',
+  wikipedia: 'Wikipedia',
   synthesized: 'AI Synthesis',
 }
 
@@ -377,7 +378,10 @@ export const EtymologyCard = memo(function EtymologyCard({
         )}
 
         {!isSimple && result.rawSources?.wikipedia && (
-          <HistoricalContext wikipediaExtract={result.rawSources.wikipedia} />
+          <HistoricalContext
+            wikipediaExtract={result.rawSources.wikipedia}
+            sourceUrl={wikipediaSourceUrl(result.sources)}
+          />
         )}
 
         {result.roots.length > 0 && (
