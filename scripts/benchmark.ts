@@ -78,6 +78,8 @@ interface WordBenchmark {
   }
   synthesisTokens: { input: number; output: number }
   extractionTokens: { input: number; output: number }
+  /** OpenRouter-reported USD cost per call, when the provider returns it. */
+  costUSD: { synthesis: number | null; extraction: number | null }
   rootProvenance: RootProvenance
   rootCount: number
   ancestryStageCount: number
@@ -190,6 +192,10 @@ async function benchmarkWord(
         input: context.llmUsage?.inputTokens ?? 0,
         output: context.llmUsage?.outputTokens ?? 0,
       },
+      costUSD: {
+        synthesis: usage.costUSD ?? null,
+        extraction: context.llmUsage ? (context.llmUsage.costUSD ?? null) : null,
+      },
       rootProvenance,
       rootCount: result.roots.length,
       ancestryStageCount: stages.length,
@@ -217,6 +223,7 @@ async function benchmarkWord(
       },
       synthesisTokens: { input: 0, output: 0 },
       extractionTokens: { input: 0, output: 0 },
+      costUSD: { synthesis: null, extraction: null },
       rootProvenance: 'none',
       rootCount: 0,
       ancestryStageCount: 0,
@@ -299,6 +306,8 @@ interface Aggregates {
   synthesisLatencyP50: number
   ungroundedReconstructed: number
   confidence: ConfidenceDistribution
+  /** Sum of OpenRouter-reported per-call costs; null when no call reported one. */
+  reportedCostUSD: number | null
 }
 
 function percentile(sorted: number[], fraction: number): number {
@@ -338,6 +347,15 @@ function aggregate(summary: BenchmarkSummary): Aggregates {
     0
   )
 
+  // costUSD may be absent in summaries from older harness versions.
+  const reportedCosts = okRecords.flatMap((record) => [
+    record.costUSD?.synthesis,
+    record.costUSD?.extraction,
+  ])
+  const knownCosts = reportedCosts.filter((cost): cost is number => typeof cost === 'number')
+  const reportedCostUSD =
+    knownCosts.length > 0 ? knownCosts.reduce((sum, cost) => sum + cost, 0) : null
+
   return {
     okCount: okRecords.length,
     schemaValidCount: summary.words.filter((record) => record.schemaValid).length,
@@ -355,6 +373,7 @@ function aggregate(summary: BenchmarkSummary): Aggregates {
       0
     ),
     confidence,
+    reportedCostUSD,
   }
 }
 
@@ -371,6 +390,10 @@ function formatAggregates(summary: BenchmarkSummary): string {
     `Latency p50: ${agg.totalLatencyP50}ms total, ${agg.synthesisLatencyP50}ms synthesis`,
     `Confidence: ${c.high} high / ${c.medium} medium / ${c.low} low / ${c.unscored} unscored`,
     `Ungrounded reconstructed stages: ${agg.ungroundedReconstructed}`,
+    agg.reportedCostUSD === null
+      ? 'Reported cost: not returned by provider'
+      : `Reported cost: $${agg.reportedCostUSD.toFixed(4)} total ` +
+        `($${(agg.reportedCostUSD / Math.max(1, agg.okCount)).toFixed(5)}/word)`,
   ].join('\n')
 }
 
