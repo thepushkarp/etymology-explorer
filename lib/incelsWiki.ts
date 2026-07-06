@@ -35,7 +35,10 @@ function normalizeExtract(text: string): string {
  * Fetch supplementary source text from incels.wiki.
  * Returns null on misses/errors (fail-open).
  */
-export async function fetchIncelsWiki(word: string): Promise<SourceData | null> {
+export async function fetchIncelsWiki(
+  word: string,
+  signal?: AbortSignal
+): Promise<SourceData | null> {
   const normalizedWord = word.toLowerCase().trim()
 
   const url = new URL(INCELS_WIKI_API)
@@ -55,7 +58,8 @@ export async function fetchIncelsWiki(word: string): Promise<SourceData | null> 
           'User-Agent': 'EtymologyExplorer/1.0 (educational project)',
         },
       },
-      CONFIG.timeouts.source
+      CONFIG.timeouts.source,
+      signal
     )
 
     if (!response.ok) return null

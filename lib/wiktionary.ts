@@ -6,6 +6,7 @@
 import { fetchWithTimeout } from './fetchUtils'
 import { safeError } from './errorUtils'
 import { CONFIG } from './config'
+import { getCachedSource, cacheSource } from './sourceCache'
 
 interface WiktionaryResponse {
   query?: {
@@ -24,13 +25,56 @@ export interface WiktionaryResult {
 }
 
 /**
- * Fetch raw etymology text from Wiktionary
+ * Extract the Etymology subsection(s) of the English language section from a
+ * plaintext MediaWiki extract (exsectionformat=wiki: "== English ==" headings).
+ *
+ * Wiktionary pages cover every language that spells the word this way; the
+ * broad fallback regex happily returns a Danish or Latin etymology when the
+ * English one is what the pipeline needs. Returns null when no English
+ * Etymology section is found so the caller can fall back.
+ */
+export function extractEnglishEtymology(extract: string): string | null {
+  const englishHeading = extract.match(/^==\s*English\s*==\s*$/m)
+  if (englishHeading?.index === undefined) return null
+
+  const sectionStart = englishHeading.index + englishHeading[0].length
+  const rest = extract.slice(sectionStart)
+  const nextLanguage = rest.match(/^==[^=\n][^\n]*==\s*$/m)
+  const englishSection = nextLanguage ? rest.slice(0, nextLanguage.index) : rest
+
+  // Collect "=== Etymology ===" / "=== Etymology 1 ===" subsections (any depth).
+  const sections: string[] = []
+  const headingPattern = /^={3,}\s*Etymology(?:\s+\d+)?\s*={3,}\s*$/gim
+  let match
+  while ((match = headingPattern.exec(englishSection)) !== null) {
+    const bodyStart = match.index + match[0].length
+    const body = englishSection.slice(bodyStart)
+    const nextHeading = body.match(/^=+[^=\n][^\n]*=+\s*$/m)
+    const section = (nextHeading ? body.slice(0, nextHeading.index) : body).trim()
+    if (section.length > 0) {
+      sections.push(section)
+    }
+    if (sections.length >= 2) break // Etymology 1 + 2 cover polysemous words
+  }
+
+  return sections.length > 0 ? sections.join('\n\n') : null
+}
+
+/**
+ * Fetch raw etymology text from Wiktionary (7d Redis source cache in front)
  * @param word - The word to look up
+ * @param signal - Optional caller cancellation signal (e.g. client disconnect)
  * @returns Object with text and URL, or null if not found
  */
-export async function fetchWiktionary(word: string): Promise<WiktionaryResult | null> {
+export async function fetchWiktionary(
+  word: string,
+  signal?: AbortSignal
+): Promise<WiktionaryResult | null> {
   const normalizedWord = word.toLowerCase().trim()
   const pageUrl = `https://en.wiktionary.org/wiki/${encodeURIComponent(normalizedWord)}`
+
+  const cached = await getCachedSource('wiktionary', normalizedWord)
+  if (cached) return cached
 
   // Wiktionary API endpoint - get plain text extract
   const url = new URL('https://en.wiktionary.org/w/api.php')
@@ -49,7 +93,8 @@ export async function fetchWiktionary(word: string): Promise<WiktionaryResult | 
           'User-Agent': 'EtymologyExplorer/1.0 (educational project)',
         },
       },
-      CONFIG.timeouts.source
+      CONFIG.timeouts.source,
+      signal
     )
 
     if (!response.ok) {
@@ -70,12 +115,16 @@ export async function fetchWiktionary(word: string): Promise<WiktionaryResult | 
       return null
     }
 
-    // Extract just the etymology section if present
+    // Prefer the English Etymology section; fall back to the old broad match
     const extract = page.extract
+    const englishEtymology = extractEnglishEtymology(extract)
     const etymologyMatch = extract.match(/Etymology[\s\S]*?(?=\n\n[A-Z]|\n\nPronunciation|$)/i)
-    const text = etymologyMatch ? etymologyMatch[0].trim() : extract.slice(0, 1000)
+    const text =
+      englishEtymology ?? (etymologyMatch ? etymologyMatch[0].trim() : extract.slice(0, 1000))
 
-    return { text, url: pageUrl }
+    const result = { text, url: pageUrl }
+    void cacheSource('wiktionary', normalizedWord, result)
+    return result
   } catch (error) {
     console.error('Wiktionary fetch error:', safeError(error))
     return null
