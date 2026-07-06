@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { usePronunciation } from '@/lib/hooks/usePronunciation'
 
 interface PronunciationButtonProps {
   word: string
@@ -12,62 +12,7 @@ interface PronunciationButtonProps {
  * Fetches audio on-demand from ElevenLabs TTS API and caches locally.
  */
 export function PronunciationButton({ word, className = '' }: PronunciationButtonProps) {
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  const objectUrlRef = useRef<string | null>(null)
-
-  const play = useCallback(async () => {
-    setError(null)
-
-    // Audio already loaded - just play
-    if (audioRef.current) {
-      setIsPlaying(true)
-      try {
-        await audioRef.current.play()
-      } catch {
-        setError('Playback failed')
-        setIsPlaying(false)
-      }
-      return
-    }
-
-    // Fetch and play
-    setIsLoading(true)
-    try {
-      const response = await fetch(`/api/pronunciation?word=${encodeURIComponent(word)}`)
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.error || `HTTP ${response.status}`)
-      }
-
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      objectUrlRef.current = url
-
-      const audio = new Audio(url)
-      audio.onended = () => setIsPlaying(false)
-      audio.onerror = () => {
-        setError('Playback failed')
-        setIsPlaying(false)
-      }
-
-      audioRef.current = audio
-      setIsPlaying(true)
-      await audio.play()
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load'
-      setError(message)
-      console.error('[PronunciationButton] Error:', err)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [word])
-
-  // Cleanup object URL on unmount is handled by browser garbage collection
-  // when the audio element is dereferenced
+  const { play, isPlaying, isLoading, error } = usePronunciation(word)
 
   return (
     <button
