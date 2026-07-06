@@ -26,7 +26,11 @@ export function ShareMenu({ result }: ShareMenuProps) {
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href)
+      const word = result.word.trim().toLowerCase()
+      const shareUrl = word
+        ? `${window.location.origin}/word/${encodeURIComponent(word)}`
+        : window.location.href
+      await navigator.clipboard.writeText(shareUrl)
       showFeedback()
       setIsOpen(false)
     } catch (err) {
