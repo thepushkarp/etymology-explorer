@@ -45,6 +45,23 @@ describe('extractRootsCpu', () => {
     expect(extractRootsCpu('telephone', null, wiktionary, [])).toEqual(['tele', 'phone'])
   })
 
+  test('classical: parses formulas with parenthetical glosses between morphemes (telephone)', () => {
+    const wiktionary =
+      'The noun is derived from tele- (prefix meaning ‘from a distance’) ' +
+      `+${LTR_MARK} -phone (suffix denoting a device which makes a sound), ` +
+      'modelled after German Telephon.'
+
+    expect(extractRootsCpu('telephone', null, wiktionary, [])).toEqual(['tele', 'phone'])
+  })
+
+  test('classical: parses quoted glosses and folds diacritics (telephone, etymonline style)', () => {
+    const etymonline =
+      '1835, from French téléphone (c. 1830), from télé- "far" (see tele- ) ' +
+      '+ phōnē "sound, voice"'
+
+    expect(extractRootsCpu('telephone', etymonline, null, [])).toEqual(['tele', 'phone'])
+  })
+
   test('classical: parses multi-part equivalent-to formula (autobiography)', () => {
     const wiktionary =
       `From auto- +${LTR_MARK} biography, ` +

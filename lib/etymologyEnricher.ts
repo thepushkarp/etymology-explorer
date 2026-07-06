@@ -105,10 +105,13 @@ function buildEvidence(matches: MatchResult[]): StageEvidence[] {
 }
 
 /**
- * Check if a stage represents a reconstructed form (PIE, Proto-*)
+ * Check if a stage represents a reconstructed form (PIE, Proto-*).
+ * The stage comes straight from LLM output and is only Zod-validated
+ * AFTER enrichment, so missing fields must not crash here.
  */
 function isReconstructedStage(stage: AncestryStage): boolean {
-  if (stage.form.startsWith('*')) return true
+  if (typeof stage.form === 'string' && stage.form.startsWith('*')) return true
+  if (typeof stage.stage !== 'string') return false
   const lower = stage.stage.toLowerCase()
   if (lower.includes('proto-indo-european') || lower === 'pie') return true
   if (lower.startsWith('proto-')) return true
@@ -207,14 +210,15 @@ export function pruneUngroundedStages(graph: AncestryGraph): number {
     const attestedForms = new Set<string>()
     for (const branch of graph.branches) {
       for (const stage of branch.stages) {
-        if (stage.isReconstructed) {
+        if (stage.isReconstructed && typeof stage.form === 'string') {
           attestedForms.add(normalize(stage.form))
         }
       }
     }
 
+    // pieRoot comes from unvalidated LLM output — drop malformed entries
     graph.convergencePoints = graph.convergencePoints
-      .filter((cp) => attestedForms.has(normalize(cp.pieRoot)))
+      .filter((cp) => typeof cp.pieRoot === 'string' && attestedForms.has(normalize(cp.pieRoot)))
       .map((cp) => ({
         ...cp,
         branchIndices: cp.branchIndices

@@ -185,22 +185,32 @@ const LOW_SIGNAL_AFFIXES = new Set([
  *   "From doom +\u200E scrolling"
  *   "equivalent to in- +\u200E credible"
  *   "By surface analysis, tele- +\u200E -phone"
- * Wiktionary inserts U+200E LEFT-TO-RIGHT MARK after "+" — strip it before
- * matching (the callers do this via extractDerivationParts).
+ *   "derived from tele- (prefix meaning 'from a distance') +\u200E -phone"
+ *   'from télé- "far" (see tele- ) + phōnē "sound, voice"'
+ * Each morpheme may carry parenthetical or quoted gloss annotations before
+ * the "+". Wiktionary inserts U+200E LEFT-TO-RIGHT MARK after "+" — strip
+ * it before matching (the callers do this via extractDerivationParts).
  */
-const DERIVATION_FORMULA_PATTERN =
-  /\b(?:from|equivalent to|modelled after|modeled after|surface analysis[,:]?|compound of)\s+((?:[\p{L}*'’.-]+\s*\+\s*)+[\p{L}*'’.-]+)/giu
+const FORMULA_ANNOTATION = /\([^)]*\)|"[^"]*"|“[^”]*”/
+const DERIVATION_FORMULA_PATTERN = new RegExp(
+  String.raw`\b(?:from|equivalent to|modelled after|modeled after|surface analysis[,:]?|compound of)` +
+    String.raw`\s+((?:[\p{L}*'’.-]+(?:\s*(?:${FORMULA_ANNOTATION.source}))*\s*\+\s*)+[\p{L}*'’.-]+)`,
+  'giu'
+)
 
 /**
  * Extract the individual morphemes of every "X + Y (+ Z)" derivation formula
- * in the text. Returns raw parts — callers normalize/filter them.
+ * in the text, stripping gloss annotations. Returns raw parts — callers
+ * normalize/filter them.
  */
 function extractDerivationParts(text: string): string[] {
   const cleaned = text.replace(/[\u200E\u200F]/g, '')
+  const annotations = new RegExp(FORMULA_ANNOTATION.source, 'gu')
   const parts: string[] = []
   for (const match of cleaned.matchAll(DERIVATION_FORMULA_PATTERN)) {
     for (const part of match[1].split(/\s*\+\s*/)) {
-      if (part) parts.push(part)
+      const bare = part.replace(annotations, ' ').trim()
+      if (bare) parts.push(bare)
     }
   }
   return parts
@@ -208,12 +218,15 @@ function extractDerivationParts(text: string): string[] {
 
 /**
  * Normalize a raw CPU root candidate: trim affix hyphens and punctuation,
+ * fold diacritics (télé/phōnē → tele/phone, matching source page titles),
  * lowercase, and reject reconstructed forms, the word itself, and
  * inflectional suffixes. Returns null when the candidate is not researchable.
  */
 function normalizeRootCandidate(term: string, word: string): string | null {
   const normalized = term
     .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[\u200E\u200F]/g, '')
     .replace(/^[-.,;:'’]+/, '')
     .replace(/[-.,;:'’]+$/, '')
