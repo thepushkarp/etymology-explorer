@@ -28,7 +28,7 @@
     "@vercel/analytics": "^1.6.1",
     "@vercel/speed-insights": "^2.0.0",
     "lucide-react": "^0.563.0",
-    "next": "16.2.3",
+    "next": "16.2.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "zod": "^4.3.6"
