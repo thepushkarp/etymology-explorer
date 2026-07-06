@@ -25,6 +25,7 @@ export function MobileSection({
   titleTextClassName,
 }: MobileSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpenMobile)
+  const contentId = id ? `${id}-content` : undefined
 
   return (
     <section id={id} className={dividerClassName}>
@@ -34,6 +35,7 @@ export function MobileSection({
           onClick={() => setIsOpen((current) => !current)}
           className="flex w-full items-center justify-between gap-4 text-left"
           aria-expanded={isOpen}
+          aria-controls={contentId}
         >
           <span className={titleTextClassName}>{title}</span>
           <svg
@@ -45,7 +47,11 @@ export function MobileSection({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </button>
-        {isOpen && <div className="pt-4 animate-fadeIn">{children}</div>}
+        {isOpen && (
+          <div id={contentId} className="pt-4 animate-fadeIn">
+            {children}
+          </div>
+        )}
       </div>
 
       <div className="hidden md:block">

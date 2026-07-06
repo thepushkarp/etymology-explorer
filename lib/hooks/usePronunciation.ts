@@ -1,10 +1,12 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
  * Fetches TTS audio for a word from /api/pronunciation and plays it.
- * The fetched audio is reused for repeat plays and discarded when the word changes.
+ * The fetched audio is reused for repeat plays and discarded when the word
+ * changes. Concurrent play() calls are ignored while audio is loading or
+ * playing, and a response that arrives after the word changed is dropped.
  */
 export function usePronunciation(word: string) {
   const [isPlaying, setIsPlaying] = useState(false)
@@ -13,9 +15,23 @@ export function usePronunciation(word: string) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const objectUrlRef = useRef<string | null>(null)
   const loadedWordRef = useRef<string | null>(null)
+  const activeWordRef = useRef(word)
+  const busyRef = useRef(false)
+
+  activeWordRef.current = word
+
+  useEffect(
+    () => () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current)
+        objectUrlRef.current = null
+      }
+    },
+    []
+  )
 
   const play = useCallback(async () => {
-    if (!word.trim()) return
+    if (!word.trim() || busyRef.current) return
 
     setError(null)
 
@@ -30,17 +46,20 @@ export function usePronunciation(word: string) {
 
     // Audio already loaded - just play
     if (audioRef.current) {
+      busyRef.current = true
       setIsPlaying(true)
       try {
         await audioRef.current.play()
       } catch {
         setError('Playback failed')
         setIsPlaying(false)
+        busyRef.current = false
       }
       return
     }
 
     // Fetch and play
+    busyRef.current = true
     setIsLoading(true)
     try {
       const response = await fetch(`/api/pronunciation?word=${encodeURIComponent(word)}`)
@@ -51,14 +70,25 @@ export function usePronunciation(word: string) {
       }
 
       const blob = await response.blob()
+
+      // The searched word changed while fetching - drop the stale audio
+      if (activeWordRef.current !== word) {
+        busyRef.current = false
+        return
+      }
+
       const url = URL.createObjectURL(blob)
       objectUrlRef.current = url
 
       const audio = new Audio(url)
-      audio.onended = () => setIsPlaying(false)
+      audio.onended = () => {
+        setIsPlaying(false)
+        busyRef.current = false
+      }
       audio.onerror = () => {
         setError('Playback failed')
         setIsPlaying(false)
+        busyRef.current = false
       }
 
       audioRef.current = audio
@@ -68,6 +98,8 @@ export function usePronunciation(word: string) {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load'
       setError(message)
+      setIsPlaying(false)
+      busyRef.current = false
       console.error('[usePronunciation] Error:', err)
     } finally {
       setIsLoading(false)

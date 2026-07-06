@@ -100,6 +100,8 @@ function SourceBadge({ source }: { source: SourceReference }) {
 }
 
 export function SourcesSection({ sources }: SourcesSectionProps) {
+  if (sources.length === 0) return null
+
   const groupedSources = groupSourcesByOrigin(sources)
 
   return (
