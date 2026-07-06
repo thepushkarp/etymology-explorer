@@ -8,7 +8,6 @@ interface KeyboardShortcutsProps {
   onHistoryForward?: () => void
   onClosePanel?: () => void
   onPlayPronunciation?: () => void
-  onToggleSimpleMode?: () => void
 }
 
 interface Shortcut {
@@ -48,11 +47,6 @@ const SHORTCUTS: Shortcut[] = [
     description: 'Play pronunciation',
     keys: ['p'],
   },
-  {
-    key: 'toggle-simple-mode',
-    description: 'Toggle simple mode',
-    keys: ['s'],
-  },
 ]
 
 export function KeyboardShortcuts({
@@ -61,7 +55,6 @@ export function KeyboardShortcuts({
   onHistoryForward,
   onClosePanel,
   onPlayPronunciation,
-  onToggleSimpleMode,
 }: KeyboardShortcutsProps) {
   const [showOverlay, setShowOverlay] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
@@ -116,11 +109,6 @@ export function KeyboardShortcuts({
           e.preventDefault()
           onPlayPronunciation?.()
           break
-        case 's':
-        case 'S':
-          e.preventDefault()
-          onToggleSimpleMode?.()
-          break
       }
     }
 
@@ -133,7 +121,6 @@ export function KeyboardShortcuts({
     onHistoryForward,
     onClosePanel,
     onPlayPronunciation,
-    onToggleSimpleMode,
   ])
 
   // Focus management for overlay

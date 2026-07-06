@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSuggestions, isKnownWord } from '@/lib/spellcheck'
+import { getAutocompleteSuggestions } from '@/lib/spellcheck'
 import { ApiResponse, WordSuggestion } from '@/lib/types'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 
@@ -30,20 +30,8 @@ export async function GET(request: NextRequest) {
     'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
   }
 
-  // If it's a known word, return it as the only suggestion
-  if (isKnownWord(normalized)) {
-    return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>(
-      {
-        success: true,
-        data: {
-          suggestions: [{ word: normalized, distance: 0 }],
-        },
-      },
-      { headers: cacheHeaders }
-    )
-  }
-
-  const suggestions = getSuggestions(normalized)
+  // Prefix/substring wordlist matches first, near-miss corrections as filler
+  const suggestions = getAutocompleteSuggestions(normalized)
 
   return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>(
     {

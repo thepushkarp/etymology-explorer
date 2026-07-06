@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { useHistory } from '@/lib/hooks/useHistory'
-import { SearchSuggestions, getSuggestionItems } from '@/components/SearchSuggestions'
+import { SearchSuggestions, useSuggestionItems } from '@/components/SearchSuggestions'
 
 interface SearchBarProps {
   onSearch: (word: string) => void
@@ -31,10 +31,7 @@ export function SearchBar({
   const searchParams = useSearchParams()
 
   const historyWords = useMemo(() => historyEntries.map((entry) => entry.word), [historyEntries])
-  const suggestionItems = useMemo(
-    () => getSuggestionItems(inputValue, historyWords),
-    [inputValue, historyWords]
-  )
+  const suggestionItems = useSuggestionItems(inputValue, historyWords)
   const shouldShowSuggestions =
     isFocused && showSuggestions && inputValue.trim().length >= 2 && suggestionItems.length > 0
 
@@ -228,8 +225,7 @@ export function SearchBar({
         </div>
 
         <SearchSuggestions
-          query={inputValue}
-          history={historyWords}
+          items={suggestionItems}
           isVisible={shouldShowSuggestions}
           onSelect={handleSuggestionSelect}
           selectedIndex={selectedIndex}

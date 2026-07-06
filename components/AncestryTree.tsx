@@ -21,7 +21,6 @@ import {
 interface AncestryTreeProps {
   graph: AncestryGraph
   word: string
-  isSimple?: boolean
 }
 
 /**
@@ -84,17 +83,15 @@ function StageNode({
   stage,
   isLast,
   animationDelay,
-  isSimple,
 }: {
   stage: AncestryStage
   isLast?: boolean
   animationDelay?: number
-  isSimple?: boolean
 }) {
   const [showEvidence, setShowEvidence] = useState(false)
   const nodeRef = useRef<HTMLDivElement>(null)
   const isReconstructed = stage.isReconstructed
-  const hasEvidence = !isSimple && stage.evidence && stage.evidence.length > 0
+  const hasEvidence = stage.evidence && stage.evidence.length > 0
 
   // Close evidence panel on outside click
   useEffect(() => {
@@ -145,7 +142,7 @@ function StageNode({
           >
             {stage.stage}
           </div>
-          {!isSimple && <ConfidenceBadge confidence={stage.confidence} />}
+          <ConfidenceBadge confidence={stage.confidence} />
         </div>
 
         {/* Form */}
@@ -160,7 +157,7 @@ function StageNode({
         </div>
 
         {/* Reconstructed label */}
-        {!isSimple && isReconstructed && (
+        {isReconstructed && (
           <div className="text-[8px] uppercase tracking-widest text-stone-400 dark:text-stone-500 mt-0.5">
             reconstructed
           </div>
@@ -185,7 +182,7 @@ function StageNode({
       </div>
 
       {/* Full evidence panel (expanded on click) */}
-      {!isSimple && showEvidence && <EvidencePanel stage={stage} />}
+      {showEvidence && <EvidencePanel stage={stage} />}
     </div>
   )
 }
@@ -275,18 +272,13 @@ function BranchColumn({
   branchIndex,
   convergencePoints,
   baseDelay,
-  isSimple,
 }: {
   branch: AncestryBranch
   branchIndex: number
   convergencePoints?: ConvergencePoint[]
   baseDelay: number
-  isSimple?: boolean
 }) {
   const branchColor = branchColors[branchIndex % branchColors.length]
-  const visibleStages = isSimple
-    ? branch.stages.filter((stage) => !stage.isReconstructed)
-    : branch.stages
 
   // Find convergences this branch participates in
   const convergences =
@@ -321,14 +313,13 @@ function BranchColumn({
       </div>
 
       {/* Stages */}
-      {visibleStages.map((stage, idx) => (
+      {branch.stages.map((stage, idx) => (
         <div key={`${stage.stage}-${idx}`} className="flex flex-col items-center w-full">
           {idx > 0 && <VerticalConnector color={branchColor.line} />}
           <StageNode
             stage={stage}
-            isLast={idx === visibleStages.length - 1}
+            isLast={idx === branch.stages.length - 1}
             animationDelay={baseDelay + (idx + 1) * 100}
-            isSimple={isSimple}
           />
         </div>
       ))}
@@ -336,56 +327,33 @@ function BranchColumn({
   )
 }
 
-export const AncestryTree = memo(function AncestryTree({
-  graph,
-  word,
-  isSimple = false,
-}: AncestryTreeProps) {
+export const AncestryTree = memo(function AncestryTree({ graph, word }: AncestryTreeProps) {
   if (!graph || !graph.branches || graph.branches.length === 0) return null
 
-  const visibleGraph = {
-    ...graph,
-    branches: graph.branches.map((branch) => ({
-      ...branch,
-      stages: isSimple ? branch.stages.filter((stage) => !stage.isReconstructed) : branch.stages,
-    })),
-    postMerge:
-      isSimple && graph.postMerge
-        ? graph.postMerge.filter((stage) => !stage.isReconstructed)
-        : graph.postMerge,
-  }
-
-  const hasMerge = visibleGraph.mergePoint && visibleGraph.branches.length > 1
-  const hasPostMerge = visibleGraph.postMerge && visibleGraph.postMerge.length > 0
-  const hasConvergence =
-    !isSimple && visibleGraph.convergencePoints && visibleGraph.convergencePoints.length > 0
+  const hasMerge = graph.mergePoint && graph.branches.length > 1
+  const hasPostMerge = graph.postMerge && graph.postMerge.length > 0
+  const hasConvergence = graph.convergencePoints && graph.convergencePoints.length > 0
 
   // Calculate the max stages across all branches for delay calculation
-  const maxStages = Math.max(...visibleGraph.branches.map((b) => b.stages.length), 0)
+  const maxStages = Math.max(...graph.branches.map((b) => b.stages.length), 0)
 
   return (
     <section>
       <div className="flex flex-col items-center w-full transition-all duration-300 ease-out">
         {/* Convergence callout - shared PIE ancestry */}
         {hasConvergence && (
-          <ConvergenceCallout
-            points={visibleGraph.convergencePoints!}
-            branches={visibleGraph.branches}
-          />
+          <ConvergenceCallout points={graph.convergencePoints!} branches={graph.branches} />
         )}
 
         {/* Branches side by side on md+; stacked on mobile */}
-        <div
-          className={`grid w-full items-end gap-4 ${gridColsClass(visibleGraph.branches.length)}`}
-        >
-          {visibleGraph.branches.map((branch, idx) => (
+        <div className={`grid w-full items-end gap-4 ${gridColsClass(graph.branches.length)}`}>
+          {graph.branches.map((branch, idx) => (
             <BranchColumn
               key={branch.root}
               branch={branch}
               branchIndex={idx}
-              convergencePoints={visibleGraph.convergencePoints}
+              convergencePoints={graph.convergencePoints}
               baseDelay={idx * 50}
-              isSimple={isSimple}
             />
           ))}
         </div>
@@ -401,7 +369,7 @@ export const AncestryTree = memo(function AncestryTree({
                 preserveAspectRatio="none"
                 fill="none"
               >
-                {visibleGraph.branches.length === 2 && (
+                {graph.branches.length === 2 && (
                   <>
                     <path
                       d="M25 0 C25 12, 50 12, 50 18"
@@ -417,7 +385,7 @@ export const AncestryTree = memo(function AncestryTree({
                     />
                   </>
                 )}
-                {visibleGraph.branches.length === 3 && (
+                {graph.branches.length === 3 && (
                   <>
                     <path
                       d="M17 0 C17 12, 50 12, 50 18"
@@ -457,11 +425,9 @@ export const AncestryTree = memo(function AncestryTree({
                 Combined
               </div>
               <div className="font-serif text-base font-semibold text-charcoal">
-                {visibleGraph.mergePoint!.form}
+                {graph.mergePoint!.form}
               </div>
-              <div className="mt-0.5 text-[10px] text-charcoal-light">
-                {visibleGraph.mergePoint!.note}
-              </div>
+              <div className="mt-0.5 text-[10px] text-charcoal-light">{graph.mergePoint!.note}</div>
             </div>
           </>
         )}
@@ -469,14 +435,13 @@ export const AncestryTree = memo(function AncestryTree({
         {/* Post-merge evolution */}
         {hasPostMerge && (
           <div className="flex flex-col items-center">
-            {visibleGraph.postMerge!.map((stage, idx) => (
+            {graph.postMerge!.map((stage, idx) => (
               <div key={`post-${idx}`} className="flex flex-col items-center w-full max-w-xs">
                 <VerticalConnector color={mergeLineColor} />
                 <StageNode
                   stage={stage}
-                  isLast={idx === visibleGraph.postMerge!.length - 1}
+                  isLast={idx === graph.postMerge!.length - 1}
                   animationDelay={(maxStages + 2 + idx) * 100}
-                  isSimple={isSimple}
                 />
               </div>
             ))}
