@@ -166,15 +166,37 @@ export async function proxy(request: NextRequest) {
 
   const response = NextResponse.next()
 
-  // CSP enforced for API responses
-  if (pathname.startsWith('/api/')) {
-    response.headers.set(
-      'Content-Security-Policy',
-      "default-src 'self'; script-src 'self' 'unsafe-inline' https://va.vercel-scripts.com; " +
-        "style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https:; " +
-        "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-    )
-  }
+  // CSP for every matched response (HTML pages and API alike).
+  //
+  // script-src uses 'unsafe-inline' rather than a hash or nonce because the
+  // HTML pages are statically prerendered: Next.js bakes per-build
+  // `self.__next_f.push(...)` inline flight scripts into the HTML, which
+  // can't be hashed ahead of time, and nonces require dynamic rendering.
+  // Adding a hash alongside 'unsafe-inline' would make CSP2+ browsers ignore
+  // 'unsafe-inline' and break hydration. The policy still blocks scripts,
+  // objects, and frames from external hosts.
+  //
+  // Vercel Analytics + Speed Insights load same-origin /_vercel/* scripts in
+  // production (covered by 'self'); in dev they load debug scripts from
+  // va.vercel-scripts.com, and the dev toolchain needs 'unsafe-eval' + ws:.
+  const isDev = process.env.NODE_ENV === 'development'
+  const scriptSrc = isDev
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com"
+    : "script-src 'self' 'unsafe-inline'"
+  const connectSrc = isDev ? "connect-src 'self' ws: wss:" : "connect-src 'self'"
+  const cspDirectives = [
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
+    "img-src 'self' data: https:",
+    connectSrc,
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ]
+  response.headers.set('Content-Security-Policy', cspDirectives.join('; '))
 
   if (pathname === '/') {
     response.headers.set('Link', AGENT_DISCOVERY_LINKS)
@@ -185,5 +207,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/api/:path*'],
+  // All pages and API routes; skip Next internals and static assets.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon\\.ico|favicon\\.svg|fonts/|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|txt|xml|json|woff2?)$).*)',
+  ],
 }

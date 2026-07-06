@@ -43,11 +43,11 @@ Pre-commit hooks (Husky + lint-staged) automatically run ESLint and Prettier on 
 ```
 User Search → proxy.ts (rate limit, CSP headers)
     ↓
-GET /api/etymology?word=X[&stream=true]
+GET /api/etymology?word=X[&stream=true]   (maxDuration 300s)
     ├── Input validation (lib/validation.ts)
     ├── Redis cache check (lib/cache.ts, 30d TTL)
-    ├── Singleflight lock (lib/singleflight.ts, prevents duplicate concurrent requests)
-    ├── Cost guard check (lib/costGuard.ts, 4 modes: normal → protected_503 → cache_only → blocked)
+    ├── Cost guard check (lib/costGuard.ts, 2 modes: normal → cache_only at 90% of budget)
+    ├── Singleflight lock (lib/singleflight.ts, owner-token lock; Redis down → 503 for uncached)
     ├── Agentic Research Pipeline (lib/research.ts):
     │   ├── Phase 1: Parallel fetch from 6 sources (3 core + 3 optional)
     │   ├── Phase 1.5: Pre-parse "from X, from Y" chains (lib/etymologyParser.ts, CPU-only)
@@ -67,36 +67,38 @@ GET /api/etymology?word=X[&stream=true]
 
 The app operates in **public mode** with server-side cost controls (added in PR #41):
 
-- **`proxy.ts`** - Rate limiting via @upstash/ratelimit:
+- **`proxy.ts`** - Node middleware for rate limiting via @upstash/ratelimit:
   - Etymology: 20 req/min + 200 req/day per IP
   - Pronunciation: 20 req/min per IP
   - General: 60 req/min per IP
-  - CSP headers and security headers
+  - CSP headers for pages and API responses (pages use `script-src 'self' 'unsafe-inline'` because statically prerendered HTML carries per-build Next.js inline flight scripts that can't be hashed or nonce'd)
 
 - **`lib/config.ts`** - Centralized configuration:
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
-  - USD monthly limit: $10/month (`openai/gpt-5.4-mini` pricing in `costTracking`)
+  - USD monthly limit: $10/month (`openai/gpt-5.4-mini` pricing in `costTracking` as fallback; OpenRouter-reported cost preferred)
   - Timeouts: source fetches 5s, LLM 120s, TTS 8s
   - Rate limits, singleflight settings, feature flags
 
 - **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENROUTER_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
 
-- **`lib/costGuard.ts`** - Monthly USD budget enforcement via atomic Redis accumulation:
-  - Normal mode (0-70% budget): allow uncached requests
-  - Protected_503 mode (70-90%): reject uncached requests
-  - Cache-only mode (90-100%): serve cached results only
-  - Blocked mode (100%+): reject new requests
-  - Fail-open if Redis unavailable
+- **`lib/costGuard.ts`** - Monthly USD budget enforcement via pipelined Redis INCRBYFLOAT + EXPIRE NX:
+  - Normal mode (0-90% of budget): allow uncached requests
+  - Cache-only mode (≥90%): serve cached results only, reject uncached requests
+  - Spend recording is awaited before responses finish; both the root-extraction and synthesis LLM calls are counted
+  - Prefers OpenRouter provider-reported cost (`usage.cost`) with config-pricing math as fallback
+  - The guard itself fails open without Redis, but uncached etymology requests fail closed (503) at the singleflight step
 
-- **`lib/singleflight.ts`** - Distributed request deduplication via Redis SET NX (30s TTL). If 10 users search "etymology" simultaneously, only 1 LLM call is made; others poll and receive the same result.
+- **`lib/singleflight.ts`** - Distributed request deduplication via Redis owner-token locks (SET NX with random token, 90s TTL, EXPIRE heartbeat every 30s while the pipeline runs). Results are cached BEFORE lock release. Streaming waiters poll the cache every 2s for up to 150s with SSE keepalive events and negative-cache checks, and promote themselves to holder if the lock vanishes without a result; non-streaming waiters poll ~10s then return 429 + Retry-After. If 10 users search "etymology" simultaneously, only 1 LLM call is made.
 
-- **`lib/cache.ts`** - Redis caching:
-  - Etymology results: 30 day TTL, versioned keys (`etymology:v2.1:`)
+- **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
+  - Etymology results: 30 day TTL, versioned keys (`etymology:v2.2:`)
   - TTS audio: 1 year TTL
   - Negative cache: 6 hour TTL for admitted types (`no_sources`, `invalid_word`)
   - Zod validation on reads for forward compatibility
 
-- **`lib/redis.ts`** - Shared Redis client factory (returns null if not configured; all callers fail open)
+- **`lib/redis.ts`** - Shared Redis client factory (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 (suggestions, random-word, and pronunciation keep working without Redis)
+
+- **`lib/counters.ts`** - Best-effort monthly INCR counters (cache_hit / cache_miss / error), exposed via `/api/admin/stats`
 
 - **`lib/errorUtils.ts`** - Secret redaction (provider keys, Bearer tokens, API keys)
 
@@ -155,8 +157,8 @@ LLM receives:
 - Cached etymology results (30d TTL)
 - TTS audio cache (1yr TTL)
 - Rate limit counters (per-IP, sliding windows)
-- Monthly spend counters (atomic accumulation)
-- Singleflight locks (30s TTL)
+- Monthly spend counters (atomic accumulation) + operational counters (cache_hit/miss/error)
+- Singleflight owner-token locks (90s TTL, heartbeat-extended while work runs)
 - Negative cache for admitted invalid/no-source words (6hr TTL)
 
 **Client-side** (localStorage):
@@ -211,7 +213,9 @@ When adding UI: _"Would this feel at home in a beautifully typeset etymology dic
 | `/api/suggestions`   | GET    | Typo correction - `?q=word`                                                       |
 | `/api/random-word`   | GET    | Random GRE word (crypto randomness)                                               |
 | `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, 8s timeout)                                 |
-| `/api/admin/stats`   | GET    | Budget usage stats (requires `x-admin-secret` header)                             |
+| `/api/ngram`         | GET    | Google Books ngram usage data - `?word=word`                                      |
+| `/api/health`        | GET    | Liveness check                                                                    |
+| `/api/admin/stats`   | GET    | Budget + counter stats (requires `x-admin-secret` header)                         |
 
 All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
@@ -222,10 +226,11 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `proxy.ts` - Rate limiting, CSP headers
 - `lib/config.ts` - Centralized config (budgets, timeouts, limits)
 - `lib/env.ts` - Zod env validation
-- `lib/costGuard.ts` - Monthly spend enforcement with protection modes
-- `lib/singleflight.ts` - Distributed request deduplication
+- `lib/costGuard.ts` - Monthly spend enforcement (normal → cache_only at 90%)
+- `lib/singleflight.ts` - Distributed request deduplication (owner-token locks)
 - `lib/cache.ts` - Redis caching with versioned keys
 - `lib/redis.ts` - Shared Redis client factory
+- `lib/counters.ts` - Monthly cache_hit/cache_miss/error counters for admin stats
 
 **Grounded Etymology:**
 
