@@ -112,7 +112,11 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${libreBaskerville.variable} ${alegreyaSans.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -120,10 +124,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body
-        className={`${libreBaskerville.variable} ${alegreyaSans.variable} min-h-screen`}
-        suppressHydrationWarning
-      >
+      <body className="min-h-screen" suppressHydrationWarning>
         <JsonLd />
         {children}
         <Analytics />
