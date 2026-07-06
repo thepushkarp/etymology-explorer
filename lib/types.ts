@@ -228,10 +228,12 @@ export interface RootResearchData {
   relatedTerms: string[]
 }
 
+/**
+ * Research data for a related term (peripheral evidence: etymonline only)
+ */
 export interface RelatedTermResearchData {
   term: string
   etymonlineData: SourceData | null
-  wiktionaryData: SourceData | null
 }
 
 /**

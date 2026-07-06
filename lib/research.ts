@@ -154,8 +154,10 @@ const LOW_SIGNAL_TERMS = new Set([
 ])
 
 /**
- * Inflectional and low-signal derivational suffixes that are not worth a
+ * Inflectional suffixes and formula noise words that are not worth a
  * dedicated root-research fetch (mirrors the LLM extraction prompt rules).
+ * The last row catches structural words that leak out of derivation
+ * formulas like "from ne 'not' + stem of scire".
  */
 const LOW_SIGNAL_AFFIXES = new Set([
   's',
@@ -178,6 +180,12 @@ const LOW_SIGNAL_AFFIXES = new Set([
   'al',
   'ish',
   'ity',
+  'root',
+  'stem',
+  'word',
+  'form',
+  'prefix',
+  'suffix',
 ])
 
 /**
@@ -375,19 +383,20 @@ async function fetchRootResearch(root: string, signal?: AbortSignal): Promise<Ro
   }
 }
 
+/**
+ * Related terms are peripheral evidence (cousin words for lore), so a single
+ * etymonline page per term is enough — the main word's chains carry the
+ * grounding. One fetch per term instead of two also frees wave budget.
+ */
 async function fetchRelatedTermResearch(
   term: string,
   signal?: AbortSignal
 ): Promise<RelatedTermResearchData> {
-  const [etymonlineData, wiktionaryData] = await Promise.all([
-    fetchEtymonline(term, signal),
-    fetchWiktionary(term, signal),
-  ])
+  const etymonlineData = await fetchEtymonline(term, signal)
 
   return {
     term,
     etymonlineData,
-    wiktionaryData,
   }
 }
 
@@ -625,17 +634,21 @@ export async function conductAgenticResearch(
     etymonlineData?.relatedEntries ?? []
   )
 
+  // Budget: each root costs 2 fetches (etymonline + wiktionary), each
+  // related term costs 1 (etymonline only).
   const remainingBudget = CONFIG.maxTotalFetches - totalFetches
-  const maxPairsByBudget = Math.floor(remainingBudget / 2)
   const rootsToFetch = rootsToResearch.slice(
     0,
-    Math.min(maxPairsByBudget, CONFIG.maxRootsToExplore)
+    Math.min(Math.floor(remainingBudget / 2), CONFIG.maxRootsToExplore)
   )
   const relatedTermsToFetch = mainRelatedTerms
     .filter((term) => !rootsToFetch.includes(term))
     .slice(
       0,
-      Math.max(0, Math.min(maxPairsByBudget - rootsToFetch.length, CONFIG.maxRelatedWordsPerRoot))
+      Math.max(
+        0,
+        Math.min(remainingBudget - rootsToFetch.length * 2, CONFIG.maxRelatedWordsPerRoot)
+      )
     )
 
   if (rootsToFetch.length > 0 || relatedTermsToFetch.length > 0) {
@@ -674,7 +687,7 @@ export async function conductAgenticResearch(
     for (const [index, result] of relatedResults.entries()) {
       if (result.status === 'fulfilled') {
         context.relatedResearch.push(result.value)
-        totalFetches += 2
+        totalFetches += 1
         continue
       }
 
@@ -795,11 +808,6 @@ export function buildResearchPrompt(context: ResearchContext): string {
     if (relatedData.etymonlineData) {
       sections.push(
         `<source_data name="etymonline">\n${sanitizeSourceText(relatedData.etymonlineData.text, relatedSourceChars)}\n</source_data>`
-      )
-    }
-    if (relatedData.wiktionaryData) {
-      sections.push(
-        `<source_data name="wiktionary">\n${sanitizeSourceText(relatedData.wiktionaryData.text, relatedSourceChars)}\n</source_data>`
       )
     }
   }

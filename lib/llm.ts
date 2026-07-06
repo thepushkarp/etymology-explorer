@@ -413,16 +413,6 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
         word: relatedData.term,
       })
     }
-    if (
-      relatedData.wiktionaryData &&
-      !sources.some((source) => source.url === relatedData.wiktionaryData?.url)
-    ) {
-      sources.push({
-        name: 'wiktionary',
-        url: relatedData.wiktionaryData.url,
-        word: relatedData.term,
-      })
-    }
   }
   if (sources.length === 0) {
     sources.push({ name: 'synthesized' })

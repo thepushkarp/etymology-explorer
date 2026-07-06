@@ -56,8 +56,9 @@ GET /api/etymology?word=X[&stream=true]   (maxDuration 300s)
     │   ├── Phase 1.5: Pre-parse "from X, from Y" chains (lib/etymologyParser.ts, CPU-only)
     │   ├── Phase 2: CPU root extraction (derivation formulas + chain affixes);
     │   │           LLM fallback (15s timeout, truncated input) only when CPU finds none
-    │   └── Phase 3: ONE parallel wave — root pages (max 4 roots) + main-word
-    │               related-term pages (max 16 total fetches)
+    │   └── Phase 3: ONE parallel wave — root pages (max 4 roots, etymonline +
+    │               wiktionary) + main-word related-term pages (etymonline only),
+    │               max 16 total fetches
     ├── Typo check (lib/spellcheck.ts, Levenshtein distance vs GRE wordlist)
     ├── LLM synthesis (lib/llm.ts)
     │   ├── Structured outputs via OpenRouter Responses JSON schema mode
@@ -80,7 +81,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
   - USD monthly limit: $10/month (`openai/gpt-5.4-mini` pricing in `costTracking` as fallback; OpenRouter-reported cost preferred)
   - Timeouts: source fetches 5s, synthesis LLM 90s, root-extraction LLM 15s, TTS 8s
-  - Tiered prompt character budgets (`promptBudget`: main 2000 / supplemental 1200 / root 1000 / related 700)
+  - Tiered prompt character budgets (`promptBudget`: main 1500 / supplemental 800 / root 700 / related 450)
   - Rate limits, singleflight settings, feature flags
 
 - **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENROUTER_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
@@ -133,10 +134,10 @@ New optional fields on `AncestryStage`: `isReconstructed`, `confidence`, `eviden
 
 Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API costs:
 
-- `maxRootsToExplore = 4` - Max root morphemes to research
-- `maxRelatedWordsPerRoot = 4` - Related terms retained per extraction pass; only main-word related terms are fetched (root-page related terms are prompt context only)
+- `maxRootsToExplore = 4` - Max root morphemes to research (etymonline + wiktionary each, 2 fetches per root)
+- `maxRelatedWordsPerRoot = 4` - Related terms retained per extraction pass; only main-word related terms are fetched (etymonline only, 1 fetch per term; root-page related terms are prompt context only)
 - `maxTotalFetches = 16` - Hard cap on external API calls per search (root + related pages share one budgeted wave)
-- `promptBudget` - Tiered per-block character caps for the synthesis prompt (main 2000, supplemental 1200, root 1000, related 700, root-extraction input 1200)
+- `promptBudget` - Tiered per-block character caps for the synthesis prompt (main 1500, supplemental 800, root 700, related 450, root-extraction input 1200)
 - `sourceCacheTTL = 7d` - Raw etymonline/wiktionary page cache
 
 ### LLM Integration

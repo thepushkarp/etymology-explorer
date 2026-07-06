@@ -201,7 +201,7 @@ etymology-explorer/
    - **Agentic Research**: Multi-phase research pipeline (aborts mid-flight if the client disconnects):
      - Phase 1: Fire all 6 source fetches at once (Etymonline, Wiktionary, Free Dictionary, Wikipedia, Urban Dictionary, Incel Wiki); only Etymonline + Wiktionary gate the next phase — the rest join before synthesis. Raw Etymonline/Wiktionary pages are served from a 7-day Redis source cache when available
      - Phase 2: Root morphemes extracted on-CPU from derivation formulas ("From X + Y", "equivalent to X + Y") and parsed-chain affixes (e.g., "telephone" → ["tele", "phone"]); a quick LLM call (15s timeout, truncated input) runs only when the CPU pass finds nothing
-     - Phase 3: One parallel wave fetches root pages (up to 4 roots) and main-word related-term pages together, within the 16-fetch budget
+     - Phase 3: One parallel wave fetches root pages (up to 4 roots, etymonline + wiktionary) and main-word related-term pages (etymonline only) within the 16-fetch budget
    - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema

@@ -28,10 +28,10 @@ export const CONFIG = {
   // Per-block character budgets for synthesis prompt source data
   // (prompt injection defense + token diet — tiered by evidentiary value)
   promptBudget: {
-    mainSourceChars: 2000, // etymonline/wiktionary text for the searched word
-    supplementalSourceChars: 1200, // wikipedia / freeDictionary / urban / incels
-    rootSourceChars: 1000, // per-source text for each explored root
-    relatedSourceChars: 700, // per-source text for each related term
+    mainSourceChars: 1500, // etymonline/wiktionary text for the searched word
+    supplementalSourceChars: 800, // wikipedia / freeDictionary / urban / incels
+    rootSourceChars: 700, // per-source text for each explored root
+    relatedSourceChars: 450, // per-source text for each related term
     rootExtractionSourceChars: 1200, // per-source input to the LLM root-extraction fallback
   },
 
