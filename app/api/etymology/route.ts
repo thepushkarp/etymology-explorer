@@ -1,11 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
-import {
-  EtymologyResult,
-  ApiResponse,
-  StreamEvent,
-  StageConfidence,
-  ResearchContext,
-} from '@/lib/types'
+import { NextRequest } from 'next/server'
+import { EtymologyResult, StreamEvent, StageConfidence, ResearchContext } from '@/lib/types'
 import { synthesizeFromResearch, SynthesisResult } from '@/lib/llm'
 import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
@@ -27,7 +21,7 @@ import { safeError } from '@/lib/errorUtils'
 import { getEnv } from '@/lib/env'
 import { CONFIG } from '@/lib/config'
 import { emitSecurityEvent } from '@/lib/telemetry'
-import { streamErrorResponse, streamResultResponse } from '@/lib/streamingResponse'
+import { createResponseAdapter } from '@/lib/responseAdapter'
 import { classifyApiError } from '@/lib/apiError'
 
 // Uncached searches run a multi-phase research + synthesis pipeline that can
@@ -38,10 +32,6 @@ const REDIS_DOWN_MESSAGE =
   'New word lookups are temporarily unavailable — our cache service is unreachable. ' +
   'Please try again in a few minutes.'
 const IN_PROGRESS_MESSAGE = 'Request in progress, please retry in a few seconds.'
-
-const CACHED_RESPONSE_HEADERS = {
-  'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
-} as const
 
 function countConfidence(result: EtymologyResult, level: StageConfidence): number {
   const allStages = [
@@ -73,58 +63,35 @@ export async function GET(request: NextRequest) {
   let shouldStream = false
 
   try {
+    shouldStream = request.nextUrl.searchParams.get('stream') === 'true'
+    const respond = createResponseAdapter(shouldStream)
+
     // Validate environment (lazy, cached after first call)
     try {
       getEnv()
     } catch {
-      return shouldStream
-        ? streamErrorResponse('Service configuration error')
-        : NextResponse.json<ApiResponse<null>>(
-            { success: false, error: 'Service configuration error' },
-            { status: 503 }
-          )
+      return respond.error('Service configuration error', { status: 503 })
     }
 
     // Feature flags
     if (!CONFIG.features.publicSearchEnabled || CONFIG.features.forceCacheOnly) {
-      return shouldStream
-        ? streamErrorResponse('Service temporarily unavailable')
-        : NextResponse.json<ApiResponse<null>>(
-            { success: false, error: 'Service temporarily unavailable' },
-            { status: 503 }
-          )
+      return respond.error('Service temporarily unavailable', { status: 503 })
     }
 
     const word = request.nextUrl.searchParams.get('word')
-    shouldStream = request.nextUrl.searchParams.get('stream') === 'true'
 
     if (!word || typeof word !== 'string') {
-      return shouldStream
-        ? streamErrorResponse('Word is required')
-        : NextResponse.json<ApiResponse<null>>(
-            { success: false, error: 'Word is required' },
-            { status: 400 }
-          )
+      return respond.error('Word is required', { status: 400 })
     }
 
     const normalizedWord = canonicalizeWord(word)
 
     if (!normalizedWord) {
-      return shouldStream
-        ? streamErrorResponse(getQuirkyMessage('empty'))
-        : NextResponse.json<ApiResponse<null>>(
-            { success: false, error: getQuirkyMessage('empty') },
-            { status: 400 }
-          )
+      return respond.error(getQuirkyMessage('empty'), { status: 400 })
     }
 
     if (!isValidWord(normalizedWord)) {
-      return shouldStream
-        ? streamErrorResponse(getQuirkyMessage('nonsense'), 'nonsense')
-        : NextResponse.json<ApiResponse<null>>(
-            { success: false, error: getQuirkyMessage('nonsense') },
-            { status: 400 }
-          )
+      return respond.error(getQuirkyMessage('nonsense'), { status: 400, errorType: 'nonsense' })
     }
 
     const costMode = await getCostMode()
@@ -139,34 +106,21 @@ export async function GET(request: NextRequest) {
         detail: { word: normalizedWord },
       })
       await incrCounter('cache_hit')
-      return shouldStream
-        ? streamResultResponse(cached, { 'X-Protection-Mode': costMode })
-        : NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
-            { success: true, data: cached, cached: true },
-            {
-              headers: {
-                ...CACHED_RESPONSE_HEADERS,
-                'X-Protection-Mode': costMode,
-              },
-            }
-          )
+      return respond.result(cached, {
+        cached: true,
+        headers: { 'X-Protection-Mode': costMode },
+      })
     }
 
     // Negative cache — skip source fetches for known gibberish
     const isNegCached = await getNegativeCache(normalizedWord)
     if (isNegCached) {
       console.log(`[Etymology API] Negative cache hit for "${normalizedWord}"`)
-      const suggestion = getRandomWord()
-      return shouldStream
-        ? streamErrorResponse(getQuirkyMessage('nonsense'), 'nonsense')
-        : NextResponse.json<ApiResponse<{ suggestion: string }>>(
-            {
-              success: false,
-              error: getQuirkyMessage('nonsense'),
-              data: { suggestion },
-            },
-            { status: 404 }
-          )
+      return respond.error(getQuirkyMessage('nonsense'), {
+        status: 404,
+        errorType: 'nonsense',
+        unaryData: { suggestion: getRandomWord() },
+      })
     }
 
     // Reject uncached requests when monthly budget is exhausted
@@ -176,20 +130,10 @@ export async function GET(request: NextRequest) {
         timestamp: Date.now(),
         detail: { word: normalizedWord, mode: costMode, action: 'rejected' },
       })
-      return shouldStream
-        ? streamErrorResponse(
-            'Monthly budget reached. Cached words still work — try again next month for new ones.',
-            'budget',
-            { 'X-Protection-Mode': costMode }
-          )
-        : NextResponse.json<ApiResponse<null>>(
-            {
-              success: false,
-              error:
-                'Monthly budget reached. Cached words still work — try again next month for new ones.',
-            },
-            { status: 503, headers: { 'X-Protection-Mode': costMode } }
-          )
+      return respond.error(
+        'Monthly budget reached. Cached words still work — try again next month for new ones.',
+        { status: 503, errorType: 'budget', headers: { 'X-Protection-Mode': costMode } }
+      )
     }
 
     // Singleflight: prevent duplicate LLM calls for the same word
@@ -203,12 +147,11 @@ export async function GET(request: NextRequest) {
       console.error(
         `[Etymology API] Redis ${acquisition.status} — failing closed for uncached search`
       )
-      return shouldStream
-        ? streamErrorResponse(REDIS_DOWN_MESSAGE, 'network')
-        : NextResponse.json<ApiResponse<null>>(
-            { success: false, error: REDIS_DOWN_MESSAGE },
-            { status: 503, headers: { 'Retry-After': '60' } }
-          )
+      return respond.error(REDIS_DOWN_MESSAGE, {
+        status: 503,
+        errorType: 'network',
+        unaryHeaders: { 'Retry-After': '60' },
+      })
     }
 
     const runResearch = async (
@@ -457,15 +400,13 @@ export async function GET(request: NextRequest) {
       console.log(`[Etymology API] Waiting for in-flight result for "${normalizedWord}"`)
       const result = await pollForResult(() => getCachedEtymology(normalizedWord))
       if (result) {
-        return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
-          { success: true, data: result, cached: true },
-          { headers: CACHED_RESPONSE_HEADERS }
-        )
+        return respond.result(result, { cached: true })
       }
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: IN_PROGRESS_MESSAGE },
-        { status: 429, headers: { 'Retry-After': '15' } }
-      )
+      return respond.error(IN_PROGRESS_MESSAGE, {
+        status: 429,
+        errorType: 'rate_limit',
+        unaryHeaders: { 'Retry-After': '15' },
+      })
     }
 
     console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
@@ -473,34 +414,23 @@ export async function GET(request: NextRequest) {
 
     if (outcome.kind === 'no_sources') {
       if (outcome.typoSuggestions && outcome.typoSuggestions.length > 0) {
-        return NextResponse.json<ApiResponse<{ suggestions: string[] }>>(
-          {
-            success: false,
-            error: `Hmm, we couldn't find "${word}". Did you mean:`,
-            data: { suggestions: outcome.typoSuggestions },
-          },
-          { status: 404 }
-        )
+        return respond.error(`Hmm, we couldn't find "${word}". Did you mean:`, {
+          status: 404,
+          errorType: 'typo',
+          unaryData: { suggestions: outcome.typoSuggestions },
+        })
       }
-      return NextResponse.json<ApiResponse<{ suggestion: string }>>(
-        {
-          success: false,
-          error: getQuirkyMessage('nonsense'),
-          data: { suggestion: outcome.fallbackSuggestion ?? getRandomWord() },
-        },
-        { status: 404 }
-      )
+      return respond.error(getQuirkyMessage('nonsense'), {
+        status: 404,
+        errorType: 'nonsense',
+        unaryData: { suggestion: outcome.fallbackSuggestion ?? getRandomWord() },
+      })
     }
 
-    return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
-      { success: true, data: outcome.result, cached: false },
-      {
-        headers: {
-          ...CACHED_RESPONSE_HEADERS,
-          'X-Protection-Mode': costMode,
-        },
-      }
-    )
+    return respond.result(outcome.result, {
+      cached: false,
+      headers: { 'X-Protection-Mode': costMode },
+    })
   } catch (error) {
     if (request.signal.aborted) {
       // Client disconnected; the pipeline was aborted intentionally. Nobody
@@ -513,11 +443,9 @@ export async function GET(request: NextRequest) {
     await incrCounter('error')
     const classified = classifyApiError(error)
 
-    return shouldStream
-      ? streamErrorResponse(classified.message, classified.streamErrorType)
-      : NextResponse.json<ApiResponse<null>>(
-          { success: false, error: classified.message },
-          { status: classified.status }
-        )
+    return createResponseAdapter(shouldStream).error(classified.message, {
+      status: classified.status,
+      errorType: classified.streamErrorType,
+    })
   }
 }
