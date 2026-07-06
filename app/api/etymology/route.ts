@@ -18,7 +18,8 @@ import {
   tryAcquireLock,
   releaseLock,
   startLockHeartbeat,
-  isLockHeld,
+  markLockFailure,
+  attemptPromotion,
   pollForResult,
 } from '@/lib/singleflight'
 import { incrCounter } from '@/lib/counters'
@@ -62,7 +63,11 @@ type PipelineOutcome =
   | { kind: 'result'; result: EtymologyResult }
   | { kind: 'no_sources'; typoSuggestions?: string[]; fallbackSuggestion?: string }
 
-type WaiterOutcome = PipelineOutcome | { kind: 'negative_cached' } | { kind: 'timeout' }
+type WaiterOutcome =
+  | PipelineOutcome
+  | { kind: 'negative_cached' }
+  | { kind: 'holder_failed'; message: string }
+  | { kind: 'timeout' }
 
 export async function GET(request: NextRequest) {
   let shouldStream = false
@@ -133,7 +138,7 @@ export async function GET(request: NextRequest) {
         timestamp: Date.now(),
         detail: { word: normalizedWord },
       })
-      void incrCounter('cache_hit')
+      await incrCounter('cache_hit')
       return shouldStream
         ? streamResultResponse(cached, { 'X-Protection-Mode': costMode })
         : NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
@@ -212,9 +217,9 @@ export async function GET(request: NextRequest) {
       const researchContext = await conductAgenticResearch(normalizedWord, {}, onProgress)
 
       if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
-        cacheNegative(normalizedWord, 'no_sources').catch((err) => {
-          console.error('[Etymology API] Negative cache store failed:', safeError(err))
-        })
+        // Awaited so the entry lands BEFORE the lock releases — waiters
+        // poll the negative cache to learn this word has no sources.
+        await cacheNegative(normalizedWord, 'no_sources')
 
         if (isLikelyTypo(normalizedWord)) {
           return {
@@ -240,7 +245,9 @@ export async function GET(request: NextRequest) {
      * Full holder pipeline: heartbeat the lock while working, record spend
      * (awaited) for both the root-extraction and synthesis calls, and write
      * the result to cache BEFORE the lock is released in `finally` so
-     * waiters polling the cache always find it.
+     * waiters polling the cache always find it. On error, a short-TTL
+     * failure marker is written (also before release) so waiters surface
+     * the failure instead of promoting and re-spending.
      */
     const runHolderPipeline = async (
       lockToken: string,
@@ -276,20 +283,28 @@ export async function GET(request: NextRequest) {
           timestamp: Date.now(),
           detail: { word: normalizedWord, sources: researchContext.totalSourcesFetched },
         })
-        void incrCounter('cache_miss')
+        await incrCounter('cache_miss')
 
         return { kind: 'result', result: synthesis.result }
+      } catch (error) {
+        // Distinguish "holder failed" from "holder crashed" for waiters:
+        // written before the lock release below, checked before promotion.
+        await markLockFailure(lockKey, classifyApiError(error).message)
+        throw error
       } finally {
         stopHeartbeat()
-        releaseLock(lockKey, lockToken).catch(() => {})
+        await releaseLock(lockKey, lockToken)
       }
     }
 
     /**
      * Streaming waiter: poll the cache while the holder works, emitting
-     * keepalive events so the SSE connection stays warm. If the lock
-     * vanishes without a cached result (holder crashed), attempt promotion
-     * and run the pipeline ourselves.
+     * keepalive events so the SSE connection stays warm. Promotion only
+     * happens on a true holder crash — a lock that vanished with neither a
+     * cached result nor a failure marker. Failed holders (LLM error etc.)
+     * leave a marker, and waiters surface that error without re-running
+     * the pipeline; a promoted waiter that fails writes the marker too,
+     * so later waiters can't cascade into further promotions.
      */
     const waitAsStreamingWaiter = async (
       emit: (event: StreamEvent) => void
@@ -310,14 +325,15 @@ export async function GET(request: NextRequest) {
           return { kind: 'negative_cached' }
         }
 
-        if (!(await isLockHeld(lockKey))) {
-          const promotion = await tryAcquireLock(lockKey)
-          if (promotion.status === 'acquired') {
-            console.log(`[Etymology API] Promoted waiter to holder for "${normalizedWord}"`)
-            return runHolderPipeline(promotion.token, emit)
-          }
-          // Another waiter won the promotion race — keep polling.
+        const promotion = await attemptPromotion(lockKey)
+        if (promotion.status === 'holder_failed') {
+          return { kind: 'holder_failed', message: promotion.message }
         }
+        if (promotion.status === 'promoted') {
+          console.log(`[Etymology API] Promoted waiter to holder for "${normalizedWord}"`)
+          return runHolderPipeline(promotion.token, emit)
+        }
+        // 'held': holder still working (or another waiter won) — keep polling.
 
         emit({ type: 'singleflight_wait', waitedMs: Date.now() - startedAt })
       }
@@ -372,6 +388,12 @@ export async function GET(request: NextRequest) {
                 message: getQuirkyMessage('nonsense'),
                 errorType: 'nonsense',
               })
+            } else if (outcome.kind === 'holder_failed') {
+              emit({
+                type: 'error',
+                message: outcome.message,
+                errorType: 'unknown',
+              })
             } else {
               emit({
                 type: 'error',
@@ -381,7 +403,7 @@ export async function GET(request: NextRequest) {
             }
           } catch (error) {
             console.error('[Etymology API] Streaming error:', safeError(error))
-            void incrCounter('error')
+            await incrCounter('error')
             const classified = classifyApiError(error)
             emit({
               type: 'error',
@@ -454,7 +476,7 @@ export async function GET(request: NextRequest) {
     )
   } catch (error) {
     console.error('Etymology API error:', safeError(error))
-    void incrCounter('error')
+    await incrCounter('error')
     const classified = classifyApiError(error)
 
     return shouldStream

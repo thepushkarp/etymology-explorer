@@ -52,6 +52,7 @@ export const CONFIG = {
     waiterPollIntervalMs: 2_000, // waiters re-check the cache at this cadence
     streamWaiterMaxWaitMs: 150_000, // streaming waiters keep the SSE open this long
     unaryWaiterMaxWaitMs: 10_000, // non-streaming waiters give up (429) after this
+    failureMarkerTTLSeconds: 60, // holder-failure marker; blocks waiter promotion, not retries
   },
 
   // USD-based cost tracking

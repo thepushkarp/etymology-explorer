@@ -132,6 +132,82 @@ export async function isLockHeld(
   }
 }
 
+function failureKey(lockKey: string): string {
+  return `${lockKey}:failed`
+}
+
+/**
+ * Record that the holder exited with an error (as opposed to crashing).
+ * Written BEFORE the lock is released so waiters can distinguish
+ * "holder failed — surface the error" from "holder crashed — take over".
+ * Short TTL: after it expires, fresh requests retry normally.
+ */
+export async function markLockFailure(
+  lockKey: string,
+  message: string,
+  client: SingleflightRedis | null = getRedis()
+): Promise<void> {
+  if (!client) return
+
+  try {
+    await client.set(failureKey(lockKey), message, {
+      nx: true,
+      ex: CONFIG.singleflight.failureMarkerTTLSeconds,
+    })
+  } catch (error) {
+    console.error('[Singleflight] Failure marker write failed:', safeError(error))
+  }
+}
+
+/** Read the holder-failure message, or null if the holder didn't fail. */
+export async function getLockFailure(
+  lockKey: string,
+  client: SingleflightRedis | null = getRedis()
+): Promise<string | null> {
+  if (!client) return null
+
+  try {
+    const value = await client.get(failureKey(lockKey))
+    return typeof value === 'string' && value.length > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
+export type PromotionAttempt =
+  | { status: 'promoted'; token: string } // true crash — caller must run the pipeline
+  | { status: 'holder_failed'; message: string } // holder errored — surface, don't re-run
+  | { status: 'held' } // holder still working (or another waiter won the race)
+
+/**
+ * Waiter-side promotion decision. Promotes only on a true holder crash:
+ * the lock vanished with neither a cached result (caller checks that) nor
+ * a failure marker. The marker is re-checked AFTER acquiring the lock —
+ * holders write it before releasing, so a marker visible post-acquisition
+ * means the holder failed between our first check and the acquisition,
+ * and we must hand the lock back instead of duplicating the work.
+ */
+export async function attemptPromotion(
+  lockKey: string,
+  client: SingleflightRedis | null = getRedis()
+): Promise<PromotionAttempt> {
+  const failure = await getLockFailure(lockKey, client)
+  if (failure !== null) return { status: 'holder_failed', message: failure }
+
+  if (await isLockHeld(lockKey, client)) return { status: 'held' }
+
+  const acquisition = await tryAcquireLock(lockKey, client)
+  if (acquisition.status !== 'acquired') return { status: 'held' }
+
+  const lateFailure = await getLockFailure(lockKey, client)
+  if (lateFailure !== null) {
+    await releaseLock(lockKey, acquisition.token, client)
+    return { status: 'holder_failed', message: lateFailure }
+  }
+
+  return { status: 'promoted', token: acquisition.token }
+}
+
 /**
  * Poll for a cached result to appear (set by the lock holder).
  * Returns the result if found within the poll window, or null on timeout.

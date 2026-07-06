@@ -4,6 +4,9 @@ import {
   releaseLock,
   startLockHeartbeat,
   isLockHeld,
+  markLockFailure,
+  getLockFailure,
+  attemptPromotion,
   pollForResult,
 } from '@/lib/singleflight'
 import { createInMemoryRedis, createFailingRedis } from '@/lib/testSupport/inMemoryRedis'
@@ -170,5 +173,95 @@ describe('pollForResult', () => {
 describe('isLockHeld', () => {
   test('assumes held on Redis errors so waiters do not stampede', async () => {
     expect(await isLockHeld(LOCK_KEY, createFailingRedis())).toBe(true)
+  })
+})
+
+describe('holder failure vs holder crash (promotion state machine)', () => {
+  test('holder failure: waiters get the error and never promote or re-run', async () => {
+    const redis = createInMemoryRedis()
+
+    // Holder acquires, fails, writes the marker, then releases (route order).
+    const holder = await tryAcquireLock(LOCK_KEY, redis)
+    if (holder.status !== 'acquired') throw new Error('setup failed')
+    await markLockFailure(LOCK_KEY, 'OpenRouter request timeout after 120000ms', redis)
+    await releaseLock(LOCK_KEY, holder.token, redis)
+
+    // Every waiter surfaces the failure; none acquires the lock.
+    for (let waiter = 0; waiter < 3; waiter++) {
+      const promotion = await attemptPromotion(LOCK_KEY, redis)
+      expect(promotion).toEqual({
+        status: 'holder_failed',
+        message: 'OpenRouter request timeout after 120000ms',
+      })
+    }
+    expect(await isLockHeld(LOCK_KEY, redis)).toBe(false) // no one re-ran the pipeline
+  })
+
+  test('true crash: lock expired with no marker — exactly one waiter promotes', async () => {
+    const redis = createInMemoryRedis()
+    await tryAcquireLock(LOCK_KEY, redis)
+    redis.advanceClock(91_000) // holder crashed; lock TTL expired, no marker
+
+    const first = await attemptPromotion(LOCK_KEY, redis)
+    const second = await attemptPromotion(LOCK_KEY, redis)
+
+    expect(first.status).toBe('promoted')
+    expect(second.status).toBe('held') // lost the race — keeps polling
+  })
+
+  test('holder still working: waiters keep polling', async () => {
+    const redis = createInMemoryRedis()
+    await tryAcquireLock(LOCK_KEY, redis)
+
+    expect(await attemptPromotion(LOCK_KEY, redis)).toEqual({ status: 'held' })
+  })
+
+  test('marker written between check and acquisition: lock is handed back', async () => {
+    const redis = createInMemoryRedis()
+
+    // Lock is free and unmarked at first check, but the failed holder's
+    // marker becomes visible by the post-acquisition re-check.
+    await markLockFailure(LOCK_KEY, 'synthesis failed', redis)
+
+    const promotion = await attemptPromotion(LOCK_KEY, redis)
+
+    expect(promotion).toEqual({ status: 'holder_failed', message: 'synthesis failed' })
+    expect(await isLockHeld(LOCK_KEY, redis)).toBe(false)
+  })
+
+  test('a failed promoted waiter cannot cascade into further promotions', async () => {
+    const redis = createInMemoryRedis()
+    await tryAcquireLock(LOCK_KEY, redis)
+    redis.advanceClock(91_000) // original holder truly crashed
+
+    const promoted = await attemptPromotion(LOCK_KEY, redis)
+    if (promoted.status !== 'promoted') throw new Error('setup failed')
+
+    // The promoted waiter's pipeline fails too: marker, then release.
+    await markLockFailure(LOCK_KEY, 'still failing', redis)
+    await releaseLock(LOCK_KEY, promoted.token, redis)
+
+    expect(await attemptPromotion(LOCK_KEY, redis)).toEqual({
+      status: 'holder_failed',
+      message: 'still failing',
+    })
+  })
+
+  test('marker expires so later fresh requests are not blocked forever', async () => {
+    const redis = createInMemoryRedis()
+    await markLockFailure(LOCK_KEY, 'transient provider error', redis)
+
+    redis.advanceClock(61_000) // past the 60s marker TTL
+
+    expect(await getLockFailure(LOCK_KEY, redis)).toBeNull()
+    expect((await attemptPromotion(LOCK_KEY, redis)).status).toBe('promoted')
+  })
+
+  test('first failure message wins (marker is SET NX)', async () => {
+    const redis = createInMemoryRedis()
+    await markLockFailure(LOCK_KEY, 'first error', redis)
+    await markLockFailure(LOCK_KEY, 'second error', redis)
+
+    expect(await getLockFailure(LOCK_KEY, redis)).toBe('first error')
   })
 })

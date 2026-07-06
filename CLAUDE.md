@@ -88,7 +88,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Prefers OpenRouter provider-reported cost (`usage.cost`) with config-pricing math as fallback
   - The guard itself fails open without Redis, but uncached etymology requests fail closed (503) at the singleflight step
 
-- **`lib/singleflight.ts`** - Distributed request deduplication via Redis owner-token locks (SET NX with random token, 90s TTL, EXPIRE heartbeat every 30s while the pipeline runs). Results are cached BEFORE lock release. Streaming waiters poll the cache every 2s for up to 150s with SSE keepalive events and negative-cache checks, and promote themselves to holder if the lock vanishes without a result; non-streaming waiters poll ~10s then return 429 + Retry-After. If 10 users search "etymology" simultaneously, only 1 LLM call is made.
+- **`lib/singleflight.ts`** - Distributed request deduplication via Redis owner-token locks (SET NX with random token, 90s TTL, EXPIRE heartbeat every 30s while the pipeline runs). Results are cached BEFORE lock release. Streaming waiters poll the cache every 2s for up to 150s with SSE keepalive events and negative-cache checks; non-streaming waiters poll ~10s then return 429 + Retry-After. A holder that errors writes a short-TTL failure marker (60s) before releasing, so waiters surface the error; promotion to holder only happens on a true crash — lock vanished with neither a result nor a marker. If 10 users search "etymology" simultaneously, only 1 LLM call is made.
 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
   - Etymology results: 30 day TTL, versioned keys (`etymology:v2.2:`)
