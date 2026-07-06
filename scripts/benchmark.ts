@@ -27,11 +27,10 @@ import type { AncestryStage, EtymologyResult } from '@/lib/types'
 
 const RESULTS_DIR = join(process.cwd(), 'bench-results')
 
-const REQUIRED_ENV_VARS = [
-  'OPENROUTER_API_KEY',
-  'ETYMOLOGY_KV_REST_API_URL',
-  'ETYMOLOGY_KV_REST_API_TOKEN',
-] as const
+// The in-process research + synthesis path only needs the OpenRouter key today.
+// Redis (ETYMOLOGY_KV_*) is route-level infrastructure (cache/costGuard/singleflight)
+// and is not touched by this harness.
+const REQUIRED_ENV_VARS = ['OPENROUTER_API_KEY'] as const
 
 type Bucket = 'classical' | 'germanic' | 'neologism' | 'tricky'
 
@@ -74,7 +73,9 @@ interface WordBenchmark {
     synthesis: number
     total: number
   }
-  tokens: { input: number; output: number }
+  // Synthesis-call usage only: conductAgenticResearch does not expose the
+  // root-extraction LLM usage yet (wired up when fix/safety-hardening lands).
+  synthesisTokens: { input: number; output: number }
   rootCount: number
   ancestryStageCount: number
   confidence: ConfidenceDistribution
@@ -109,7 +110,8 @@ function assertRequiredEnv(): void {
   fail(
     `missing required environment variable(s): ${missing.join(', ')}.\n` +
       'Set them in .env.local (see .env.example for the full list) or export them ' +
-      'before running the benchmark.'
+      'before running the benchmark. Redis (ETYMOLOGY_KV_*) variables are NOT ' +
+      'required — the in-process pipeline does not use Redis.'
   )
 }
 
@@ -136,25 +138,6 @@ function countUngroundedReconstructed(stages: AncestryStage[]): number {
   return count
 }
 
-/**
- * Temporarily override the synthesis model. CONFIG's `as const` is type-level
- * only — the underlying object is mutable at runtime, and buildSynthesisRequest
- * reads CONFIG.model at call time. Root extraction (inside research) keeps the
- * default model; only the synthesis call is affected, matching the bake-off intent.
- */
-async function withModelOverride<T>(model: string | undefined, fn: () => Promise<T>): Promise<T> {
-  if (!model) return fn()
-
-  const mutableConfig = CONFIG as unknown as { model: string }
-  const originalModel = mutableConfig.model
-  mutableConfig.model = model
-  try {
-    return await fn()
-  } finally {
-    mutableConfig.model = originalModel
-  }
-}
-
 async function benchmarkWord(
   word: string,
   bucket: Bucket,
@@ -171,7 +154,7 @@ async function benchmarkWord(
     })
     const researchDone = performance.now()
 
-    const { result, usage } = await withModelOverride(model, () => synthesizeFromResearch(context))
+    const { result, usage } = await synthesizeFromResearch(context, { model })
     const synthesisDone = performance.now()
 
     const stages = collectStages(result.ancestryGraph)
@@ -191,7 +174,7 @@ async function benchmarkWord(
         synthesis: Math.round(synthesisDone - researchDone),
         total: Math.round(synthesisDone - startedAt),
       },
-      tokens: { input: usage.inputTokens, output: usage.outputTokens },
+      synthesisTokens: { input: usage.inputTokens, output: usage.outputTokens },
       rootCount: result.roots.length,
       ancestryStageCount: stages.length,
       confidence: distributeConfidence(stages),
@@ -216,7 +199,7 @@ async function benchmarkWord(
         synthesis: 0,
         total: Math.round(performance.now() - startedAt),
       },
-      tokens: { input: 0, output: 0 },
+      synthesisTokens: { input: 0, output: 0 },
       rootCount: 0,
       ancestryStageCount: 0,
       confidence: { high: 0, medium: 0, low: 0, unscored: 0 },
@@ -235,7 +218,7 @@ function formatWordLine(record: WordBenchmark): string {
   const seconds = (latencyMs.total / 1000).toFixed(1)
   return (
     `ok   ${record.word} [${record.bucket}] ${seconds}s | ` +
-    `${record.tokens.input} in / ${record.tokens.output} out tok | ` +
+    `${record.synthesisTokens.input} in / ${record.synthesisTokens.output} out tok | ` +
     `${record.rootCount} roots, ${record.ancestryStageCount} stages ` +
     `(${c.high}h/${c.medium}m/${c.low}l/${c.unscored}u) | ` +
     `${record.ungroundedReconstructedStages} ungrounded reconstructed`
@@ -285,8 +268,8 @@ async function runBenchmark(label: string, model: string | undefined): Promise<v
 interface Aggregates {
   okCount: number
   schemaValidCount: number
-  inputTokens: number
-  outputTokens: number
+  synthesisInputTokens: number
+  synthesisOutputTokens: number
   totalLatencyP50: number
   synthesisLatencyP50: number
   ungroundedReconstructed: number
@@ -315,8 +298,11 @@ function aggregate(summary: BenchmarkSummary): Aggregates {
   return {
     okCount: okRecords.length,
     schemaValidCount: summary.words.filter((record) => record.schemaValid).length,
-    inputTokens: okRecords.reduce((sum, record) => sum + record.tokens.input, 0),
-    outputTokens: okRecords.reduce((sum, record) => sum + record.tokens.output, 0),
+    synthesisInputTokens: okRecords.reduce((sum, record) => sum + record.synthesisTokens.input, 0),
+    synthesisOutputTokens: okRecords.reduce(
+      (sum, record) => sum + record.synthesisTokens.output,
+      0
+    ),
     totalLatencyP50: percentile(totals, 0.5),
     synthesisLatencyP50: percentile(synthesis, 0.5),
     ungroundedReconstructed: okRecords.reduce(
@@ -333,7 +319,7 @@ function formatAggregates(summary: BenchmarkSummary): string {
   const c = agg.confidence
   return [
     `Completed: ${agg.okCount}/${total} | schema-valid: ${agg.schemaValidCount}/${total}`,
-    `Tokens: ${agg.inputTokens} in / ${agg.outputTokens} out`,
+    `Tokens (synthesis only): ${agg.synthesisInputTokens} in / ${agg.synthesisOutputTokens} out`,
     `Latency p50: ${agg.totalLatencyP50}ms total, ${agg.synthesisLatencyP50}ms synthesis`,
     `Confidence: ${c.high} high / ${c.medium} medium / ${c.low} low / ${c.unscored} unscored`,
     `Ungrounded reconstructed stages: ${agg.ungroundedReconstructed}`,
@@ -346,7 +332,14 @@ function loadSummary(label: string): BenchmarkSummary {
   if (!existsSync(path)) {
     fail(`no summary found at bench-results/${label}/summary.json — run the benchmark first`)
   }
-  return JSON.parse(readFileSync(path, 'utf8')) as BenchmarkSummary
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as BenchmarkSummary
+  } catch (error) {
+    return fail(
+      `could not parse bench-results/${label}/summary.json (${safeError(error)}). ` +
+        'The file may be corrupted — delete the run directory and re-run the benchmark.'
+    )
+  }
 }
 
 function compareRow(metric: string, a: number, b: number): string {
@@ -372,8 +365,12 @@ function compareLabels(labelA: string, labelB: string): void {
 
   console.log(compareRow('completed words', aggA.okCount, aggB.okCount))
   console.log(compareRow('schema-valid words', aggA.schemaValidCount, aggB.schemaValidCount))
-  console.log(compareRow('input tokens (total)', aggA.inputTokens, aggB.inputTokens))
-  console.log(compareRow('output tokens (total)', aggA.outputTokens, aggB.outputTokens))
+  console.log(
+    compareRow('input tokens (synthesis)', aggA.synthesisInputTokens, aggB.synthesisInputTokens)
+  )
+  console.log(
+    compareRow('output tokens (synthesis)', aggA.synthesisOutputTokens, aggB.synthesisOutputTokens)
+  )
   console.log(compareRow('latency p50 total (ms)', aggA.totalLatencyP50, aggB.totalLatencyP50))
   console.log(
     compareRow('latency p50 synthesis (ms)', aggA.synthesisLatencyP50, aggB.synthesisLatencyP50)
