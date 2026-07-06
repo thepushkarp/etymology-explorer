@@ -54,9 +54,9 @@ export const CONFIG = {
 
   // USD-based cost tracking
   costTracking: {
-    pricingPerMillionTokens: { input: 0.75, output: 4.5 },
+    pricingPerMillionTokens: { input: 0.75, output: 4.5 }, // fallback when OpenRouter omits cost
     monthlyLimitUSD: 10.0,
-    cacheOnlyAtPercent: 1.0, // serve only cached results at 100%
+    cacheOnlyAtPercent: 0.9, // serve only cached results at 90% of budget
   },
 
   // Feature flags

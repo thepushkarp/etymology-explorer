@@ -145,6 +145,17 @@ export interface NgramResult {
 }
 
 /**
+ * Token and cost usage from a single LLM call.
+ * costUSD is the OpenRouter provider-reported cost when available;
+ * cost accounting falls back to config pricing math when absent.
+ */
+export interface LlmUsage {
+  inputTokens: number
+  outputTokens: number
+  costUSD?: number
+}
+
+/**
  * Complete etymology result for a word
  */
 export interface EtymologyResult {
@@ -241,6 +252,7 @@ export interface ResearchContext {
   relatedResearch: RelatedTermResearchData[]
   totalSourcesFetched: number
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
+  llmUsage?: LlmUsage // root-extraction LLM usage, counted toward the budget
   rawSources?: {
     wikipedia?: string
     dateAttested?: string
