@@ -165,21 +165,6 @@ body {
   animation: heroLift 0.55s ease-out both;
 }
 
-@keyframes streamRoll {
-  from {
-    opacity: 0.72;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-stream-roll {
-  animation: streamRoll 0.28s ease-out both;
-}
-
 /* Custom max-width for content */
 .max-w-content {
   max-width: 42rem;

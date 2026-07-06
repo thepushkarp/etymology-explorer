@@ -1,6 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
 import { StreamEvent } from '@/lib/types'
 
 interface ResearchProgressProps {
@@ -38,32 +37,6 @@ function normalizeSourceKey(source: string): string {
   return source.toLowerCase().replace(/\s+/g, '')
 }
 
-function buildSynthesisLines(tokens: string, maxLineLength = 42): string[] {
-  const normalized = tokens.replace(/\s+/g, ' ').trim()
-  if (!normalized) return []
-
-  const words = normalized.split(' ')
-  const lines: string[] = []
-  let currentLine = ''
-
-  for (const word of words) {
-    const nextLine = currentLine ? `${currentLine} ${word}` : word
-    if (currentLine && nextLine.length > maxLineLength) {
-      lines.push(currentLine)
-      currentLine = word
-      continue
-    }
-
-    currentLine = nextLine
-  }
-
-  if (currentLine) {
-    lines.push(currentLine)
-  }
-
-  return lines
-}
-
 export default function ResearchProgress({ events, query }: ResearchProgressProps) {
   // Build source states from events
   const sources: Record<string, SourceState> = {}
@@ -71,7 +44,6 @@ export default function ResearchProgress({ events, query }: ResearchProgressProp
 
   let parsingComplete = false
   let synthesisStarted = false
-  let synthesisTokens = ''
   let enrichmentDone = false
 
   const ensureSource = (source: string): string => {
@@ -101,8 +73,6 @@ export default function ResearchProgress({ events, query }: ResearchProgressProp
       parsingComplete = true
     } else if (event.type === 'synthesis_started') {
       synthesisStarted = true
-    } else if (event.type === 'synthesis_token') {
-      synthesisTokens += event.token
     } else if (event.type === 'enrichment_done') {
       enrichmentDone = true
     }
@@ -120,23 +90,10 @@ export default function ResearchProgress({ events, query }: ResearchProgressProp
   }
 
   const collapseSourceChips = parsingComplete
-  const synthesisLines = useMemo(() => buildSynthesisLines(synthesisTokens), [synthesisTokens])
-  const hasSynthesisTokens = synthesisLines.length > 0
-  const visibleSynthesisLines = synthesisLines.slice(-4)
-  const paddedSynthesisLines = Array.from({ length: 4 }, (_, index) => {
-    const offset = 4 - visibleSynthesisLines.length
-    return visibleSynthesisLines[index - offset] ?? ''
-  })
-  const synthesisPhaseLabel = enrichmentDone
-    ? 'Finalizing grounded result'
-    : hasSynthesisTokens
-      ? 'Streaming synthesis'
-      : 'Reasoning over sources'
+  const synthesisPhaseLabel = enrichmentDone ? 'Finalizing grounded result' : 'Composing the entry'
   const synthesisPhaseDetail = enrichmentDone
     ? 'Aligning the generated explanation with evidence...'
-    : hasSynthesisTokens
-      ? 'Unfolding the story...'
-      : 'Putting the explanation together...'
+    : 'Putting the explanation together...'
 
   return (
     <section className="editorial-shell animate-fadeIn p-6 sm:p-8 lg:p-10">
@@ -169,29 +126,6 @@ export default function ResearchProgress({ events, query }: ResearchProgressProp
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-charcoal-light">
                   {synthesisPhaseDetail}
                 </p>
-
-                {visibleSynthesisLines.length > 0 && (
-                  <div className="editorial-inset mt-5 w-full max-w-none overflow-hidden px-4 py-4">
-                    <div
-                      key={synthesisLines.length}
-                      className="flex h-[6.8rem] flex-col justify-center gap-2 animate-stream-roll"
-                    >
-                      {paddedSynthesisLines.map((line, index) => (
-                        <div
-                          key={`${index}-${line}`}
-                          className={`
-                            min-h-[1.15rem] text-center font-mono text-[11px] leading-relaxed
-                            text-charcoal/72 transition-opacity duration-200
-                            ${line ? '' : 'opacity-0'}
-                          `}
-                          style={{ opacity: line ? [0.28, 0.45, 0.68, 1][index] : 0 }}
-                        >
-                          {line || '\u00a0'}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

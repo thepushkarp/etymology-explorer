@@ -6,7 +6,7 @@ import {
   StageConfidence,
   ResearchContext,
 } from '@/lib/types'
-import { synthesizeFromResearch, streamSynthesis, SynthesisResult } from '@/lib/llm'
+import { synthesizeFromResearch, SynthesisResult } from '@/lib/llm'
 import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
@@ -274,13 +274,12 @@ export async function GET(request: NextRequest) {
         let synthesis: SynthesisResult
         if (emit) {
           emit({ type: 'synthesis_started' })
-          synthesis = await streamSynthesis(
-            researchContext,
-            (token) => {
-              emit({ type: 'synthesis_token', token })
+          synthesis = await synthesizeFromResearch(researchContext, {
+            signal: request.signal,
+            onSection: (section, data) => {
+              emit({ type: 'synthesis_section', section, data })
             },
-            { signal: request.signal }
-          )
+          })
         } else {
           synthesis = await synthesizeFromResearch(researchContext, { signal: request.signal })
         }

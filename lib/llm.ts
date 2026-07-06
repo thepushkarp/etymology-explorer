@@ -4,6 +4,7 @@ import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph, pruneUngroundedStages } from './etymologyEnricher'
 import { EtymologyResultSchema } from './schemas/etymology'
 import { stripNullsDeep } from './schemas/llm-schema'
+import { createSectionScanner } from './sectionScanner'
 import { CONFIG } from './config'
 import {
   buildSynthesisRequest,
@@ -271,6 +272,14 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
 interface SynthesisOptions {
   model?: string
   signal?: AbortSignal
+  /**
+   * Streams the LLM response and fires once per closed top-level field of
+   * the response JSON, in schema (render) order — ~10 events per response.
+   * Presence of this callback selects the streaming transport; the
+   * streaming path does not retry malformed output, because sections
+   * already on the wire cannot be retracted.
+   */
+  onSection?: (section: string, data: unknown) => void
 }
 
 async function callLlm(
@@ -282,10 +291,37 @@ async function callLlm(
 }> {
   const request = buildSynthesisRequest(userPrompt, options?.model)
   request.instructions = SYSTEM_PROMPT
+  const onSection = options?.onSection
 
-  let response
   try {
-    response = await createOpenRouterResponse(request, CONFIG.timeouts.llm, options?.signal)
+    if (!onSection) {
+      const response = await createOpenRouterResponse(request, CONFIG.timeouts.llm, options?.signal)
+      return { text: extractOutputText(response), usage: extractUsage(response) }
+    }
+
+    const scanner = createSectionScanner((section, data) => {
+      onSection(section, stripNullsDeep(data))
+    })
+
+    let streamedText = ''
+    const response = await streamOpenRouterResponse(
+      request,
+      (token) => {
+        streamedText += token
+        scanner.push(token)
+      },
+      CONFIG.timeouts.llm,
+      options?.signal
+    )
+
+    if (streamedText.length === 0) {
+      // Some providers deliver the text only in the final response event;
+      // feed it through the scanner so section events still fire.
+      streamedText = extractOutputText(response)
+      scanner.push(streamedText)
+    }
+
+    return { text: streamedText, usage: extractUsage(response) }
   } catch (error) {
     if (options?.signal?.aborted) {
       throw error // caller-initiated cancellation, not a timeout
@@ -294,11 +330,6 @@ async function callLlm(
       throw new Error(timeoutErrorMessage(CONFIG.timeouts.llm))
     }
     throw error
-  }
-
-  return {
-    text: extractOutputText(response),
-    usage: extractUsage(response),
   }
 }
 
@@ -310,7 +341,10 @@ async function generateEtymologyResponse(
   usage: LlmUsage
 }> {
   const totalUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
-  const maxAttempts = CONFIG.retries.malformedOutputRetries + 1
+  // json_schema strict mode makes malformed output rare. The unary path
+  // keeps one retry as a safety net; the streaming path fails fast — its
+  // section events are already on the wire and cannot be retracted.
+  const maxAttempts = options?.onSection ? 1 : CONFIG.retries.malformedOutputRetries + 1
   let lastMalformedError: MalformedModelOutputError | null = null
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -457,6 +491,12 @@ function finalizeResult(
   return validated.data as EtymologyResult
 }
 
+/**
+ * Single synthesis entrypoint for both transports: pass `onSection` to
+ * stream (section events fire as top-level fields close), omit it for a
+ * unary call. Either way the parsed result is enriched, source-attributed,
+ * and Zod-validated before it is returned.
+ */
 export async function synthesizeFromResearch(
   researchContext: ResearchContext,
   options?: SynthesisOptions
@@ -467,72 +507,7 @@ export async function synthesizeFromResearch(
   const { result, usage } = await generateEtymologyResponse(userPrompt, options)
 
   return {
-    result: finalizeResult(result, researchContext, 'standard'),
-    usage,
-  }
-}
-
-export async function streamSynthesis(
-  researchContext: ResearchContext,
-  onToken: (token: string) => void,
-  options?: SynthesisOptions
-): Promise<SynthesisResult> {
-  const researchData = buildResearchPrompt(researchContext)
-  const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
-  const request = buildSynthesisRequest(userPrompt, options?.model)
-  request.instructions = SYSTEM_PROMPT
-
-  let fullText = ''
-  let usage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
-
-  try {
-    const response = await streamOpenRouterResponse(
-      request,
-      (token) => {
-        fullText += token
-        onToken(token)
-      },
-      CONFIG.timeouts.llm,
-      options?.signal
-    )
-
-    const responseText = extractOutputText(response)
-    if (!fullText) {
-      fullText = responseText
-    }
-    usage = extractUsage(response)
-  } catch (error) {
-    if (options?.signal?.aborted) {
-      throw error // caller-initiated cancellation — propagate as-is
-    }
-    const errorMessage = error instanceof Error ? error.message : String(error)
-    throw new Error(`Streaming failed: ${errorMessage}`)
-  }
-
-  let result: EtymologyResult
-  try {
-    result = stripNullsDeep(parseGeneratedJson(fullText))
-    sanitizeSuggestions(result)
-  } catch (error) {
-    const preview = fullText.slice(0, 200)
-    const parseError = new MalformedModelOutputError(
-      `Failed to parse streamed LLM response: ${error}. Preview: ${preview}`,
-      usage
-    )
-
-    if (CONFIG.retries.malformedOutputRetries < 1) {
-      throw parseError
-    }
-
-    console.warn('[LLM] Streaming output malformed, retrying with unary generation')
-
-    const recovered = await generateEtymologyResponse(userPrompt, options)
-    result = recovered.result
-    addUsage(usage, recovered.usage)
-  }
-
-  return {
-    result: finalizeResult(result, researchContext, 'streaming'),
+    result: finalizeResult(result, researchContext, options?.onSection ? 'streaming' : 'standard'),
     usage,
   }
 }
