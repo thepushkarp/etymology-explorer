@@ -294,6 +294,7 @@ export type StreamEvent =
   | { type: 'root_research'; root: string; source: string; status: string }
   | { type: 'synthesis_started' }
   | { type: 'synthesis_token'; token: string }
+  | { type: 'singleflight_wait'; waitedMs: number }
   | {
       type: 'enrichment_done'
       highConfidence: number

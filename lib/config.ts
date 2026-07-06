@@ -45,11 +45,13 @@ export const CONFIG = {
     tts: 8_000, // ElevenLabs
   },
 
-  // Singleflight deduplication
+  // Singleflight deduplication (owner-token locks, see lib/singleflight.ts)
   singleflight: {
-    lockTTL: 30, // seconds — auto-expires if holder crashes
-    pollIntervalMs: 500,
-    maxPolls: 16, // 8s total wait
+    lockTTLSeconds: 90, // auto-expires if holder crashes; holder heartbeats to extend
+    heartbeatIntervalMs: 30_000, // holder re-EXPIREs the lock while the pipeline runs
+    waiterPollIntervalMs: 2_000, // waiters re-check the cache at this cadence
+    streamWaiterMaxWaitMs: 150_000, // streaming waiters keep the SSE open this long
+    unaryWaiterMaxWaitMs: 10_000, // non-streaming waiters give up (429) after this
   },
 
   // USD-based cost tracking

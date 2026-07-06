@@ -7,6 +7,9 @@ import { tryAcquireLock, releaseLock, pollForResult } from '@/lib/singleflight'
 import { safeError } from '@/lib/errorUtils'
 import { CONFIG } from '@/lib/config'
 
+// TTS generation has an 8s timeout, plus cache round-trips and waiter polling.
+export const maxDuration = 60
+
 /**
  * GET /api/pronunciation?word=example
  *
@@ -66,9 +69,9 @@ export async function GET(request: NextRequest) {
 
   // Singleflight: prevent duplicate TTS calls for the same word
   const lockKey = `lock:audio:${normalized}`
-  const acquiredLock = await tryAcquireLock(lockKey)
+  const acquisition = await tryAcquireLock(lockKey)
 
-  if (!acquiredLock) {
+  if (acquisition.status === 'busy') {
     // Another request is generating this audio — poll for it
     console.log(`[Pronunciation] Waiting for in-flight audio for "${normalized}"`)
     const result = await pollForResult(() => getCachedAudio(normalized))
@@ -84,9 +87,14 @@ export async function GET(request: NextRequest) {
     }
     return NextResponse.json(
       { success: false, error: 'Request in progress, please retry in a few seconds.' },
-      { status: 429, headers: { 'Retry-After': '2' } }
+      { status: 429, headers: { 'Retry-After': '5' } }
     )
   }
+
+  // 'unavailable' / 'error' fall through without a lock: pronunciation fails
+  // open because TTS cost is bounded (8s timeout, per-IP rate limits) and the
+  // endpoint must keep working when Redis is down.
+  const lockToken = acquisition.status === 'acquired' ? acquisition.token : null
 
   try {
     // Check cost mode — reject uncached expensive requests when budget is pressured
@@ -101,10 +109,9 @@ export async function GET(request: NextRequest) {
     const audioBuffer = await generatePronunciation(normalized)
     const base64 = Buffer.from(audioBuffer).toString('base64')
 
-    // Cache for future use (non-blocking)
-    cacheAudio(normalized, base64).catch((err) => {
-      console.error('[Pronunciation] Cache store failed:', safeError(err))
-    })
+    // Cache BEFORE the lock is released in `finally` so waiters polling
+    // the audio cache find the result instead of hitting 429.
+    await cacheAudio(normalized, base64)
 
     return new NextResponse(Buffer.from(audioBuffer), {
       headers: {
@@ -128,6 +135,8 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   } finally {
-    releaseLock(lockKey).catch(() => {})
+    if (lockToken) {
+      releaseLock(lockKey, lockToken).catch(() => {})
+    }
   }
 }
