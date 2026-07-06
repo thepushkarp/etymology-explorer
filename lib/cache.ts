@@ -22,8 +22,8 @@ function jitterTTL(ttl: number): number {
 }
 
 // Bump version when EtymologyResult schema or sourcing behavior changes
-const CACHE_VERSION = '2.2'
-const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
+export const CACHE_VERSION = '2.2'
+export const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
 const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
 
 // Audio cache (longer TTL - pronunciations don't change)
