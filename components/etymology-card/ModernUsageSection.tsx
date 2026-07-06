@@ -5,10 +5,9 @@ import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './Mob
 
 interface ModernUsageSectionProps {
   modernUsage: ModernUsage
-  isSimple: boolean
 }
 
-export function ModernUsageSection({ modernUsage, isSimple }: ModernUsageSectionProps) {
+export function ModernUsageSection({ modernUsage }: ModernUsageSectionProps) {
   return (
     <MobileSection
       title="Modern Usage"
@@ -39,7 +38,7 @@ export function ModernUsageSection({ modernUsage, isSimple }: ModernUsageSection
           </div>
         )}
 
-        {!isSimple && modernUsage.notableReferences && modernUsage.notableReferences.length > 0 && (
+        {modernUsage.notableReferences && modernUsage.notableReferences.length > 0 && (
           <div className="mt-5 border-t border-border-soft pt-5">
             <p className="mb-2 text-xs uppercase tracking-[0.16em] text-charcoal/50">
               Notable References

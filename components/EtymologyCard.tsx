@@ -15,23 +15,21 @@ import { UsageSection } from './etymology-card/UsageSection'
 interface EtymologyCardProps {
   result: EtymologyResult
   onWordClick: (word: string) => void
-  isSimple?: boolean
   headerActions?: React.ReactNode
 }
 
 export const EtymologyCard = memo(function EtymologyCard({
   result,
   onWordClick,
-  isSimple = false,
   headerActions,
 }: EtymologyCardProps) {
   return (
     <article className="editorial-shell animate-fadeIn p-6 sm:p-8 md:p-12">
       <div className="relative">
-        <EntryHeader result={result} isSimple={isSimple} headerActions={headerActions} />
+        <EntryHeader result={result} headerActions={headerActions} />
 
         {result.ancestryGraph?.branches?.length > 0 && (
-          <AncestrySection graph={result.ancestryGraph} word={result.word} isSimple={isSimple} />
+          <AncestrySection graph={result.ancestryGraph} word={result.word} />
         )}
 
         <StorySection lore={result.lore} />
@@ -39,14 +37,14 @@ export const EtymologyCard = memo(function EtymologyCard({
         {result.ngram && result.ngram.data.length > 0 && <UsageSection ngram={result.ngram} />}
 
         {result.modernUsage && result.modernUsage.hasSlangMeaning && (
-          <ModernUsageSection modernUsage={result.modernUsage} isSimple={isSimple} />
+          <ModernUsageSection modernUsage={result.modernUsage} />
         )}
 
         {result.suggestions && (
           <RelatedWordsSection suggestions={result.suggestions} onWordClick={onWordClick} />
         )}
 
-        {!isSimple && result.rawSources?.wikipedia && (
+        {result.rawSources?.wikipedia && (
           <HistoricalContext
             wikipediaExtract={result.rawSources.wikipedia}
             sourceUrl={wikipediaSourceUrl(result.sources)}
@@ -55,7 +53,7 @@ export const EtymologyCard = memo(function EtymologyCard({
 
         {result.roots.length > 0 && <KinSection roots={result.roots} onWordClick={onWordClick} />}
 
-        {!isSimple && <SourcesSection sources={result.sources} />}
+        <SourcesSection sources={result.sources} />
 
         <div
           className="

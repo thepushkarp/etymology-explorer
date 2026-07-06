@@ -7,10 +7,9 @@ import { FIRST_SECTION_CLASS, MobileSection, SECTION_TITLE_CLASS } from './Mobil
 interface AncestrySectionProps {
   graph: AncestryGraph
   word: string
-  isSimple: boolean
 }
 
-export function AncestrySection({ graph, word, isSimple }: AncestrySectionProps) {
+export function AncestrySection({ graph, word }: AncestrySectionProps) {
   return (
     <MobileSection
       id="entry-ancestry"
@@ -21,7 +20,7 @@ export function AncestrySection({ graph, word, isSimple }: AncestrySectionProps)
     >
       <div className="editorial-card editorial-grid mt-2 p-5 sm:p-6">
         <div className="pt-1">
-          <AncestryTree graph={graph} word={word} isSimple={isSimple} />
+          <AncestryTree graph={graph} word={word} />
         </div>
       </div>
     </MobileSection>

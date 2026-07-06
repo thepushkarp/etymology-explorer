@@ -5,7 +5,6 @@ import { PronunciationButton } from '../PronunciationButton'
 
 interface EntryHeaderProps {
   result: EtymologyResult
-  isSimple: boolean
   headerActions?: React.ReactNode
 }
 
@@ -31,7 +30,7 @@ function buildOriginHook(result: EtymologyResult): string | null {
   return `From ${parts.join(' + ')}.`
 }
 
-export function EntryHeader({ result, isSimple, headerActions }: EntryHeaderProps) {
+export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
   const originHook = buildOriginHook(result)
   const sectionLinks: Array<{ label: string; href: string }> = [
     { label: 'Ancestry', href: '#entry-ancestry' },
@@ -39,10 +38,8 @@ export function EntryHeader({ result, isSimple, headerActions }: EntryHeaderProp
     ...(result.ngram?.data.length ? [{ label: 'Usage', href: '#entry-usage' }] : []),
     ...(result.suggestions ? [{ label: 'Related', href: '#entry-related' }] : []),
     ...(result.roots.length > 0 ? [{ label: 'Kin', href: '#entry-kin' }] : []),
-    ...(!isSimple && result.rawSources?.wikipedia
-      ? [{ label: 'Context', href: '#entry-context' }]
-      : []),
-    ...(!isSimple ? [{ label: 'Sources', href: '#entry-sources' }] : []),
+    ...(result.rawSources?.wikipedia ? [{ label: 'Context', href: '#entry-context' }] : []),
+    { label: 'Sources', href: '#entry-sources' },
   ]
 
   return (
@@ -56,7 +53,7 @@ export function EntryHeader({ result, isSimple, headerActions }: EntryHeaderProp
             </h1>
 
             <span className="inline-flex items-center gap-1 pt-2 text-base italic text-charcoal-light sm:text-lg">
-              {!isSimple && result.pronunciation}
+              {result.pronunciation}
               <PronunciationButton word={result.word} />
             </span>
           </div>

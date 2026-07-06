@@ -5,7 +5,6 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { useHistory } from '@/lib/hooks/useHistory'
 import { usePronunciation } from '@/lib/hooks/usePronunciation'
-import { useSimpleMode } from '@/lib/hooks/useSimpleMode'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { SearchBar } from '@/components/SearchBar'
 import { EtymologyCard } from '@/components/EtymologyCard'
@@ -38,7 +37,6 @@ export function ExploreExperience() {
   const searchParams = useSearchParams()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const { history, clearHistory, removeFromHistory } = useHistory()
-  const { isSimple, toggleSimple } = useSimpleMode()
   const { state, events, partialResult, error, search, reset } = useStreamingEtymology()
   const currentWord = searchParams.get('q')?.toLowerCase() ?? null
   const [ngramData, setNgramData] = useState<NgramResult | null>(null)
@@ -119,14 +117,6 @@ export function ExploreExperience() {
     navigateToWord(history[currentIndex - 1].word)
   }, [history, currentWord, navigateToWord])
 
-  const currentHistoryIndex = currentWord
-    ? history.findIndex((entry) => entry.word === currentWord)
-    : -1
-  const canGoBack =
-    history.length > 0 &&
-    (!currentWord || currentHistoryIndex === -1 || currentHistoryIndex < history.length - 1)
-  const canGoForward = currentHistoryIndex > 0
-
   const { play: playPronunciation } = usePronunciation(partialResult?.word ?? '')
   const handlePlayPronunciation = useCallback(() => {
     if (state === 'success') {
@@ -142,7 +132,7 @@ export function ExploreExperience() {
 
   return (
     <div className="min-h-screen bg-cream text-charcoal">
-      <SiteHeader isSimple={isSimple} onToggleSimpleMode={toggleSimple} />
+      <SiteHeader />
 
       <HistorySidebar
         history={history}
@@ -192,41 +182,11 @@ export function ExploreExperience() {
                   onSuggestionsVisibilityChange={setSuggestionsVisible}
                 />
                 {!suggestionsVisible && (
-                  <div className="relative mt-5 flex flex-wrap items-center justify-center gap-3">
+                  <div className="mt-5 flex justify-center">
                     <SurpriseButton
                       onWordSelected={navigateToWord}
                       disabled={state === 'loading'}
                     />
-                    {history.length > 0 && (
-                      <nav
-                        aria-label="Search history"
-                        className="flex items-center gap-1.5 sm:absolute sm:right-0 sm:top-1/2 sm:-translate-y-1/2"
-                      >
-                        <span className="hidden text-[10px] uppercase tracking-[0.2em] text-charcoal-light/62 sm:inline">
-                          history
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleHistoryBack}
-                          disabled={!canGoBack}
-                          aria-label="Previous word in history"
-                          title="Previous word (←)"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border-soft bg-surface font-serif text-charcoal-light transition-colors hover:border-border-strong hover:text-charcoal disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-border-soft disabled:hover:text-charcoal-light"
-                        >
-                          ←
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleHistoryForward}
-                          disabled={!canGoForward}
-                          aria-label="Next word in history"
-                          title="Next word (→)"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border-soft bg-surface font-serif text-charcoal-light transition-colors hover:border-border-strong hover:text-charcoal disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-border-soft disabled:hover:text-charcoal-light"
-                        >
-                          →
-                        </button>
-                      </nav>
-                    )}
                   </div>
                 )}
               </div>
@@ -290,7 +250,6 @@ export function ExploreExperience() {
               <EtymologyCard
                 result={resultWithNgram}
                 onWordClick={navigateToWord}
-                isSimple={isSimple}
                 headerActions={<ShareMenu result={resultWithNgram} />}
               />
             )}
@@ -303,7 +262,6 @@ export function ExploreExperience() {
         onHistoryBack={handleHistoryBack}
         onHistoryForward={handleHistoryForward}
         onPlayPronunciation={handlePlayPronunciation}
-        onToggleSimpleMode={toggleSimple}
       />
 
       <SiteFooter />
