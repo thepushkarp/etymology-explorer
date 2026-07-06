@@ -33,6 +33,30 @@ function isMalformedModelOutputError(error: unknown): error is MalformedModelOut
   return error instanceof MalformedModelOutputError
 }
 
+/**
+ * Extract the LLM usage attached to a synthesis error, if any. Errors thrown
+ * AFTER the model ran (malformed output, post-processing schema failures)
+ * carry the billed usage so callers can still record the spend; transport
+ * errors (timeouts, aborts) carry none.
+ */
+export function getLlmUsageFromError(error: unknown): LlmUsage | undefined {
+  if (!error || typeof error !== 'object' || !('usage' in error)) {
+    return undefined
+  }
+
+  const usage = (error as { usage?: unknown }).usage
+  if (!usage || typeof usage !== 'object') {
+    return undefined
+  }
+
+  const maybe = usage as { inputTokens?: unknown; outputTokens?: unknown }
+  if (typeof maybe.inputTokens !== 'number' || typeof maybe.outputTokens !== 'number') {
+    return undefined
+  }
+
+  return usage as LlmUsage
+}
+
 function addUsage(total: LlmUsage, delta: LlmUsage): void {
   total.inputTokens += delta.inputTokens
   total.outputTokens += delta.outputTokens
@@ -382,7 +406,12 @@ async function generateEtymologyResponse(
     }
   }
 
-  throw lastMalformedError ?? new Error('Failed to parse LLM response after retries')
+  // Re-wrap with the usage accumulated across ALL attempts (the stored
+  // error only carries the final attempt's), so the caller records the
+  // full spend of a failed synthesis.
+  throw lastMalformedError
+    ? new MalformedModelOutputError(lastMalformedError.message, totalUsage)
+    : new Error('Failed to parse LLM response after retries')
 }
 
 function attachSources(result: EtymologyResult, researchContext: ResearchContext): EtymologyResult {
@@ -506,8 +535,21 @@ export async function synthesizeFromResearch(
 
   const { result, usage } = await generateEtymologyResponse(userPrompt, options)
 
-  return {
-    result: finalizeResult(result, researchContext, options?.onSection ? 'streaming' : 'standard'),
-    usage,
+  try {
+    return {
+      result: finalizeResult(
+        result,
+        researchContext,
+        options?.onSection ? 'streaming' : 'standard'
+      ),
+      usage,
+    }
+  } catch (error) {
+    // Post-processing failures (schema validation) still consumed a billed
+    // LLM call — attach the usage so the route can record the spend.
+    if (error instanceof Error && !('usage' in error)) {
+      ;(error as Error & { usage?: LlmUsage }).usage = usage
+    }
+    throw error
   }
 }

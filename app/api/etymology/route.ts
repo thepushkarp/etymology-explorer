@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { EtymologyResult, StreamEvent, StageConfidence, ResearchContext } from '@/lib/types'
-import { synthesizeFromResearch, SynthesisResult } from '@/lib/llm'
+import { synthesizeFromResearch, getLlmUsageFromError, SynthesisResult } from '@/lib/llm'
 import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
@@ -239,6 +239,14 @@ export async function GET(request: NextRequest) {
 
         return { kind: 'result', result: synthesis.result }
       } catch (error) {
+        // A synthesis attempt that failed AFTER the model ran (malformed
+        // output, schema validation) still billed us — count it toward
+        // the budget before surfacing the failure. recordSpend never throws.
+        const failedCallUsage = getLlmUsageFromError(error)
+        if (failedCallUsage) {
+          await recordSpend(failedCallUsage)
+        }
+
         // Distinguish "holder failed" from "holder crashed" for waiters:
         // written before the lock release below, checked before promotion.
         // A client disconnect is neither — skip the marker so a waiting
