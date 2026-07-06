@@ -168,7 +168,6 @@ LLM receives:
 **Key hooks**:
 
 - `lib/hooks/useStreamingEtymology.ts` - Main streaming search state management (SSE progress + token streaming)
-- `lib/hooks/useEtymologySearch.ts` - Non-streaming search state management (idle/loading/success/error)
 - `lib/hooks/useLocalStorage.ts` - Persistent client state
 - `lib/hooks/useHistory.ts` - Search history management
 

@@ -168,8 +168,7 @@ etymology-explorer/
 │   ├── validation.ts       # Input validation
 │   ├── wordlist.ts         # GRE word utilities
 │   ├── hooks/              # React hooks (localStorage, history, search)
-│   │   ├── useStreamingEtymology.ts # Primary streaming search hook (SSE)
-│   │   └── useEtymologySearch.ts    # Non-streaming search hook
+│   │   └── useStreamingEtymology.ts # Primary streaming search hook (SSE)
 │   └── schemas/
 │       ├── etymology.ts    # Zod schema for cache validation
 │       └── llm-schema.ts   # JSON Schema for LLM structured outputs

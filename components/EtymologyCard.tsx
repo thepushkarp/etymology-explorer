@@ -336,7 +336,7 @@ export const EtymologyCard = memo(function EtymologyCard({
                     label="Synonyms"
                     words={result.suggestions.synonyms}
                     onWordClick={onWordClick}
-                    color="emerald"
+                    color="olive"
                   />
                 )}
                 {result.suggestions.antonyms && result.suggestions.antonyms.length > 0 && (
@@ -361,7 +361,7 @@ export const EtymologyCard = memo(function EtymologyCard({
                       label="Often Confused With"
                       words={result.suggestions.easilyConfusedWith}
                       onWordClick={onWordClick}
-                      color="blue"
+                      color="sky"
                     />
                   )}
                 {result.suggestions.seeAlso && result.suggestions.seeAlso.length > 0 && (
@@ -369,7 +369,7 @@ export const EtymologyCard = memo(function EtymologyCard({
                     label="See Also"
                     words={result.suggestions.seeAlso}
                     onWordClick={onWordClick}
-                    color="purple"
+                    color="plum"
                   />
                 )}
               </div>
@@ -441,16 +441,18 @@ export const EtymologyCard = memo(function EtymologyCard({
 function SourceBadge({ source }: { source: SourceReference }) {
   const colors: Record<string, string> = {
     etymonline:
-      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
+      'border-accent-oxblood/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-oxblood/70',
     wiktionary:
-      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
+      'border-accent-olive/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-olive/70',
     freeDictionary:
-      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
+      'border-accent-sky/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-sky/70',
     urbanDictionary:
-      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
+      'border-accent-amber/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-amber/70',
     incelsWiki:
-      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
-    synthesized: 'border-border-soft bg-surface text-charcoal-light',
+      'border-accent-plum/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-plum/70',
+    wikipedia:
+      'border-accent-soft/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-soft/70',
+    synthesized: 'border-accent-rose/40 bg-surface text-charcoal-light',
   }
 
   const baseClasses = `
@@ -552,17 +554,16 @@ function SuggestionRow({
   label: string
   words: string[]
   onWordClick: (word: string) => void
-  color: 'emerald' | 'rose' | 'amber' | 'blue' | 'purple'
+  color: 'olive' | 'rose' | 'amber' | 'sky' | 'plum'
 }) {
   const colorClasses = {
-    emerald:
-      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
-    rose: 'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
+    olive:
+      'border-accent-olive/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-olive/70',
+    rose: 'border-accent-rose/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-rose/70',
     amber:
-      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
-    blue: 'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
-    purple:
-      'border-border-soft bg-surface text-charcoal-light hover:bg-surface-muted hover:border-border-strong',
+      'border-accent-amber/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-amber/70',
+    sky: 'border-accent-sky/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-sky/70',
+    plum: 'border-accent-plum/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-plum/70',
   }
 
   return (
