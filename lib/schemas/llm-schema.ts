@@ -14,6 +14,10 @@
  * Kept in sync with the Zod cache schema (lib/schemas/etymology.ts) by a
  * mechanical cross-check in lib/schemas/llm-schema.test.ts — key sets,
  * required lists, and null-unions fail the suite on drift.
+ *
+ * The schema is billed as input tokens on every synthesis call, so
+ * descriptions are deliberately terse and only cover what the system
+ * prompt's content rules (lib/prompts.ts) don't already say.
  */
 
 const ANCESTRY_STAGE_SCHEMA = {
@@ -21,15 +25,15 @@ const ANCESTRY_STAGE_SCHEMA = {
   properties: {
     stage: {
       type: 'string',
-      description: 'Language/period: "Proto-Indo-European", "Ancient Greek", "Old French", etc.',
+      description: 'Language/period, e.g. "Ancient Greek"',
     },
     form: {
       type: 'string',
-      description: 'Word form at this stage, with native script when it exists, e.g. "tēle (τῆλε)"',
+      description: 'Form at this stage, native script when it exists, e.g. "tēle (τῆλε)"',
     },
     note: {
       type: 'string',
-      description: `Brief annotation about meaning/context, e.g. "meaning 'far, distant'"`,
+      description: 'Brief meaning/context note',
     },
   },
   required: ['stage', 'form', 'note'],
@@ -39,24 +43,22 @@ const ANCESTRY_STAGE_SCHEMA = {
 export const ETYMOLOGY_LLM_SCHEMA = {
   type: 'object',
   properties: {
-    word: { type: 'string', description: 'The word being analyzed' },
-    pronunciation: { type: 'string', description: 'IPA pronunciation, e.g. /pərˈfɪdiəs/' },
+    word: { type: 'string' },
+    pronunciation: { type: 'string', description: 'IPA, e.g. /pərˈfɪdiəs/' },
     definition: { type: 'string', description: 'Brief 5-10 word definition' },
     ancestryGraph: {
       type: 'object',
-      description: 'Graph showing how roots evolved independently then merged',
       properties: {
         branches: {
           type: 'array',
-          description: 'One branch per root: 2-4 interesting stages of independent evolution',
           items: {
             type: 'object',
             properties: {
-              root: { type: 'string', description: 'The root this branch traces' },
+              root: { type: 'string' },
               stages: {
                 type: 'array',
                 items: ANCESTRY_STAGE_SCHEMA,
-                description: 'Evolution stages for this root, oldest first',
+                description: 'Oldest first',
               },
             },
             required: ['root', 'stages'],
@@ -65,17 +67,15 @@ export const ETYMOLOGY_LLM_SCHEMA = {
         },
         convergencePoints: {
           type: ['array', 'null'],
-          description:
-            'Only when branches share a PIE root already present in their stages; else null',
           items: {
             type: 'object',
             properties: {
-              pieRoot: { type: 'string', description: 'The shared Proto-Indo-European root' },
-              meaning: { type: 'string', description: 'What the PIE root meant' },
+              pieRoot: { type: 'string' },
+              meaning: { type: 'string' },
               branchIndices: {
                 type: 'array',
                 items: { type: 'integer' },
-                description: 'Which branches (by index) share this ancestor',
+                description: 'Indices of branches sharing this ancestor',
               },
             },
             required: ['pieRoot', 'meaning', 'branchIndices'],
@@ -84,13 +84,10 @@ export const ETYMOLOGY_LLM_SCHEMA = {
         },
         mergePoint: {
           type: ['object', 'null'],
-          description: 'Where branches combine, compound words only — null for single-root words',
+          description: 'Compound words only; null for single-root words',
           properties: {
-            form: { type: 'string', description: 'The combined form' },
-            note: {
-              type: 'string',
-              description: `Context about the combination, e.g. "coined 1835, 'far-sound' device"`,
-            },
+            form: { type: 'string' },
+            note: { type: 'string' },
           },
           required: ['form', 'note'],
           additionalProperties: false,
@@ -98,7 +95,6 @@ export const ETYMOLOGY_LLM_SCHEMA = {
         postMerge: {
           type: ['array', 'null'],
           items: ANCESTRY_STAGE_SCHEMA,
-          description: 'Evolution after the merge; null when none',
         },
       },
       required: ['branches', 'convergencePoints', 'mergePoint', 'postMerge'],
@@ -106,26 +102,17 @@ export const ETYMOLOGY_LLM_SCHEMA = {
     },
     roots: {
       type: 'array',
-      description:
-        'ALL constituent roots: 1 for simple words, 2+ for compounds like telephone or autobiography',
       items: {
         type: 'object',
         properties: {
-          root: { type: 'string', description: 'Root morpheme' },
-          origin: {
-            type: 'string',
-            description: 'Language of origin (Latin, Greek, Old English…)',
-          },
-          meaning: { type: 'string', description: 'What this root means' },
-          relatedWords: {
-            type: 'array',
-            items: { type: 'string' },
-            description: '3-8 GRE/TOEFL-level words sharing this root; never padded',
-          },
+          root: { type: 'string' },
+          origin: { type: 'string', description: 'Language of origin' },
+          meaning: { type: 'string' },
+          relatedWords: { type: 'array', items: { type: 'string' } },
           ancestorRoots: {
             type: ['array', 'null'],
             items: { type: 'string' },
-            description: 'Older forms like PIE roots; null when unknown',
+            description: 'Older forms (PIE roots); null when unknown',
           },
           descendantWords: {
             type: ['array', 'null'],
@@ -137,13 +124,9 @@ export const ETYMOLOGY_LLM_SCHEMA = {
         additionalProperties: false,
       },
     },
-    lore: {
-      type: 'string',
-      description: '4-6 sentence revelatory narrative per the LORE rules in the instructions',
-    },
+    lore: { type: 'string' },
     partsOfSpeech: {
       type: 'array',
-      description: 'Definitions per grammatical category',
       items: {
         type: 'object',
         properties: {
@@ -161,10 +144,10 @@ export const ETYMOLOGY_LLM_SCHEMA = {
               'determiner',
             ],
           },
-          definition: { type: 'string', description: 'Brief definition for this POS' },
+          definition: { type: 'string' },
           pronunciation: {
             type: ['string', 'null'],
-            description: 'IPA only when it differs per POS (REcord vs reCORD); else null',
+            description: 'IPA only when it differs per POS; else null',
           },
         },
         required: ['pos', 'definition', 'pronunciation'],
@@ -173,33 +156,20 @@ export const ETYMOLOGY_LLM_SCHEMA = {
     },
     suggestions: {
       type: 'object',
-      description: 'Related words for vocabulary building; every item is ONLY the bare word',
       properties: {
         synonyms: { type: 'array', items: { type: 'string' }, description: '2-4 words' },
         antonyms: { type: 'array', items: { type: 'string' }, description: '1-3 words' },
-        homophones: { type: 'array', items: { type: 'string' }, description: 'Often empty' },
-        easilyConfusedWith: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Commonly mistaken words',
-        },
-        seeAlso: {
-          type: 'array',
-          items: { type: 'string' },
-          description: '2-4 related words worth exploring',
-        },
+        homophones: { type: 'array', items: { type: 'string' } },
+        easilyConfusedWith: { type: 'array', items: { type: 'string' } },
+        seeAlso: { type: 'array', items: { type: 'string' }, description: '2-4 words' },
       },
       required: ['synonyms', 'antonyms', 'homophones', 'easilyConfusedWith', 'seeAlso'],
       additionalProperties: false,
     },
     modernUsage: {
       type: 'object',
-      description: 'Contemporary/slang usage; non-boolean fields are null unless hasSlangMeaning',
       properties: {
-        hasSlangMeaning: {
-          type: 'boolean',
-          description: 'True ONLY with concrete source_data evidence of a modern slang meaning',
-        },
+        hasSlangMeaning: { type: 'boolean' },
         slangDefinition: { type: ['string', 'null'] },
         popularizedBy: { type: ['string', 'null'] },
         contexts: {
@@ -207,11 +177,7 @@ export const ETYMOLOGY_LLM_SCHEMA = {
           items: { type: 'string' },
           description: 'e.g. "gaming", "Gen Z slang"',
         },
-        notableReferences: {
-          type: ['array', 'null'],
-          items: { type: 'string' },
-          description: 'Famous uses in media/literature',
-        },
+        notableReferences: { type: ['array', 'null'], items: { type: 'string' } },
       },
       required: [
         'hasSlangMeaning',
@@ -224,7 +190,7 @@ export const ETYMOLOGY_LLM_SCHEMA = {
     },
     sources: {
       type: 'array',
-      description: 'Which source databases actually contributed evidence',
+      description: 'Source databases that contributed evidence',
       items: {
         type: 'object',
         properties: {
