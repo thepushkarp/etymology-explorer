@@ -3,6 +3,7 @@ import { SYSTEM_PROMPT, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph, pruneUngroundedStages } from './etymologyEnricher'
 import { EtymologyResultSchema } from './schemas/etymology'
+import { stripNullsDeep } from './schemas/llm-schema'
 import { CONFIG } from './config'
 import {
   buildSynthesisRequest,
@@ -317,7 +318,9 @@ async function generateEtymologyResponse(
       const { text, usage } = await callLlm(userPrompt, options)
 
       try {
-        const result = parseGeneratedJson(text)
+        // Strict mode encodes optional fields as null — decode to the app's
+        // canonical absent-field shape before sanitizers and Zod see it.
+        const result = stripNullsDeep(parseGeneratedJson(text))
         sanitizeSuggestions(result)
         addUsage(totalUsage, usage)
         return { result, usage: totalUsage }
@@ -508,7 +511,7 @@ export async function streamSynthesis(
 
   let result: EtymologyResult
   try {
-    result = parseGeneratedJson(fullText)
+    result = stripNullsDeep(parseGeneratedJson(fullText))
     sanitizeSuggestions(result)
   } catch (error) {
     const preview = fullText.slice(0, 200)

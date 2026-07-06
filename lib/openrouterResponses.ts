@@ -1,6 +1,7 @@
 import { CONFIG } from '@/lib/config'
 import { getEnv } from '@/lib/env'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
+import { ETYMOLOGY_LLM_SCHEMA } from '@/lib/schemas/llm-schema'
 import type { LlmUsage } from '@/lib/types'
 
 const ROOTS_JSON_SCHEMA = {
@@ -34,6 +35,9 @@ export type OpenRouterRequest = {
   reasoning: { effort: ReasoningEffort }
   max_output_tokens: number
   text: { format: JsonSchemaFormat | TextFormat }
+  // Route only to providers that support every request parameter — without
+  // this, OpenRouter may silently drop text.format on non-supporting hosts.
+  provider: { require_parameters: true }
   instructions?: string
 }
 
@@ -101,11 +105,23 @@ function buildRequest(
     reasoning: { effort: reasoningEffort },
     max_output_tokens: maxOutputTokens,
     text: { format },
+    provider: { require_parameters: true },
   }
 }
 
 export function buildSynthesisRequest(input: string, model?: string): OpenRouterRequest {
-  return buildRequest(input, CONFIG.synthesisMaxTokens, { type: 'text' }, 'low', model)
+  return buildRequest(
+    input,
+    CONFIG.synthesisMaxTokens,
+    {
+      type: 'json_schema',
+      name: 'etymology_result',
+      strict: true,
+      schema: ETYMOLOGY_LLM_SCHEMA,
+    },
+    'low',
+    model
+  )
 }
 
 export function buildRootExtractionRequest(input: string): OpenRouterRequest {

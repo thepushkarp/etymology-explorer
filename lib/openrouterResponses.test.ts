@@ -8,13 +8,19 @@ import {
 } from '@/lib/openrouterResponses'
 
 describe('openrouterResponses', () => {
-  test('buildSynthesisRequest uses low reasoning for faster visible synthesis output', () => {
+  test('buildSynthesisRequest uses strict json_schema mode with low reasoning', () => {
     const request = buildSynthesisRequest('Analyze this word')
 
     expect(request.model).toBe('openai/gpt-5.4-mini')
     expect(request.reasoning).toEqual({ effort: 'low' })
     expect(request.max_output_tokens).toBe(9000)
-    expect(request.text.format).toEqual({ type: 'text' })
+    expect(request.text.format).toMatchObject({
+      type: 'json_schema',
+      name: 'etymology_result',
+      strict: true,
+      schema: { type: 'object', additionalProperties: false },
+    })
+    expect(request.provider).toEqual({ require_parameters: true })
     expect('temperature' in request).toBe(false)
   })
 
