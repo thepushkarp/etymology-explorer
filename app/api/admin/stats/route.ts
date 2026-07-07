@@ -1,23 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { timingSafeEqual } from 'crypto'
+import { createHash, timingSafeEqual } from 'crypto'
 import { getSpendStats } from '@/lib/costGuard'
+import { getCounters } from '@/lib/counters'
+import { getEnv } from '@/lib/env'
+
+function sha256(value: string): Buffer {
+  return createHash('sha256').update(value).digest()
+}
 
 export async function GET(request: NextRequest) {
-  const secret = request.headers.get('x-admin-secret')
-  const adminSecret = process.env.ADMIN_SECRET
+  let adminSecret: string | undefined
+  try {
+    adminSecret = getEnv().ADMIN_SECRET
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Service configuration error' },
+      { status: 503 }
+    )
+  }
 
-  // Timing-safe comparison prevents timing attacks on the secret
+  const secret = request.headers.get('x-admin-secret')
+
+  // Compare fixed-length digests: timingSafeEqual stays timing-safe and no
+  // length precheck is needed, so the secret's length can't leak via timing.
   const authorized =
-    !!adminSecret &&
-    !!secret &&
-    Buffer.byteLength(adminSecret) === Buffer.byteLength(secret) &&
-    timingSafeEqual(Buffer.from(adminSecret), Buffer.from(secret))
+    !!adminSecret && !!secret && timingSafeEqual(sha256(adminSecret), sha256(secret))
 
   if (!authorized) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
 
-  const spend = await getSpendStats()
+  const [spend, counters] = await Promise.all([getSpendStats(), getCounters()])
 
   if (!spend) {
     return NextResponse.json(
@@ -31,6 +44,7 @@ export async function GET(request: NextRequest) {
     data: {
       month: spend.period,
       spend,
+      counters,
     },
   })
 }

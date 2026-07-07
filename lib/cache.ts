@@ -3,17 +3,12 @@
  * Reduces API costs by caching LLM synthesis results.
  */
 
-import { Redis } from '@upstash/redis'
 import { EtymologyResult } from './types'
 import { EtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
+import { getRedis } from './redis'
 import { safeError } from './errorUtils'
 import { emitSecurityEvent } from './telemetry'
-
-const redis = new Redis({
-  url: process.env.ETYMOLOGY_KV_REST_API_URL || '',
-  token: process.env.ETYMOLOGY_KV_REST_API_TOKEN || '',
-})
 
 /** Apply ±jitter to a TTL to prevent synchronized cache stampedes */
 function jitterTTL(ttl: number): number {
@@ -34,7 +29,7 @@ const AUDIO_TTL = CONFIG.audioCacheTTL
  * Check if Redis caching is configured
  */
 export function isCacheConfigured(): boolean {
-  return !!(process.env.ETYMOLOGY_KV_REST_API_URL && process.env.ETYMOLOGY_KV_REST_API_TOKEN)
+  return getRedis() !== null
 }
 
 /**
@@ -43,7 +38,8 @@ export function isCacheConfigured(): boolean {
  * Uses Zod validation to detect schema mismatches from old cache entries
  */
 export async function getCachedEtymology(word: string): Promise<EtymologyResult | null> {
-  if (!isCacheConfigured()) return null
+  const redis = getRedis()
+  if (!redis) return null
 
   const key = `${ETYMOLOGY_PREFIX}${word.toLowerCase().trim()}`
   try {
@@ -76,7 +72,8 @@ export async function getCachedEtymology(word: string): Promise<EtymologyResult 
  * Cache etymology result for future lookups
  */
 export async function cacheEtymology(word: string, result: EtymologyResult): Promise<void> {
-  if (!isCacheConfigured()) return
+  const redis = getRedis()
+  if (!redis) return
 
   // Validate before writing to prevent caching invalid data
   const validated = EtymologyResultSchema.safeParse(result)
@@ -108,7 +105,8 @@ export async function cacheEtymology(word: string, result: EtymologyResult): Pro
  * Get cached audio (as base64 string)
  */
 export async function getCachedAudio(word: string): Promise<string | null> {
-  if (!isCacheConfigured()) return null
+  const redis = getRedis()
+  if (!redis) return null
 
   const key = `${AUDIO_PREFIX}${word.toLowerCase().trim()}`
   try {
@@ -123,7 +121,8 @@ export async function getCachedAudio(word: string): Promise<string | null> {
  * Cache audio (as base64 string)
  */
 export async function cacheAudio(word: string, audioBase64: string): Promise<void> {
-  if (!isCacheConfigured()) return
+  const redis = getRedis()
+  if (!redis) return
 
   const key = `${AUDIO_PREFIX}${word.toLowerCase().trim()}`
   try {
@@ -139,7 +138,8 @@ export async function cacheAudio(word: string, audioBase64: string): Promise<voi
  * Returns false on error (fail open).
  */
 export async function getNegativeCache(word: string): Promise<boolean> {
-  if (!isCacheConfigured()) return false
+  const redis = getRedis()
+  if (!redis) return false
 
   const key = `neg:v1:${word.toLowerCase().trim()}`
   try {
@@ -157,7 +157,8 @@ export async function getNegativeCache(word: string): Promise<boolean> {
  * Fails silently.
  */
 export async function cacheNegative(word: string, errorType: string): Promise<void> {
-  if (!isCacheConfigured()) return
+  const redis = getRedis()
+  if (!redis) return
 
   if (!CONFIG.cache.negativeCacheAdmitOnly.includes(errorType)) {
     return

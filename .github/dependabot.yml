@@ -1,0 +1,29 @@
+# Dependency update automation.
+#
+# The bun ecosystem (not npm) is used so Dependabot updates bun.lock together
+# with package.json — npm-ecosystem updates rewrite only package.json, which
+# desyncs the lockfile and breaks `bun install --frozen-lockfile` in CI
+# (this is what happened with the next 16.2.6 bump in PR #63).
+version: 2
+updates:
+  - package-ecosystem: 'bun'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    cooldown:
+      default-days: 7
+    groups:
+      dependencies:
+        patterns:
+          - '*'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns:
+          - '*'
