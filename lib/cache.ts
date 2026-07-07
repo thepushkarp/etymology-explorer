@@ -3,6 +3,7 @@
  * Reduces API costs by caching LLM synthesis results.
  */
 
+import { revalidateTag } from 'next/cache'
 import { EtymologyResult } from './types'
 import { EtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
@@ -78,13 +79,26 @@ export async function cacheEtymology(word: string, result: EtymologyResult): Pro
   const redis = getRedis()
   if (!redis) return
 
-  const key = `${ETYMOLOGY_PREFIX}${word.toLowerCase().trim()}`
+  const normalized = word.toLowerCase().trim()
+  const key = `${ETYMOLOGY_PREFIX}${normalized}`
   try {
     await redis.set(key, result, { ex: jitterTTL(ETYMOLOGY_TTL) })
     console.log(`[Cache] Stored etymology for "${word}"`)
   } catch (error) {
     console.error('[Cache] Etymology set error:', safeError(error))
     // Fail silently - result was already returned to user
+    return
+  }
+
+  // A freshly traced word must surface on /word/{word} immediately: purge
+  // the page's tagged data cache (tag planted by app/word/[word]/page.tsx)
+  // so the ISR miss page doesn't outlive the trace. Best-effort — outside a
+  // Next request scope (tests, scripts) revalidateTag throws and the page
+  // simply refreshes on its hourly data-cache window instead.
+  try {
+    revalidateTag(`etymology-word:${normalized}`, 'max')
+  } catch (error) {
+    console.warn('[Cache] Word page revalidation skipped:', safeError(error))
   }
 }
 
