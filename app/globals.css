@@ -115,6 +115,27 @@ body {
   color: var(--charcoal);
 }
 
+/* Keyboard focus: restore a visible ring everywhere, including controls
+   whose default outline was removed with `outline-none`. This rule is
+   unlayered, so it wins over Tailwind's layered utilities. */
+:focus-visible {
+  outline: 2px solid var(--accent-oxblood);
+  outline-offset: 2px;
+}
+
+/* Honor reduced-motion preferences: collapse animations and transitions to
+   effectively instant so progress states still resolve, without motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Custom animations */
 @keyframes fadeIn {
   from {
