@@ -221,7 +221,7 @@ and the output is guaranteed-shape JSON.
 
 - `lib/hooks/useStreamingEtymology.ts` - SSE transport for streaming search; all progress
   state folds through the pure reducer in `lib/streamReducer.ts` (per-source states with
-  timing, phase, accumulated synthesis sections, final result)
+  timing, phase, accumulated `synthesis_section` events, final result)
 - `lib/hooks/useWordNavigation.ts` - All in-app word navigation (marks trace intent, pushes
   `/word/{word}`, keyboard history back/forward)
 - `lib/hooks/useNgram.ts` - Usage-chart data, fetched as soon as the word is known
