@@ -296,7 +296,13 @@ export type StreamEvent =
   | { type: 'roots_identified'; roots: string[] }
   | { type: 'root_research'; root: string; source: string; status: string }
   | { type: 'synthesis_started' }
-  | { type: 'synthesis_token'; token: string }
+  /**
+   * Emitted when a top-level field of the synthesis JSON closes, in schema
+   * (render) order — ~10 per response. `data` is the parsed, null-stripped
+   * field value; enrichment fields (confidence, evidence) and the real
+   * source attributions arrive only with the terminal `result` event.
+   */
+  | { type: 'synthesis_section'; section: string; data: unknown }
   | { type: 'singleflight_wait'; waitedMs: number }
   | {
       type: 'enrichment_done'

@@ -17,9 +17,9 @@ Try it out at [etymex.com](https://etymex.com)
 - **Pronunciation Audio**: Listen to word pronunciations powered by ElevenLabs
 - **Search History**: Track your vocabulary exploration with a persistent sidebar
 - **Surprise Me**: Discover random words to expand your vocabulary
-- **Structured Outputs**: Guaranteed valid JSON responses using constrained decoding
+- **Structured Outputs**: Guaranteed valid JSON via OpenRouter `json_schema` strict mode
 - **Streaming UI**: Optional `?stream=true` server-sent events for source progress,
-  token streaming, cached hits, and early error responses
+  per-section synthesis events, cached hits, and early error responses
 - **Smart Caching**: Redis-backed caching reduces costs and improves speed (30d etymology, 1yr audio)
 - **Shareable Word Pages**: Crawlable `/word/{word}` pages served strictly from the cache
   (never trigger LLM spend), with per-word OG images and sitemap listings
@@ -174,7 +174,8 @@ etymology-explorer/
 │   │   └── useStreamingEtymology.ts # Primary streaming search hook (SSE)
 │   └── schemas/
 │       ├── etymology.ts    # Zod schema for cache validation
-│       └── llm-schema.ts   # JSON Schema for LLM structured outputs
+│       └── llm-schema.ts   # Strict-mode JSON Schema for LLM structured outputs
+│                           #   (mechanically sync-checked against the Zod schema)
 ├── data/
 │   ├── faq.ts              # FAQ content with FaqItem interface
 │   └── gre-words.json      # Vocabulary word list
@@ -238,14 +239,15 @@ etymology-explorer/
 │ 2) Parse "from X, from Y" chains once etymonline+wiktionary land (CPU-only)  │
 │ 3) CPU root extraction from derivation formulas; LLM fallback if none found  │
 │ 4) ONE parallel wave: root pages + related-term pages (16-fetch budget)      │
-│ 5) OpenRouter synthesis (stream tokens when stream=true)                     │
+│ 5) OpenRouter synthesis, json_schema strict (sections stream when stream=true)│
 │ 6) Enrich ancestry graph + confidence/evidence                               │
 │ 7) Cache result in Redis                                                     │
 └──────────────────────────────┬───────────────────────────────────────────────┘
                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Response Paths                                                               │
-│ stream=true   → SSE events: source_* → parsing_complete → synthesis_*       │
+│ stream=true   → SSE events: source_* → parsing_complete → synthesis_started │
+│                    → synthesis_section (per top-level field, render order)  │
 │                    → enrichment_done → result / error                        │
 │ default       → JSON response with final EtymologyResult                     │
 └──────────────────────────────────────────────────────────────────────────────┘

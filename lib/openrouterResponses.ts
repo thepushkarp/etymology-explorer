@@ -1,6 +1,7 @@
 import { CONFIG } from '@/lib/config'
 import { getEnv } from '@/lib/env'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
+import { ETYMOLOGY_LLM_SCHEMA } from '@/lib/schemas/llm-schema'
 import type { LlmUsage } from '@/lib/types'
 
 const ROOTS_JSON_SCHEMA = {
@@ -27,13 +28,20 @@ type JsonSchemaFormat = {
 }
 
 type ReasoningEffort = 'low' | 'medium' | 'high' | 'minimal' | 'none' | 'xhigh'
+type ReasoningConfig =
+  { effort: ReasoningEffort; exclude?: boolean } | { enabled: false; exclude?: boolean }
 
 export type OpenRouterRequest = {
   model: string
   input: string
-  reasoning: { effort: ReasoningEffort }
+  reasoning?: ReasoningConfig
   max_output_tokens: number
   text: { format: JsonSchemaFormat | TextFormat }
+  // Route only to providers that support every request parameter — without
+  // this, OpenRouter may silently drop text.format on non-supporting hosts.
+  // Synthesis-only: on the root-extraction call this measurably slow-routed
+  // (~1s → 15s+), and a dropped format there is already caught downstream.
+  provider?: { require_parameters: true }
   instructions?: string
 }
 
@@ -88,24 +96,71 @@ type OpenRouterStreamEvent = {
 
 const OPENROUTER_RESPONSES_URL = 'https://openrouter.ai/api/v1/responses'
 
+const SYNTHESIS_REASONING_BY_MODEL: Record<string, ReasoningConfig | undefined> = {
+  // Production baseline: keep the existing low-effort synthesis behavior.
+  'openai/gpt-5.4-mini': { effort: 'low' },
+  // Gemini 3.5 Flash rejects disabled/none reasoning; minimal is the cheapest
+  // valid setting per /api/v1/models and live probe.
+  'google/gemini-3.5-flash': { effort: 'minimal', exclude: true },
+  // These models otherwise spend hidden reasoning tokens on tiny strict-schema
+  // probes; disabling reasoning produced schema-valid Responses output.
+  'moonshotai/kimi-k2.6': { enabled: false, exclude: true },
+  'xiaomi/mimo-v2.5-pro': { enabled: false, exclude: true },
+  'z-ai/glm-5.2': { enabled: false, exclude: true },
+  'minimax/minimax-m3': { enabled: false, exclude: true },
+  // Mimo v2.5 still emits a few reasoning tokens, but effort:none was the
+  // fastest valid shape in live probes and avoids enabling heavier reasoning.
+  'xiaomi/mimo-v2.5': { effort: 'none', exclude: true },
+  // HY3 advertises none/low/high reasoning on OpenRouter; live strict-schema
+  // probes with none timed out, but this is still the least costly valid shape.
+  'tencent/hy3': { effort: 'none', exclude: true },
+}
+
+function synthesisReasoningForModel(model: string): ReasoningConfig | undefined {
+  if (model.startsWith('deepseek/deepseek-v4-')) {
+    // OpenRouter reports only high/xhigh efforts for these models. Omitting
+    // reasoning is valid and avoids forcing a high-effort request.
+    return undefined
+  }
+
+  return SYNTHESIS_REASONING_BY_MODEL[model] ?? { effort: 'low' }
+}
+
 function buildRequest(
   input: string,
   maxOutputTokens: number,
   format: JsonSchemaFormat | TextFormat,
-  reasoningEffort: ReasoningEffort,
+  reasoning: ReasoningConfig | undefined,
   model?: string
 ): OpenRouterRequest {
-  return {
+  const request: OpenRouterRequest = {
     model: model ?? CONFIG.model,
     input,
-    reasoning: { effort: reasoningEffort },
     max_output_tokens: maxOutputTokens,
     text: { format },
   }
+  if (reasoning) {
+    request.reasoning = reasoning
+  }
+  return request
 }
 
 export function buildSynthesisRequest(input: string, model?: string): OpenRouterRequest {
-  return buildRequest(input, CONFIG.synthesisMaxTokens, { type: 'text' }, 'low', model)
+  const resolvedModel = model ?? CONFIG.model
+  const request = buildRequest(
+    input,
+    CONFIG.synthesisMaxTokens,
+    {
+      type: 'json_schema',
+      name: 'etymology_result',
+      strict: true,
+      schema: ETYMOLOGY_LLM_SCHEMA,
+    },
+    synthesisReasoningForModel(resolvedModel),
+    resolvedModel
+  )
+  request.provider = { require_parameters: true }
+  return request
 }
 
 export function buildRootExtractionRequest(input: string): OpenRouterRequest {
@@ -118,7 +173,7 @@ export function buildRootExtractionRequest(input: string): OpenRouterRequest {
       strict: true,
       schema: ROOTS_JSON_SCHEMA,
     },
-    'none'
+    { effort: 'none' }
   )
 }
 

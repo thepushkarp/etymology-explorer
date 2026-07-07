@@ -8,14 +8,50 @@ import {
 } from '@/lib/openrouterResponses'
 
 describe('openrouterResponses', () => {
-  test('buildSynthesisRequest uses low reasoning for faster visible synthesis output', () => {
+  test('buildSynthesisRequest uses strict json_schema mode with low reasoning', () => {
     const request = buildSynthesisRequest('Analyze this word')
 
     expect(request.model).toBe('openai/gpt-5.4-mini')
     expect(request.reasoning).toEqual({ effort: 'low' })
     expect(request.max_output_tokens).toBe(9000)
-    expect(request.text.format).toEqual({ type: 'text' })
+    expect(request.text.format).toMatchObject({
+      type: 'json_schema',
+      name: 'etymology_result',
+      strict: true,
+      schema: { type: 'object', additionalProperties: false },
+    })
+    expect(request.provider).toEqual({ require_parameters: true })
     expect('temperature' in request).toBe(false)
+  })
+
+  test('buildSynthesisRequest adapts reasoning to model capabilities', () => {
+    expect(buildSynthesisRequest('Analyze', 'google/gemini-3.5-flash').reasoning).toEqual({
+      effort: 'minimal',
+      exclude: true,
+    })
+    expect(buildSynthesisRequest('Analyze', 'moonshotai/kimi-k2.6').reasoning).toEqual({
+      enabled: false,
+      exclude: true,
+    })
+    expect(buildSynthesisRequest('Analyze', 'z-ai/glm-5.2').reasoning).toEqual({
+      enabled: false,
+      exclude: true,
+    })
+    expect(buildSynthesisRequest('Analyze', 'minimax/minimax-m3').reasoning).toEqual({
+      enabled: false,
+      exclude: true,
+    })
+    expect(buildSynthesisRequest('Analyze', 'xiaomi/mimo-v2.5').reasoning).toEqual({
+      effort: 'none',
+      exclude: true,
+    })
+    expect(buildSynthesisRequest('Analyze', 'tencent/hy3').reasoning).toEqual({
+      effort: 'none',
+      exclude: true,
+    })
+    expect('reasoning' in buildSynthesisRequest('Analyze', 'deepseek/deepseek-v4-flash')).toBe(
+      false
+    )
   })
 
   test('buildRootExtractionRequest disables reasoning for tiny root extraction output', () => {
@@ -23,6 +59,9 @@ describe('openrouterResponses', () => {
 
     expect(request.model).toBe('openai/gpt-5.4-mini')
     expect(request.reasoning).toEqual({ effort: 'none' })
+    // require_parameters is synthesis-only: adding it here slow-routed the
+    // ~100-token extraction call from ~1s to 15s+ in live tests.
+    expect('provider' in request).toBe(false)
     expect(request.max_output_tokens).toBe(100)
     expect(request.text.format).toMatchObject({
       type: 'json_schema',
