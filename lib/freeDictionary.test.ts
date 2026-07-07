@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { fetchFreeDictionary } from '@/lib/freeDictionary'
+import {
+  compactFreeDictionary,
+  fetchFreeDictionary,
+  type FreeDictionaryEntry,
+} from '@/lib/freeDictionary'
 
 const originalFetch = globalThis.fetch
 
@@ -43,5 +47,50 @@ describe('fetchFreeDictionary timeout', () => {
       Promise.resolve(new Response('not found', { status: 404 }))) as unknown as typeof fetch
 
     expect(await fetchFreeDictionary('zzzzz', 1000)).toBeNull()
+  })
+})
+
+describe('compactFreeDictionary', () => {
+  test('keeps origin, phonetics, and up to three definitions per POS — drops the rest', () => {
+    const entry: FreeDictionaryEntry = {
+      word: 'telephone',
+      phonetic: '/ˈtɛlɪfoʊn/',
+      phonetics: [
+        { text: '/ˈtɛlɪfoʊn/', audio: 'https://example.com/telephone-us.mp3' },
+        { text: '/ˈtelɪfəʊn/' },
+      ],
+      meanings: [
+        {
+          partOfSpeech: 'noun',
+          definitions: [
+            { definition: 'first', example: 'example one' },
+            { definition: 'second' },
+            { definition: 'third' },
+            { definition: 'fourth must be dropped' },
+          ],
+        },
+        { partOfSpeech: 'verb', definitions: [{ definition: 'to call' }] },
+      ],
+      origin: 'late 19th century: from French téléphone',
+    }
+
+    const compact = compactFreeDictionary(entry)
+
+    expect(compact).toBe(
+      [
+        'Phonetics: /ˈtɛlɪfoʊn/, /ˈtelɪfəʊn/',
+        'Origin: late 19th century: from French téléphone',
+        'noun: first | second | third',
+        'verb: to call',
+      ].join('\n')
+    )
+    expect(compact).not.toContain('.mp3')
+    expect(compact).not.toContain('example one')
+  })
+
+  test('tolerates malformed entries missing arrays', () => {
+    const entry = { word: 'x' } as FreeDictionaryEntry
+
+    expect(compactFreeDictionary(entry)).toBe('')
   })
 })

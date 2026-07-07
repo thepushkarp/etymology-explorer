@@ -1,0 +1,8 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`buildResearchPrompt token diet freeDictionary compact block matches snapshot 1`] = `
+"Phonetics: /ˈtɛlɪfoʊn/
+Origin: late 19th century: from French téléphone
+noun: An electronic device used for two-way talking | The telephone network | A children’s whisper game
+verb: To call someone using a telephone"
+`;

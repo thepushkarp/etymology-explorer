@@ -74,12 +74,16 @@ function scoreQuality(entry: UrbanDictionaryEntry): number {
   return score
 }
 
-export async function fetchUrbanDictionary(word: string): Promise<SourceData | null> {
+export async function fetchUrbanDictionary(
+  word: string,
+  signal?: AbortSignal
+): Promise<SourceData | null> {
   try {
     const response = await fetchWithTimeout(
       `${URBAN_DICTIONARY_API}?term=${encodeURIComponent(word)}`,
       {},
-      CONFIG.timeouts.source
+      CONFIG.timeouts.source,
+      signal
     )
 
     if (!response.ok) return null

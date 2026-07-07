@@ -214,7 +214,13 @@ export async function GET(request: NextRequest) {
     const runResearch = async (
       onProgress?: (event: StreamEvent) => void
     ): Promise<ResearchOutcome> => {
-      const researchContext = await conductAgenticResearch(normalizedWord, {}, onProgress)
+      // request.signal aborts in-flight source fetches and LLM calls when the
+      // client disconnects, so abandoned searches stop spending immediately.
+      const researchContext = await conductAgenticResearch(
+        normalizedWord,
+        { signal: request.signal },
+        onProgress
+      )
 
       if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
         // Awaited so the entry lands BEFORE the lock releases — waiters
@@ -268,11 +274,15 @@ export async function GET(request: NextRequest) {
         let synthesis: SynthesisResult
         if (emit) {
           emit({ type: 'synthesis_started' })
-          synthesis = await streamSynthesis(researchContext, (token) => {
-            emit({ type: 'synthesis_token', token })
-          })
+          synthesis = await streamSynthesis(
+            researchContext,
+            (token) => {
+              emit({ type: 'synthesis_token', token })
+            },
+            { signal: request.signal }
+          )
         } else {
-          synthesis = await synthesizeFromResearch(researchContext)
+          synthesis = await synthesizeFromResearch(researchContext, { signal: request.signal })
         }
 
         await recordSpend(synthesis.usage)
@@ -289,7 +299,11 @@ export async function GET(request: NextRequest) {
       } catch (error) {
         // Distinguish "holder failed" from "holder crashed" for waiters:
         // written before the lock release below, checked before promotion.
-        await markLockFailure(lockKey, classifyApiError(error).message)
+        // A client disconnect is neither — skip the marker so a waiting
+        // request can promote itself and finish the work.
+        if (!request.signal.aborted) {
+          await markLockFailure(lockKey, classifyApiError(error).message)
+        }
         throw error
       } finally {
         stopHeartbeat()
@@ -346,7 +360,11 @@ export async function GET(request: NextRequest) {
         async start(controller) {
           const encoder = new TextEncoder()
           const emit = (event: StreamEvent) => {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+            try {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+            } catch {
+              // Client disconnected mid-stream; request.signal stops the pipeline
+            }
           }
 
           try {
@@ -402,16 +420,26 @@ export async function GET(request: NextRequest) {
               })
             }
           } catch (error) {
-            console.error('[Etymology API] Streaming error:', safeError(error))
-            await incrCounter('error')
-            const classified = classifyApiError(error)
-            emit({
-              type: 'error',
-              message: classified.message,
-              errorType: classified.streamErrorType,
-            })
+            if (request.signal.aborted) {
+              console.log(
+                `[Etymology API] Client disconnected for "${normalizedWord}" — pipeline aborted`
+              )
+            } else {
+              console.error('[Etymology API] Streaming error:', safeError(error))
+              await incrCounter('error')
+              const classified = classifyApiError(error)
+              emit({
+                type: 'error',
+                message: classified.message,
+                errorType: classified.streamErrorType,
+              })
+            }
           }
-          controller.close()
+          try {
+            controller.close()
+          } catch {
+            // Already closed by client cancellation
+          }
         },
       })
 
@@ -475,6 +503,13 @@ export async function GET(request: NextRequest) {
       }
     )
   } catch (error) {
+    if (request.signal.aborted) {
+      // Client disconnected; the pipeline was aborted intentionally. Nobody
+      // is listening, but return a response to satisfy the route contract.
+      console.log('[Etymology API] Client disconnected — pipeline aborted')
+      return new Response(null, { status: 499 })
+    }
+
     console.error('Etymology API error:', safeError(error))
     await incrCounter('error')
     const classified = classifyApiError(error)

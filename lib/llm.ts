@@ -267,20 +267,28 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
   }
 }
 
+interface SynthesisOptions {
+  model?: string
+  signal?: AbortSignal
+}
+
 async function callLlm(
   userPrompt: string,
-  model?: string
+  options?: SynthesisOptions
 ): Promise<{
   text: string
   usage: LlmUsage
 }> {
-  const request = buildSynthesisRequest(userPrompt, model)
+  const request = buildSynthesisRequest(userPrompt, options?.model)
   request.instructions = SYSTEM_PROMPT
 
   let response
   try {
-    response = await createOpenRouterResponse(request, CONFIG.timeouts.llm)
+    response = await createOpenRouterResponse(request, CONFIG.timeouts.llm, options?.signal)
   } catch (error) {
+    if (options?.signal?.aborted) {
+      throw error // caller-initiated cancellation, not a timeout
+    }
     if (isAbortLikeError(error)) {
       throw new Error(timeoutErrorMessage(CONFIG.timeouts.llm))
     }
@@ -295,7 +303,7 @@ async function callLlm(
 
 async function generateEtymologyResponse(
   userPrompt: string,
-  model?: string
+  options?: SynthesisOptions
 ): Promise<{
   result: EtymologyResult
   usage: LlmUsage
@@ -306,7 +314,7 @@ async function generateEtymologyResponse(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const { text, usage } = await callLlm(userPrompt, model)
+      const { text, usage } = await callLlm(userPrompt, options)
 
       try {
         const result = parseGeneratedJson(text)
@@ -405,16 +413,6 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
         word: relatedData.term,
       })
     }
-    if (
-      relatedData.wiktionaryData &&
-      !sources.some((source) => source.url === relatedData.wiktionaryData?.url)
-    ) {
-      sources.push({
-        name: 'wiktionary',
-        url: relatedData.wiktionaryData.url,
-        word: relatedData.term,
-      })
-    }
   }
   if (sources.length === 0) {
     sources.push({ name: 'synthesized' })
@@ -458,12 +456,12 @@ function finalizeResult(
 
 export async function synthesizeFromResearch(
   researchContext: ResearchContext,
-  options?: { model?: string }
+  options?: SynthesisOptions
 ): Promise<SynthesisResult> {
   const researchData = buildResearchPrompt(researchContext)
   const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
 
-  const { result, usage } = await generateEtymologyResponse(userPrompt, options?.model)
+  const { result, usage } = await generateEtymologyResponse(userPrompt, options)
 
   return {
     result: finalizeResult(result, researchContext, 'standard'),
@@ -473,11 +471,12 @@ export async function synthesizeFromResearch(
 
 export async function streamSynthesis(
   researchContext: ResearchContext,
-  onToken: (token: string) => void
+  onToken: (token: string) => void,
+  options?: SynthesisOptions
 ): Promise<SynthesisResult> {
   const researchData = buildResearchPrompt(researchContext)
   const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
-  const request = buildSynthesisRequest(userPrompt)
+  const request = buildSynthesisRequest(userPrompt, options?.model)
   request.instructions = SYSTEM_PROMPT
 
   let fullText = ''
@@ -490,7 +489,8 @@ export async function streamSynthesis(
         fullText += token
         onToken(token)
       },
-      CONFIG.timeouts.llm
+      CONFIG.timeouts.llm,
+      options?.signal
     )
 
     const responseText = extractOutputText(response)
@@ -499,6 +499,9 @@ export async function streamSynthesis(
     }
     usage = extractUsage(response)
   } catch (error) {
+    if (options?.signal?.aborted) {
+      throw error // caller-initiated cancellation — propagate as-is
+    }
     const errorMessage = error instanceof Error ? error.message : String(error)
     throw new Error(`Streaming failed: ${errorMessage}`)
   }
@@ -520,7 +523,7 @@ export async function streamSynthesis(
 
     console.warn('[LLM] Streaming output malformed, retrying with unary generation')
 
-    const recovered = await generateEtymologyResponse(userPrompt)
+    const recovered = await generateEtymologyResponse(userPrompt, options)
     result = recovered.result
     addUsage(usage, recovered.usage)
   }

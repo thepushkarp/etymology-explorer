@@ -48,13 +48,17 @@ GET /api/etymology?word=X[&stream=true]   (maxDuration 300s)
     ├── Redis cache check (lib/cache.ts, 30d TTL)
     ├── Cost guard check (lib/costGuard.ts, 2 modes: normal → cache_only at 90% of budget)
     ├── Singleflight lock (lib/singleflight.ts, owner-token lock; Redis down → 503 for uncached)
-    ├── Agentic Research Pipeline (lib/research.ts):
-    │   ├── Phase 1: Parallel fetch from 6 sources (3 core + 3 optional)
+    ├── Agentic Research Pipeline (lib/research.ts; request.signal aborts in-flight work):
+    │   ├── Phase 1: Fire all 6 source fetches at once (3 core + 3 optional);
+    │   │           only etymonline + wiktionary gate the next phase, the rest
+    │   │           join before synthesis. Raw etymonline/wiktionary pages come
+    │   │           from a 7d Redis source cache when available (lib/sourceCache.ts)
     │   ├── Phase 1.5: Pre-parse "from X, from Y" chains (lib/etymologyParser.ts, CPU-only)
-    │   ├── Phase 2: LLM call to extract root morphemes
-    │   ├── Phase 3: Fetch data for each root (max 4)
-    │   ├── Phase 4: Mine Etymonline linked entries + Wiktionary derivation formulas
-    │   └── Phase 5: Fetch bounded related-term pages (max 16 total fetches)
+    │   ├── Phase 2: CPU root extraction (derivation formulas + chain affixes);
+    │   │           LLM fallback (15s timeout, truncated input) only when CPU finds none
+    │   └── Phase 3: ONE parallel wave — root pages (max 4 roots, etymonline +
+    │               wiktionary) + main-word related-term pages (etymonline only),
+    │               max 16 total fetches
     ├── Typo check (lib/spellcheck.ts, Levenshtein distance vs GRE wordlist)
     ├── LLM synthesis (lib/llm.ts)
     │   ├── Structured outputs via OpenRouter Responses JSON schema mode
@@ -76,7 +80,8 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/config.ts`** - Centralized configuration:
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
   - USD monthly limit: $10/month (`openai/gpt-5.4-mini` pricing in `costTracking` as fallback; OpenRouter-reported cost preferred)
-  - Timeouts: source fetches 5s, LLM 120s, TTS 8s
+  - Timeouts: source fetches 5s, synthesis LLM 90s, root-extraction LLM 15s, TTS 8s
+  - Tiered prompt character budgets (`promptBudget`: main 1500 / supplemental 800 / root 700 / related 450)
   - Rate limits, singleflight settings, feature flags
 
 - **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENROUTER_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
@@ -94,7 +99,9 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Etymology results: 30 day TTL, versioned keys (`etymology:v2.2:`)
   - TTS audio: 1 year TTL
   - Negative cache: 6 hour TTL for admitted types (`no_sources`, `invalid_word`)
-  - Zod validation on reads for forward compatibility
+  - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
+
+- **`lib/sourceCache.ts`** - 7-day Redis cache for raw etymonline/wiktionary page data (`src:v1:<source>:<word>`). Fail-open: no Redis or a Redis error means a live fetch. Saves repeated scrapes across result-cache misses and overlapping root/related lookups.
 
 - **`lib/redis.ts`** - Shared Redis client factory (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -102,7 +109,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/errorUtils.ts`** - Secret redaction (provider keys, Bearer tokens, API keys)
 
-- **`lib/fetchUtils.ts`** - AbortController-based timeout wrapper for all external API calls
+- **`lib/fetchUtils.ts`** - AbortController-based timeout wrapper for all external API calls; composes an optional caller AbortSignal (request.signal) via `AbortSignal.any` so client disconnects cancel in-flight fetches and LLM calls
 
 ### Grounded Etymology Pipeline
 
@@ -127,9 +134,11 @@ New optional fields on `AncestryStage`: `isReconstructed`, `confidence`, `eviden
 
 Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API costs:
 
-- `maxRootsToExplore = 4` - Max root morphemes to research
-- `maxRelatedWordsPerRoot = 4` - Related terms retained from each root or candidate pass
-- `maxTotalFetches = 16` - Hard cap on external API calls per search
+- `maxRootsToExplore = 4` - Max root morphemes to research (etymonline + wiktionary each, 2 fetches per root)
+- `maxRelatedWordsPerRoot = 4` - Related terms retained per extraction pass; only main-word related terms are fetched (etymonline only, 1 fetch per term; root-page related terms are prompt context only)
+- `maxTotalFetches = 16` - Hard cap on external API calls per search (root + related pages share one budgeted wave)
+- `promptBudget` - Tiered per-block character caps for the synthesis prompt (main 1500, supplemental 800, root 700, related 450, root-extraction input 1200)
+- `sourceCacheTTL = 7d` - Raw etymonline/wiktionary page cache
 
 ### LLM Integration
 
@@ -229,6 +238,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `lib/costGuard.ts` - Monthly spend enforcement (normal → cache_only at 90%)
 - `lib/singleflight.ts` - Distributed request deduplication (owner-token locks)
 - `lib/cache.ts` - Redis caching with versioned keys
+- `lib/sourceCache.ts` - 7-day Redis cache for raw etymonline/wiktionary pages
 - `lib/redis.ts` - Shared Redis client factory
 - `lib/counters.ts` - Monthly cache_hit/cache_miss/error counters for admin stats
 

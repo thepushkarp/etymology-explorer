@@ -7,6 +7,7 @@
 import { fetchWithTimeout } from './fetchUtils'
 import { safeError } from './errorUtils'
 import { CONFIG } from './config'
+import { getCachedSource, cacheSource } from './sourceCache'
 
 export interface EtymonlineResult {
   text: string
@@ -19,13 +20,20 @@ const RELATION_DESC_SIGNALS =
 const STOP_WORDS = new Set(['the', 'and', 'for', 'from', 'with', 'word'])
 
 /**
- * Fetch etymology text from Etymonline
+ * Fetch etymology text from Etymonline (7d Redis source cache in front)
  * @param word - The word to look up
+ * @param signal - Optional caller cancellation signal (e.g. client disconnect)
  * @returns Object with text and URL, or null if not found/failed
  */
-export async function fetchEtymonline(word: string): Promise<EtymonlineResult | null> {
+export async function fetchEtymonline(
+  word: string,
+  signal?: AbortSignal
+): Promise<EtymonlineResult | null> {
   const normalizedWord = word.toLowerCase().trim().replace(/\s+/g, '-')
   const url = `https://www.etymonline.com/word/${encodeURIComponent(normalizedWord)}`
+
+  const cached = await getCachedSource('etymonline', normalizedWord)
+  if (cached) return cached
 
   try {
     const response = await fetchWithTimeout(
@@ -35,7 +43,8 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
           'User-Agent': 'EtymologyExplorer/1.0 (educational project)',
         },
       },
-      CONFIG.timeouts.source
+      CONFIG.timeouts.source,
+      signal
     )
 
     if (!response.ok) {
@@ -69,11 +78,13 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
         const text = stripHtml(match[1])
         // Verify this looks like etymology content (has date or language reference)
         if (/\d{4}s?|Latin|Greek|French|Old English|German/i.test(text)) {
-          return {
+          const result = {
             text,
             url,
             relatedEntries: extractEtymonlineRelatedEntries(html, normalizedWord),
           }
+          void cacheSource('etymonline', normalizedWord, result)
+          return result
         }
       }
     }
@@ -88,11 +99,13 @@ export async function fetchEtymonline(word: string): Promise<EtymonlineResult | 
         const content = stripHtml(p)
         // Must have a date and "from" to be etymology content
         if (datePattern.test(content) && /\bfrom\b/i.test(content)) {
-          return {
+          const result = {
             text: content,
             url,
             relatedEntries: extractEtymonlineRelatedEntries(html, normalizedWord),
           }
+          void cacheSource('etymonline', normalizedWord, result)
+          return result
         }
       }
     }
