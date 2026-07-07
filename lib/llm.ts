@@ -374,6 +374,13 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
       word: mainWord,
     })
   }
+  if (researchContext.mainWord.wikipedia) {
+    sources.push({
+      name: 'wikipedia',
+      url: researchContext.mainWord.wikipedia.url,
+      word: mainWord,
+    })
+  }
   if (researchContext.mainWord.urbanDictionary && supplementalSignals.urbanDictionary) {
     sources.push({
       name: 'urbanDictionary',

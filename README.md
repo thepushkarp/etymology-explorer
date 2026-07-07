@@ -109,7 +109,7 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
   - [Urban Dictionary](https://www.urbandictionary.com/) - Modern slang (quality-filtered)
   - [Incel Wiki](https://incels.wiki/) - Supplemental community slang context
 - **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
-- **Typography**: Libre Baskerville (serif)
+- **Typography**: Libre Baskerville (display serif) + Alegreya Sans (body), self-hosted woff2 subsets
 
 ## Project Structure
 
@@ -121,7 +121,7 @@ etymology-explorer/
 │   │   ├── etymology/      # Main etymology synthesis endpoint (GET)
 │   │   ├── pronunciation/  # TTS audio endpoint (ElevenLabs)
 │   │   ├── random-word/    # Random word selection
-│   │   └── suggestions/    # Typo correction suggestions
+│   │   └── suggestions/    # Autocomplete + typo suggestions
 │   ├── faq/                # FAQ page with structured data
 │   ├── learn/              # Educational content pages
 │   │   └── what-is-etymology/
@@ -171,8 +171,7 @@ etymology-explorer/
 │   ├── validation.ts       # Input validation
 │   ├── wordlist.ts         # GRE word utilities
 │   ├── hooks/              # React hooks (localStorage, history, search)
-│   │   ├── useStreamingEtymology.ts # Primary streaming search hook (SSE)
-│   │   └── useEtymologySearch.ts    # Non-streaming search hook
+│   │   └── useStreamingEtymology.ts # Primary streaming search hook (SSE)
 │   └── schemas/
 │       ├── etymology.ts    # Zod schema for cache validation
 │       └── llm-schema.ts   # JSON Schema for LLM structured outputs
@@ -188,7 +187,7 @@ etymology-explorer/
 | -------------------- | ------ | ------------------------------------------------------------- | ----------------- |
 | `/api/etymology`     | GET    | Synthesize etymology (`?word=X`, optional `?stream=true` SSE) | No (rate-limited) |
 | `/api/pronunciation` | GET    | Get pronunciation audio                                       | No                |
-| `/api/suggestions`   | GET    | Get typo correction suggestions                               | No                |
+| `/api/suggestions`   | GET    | Get autocomplete and typo suggestions                         | No                |
 | `/api/random-word`   | GET    | Get a random word                                             | No                |
 | `/api/ngram`         | GET    | Get Google Books usage-over-time data (`?word=X`)             | No                |
 | `/api/health`        | GET    | Liveness check                                                | No                |

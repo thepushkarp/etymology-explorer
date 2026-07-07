@@ -6,6 +6,8 @@ import { canonicalizeWord, isValidWord } from '@/lib/validation'
 
 const fontDirectory = join(process.cwd(), 'public/fonts')
 
+// Satori (next/og) cannot read woff2, so these Latin-subset TTFs exist solely
+// for this route; the app itself loads the woff2 subsets via next/font/local.
 // Lazy + memoized so a failed read rejects inside the request handler
 // (500 for that request) instead of as an unhandled rejection at module load
 let brandFontData: Promise<[Buffer, Buffer]> | null = null

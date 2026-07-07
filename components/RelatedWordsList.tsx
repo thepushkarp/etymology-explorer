@@ -8,19 +8,17 @@ interface RelatedWordsListProps {
   onWordClick: (word: string) => void
 }
 
-type WordCategory = 'cognates' | 'derived' | 'related'
+type WordCategory = 'cognates' | 'derived'
 
 interface CategorizedWords {
   cognates: string[]
   derived: string[]
-  related: string[]
 }
 
 /**
  * Categorize a word based on simple heuristics
  * - Cognates: contain parentheses (language tags) or non-ASCII chars
  * - Derived: English words (ASCII, no parens)
- * - Related: fallback for ambiguous cases
  */
 function categorizeWord(word: string): WordCategory {
   // Check for language tags in parentheses: "word (French)", "mot (Latin)"
@@ -52,7 +50,7 @@ function groupWordsByCategory(words: string[]): CategorizedWords {
       acc[category].push(word)
       return acc
     },
-    { cognates: [], derived: [], related: [] } as CategorizedWords
+    { cognates: [], derived: [] } as CategorizedWords
   )
 }
 
@@ -70,11 +68,6 @@ const CATEGORY_META: Record<WordCategory, { label: string; description: string; 
     description: 'English words from this root',
     order: 2,
   },
-  related: {
-    label: 'Related Concepts',
-    description: 'Semantically related terms',
-    order: 3,
-  },
 }
 
 export const RelatedWordsList = memo(function RelatedWordsList({
@@ -85,7 +78,7 @@ export const RelatedWordsList = memo(function RelatedWordsList({
     <div className="grid gap-8 md:grid-cols-2">
       {roots.map((root, rootIndex) => {
         const grouped = groupWordsByCategory(root.relatedWords)
-        const categories = (['cognates', 'derived', 'related'] as WordCategory[]).filter(
+        const categories = (['cognates', 'derived'] as WordCategory[]).filter(
           (cat) => grouped[cat].length > 0
         )
 

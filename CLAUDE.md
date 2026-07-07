@@ -196,7 +196,6 @@ LLM receives:
 **Key hooks**:
 
 - `lib/hooks/useStreamingEtymology.ts` - Main streaming search state management (SSE progress + token streaming)
-- `lib/hooks/useEtymologySearch.ts` - Non-streaming search state management (idle/loading/success/error)
 - `lib/hooks/useLocalStorage.ts` - Persistent client state
 - `lib/hooks/useHistory.ts` - Search history management
 
@@ -236,7 +235,7 @@ When adding UI: _"Would this feel at home in a beautifully typeset etymology dic
 | Endpoint             | Method | Purpose                                                                           |
 | -------------------- | ------ | --------------------------------------------------------------------------------- |
 | `/api/etymology`     | GET    | Main synthesis - `?word=X`; optional `?stream=true` for SSE (server-side API key) |
-| `/api/suggestions`   | GET    | Typo correction - `?q=word`                                                       |
+| `/api/suggestions`   | GET    | Autocomplete + typo suggestions - `?q=word`                                       |
 | `/api/random-word`   | GET    | Random GRE word (crypto randomness)                                               |
 | `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, 8s timeout)                                 |
 | `/api/ngram`         | GET    | Google Books ngram usage data - `?word=word`                                      |
