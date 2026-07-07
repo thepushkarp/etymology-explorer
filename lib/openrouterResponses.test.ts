@@ -45,6 +45,10 @@ describe('openrouterResponses', () => {
       effort: 'none',
       exclude: true,
     })
+    expect(buildSynthesisRequest('Analyze', 'tencent/hy3').reasoning).toEqual({
+      effort: 'none',
+      exclude: true,
+    })
     expect('reasoning' in buildSynthesisRequest('Analyze', 'deepseek/deepseek-v4-flash')).toBe(
       false
     )

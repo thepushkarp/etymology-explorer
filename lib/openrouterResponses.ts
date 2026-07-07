@@ -111,6 +111,9 @@ const SYNTHESIS_REASONING_BY_MODEL: Record<string, ReasoningConfig | undefined> 
   // Mimo v2.5 still emits a few reasoning tokens, but effort:none was the
   // fastest valid shape in live probes and avoids enabling heavier reasoning.
   'xiaomi/mimo-v2.5': { effort: 'none', exclude: true },
+  // HY3 advertises none/low/high reasoning on OpenRouter; live strict-schema
+  // probes with none timed out, but this is still the least costly valid shape.
+  'tencent/hy3': { effort: 'none', exclude: true },
 }
 
 function synthesisReasoningForModel(model: string): ReasoningConfig | undefined {

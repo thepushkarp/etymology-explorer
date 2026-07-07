@@ -42,12 +42,14 @@ export async function extractRootsQuick(
   wiktionaryText: string | null,
   signal?: AbortSignal
 ): Promise<RootExtraction> {
-  // A 100-token extraction doesn't need the full source pages; the
-  // morphological breakdown is always near the top of the entry.
+  // A 100-token extraction doesn't need the full source pages, but long
+  // entries can put compounds or cognates near the tail. Use the same
+  // head+tail clipping strategy as synthesis so the fallback does not
+  // silently lose late derivation clues.
   const maxChars = CONFIG.promptBudget.rootExtractionSourceChars
   const sourceText = [etymonlineText, wiktionaryText]
     .filter((text): text is string => Boolean(text))
-    .map((text) => text.slice(0, maxChars))
+    .map((text) => sanitizeSourceText(text, maxChars))
     .join('\n\n')
 
   if (!sourceText) {
