@@ -2,10 +2,11 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import {
   buildResearchPrompt,
   conductAgenticResearch,
+  extractRootsQuick,
   extractRelatedTerms,
   extractRootsCpu,
 } from '@/lib/research'
-import { extractEtymonlineRelatedEntries } from '@/lib/etymonline'
+import { extractEtymonlineRelatedEntries, fetchEtymonline } from '@/lib/etymonline'
 import { parseSourceTexts } from '@/lib/etymologyParser'
 import { CONFIG } from '@/lib/config'
 import { ResearchContext, StreamEvent } from '@/lib/types'
@@ -138,6 +139,29 @@ describe('research breadth', () => {
     ])
   })
 
+  test('fetchEtymonline preserves long cleaned entries for prompt-time clipping', async () => {
+    const tailEvidence = 'tail evidence from Proto-Testic *werd- "speak"'
+    const longEntry = `1590s, from Latin initium. ${'middle '.repeat(400)} ${tailEvidence}`
+
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+      if (kvUrl && url.startsWith(kvUrl)) {
+        return upstashMissResponse(init)
+      }
+
+      return new Response(
+        `<html><body><section class="prose-lg">${longEntry}</section></body></html>`,
+        { status: 200 }
+      )
+    }) as typeof fetch
+
+    const result = await fetchEtymonline('longword')
+
+    expect(result?.text.length).toBeGreaterThan(2000)
+    expect(result?.text).toContain(tailEvidence)
+  })
+
   test('extractRelatedTerms combines derivational formulas with seeded source hints', () => {
     const text = `
 Derived from Latin contradictus.
@@ -194,6 +218,50 @@ Compare gainsay.
     expect(prompt).toContain('Etymonline linked entries: contra, *deik-, contravene')
     expect(prompt).toContain('=== Related Term: "contravene" ===')
     expect(prompt).toContain('Related terms found: oppose, contravene')
+  })
+})
+
+describe('extractRootsQuick prompt clipping', () => {
+  test('preserves tail evidence in the fallback root-extraction prompt', async () => {
+    const previousKey = process.env.OPENROUTER_API_KEY
+    process.env.OPENROUTER_API_KEY = previousKey ?? 'test-openrouter-key'
+    const tailEvidence = 'tailroot appears only in this final derivation clue'
+    let capturedInput = ''
+
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (!url.includes('openrouter.ai/api/v1/responses')) {
+        return new Response(JSON.stringify({ result: null }), { status: 200 })
+      }
+
+      const requestBody = JSON.parse(String(init?.body)) as { input?: string }
+      capturedInput = requestBody.input ?? ''
+      return new Response(
+        JSON.stringify({
+          output_text: '{"roots":["tailroot"]}',
+          usage: { input_tokens: 1, output_tokens: 1 },
+        }),
+        { status: 200 }
+      )
+    }) as typeof fetch
+
+    try {
+      const result = await extractRootsQuick(
+        'longword',
+        `${'head '.repeat(500)} ${tailEvidence}`,
+        null
+      )
+
+      expect(result.roots).toEqual(['tailroot'])
+      expect(capturedInput).toContain('[...source excerpt clipped for prompt budget...]')
+      expect(capturedInput).toContain(tailEvidence)
+    } finally {
+      if (previousKey === undefined) {
+        delete process.env.OPENROUTER_API_KEY
+      } else {
+        process.env.OPENROUTER_API_KEY = previousKey
+      }
+    }
   })
 })
 

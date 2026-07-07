@@ -157,5 +157,4 @@ function stripHtml(html: string): string {
     .replace(/&#39;/g, "'") // Replace apostrophe
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
-    .slice(0, 2000) // Limit length
 }
