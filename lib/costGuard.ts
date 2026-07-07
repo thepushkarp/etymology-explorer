@@ -2,9 +2,21 @@ import { CONFIG } from './config'
 import { getRedis } from './redis'
 import { safeError } from './errorUtils'
 import { emitSecurityEvent } from './telemetry'
-import type { ProtectionMode } from './types'
+import type { LlmUsage, ProtectionMode } from './types'
 
 export type CostMode = ProtectionMode
+
+/** Minimal Redis surface used by this module (allows in-memory test doubles). */
+export interface CostGuardRedis {
+  get(key: string): Promise<unknown>
+  pipeline(): CostGuardPipeline
+}
+
+export interface CostGuardPipeline {
+  incrbyfloat(key: string, value: number): CostGuardPipeline
+  expire(key: string, seconds: number, option: 'nx'): CostGuardPipeline
+  exec(): Promise<unknown>
+}
 
 const {
   pricingPerMillionTokens: pricing,
@@ -27,34 +39,47 @@ function secondsUntilNextMonth(now = new Date()): number {
   return Math.max(60, windowSeconds + safetyBufferSeconds)
 }
 
-export async function recordSpend(usage: {
-  inputTokens: number
-  outputTokens: number
-}): Promise<void> {
-  const redis = getRedis()
-  if (!redis) return
+/** Prefer the OpenRouter-reported USD cost; fall back to config pricing math. */
+export function usageToUSD(usage: LlmUsage): number {
+  if (usage.costUSD !== undefined) return usage.costUSD
+  return (usage.inputTokens * pricing.input + usage.outputTokens * pricing.output) / 1_000_000
+}
 
-  const usd = (usage.inputTokens * pricing.input + usage.outputTokens * pricing.output) / 1_000_000
+function parseSpend(raw: unknown): number {
+  const spent = Number(raw ?? 0)
+  return Number.isFinite(spent) ? spent : 0
+}
+
+/**
+ * Record LLM spend against the monthly budget.
+ * INCRBYFLOAT and EXPIRE NX run in one pipeline: NX sets the TTL only when
+ * the key has none, so every increment repairs a missing TTL (no brittle
+ * first-increment detection) without ever extending an existing one.
+ */
+export async function recordSpend(
+  usage: LlmUsage,
+  client: CostGuardRedis | null = getRedis()
+): Promise<void> {
+  if (!client) return
+
+  const usd = usageToUSD(usage)
+  if (usd <= 0) return
 
   try {
-    const key = costKey()
-    const result = await redis.incrbyfloat(key, usd)
-    // First increment: result ≈ usd (within floating-point tolerance)
-    if (Math.abs(result - usd) < 0.0001) {
-      await redis.expire(key, secondsUntilNextMonth())
-    }
+    const pipeline = client.pipeline()
+    pipeline.incrbyfloat(costKey(), usd)
+    pipeline.expire(costKey(), secondsUntilNextMonth(), 'nx')
+    await pipeline.exec()
   } catch (error) {
     console.error('[CostGuard] recordSpend failed:', safeError(error))
   }
 }
 
-export async function getCostMode(): Promise<CostMode> {
-  const redis = getRedis()
-  if (!redis) return 'normal'
+export async function getCostMode(client: CostGuardRedis | null = getRedis()): Promise<CostMode> {
+  if (!client) return 'normal'
 
   try {
-    const raw = await redis.get<number>(costKey())
-    const spent = raw ?? 0
+    const spent = parseSpend(await client.get(costKey()))
 
     const mode: CostMode = spent >= monthlyLimitUSD * cacheOnlyAtPercent ? 'cache_only' : 'normal'
 
@@ -73,19 +98,17 @@ export async function getCostMode(): Promise<CostMode> {
   }
 }
 
-export async function getSpendStats(): Promise<{
+export async function getSpendStats(client: CostGuardRedis | null = getRedis()): Promise<{
   spentUSD: number
   limitUSD: number
   mode: CostMode
   period: string
 } | null> {
-  const redis = getRedis()
-  if (!redis) return null
+  if (!client) return null
 
   try {
-    const raw = await redis.get<number>(costKey())
-    const spentUSD = raw ?? 0
-    const mode = await getCostMode()
+    const spentUSD = parseSpend(await client.get(costKey()))
+    const mode = await getCostMode(client)
     return { spentUSD, limitUSD: monthlyLimitUSD, mode, period: currentMonth() }
   } catch (error) {
     console.error('[CostGuard] getSpendStats failed:', safeError(error))

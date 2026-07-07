@@ -10,7 +10,13 @@ import { fetchWikipedia } from './wikipedia'
 import { fetchUrbanDictionary } from './urbanDictionary'
 import { fetchIncelsWiki } from './incelsWiki'
 import { fetchFreeDictionary } from './freeDictionary'
-import { RelatedTermResearchData, ResearchContext, RootResearchData, StreamEvent } from './types'
+import {
+  LlmUsage,
+  RelatedTermResearchData,
+  ResearchContext,
+  RootResearchData,
+  StreamEvent,
+} from './types'
 import { parseSourceTexts, formatParsedChainsForPrompt } from './etymologyParser'
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
@@ -18,17 +24,23 @@ import {
   buildRootExtractionRequest,
   createOpenRouterResponse,
   extractOutputText,
+  extractUsage,
 } from './openrouterResponses'
+
+export interface RootExtraction {
+  roots: string[]
+  usage: LlmUsage | null // null when no LLM call was made (or it failed before billing)
+}
 
 export async function extractRootsQuick(
   word: string,
   etymonlineText: string | null,
   wiktionaryText: string | null
-): Promise<string[]> {
+): Promise<RootExtraction> {
   const sourceText = [etymonlineText, wiktionaryText].filter(Boolean).join('\n\n')
 
   if (!sourceText) {
-    return []
+    return { roots: [], usage: null }
   }
 
   const prompt = `Analyze this etymology data and extract the ETYMOLOGICAL root morphemes of the word "${word}".
@@ -52,16 +64,25 @@ Examples:
 
 Return the JSON object only, no explanation:`
 
+  let response
   try {
     const request = buildRootExtractionRequest(prompt)
     request.instructions =
       'Extract root morphemes only. Return {"roots":["root"]} with lowercase strings and no commentary.'
 
-    const response = await createOpenRouterResponse(request)
-    return parseRootsArray(extractOutputText(response))
+    response = await createOpenRouterResponse(request)
   } catch (error) {
     console.error('Root extraction error:', safeError(error))
-    return []
+    return { roots: [], usage: null }
+  }
+
+  // The call was billed even if the output is unusable — always report usage.
+  const usage = extractUsage(response)
+  try {
+    return { roots: parseRootsArray(extractOutputText(response)), usage }
+  } catch (error) {
+    console.error('Root extraction error:', safeError(error))
+    return { roots: [], usage }
   }
 }
 
@@ -258,7 +279,10 @@ export async function conductAgenticResearch(
   const normalizedWord = word.toLowerCase().trim()
   const skipOptional = options?.skipOptionalSources ?? false
 
-  const runOptionalSource = <T>(
+  // Every source fails soft: a throwing client must not reject the whole
+  // Promise.all and lose the other five sources. The no-etymonline-AND-no-
+  // wiktionary check below already handles the nothing-found case.
+  const runSource = <T>(
     source: string,
     startTime: number,
     fetcher: () => Promise<T | null>,
@@ -281,41 +305,6 @@ export async function conductAgenticResearch(
           source,
           error: safeError(err),
         })
-        return null
-      })
-  }
-
-  const runRequiredSource = <T>(
-    source: string,
-    startTime: number,
-    fetcher: () => Promise<T | null>,
-    preview: (data: T | null) => string | undefined,
-    options?: { failHard?: boolean }
-  ): Promise<T | null> => {
-    const failHard = options?.failHard ?? true
-    return fetcher()
-      .then((data) => {
-        emitProgress(onProgress, {
-          type: 'source_complete',
-          source,
-          timing: Date.now() - startTime,
-          preview: preview(data),
-        })
-        return data
-      })
-      .catch((err) => {
-        if (!failHard) {
-          console.error(
-            `[Research] ${source} fetch failed for "${normalizedWord}":`,
-            safeError(err)
-          )
-        }
-        emitProgress(onProgress, {
-          type: 'source_failed',
-          source,
-          error: safeError(err),
-        })
-        if (failHard) throw err
         return null
       })
   }
@@ -344,28 +333,27 @@ export async function conductAgenticResearch(
     wikipediaData,
     incelsWikiData,
   ] = await Promise.all([
-    runRequiredSource(
+    runSource(
       'etymonline',
       startTime,
       () => fetchEtymonline(normalizedWord),
       (data) => data?.text.slice(0, 100)
     ),
-    runRequiredSource(
+    runSource(
       'wiktionary',
       startTime,
       () => fetchWiktionary(normalizedWord),
       (data) => data?.text.slice(0, 100)
     ),
-    runRequiredSource(
+    runSource(
       'freeDictionary',
       startTime,
       () => fetchFreeDictionary(normalizedWord),
-      (data) => data?.origin?.slice(0, 100),
-      { failHard: false }
+      (data) => data?.origin?.slice(0, 100)
     ),
     skipOptional
       ? Promise.resolve(null)
-      : runOptionalSource(
+      : runSource(
           'urbanDictionary',
           startTime,
           () => fetchUrbanDictionary(normalizedWord),
@@ -373,7 +361,7 @@ export async function conductAgenticResearch(
         ),
     skipOptional
       ? Promise.resolve(null)
-      : runOptionalSource(
+      : runSource(
           'wikipedia',
           startTime,
           () => fetchWikipedia(normalizedWord),
@@ -381,7 +369,7 @@ export async function conductAgenticResearch(
         ),
     skipOptional
       ? Promise.resolve(null)
-      : runOptionalSource(
+      : runSource(
           'incelsWiki',
           startTime,
           () => fetchIncelsWiki(normalizedWord),
@@ -437,11 +425,14 @@ export async function conductAgenticResearch(
 
   // Phase 2: Extract roots from initial data
   console.log('[Research] Phase 2: Extracting roots')
-  const identifiedRoots = await extractRootsQuick(
+  const { roots: identifiedRoots, usage: extractionUsage } = await extractRootsQuick(
     normalizedWord,
     etymonlineData?.text ?? null,
     wiktionaryData?.text ?? null
   )
+  if (extractionUsage) {
+    context.llmUsage = extractionUsage
+  }
   context.identifiedRoots = identifiedRoots
   console.log(`[Research] Identified roots: ${identifiedRoots.join(', ') || 'none'}`)
   emitProgress(onProgress, {

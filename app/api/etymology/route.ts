@@ -6,7 +6,7 @@ import {
   StageConfidence,
   ResearchContext,
 } from '@/lib/types'
-import { synthesizeFromResearch, streamSynthesis } from '@/lib/llm'
+import { synthesizeFromResearch, streamSynthesis, SynthesisResult } from '@/lib/llm'
 import { conductAgenticResearch } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
@@ -14,13 +14,34 @@ import { getQuirkyMessage } from '@/lib/prompts'
 import { getCachedEtymology, cacheEtymology, getNegativeCache, cacheNegative } from '@/lib/cache'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { getCostMode, recordSpend } from '@/lib/costGuard'
-import { tryAcquireLock, releaseLock, pollForResult } from '@/lib/singleflight'
+import {
+  tryAcquireLock,
+  releaseLock,
+  startLockHeartbeat,
+  markLockFailure,
+  attemptPromotion,
+  pollForResult,
+} from '@/lib/singleflight'
+import { incrCounter } from '@/lib/counters'
 import { safeError } from '@/lib/errorUtils'
 import { getEnv } from '@/lib/env'
 import { CONFIG } from '@/lib/config'
 import { emitSecurityEvent } from '@/lib/telemetry'
 import { streamErrorResponse, streamResultResponse } from '@/lib/streamingResponse'
 import { classifyApiError } from '@/lib/apiError'
+
+// Uncached searches run a multi-phase research + synthesis pipeline that can
+// take minutes; without this the function dies at the platform default.
+export const maxDuration = 300
+
+const REDIS_DOWN_MESSAGE =
+  'New word lookups are temporarily unavailable — our cache service is unreachable. ' +
+  'Please try again in a few minutes.'
+const IN_PROGRESS_MESSAGE = 'Request in progress, please retry in a few seconds.'
+
+const CACHED_RESPONSE_HEADERS = {
+  'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+} as const
 
 function countConfidence(result: EtymologyResult, level: StageConfidence): number {
   const allStages = [
@@ -29,6 +50,24 @@ function countConfidence(result: EtymologyResult, level: StageConfidence): numbe
   ]
   return allStages.filter((stage) => stage.confidence === level).length
 }
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+type ResearchOutcome =
+  | { kind: 'ok'; researchContext: ResearchContext }
+  | { kind: 'no_sources'; typoSuggestions?: string[]; fallbackSuggestion?: string }
+
+type PipelineOutcome =
+  | { kind: 'result'; result: EtymologyResult }
+  | { kind: 'no_sources'; typoSuggestions?: string[]; fallbackSuggestion?: string }
+
+type WaiterOutcome =
+  | PipelineOutcome
+  | { kind: 'negative_cached' }
+  | { kind: 'holder_failed'; message: string }
+  | { kind: 'timeout' }
 
 export async function GET(request: NextRequest) {
   let shouldStream = false
@@ -99,13 +138,14 @@ export async function GET(request: NextRequest) {
         timestamp: Date.now(),
         detail: { word: normalizedWord },
       })
+      await incrCounter('cache_hit')
       return shouldStream
         ? streamResultResponse(cached, { 'X-Protection-Mode': costMode })
         : NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
             { success: true, data: cached, cached: true },
             {
               headers: {
-                'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
+                ...CACHED_RESPONSE_HEADERS,
                 'X-Protection-Mode': costMode,
               },
             }
@@ -154,208 +194,289 @@ export async function GET(request: NextRequest) {
 
     // Singleflight: prevent duplicate LLM calls for the same word
     const lockKey = `lock:etymology:${normalizedWord}`
-    const acquiredLock = await tryAcquireLock(lockKey)
+    const acquisition = await tryAcquireLock(lockKey)
 
-    if (!acquiredLock) {
-      // Another request is already processing this word — poll for its result
-      console.log(`[Etymology API] Waiting for in-flight result for "${normalizedWord}"`)
-      const result = await pollForResult(() => getCachedEtymology(normalizedWord))
-      if (result) {
-        return shouldStream
-          ? streamResultResponse(result)
-          : NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
-              { success: true, data: result, cached: true },
-              {
-                headers: {
-                  'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
-                },
-              }
-            )
-      }
-      // Timed out waiting — tell client to retry
+    // Fail closed: an uncached synthesis without Redis would run with no
+    // budget enforcement, no dedup, and no caching — reject it instead.
+    // Cached lookups can't exist without Redis, so only uncached paths hit this.
+    if (acquisition.status === 'unavailable' || acquisition.status === 'error') {
+      console.error(
+        `[Etymology API] Redis ${acquisition.status} — failing closed for uncached search`
+      )
       return shouldStream
-        ? streamErrorResponse('Request in progress, please retry in a few seconds.', 'rate_limit')
+        ? streamErrorResponse(REDIS_DOWN_MESSAGE, 'network')
         : NextResponse.json<ApiResponse<null>>(
-            { success: false, error: 'Request in progress, please retry in a few seconds.' },
-            { status: 429, headers: { 'Retry-After': '2' } }
+            { success: false, error: REDIS_DOWN_MESSAGE },
+            { status: 503, headers: { 'Retry-After': '60' } }
           )
     }
 
-    try {
-      const runResearch = async (
-        onProgress?: (event: StreamEvent) => void
-      ): Promise<
-        | { kind: 'ok'; researchContext: ResearchContext }
-        | { kind: 'no_sources'; typoSuggestions?: string[]; fallbackSuggestion?: string }
-      > => {
-        const researchContext = await conductAgenticResearch(normalizedWord, {}, onProgress)
+    const runResearch = async (
+      onProgress?: (event: StreamEvent) => void
+    ): Promise<ResearchOutcome> => {
+      const researchContext = await conductAgenticResearch(normalizedWord, {}, onProgress)
 
-        if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
-          cacheNegative(normalizedWord, 'no_sources').catch((err) => {
-            console.error('[Etymology API] Negative cache store failed:', safeError(err))
-          })
+      if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
+        // Awaited so the entry lands BEFORE the lock releases — waiters
+        // poll the negative cache to learn this word has no sources.
+        await cacheNegative(normalizedWord, 'no_sources')
 
-          if (isLikelyTypo(normalizedWord)) {
-            return {
-              kind: 'no_sources',
-              typoSuggestions: getSuggestions(normalizedWord).map((s) => s.word),
-            }
-          }
-
+        if (isLikelyTypo(normalizedWord)) {
           return {
             kind: 'no_sources',
-            fallbackSuggestion: getRandomWord(),
+            typoSuggestions: getSuggestions(normalizedWord).map((s) => s.word),
           }
         }
 
-        console.log(
-          `[Etymology API] Research complete. Fetched ${researchContext.totalSourcesFetched} sources, ` +
-            `identified ${researchContext.identifiedRoots.length} roots`
-        )
-        return { kind: 'ok', researchContext }
+        return {
+          kind: 'no_sources',
+          fallbackSuggestion: getRandomWord(),
+        }
       }
 
-      const recordUsage = (usage: { inputTokens: number; outputTokens: number }) => {
-        recordSpend(usage).catch((err) => {
-          console.error('[Etymology API] Spend recording failed:', safeError(err))
-        })
-      }
+      console.log(
+        `[Etymology API] Research complete. Fetched ${researchContext.totalSourcesFetched} sources, ` +
+          `identified ${researchContext.identifiedRoots.length} roots`
+      )
+      return { kind: 'ok', researchContext }
+    }
 
-      const cacheAndAudit = (researchContext: ResearchContext, result: EtymologyResult) => {
-        cacheEtymology(normalizedWord, result).catch((err) => {
-          console.error('[Etymology API] Cache store failed:', safeError(err))
-        })
+    /**
+     * Full holder pipeline: heartbeat the lock while working, record spend
+     * (awaited) for both the root-extraction and synthesis calls, and write
+     * the result to cache BEFORE the lock is released in `finally` so
+     * waiters polling the cache always find it. On error, a short-TTL
+     * failure marker is written (also before release) so waiters surface
+     * the failure instead of promoting and re-spending.
+     */
+    const runHolderPipeline = async (
+      lockToken: string,
+      emit?: (event: StreamEvent) => void
+    ): Promise<PipelineOutcome> => {
+      const stopHeartbeat = startLockHeartbeat(lockKey, lockToken)
+      try {
+        const research = await runResearch(emit)
+        if (research.kind === 'no_sources') {
+          return research
+        }
+        const researchContext = research.researchContext
 
+        if (researchContext.llmUsage) {
+          await recordSpend(researchContext.llmUsage)
+        }
+
+        let synthesis: SynthesisResult
+        if (emit) {
+          emit({ type: 'synthesis_started' })
+          synthesis = await streamSynthesis(researchContext, (token) => {
+            emit({ type: 'synthesis_token', token })
+          })
+        } else {
+          synthesis = await synthesizeFromResearch(researchContext)
+        }
+
+        await recordSpend(synthesis.usage)
+
+        await cacheEtymology(normalizedWord, synthesis.result)
         emitSecurityEvent({
           type: 'cache_miss',
           timestamp: Date.now(),
           detail: { word: normalizedWord, sources: researchContext.totalSourcesFetched },
         })
+        await incrCounter('cache_miss')
+
+        return { kind: 'result', result: synthesis.result }
+      } catch (error) {
+        // Distinguish "holder failed" from "holder crashed" for waiters:
+        // written before the lock release below, checked before promotion.
+        await markLockFailure(lockKey, classifyApiError(error).message)
+        throw error
+      } finally {
+        stopHeartbeat()
+        await releaseLock(lockKey, lockToken)
+      }
+    }
+
+    /**
+     * Streaming waiter: poll the cache while the holder works, emitting
+     * keepalive events so the SSE connection stays warm. Promotion only
+     * happens on a true holder crash — a lock that vanished with neither a
+     * cached result nor a failure marker. Failed holders (LLM error etc.)
+     * leave a marker, and waiters surface that error without re-running
+     * the pipeline; a promoted waiter that fails writes the marker too,
+     * so later waiters can't cascade into further promotions.
+     */
+    const waitAsStreamingWaiter = async (
+      emit: (event: StreamEvent) => void
+    ): Promise<WaiterOutcome> => {
+      console.log(`[Etymology API] Waiting for in-flight result for "${normalizedWord}" (stream)`)
+      const startedAt = Date.now()
+      const { waiterPollIntervalMs, streamWaiterMaxWaitMs } = CONFIG.singleflight
+
+      while (Date.now() - startedAt < streamWaiterMaxWaitMs) {
+        await sleep(waiterPollIntervalMs)
+
+        const result = await getCachedEtymology(normalizedWord)
+        if (result) {
+          return { kind: 'result', result }
+        }
+
+        if (await getNegativeCache(normalizedWord)) {
+          return { kind: 'negative_cached' }
+        }
+
+        const promotion = await attemptPromotion(lockKey)
+        if (promotion.status === 'holder_failed') {
+          return { kind: 'holder_failed', message: promotion.message }
+        }
+        if (promotion.status === 'promoted') {
+          console.log(`[Etymology API] Promoted waiter to holder for "${normalizedWord}"`)
+          return runHolderPipeline(promotion.token, emit)
+        }
+        // 'held': holder still working (or another waiter won) — keep polling.
+
+        emit({ type: 'singleflight_wait', waitedMs: Date.now() - startedAt })
       }
 
-      if (shouldStream) {
-        const stream = new ReadableStream({
-          async start(controller) {
-            const encoder = new TextEncoder()
-            const emit = (event: StreamEvent) => {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
-            }
+      return { kind: 'timeout' }
+    }
 
-            try {
+    if (shouldStream) {
+      const stream = new ReadableStream({
+        async start(controller) {
+          const encoder = new TextEncoder()
+          const emit = (event: StreamEvent) => {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+          }
+
+          try {
+            let outcome: WaiterOutcome
+            if (acquisition.status === 'acquired') {
               console.log(
                 `[Etymology API] Starting agentic research (streaming) for "${normalizedWord}"`
               )
-              const research = await runResearch(emit)
-              if (research.kind === 'no_sources') {
-                if (research.typoSuggestions && research.typoSuggestions.length > 0) {
-                  emit({
-                    type: 'error',
-                    message: `Hmm, we couldn't find "${word}".`,
-                    errorType: 'typo',
-                    suggestions: research.typoSuggestions,
-                  })
-                } else {
-                  emit({
-                    type: 'error',
-                    message: getQuirkyMessage('nonsense'),
-                    errorType: 'nonsense',
-                  })
-                }
-                controller.close()
-                return
-              }
-              const researchContext = research.researchContext
+              outcome = await runHolderPipeline(acquisition.token, emit)
+            } else {
+              outcome = await waitAsStreamingWaiter(emit)
+            }
 
-              emit({ type: 'synthesis_started' })
-
-              const { result, usage } = await streamSynthesis(researchContext, (token) => {
-                emit({ type: 'synthesis_token', token })
-              })
-
-              recordUsage(usage)
-
+            if (outcome.kind === 'result') {
               emit({
                 type: 'enrichment_done',
-                highConfidence: countConfidence(result, 'high'),
-                mediumConfidence: countConfidence(result, 'medium'),
+                highConfidence: countConfidence(outcome.result, 'high'),
+                mediumConfidence: countConfidence(outcome.result, 'medium'),
               })
-
-              emit({ type: 'result', data: result })
-
-              cacheAndAudit(researchContext, result)
-
-              controller.close()
-            } catch (error) {
-              console.error('[Etymology API] Streaming error:', safeError(error))
-              const classified = classifyApiError(error)
+              emit({ type: 'result', data: outcome.result })
+            } else if (outcome.kind === 'no_sources') {
+              if (outcome.typoSuggestions && outcome.typoSuggestions.length > 0) {
+                emit({
+                  type: 'error',
+                  message: `Hmm, we couldn't find "${word}".`,
+                  errorType: 'typo',
+                  suggestions: outcome.typoSuggestions,
+                })
+              } else {
+                emit({
+                  type: 'error',
+                  message: getQuirkyMessage('nonsense'),
+                  errorType: 'nonsense',
+                })
+              }
+            } else if (outcome.kind === 'negative_cached') {
               emit({
                 type: 'error',
-                message: classified.message,
-                errorType: classified.streamErrorType,
+                message: getQuirkyMessage('nonsense'),
+                errorType: 'nonsense',
               })
-              controller.close()
-            } finally {
-              // Release lock after stream completes
-              releaseLock(lockKey).catch(() => {})
+            } else if (outcome.kind === 'holder_failed') {
+              emit({
+                type: 'error',
+                message: outcome.message,
+                errorType: 'unknown',
+              })
+            } else {
+              emit({
+                type: 'error',
+                message: IN_PROGRESS_MESSAGE,
+                errorType: 'rate_limit',
+              })
             }
-          },
-        })
-
-        return new Response(stream, {
-          headers: {
-            'Content-Type': 'text/event-stream',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-            'X-Protection-Mode': costMode,
-          },
-        })
-      } else {
-        console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
-        const research = await runResearch()
-        if (research.kind === 'no_sources') {
-          if (research.typoSuggestions && research.typoSuggestions.length > 0) {
-            return NextResponse.json<ApiResponse<{ suggestions: string[] }>>(
-              {
-                success: false,
-                error: `Hmm, we couldn't find "${word}". Did you mean:`,
-                data: { suggestions: research.typoSuggestions },
-              },
-              { status: 404 }
-            )
+          } catch (error) {
+            console.error('[Etymology API] Streaming error:', safeError(error))
+            await incrCounter('error')
+            const classified = classifyApiError(error)
+            emit({
+              type: 'error',
+              message: classified.message,
+              errorType: classified.streamErrorType,
+            })
           }
-          return NextResponse.json<ApiResponse<{ suggestion: string }>>(
-            {
-              success: false,
-              error: getQuirkyMessage('nonsense'),
-              data: { suggestion: research.fallbackSuggestion ?? getRandomWord() },
-            },
-            { status: 404 }
-          )
-        }
-        const researchContext = research.researchContext
+          controller.close()
+        },
+      })
 
-        const { result, usage } = await synthesizeFromResearch(researchContext)
-        recordUsage(usage)
-        cacheAndAudit(researchContext, result)
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+          'X-Protection-Mode': costMode,
+        },
+      })
+    }
 
+    // Non-streaming waiter: short poll, then ask the client to retry.
+    if (acquisition.status === 'busy') {
+      console.log(`[Etymology API] Waiting for in-flight result for "${normalizedWord}"`)
+      const result = await pollForResult(() => getCachedEtymology(normalizedWord))
+      if (result) {
         return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
-          { success: true, data: result, cached: false },
-          {
-            headers: {
-              'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800',
-              'X-Protection-Mode': costMode,
-            },
-          }
+          { success: true, data: result, cached: true },
+          { headers: CACHED_RESPONSE_HEADERS }
         )
       }
-    } finally {
-      // Always release the lock for non-streaming path (streaming path releases in ReadableStream)
-      if (!shouldStream) {
-        releaseLock(lockKey).catch(() => {})
-      }
+      return NextResponse.json<ApiResponse<null>>(
+        { success: false, error: IN_PROGRESS_MESSAGE },
+        { status: 429, headers: { 'Retry-After': '15' } }
+      )
     }
+
+    console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
+    const outcome = await runHolderPipeline(acquisition.token)
+
+    if (outcome.kind === 'no_sources') {
+      if (outcome.typoSuggestions && outcome.typoSuggestions.length > 0) {
+        return NextResponse.json<ApiResponse<{ suggestions: string[] }>>(
+          {
+            success: false,
+            error: `Hmm, we couldn't find "${word}". Did you mean:`,
+            data: { suggestions: outcome.typoSuggestions },
+          },
+          { status: 404 }
+        )
+      }
+      return NextResponse.json<ApiResponse<{ suggestion: string }>>(
+        {
+          success: false,
+          error: getQuirkyMessage('nonsense'),
+          data: { suggestion: outcome.fallbackSuggestion ?? getRandomWord() },
+        },
+        { status: 404 }
+      )
+    }
+
+    return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
+      { success: true, data: outcome.result, cached: false },
+      {
+        headers: {
+          ...CACHED_RESPONSE_HEADERS,
+          'X-Protection-Mode': costMode,
+        },
+      }
+    )
   } catch (error) {
     console.error('Etymology API error:', safeError(error))
+    await incrCounter('error')
     const classified = classifyApiError(error)
 
     return shouldStream
