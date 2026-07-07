@@ -24,6 +24,32 @@ describe('openrouterResponses', () => {
     expect('temperature' in request).toBe(false)
   })
 
+  test('buildSynthesisRequest adapts reasoning to model capabilities', () => {
+    expect(buildSynthesisRequest('Analyze', 'google/gemini-3.5-flash').reasoning).toEqual({
+      effort: 'minimal',
+      exclude: true,
+    })
+    expect(buildSynthesisRequest('Analyze', 'moonshotai/kimi-k2.6').reasoning).toEqual({
+      enabled: false,
+      exclude: true,
+    })
+    expect(buildSynthesisRequest('Analyze', 'z-ai/glm-5.2').reasoning).toEqual({
+      enabled: false,
+      exclude: true,
+    })
+    expect(buildSynthesisRequest('Analyze', 'minimax/minimax-m3').reasoning).toEqual({
+      enabled: false,
+      exclude: true,
+    })
+    expect(buildSynthesisRequest('Analyze', 'xiaomi/mimo-v2.5').reasoning).toEqual({
+      effort: 'none',
+      exclude: true,
+    })
+    expect('reasoning' in buildSynthesisRequest('Analyze', 'deepseek/deepseek-v4-flash')).toBe(
+      false
+    )
+  })
+
   test('buildRootExtractionRequest disables reasoning for tiny root extraction output', () => {
     const request = buildRootExtractionRequest('Analyze roots')
 

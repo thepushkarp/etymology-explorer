@@ -190,6 +190,8 @@ export async function proxy(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",
     "img-src 'self' data: https:",
+    // PronunciationButton plays TTS audio via URL.createObjectURL → blob:
+    "media-src 'self' blob:",
     connectSrc,
     "object-src 'none'",
     "frame-ancestors 'none'",

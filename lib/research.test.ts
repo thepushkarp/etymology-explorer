@@ -319,6 +319,16 @@ describe('buildResearchPrompt token diet', () => {
     )
     expect(relatedBlock?.[1].length).toBe(CONFIG.promptBudget.relatedSourceChars)
   })
+
+  test('clipped source blocks preserve tail context with an explicit marker', () => {
+    const prompt = buildResearchPrompt(buildContext())
+    const etymonlineBlock = sourceBlocks(prompt)[0]
+
+    expect(etymonlineBlock).toContain('1835, from French téléphone.')
+    expect(etymonlineBlock).toContain('[...source excerpt clipped for prompt budget...]')
+    expect(etymonlineBlock.endsWith('x'.repeat(20))).toBe(true)
+    expect(etymonlineBlock.length).toBe(CONFIG.promptBudget.mainSourceChars)
+  })
 })
 
 /**

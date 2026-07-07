@@ -722,15 +722,26 @@ function sanitizeSourceText(text: string, maxChars: number): string {
   sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
   // Neutralize Unicode directional overrides
   sanitized = sanitized.replace(/[\u200E\u200F\u202A-\u202E]/g, '')
-  return sanitized.slice(0, maxChars)
+  if (sanitized.length <= maxChars) {
+    return sanitized
+  }
+
+  const marker = '\n[...source excerpt clipped for prompt budget...]\n'
+  if (maxChars <= marker.length + 2) {
+    return sanitized.slice(0, maxChars)
+  }
+
+  const headChars = Math.ceil((maxChars - marker.length) * 0.7)
+  const tailChars = maxChars - marker.length - headChars
+  return sanitized.slice(0, headChars) + marker + sanitized.slice(-tailChars)
 }
 
 /**
  * Build a rich prompt from research context for final synthesis.
  * Source data is wrapped in <source_data> XML tags for prompt injection
- * defense and truncated to the tiered CONFIG.promptBudget caps (main
- * sources carry the chains, so root/related/supplemental blocks get
- * smaller budgets).
+ * defense and clipped to the tiered CONFIG.promptBudget caps. Clipping keeps
+ * the source opening plus tail context with an explicit omission marker; the
+ * full parsed chain evidence is appended separately below.
  */
 export function buildResearchPrompt(context: ResearchContext): string {
   const sections: string[] = []
