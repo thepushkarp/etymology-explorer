@@ -127,7 +127,13 @@ export default async function WordPage({ params }: WordPageProps) {
 
   const result = await loadCachedEtymology(word)
   if (!result) {
-    return <WordTraceExperience word={word} />
+    // key={word} forces a fresh mount per word: without it, an in-app
+    // navigation between two uncached words reuses this client instance
+    // (same type + position), so startedRef and the stream reducer state
+    // would persist — the new word would never trace and the prior result
+    // would leak. The cached branch (WordPageEntry) is prop-driven and needs
+    // no key.
+    return <WordTraceExperience key={word} word={word} />
   }
 
   return (
