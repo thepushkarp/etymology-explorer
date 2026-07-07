@@ -1,12 +1,19 @@
 'use client'
 
 import { useState } from 'react'
+import type { SourceReference } from '@/lib/types'
 
 interface HistoricalContextProps {
   wikipediaExtract: string
+  sourceUrl?: string
 }
 
-export default function HistoricalContext({ wikipediaExtract }: HistoricalContextProps) {
+/** Find the Wikipedia page URL among a result's source references, if any. */
+export function wikipediaSourceUrl(sources: SourceReference[]): string | undefined {
+  return sources.find((source) => source.name === 'wikipedia' && source.url)?.url
+}
+
+export default function HistoricalContext({ wikipediaExtract, sourceUrl }: HistoricalContextProps) {
   const [isExpanded, setIsExpanded] = useState(false)
 
   if (!wikipediaExtract?.trim()) return null
@@ -25,7 +32,7 @@ export default function HistoricalContext({ wikipediaExtract }: HistoricalContex
         aria-controls="historical-context-content"
       >
         <div className="flex items-center gap-3">
-          <span className="select-none font-serif text-2xl text-charcoal/45">\u00a7</span>
+          <span className="select-none font-serif text-2xl text-charcoal/45">§</span>
           <h2 className="font-serif text-xl font-semibold text-charcoal/80 group-hover:text-charcoal">
             Historical Context
           </h2>
@@ -55,17 +62,19 @@ export default function HistoricalContext({ wikipediaExtract }: HistoricalContex
             </p>
           </div>
 
-          <p className="mt-3 text-xs text-charcoal/55 font-sans">
-            Source:{' '}
-            <a
-              href={`https://en.wikipedia.org/wiki/${wikipediaExtract.split(' ')[0]}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="editorial-link transition-colors hover:text-charcoal/60"
-            >
-              Wikipedia
-            </a>
-          </p>
+          {sourceUrl && (
+            <p className="mt-3 text-xs text-charcoal/55 font-sans">
+              Source:{' '}
+              <a
+                href={sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="editorial-link transition-colors hover:text-charcoal/60"
+              >
+                Wikipedia
+              </a>
+            </p>
+          )}
         </div>
       )}
     </section>

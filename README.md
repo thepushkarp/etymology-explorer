@@ -21,6 +21,8 @@ Try it out at [etymex.com](https://etymex.com)
 - **Streaming UI**: Optional `?stream=true` server-sent events for source progress,
   per-section synthesis events, cached hits, and early error responses
 - **Smart Caching**: Redis-backed caching reduces costs and improves speed (30d etymology, 1yr audio)
+- **Shareable Word Pages**: Crawlable `/word/{word}` pages served strictly from the cache
+  (never trigger LLM spend), with per-word OG images and sitemap listings
 - **Rate Limiting**: Per-IP protection via Upstash Redis with automatic budget enforcement
 
 ## Getting Started
@@ -107,7 +109,7 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
   - [Urban Dictionary](https://www.urbandictionary.com/) - Modern slang (quality-filtered)
   - [Incel Wiki](https://incels.wiki/) - Supplemental community slang context
 - **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
-- **Typography**: Libre Baskerville (serif)
+- **Typography**: Libre Baskerville (display serif) + Alegreya Sans (body), self-hosted woff2 subsets
 
 ## Project Structure
 
@@ -119,12 +121,13 @@ etymology-explorer/
 │   │   ├── etymology/      # Main etymology synthesis endpoint (GET)
 │   │   ├── pronunciation/  # TTS audio endpoint (ElevenLabs)
 │   │   ├── random-word/    # Random word selection
-│   │   └── suggestions/    # Typo correction suggestions
+│   │   └── suggestions/    # Autocomplete + typo suggestions
 │   ├── faq/                # FAQ page with structured data
 │   ├── learn/              # Educational content pages
 │   │   └── what-is-etymology/
-│   ├── og/                 # Dynamic OG image generation
-│   ├── sitemap.ts          # Dynamic sitemap
+│   ├── og/                 # Dynamic OG image generation (brand + per-word cards)
+│   ├── word/[word]/        # Cache-only SSR word pages (SEO; never call the LLM)
+│   ├── sitemap.ts          # Dynamic sitemap (static pages + cached /word/ entries)
 │   ├── robots.ts           # Robots.txt configuration
 │   ├── layout.tsx          # Root layout with fonts
 │   └── page.tsx            # Main page with search UI
@@ -168,8 +171,7 @@ etymology-explorer/
 │   ├── validation.ts       # Input validation
 │   ├── wordlist.ts         # GRE word utilities
 │   ├── hooks/              # React hooks (localStorage, history, search)
-│   │   ├── useStreamingEtymology.ts # Primary streaming search hook (SSE)
-│   │   └── useEtymologySearch.ts    # Non-streaming search hook
+│   │   └── useStreamingEtymology.ts # Primary streaming search hook (SSE)
 │   └── schemas/
 │       ├── etymology.ts    # Zod schema for cache validation
 │       └── llm-schema.ts   # Strict-mode JSON Schema for LLM structured outputs
@@ -186,7 +188,7 @@ etymology-explorer/
 | -------------------- | ------ | ------------------------------------------------------------- | ----------------- |
 | `/api/etymology`     | GET    | Synthesize etymology (`?word=X`, optional `?stream=true` SSE) | No (rate-limited) |
 | `/api/pronunciation` | GET    | Get pronunciation audio                                       | No                |
-| `/api/suggestions`   | GET    | Get typo correction suggestions                               | No                |
+| `/api/suggestions`   | GET    | Get autocomplete and typo suggestions                         | No                |
 | `/api/random-word`   | GET    | Get a random word                                             | No                |
 | `/api/ngram`         | GET    | Get Google Books usage-over-time data (`?word=X`)             | No                |
 | `/api/health`        | GET    | Liveness check                                                | No                |

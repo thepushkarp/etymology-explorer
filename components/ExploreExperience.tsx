@@ -4,7 +4,7 @@ import { useEffect, useCallback, useRef, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { useHistory } from '@/lib/hooks/useHistory'
-import { useSimpleMode } from '@/lib/hooks/useSimpleMode'
+import { usePronunciation } from '@/lib/hooks/usePronunciation'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { SearchBar } from '@/components/SearchBar'
 import { EtymologyCard } from '@/components/EtymologyCard'
@@ -37,7 +37,6 @@ export function ExploreExperience() {
   const searchParams = useSearchParams()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const { history, clearHistory, removeFromHistory } = useHistory()
-  const { isSimple, toggleSimple } = useSimpleMode()
   const { state, events, partialResult, error, search, reset } = useStreamingEtymology()
   const currentWord = searchParams.get('q')?.toLowerCase() ?? null
   const [ngramData, setNgramData] = useState<NgramResult | null>(null)
@@ -117,6 +116,13 @@ export function ExploreExperience() {
 
     navigateToWord(history[currentIndex - 1].word)
   }, [history, currentWord, navigateToWord])
+
+  const { play: playPronunciation } = usePronunciation(partialResult?.word ?? '')
+  const handlePlayPronunciation = useCallback(() => {
+    if (state === 'success') {
+      void playPronunciation()
+    }
+  }, [state, playPronunciation])
 
   const isIdle = state === 'idle'
   const hasSearchContext = !isIdle
@@ -244,7 +250,6 @@ export function ExploreExperience() {
               <EtymologyCard
                 result={resultWithNgram}
                 onWordClick={navigateToWord}
-                isSimple={isSimple}
                 headerActions={<ShareMenu result={resultWithNgram} />}
               />
             )}
@@ -256,7 +261,7 @@ export function ExploreExperience() {
         onFocusSearch={() => searchInputRef.current?.focus()}
         onHistoryBack={handleHistoryBack}
         onHistoryForward={handleHistoryForward}
-        onToggleSimpleMode={toggleSimple}
+        onPlayPronunciation={handlePlayPronunciation}
       />
 
       <SiteFooter />

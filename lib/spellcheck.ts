@@ -1,4 +1,5 @@
 import { WordSuggestion } from './types'
+import { rankMatches } from './suggestionRanking'
 import greWordsData from '@/data/gre-words.json'
 
 const greWords: string[] = greWordsData.words
@@ -56,6 +57,34 @@ export function getSuggestions(
     .filter((s) => s.distance <= maxDistance && s.distance > 0)
     .sort((a, b) => a.distance - b.distance)
     .slice(0, maxSuggestions)
+
+  return suggestions
+}
+
+/**
+ * Autocomplete suggestions for a partial word: prefix matches first, then
+ * substring matches, then near-miss (typo) corrections to fill up to the limit.
+ */
+export function getAutocompleteSuggestions(input: string, limit: number = 5): WordSuggestion[] {
+  const normalizedInput = input.toLowerCase().trim()
+
+  const matches = rankMatches(greWords, normalizedInput, limit)
+  const suggestions: WordSuggestion[] = matches.map((word) => ({
+    word,
+    distance: word === normalizedInput ? 0 : levenshteinDistance(normalizedInput, word),
+  }))
+
+  if (suggestions.length < limit) {
+    const matched = new Set(matches)
+    const typoFill = getSuggestions(normalizedInput, limit).filter((s) => !matched.has(s.word))
+    suggestions.push(...typoFill.slice(0, limit - suggestions.length))
+  }
+
+  const exactIndex = suggestions.findIndex((s) => s.word === normalizedInput)
+  if (exactIndex > 0) {
+    const [exact] = suggestions.splice(exactIndex, 1)
+    suggestions.unshift(exact)
+  }
 
   return suggestions
 }

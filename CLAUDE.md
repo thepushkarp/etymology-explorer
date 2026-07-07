@@ -132,6 +132,23 @@ Pipeline flow: Raw sources → Parser (CPU) → LLM (validates/extends) → Enri
 
 New optional fields on `AncestryStage`: `isReconstructed`, `confidence`, `evidence[]` (backward compatible)
 
+### SEO Word Pages
+
+Shareable, crawlable per-word pages that must never cost LLM money:
+
+- **`app/word/[word]/page.tsx`** - SSR strictly from `getCachedEtymology` (`lib/cache.ts`).
+  The module graph must never include `lib/research.ts`, `lib/llm.ts`, or
+  `lib/openrouterResponses.ts` — enforced by `app/word/import-graph.test.ts`. Cache miss
+  renders a noindex page with a "Trace it live" CTA to `/?q={word}`. ISR via
+  `revalidate = 86400`.
+- **`app/sitemap.ts`** - SCANs cached etymology keys (cursor-paginated, capped at 1000) using
+  the exported `CACHE_VERSION`/`ETYMOLOGY_PREFIX` constants from `lib/cache.ts`.
+- **`app/og/route.tsx`** - `/og?word={word}` renders a per-word OG card; without a valid
+  `word` it falls back to the brand card.
+- **Canonicals**: `/?q=word` canonicalizes to `/word/{word}` (`app/page.tsx`
+  `generateMetadata`); bare `/` keeps canonical `/`. `ShareMenu` copies `/word/{word}` links.
+  Client search UX stays on `/?q=`.
+
 ### Research Pipeline Limits
 
 Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API costs:
@@ -191,7 +208,6 @@ and the output is guaranteed-shape JSON.
 **Key hooks**:
 
 - `lib/hooks/useStreamingEtymology.ts` - Main streaming search state management (SSE progress + synthesis_section events)
-- `lib/hooks/useEtymologySearch.ts` - Non-streaming search state management (idle/loading/success/error)
 - `lib/hooks/useLocalStorage.ts` - Persistent client state
 - `lib/hooks/useHistory.ts` - Search history management
 
@@ -231,7 +247,7 @@ When adding UI: _"Would this feel at home in a beautifully typeset etymology dic
 | Endpoint             | Method | Purpose                                                                           |
 | -------------------- | ------ | --------------------------------------------------------------------------------- |
 | `/api/etymology`     | GET    | Main synthesis - `?word=X`; optional `?stream=true` for SSE (server-side API key) |
-| `/api/suggestions`   | GET    | Typo correction - `?q=word`                                                       |
+| `/api/suggestions`   | GET    | Autocomplete + typo suggestions - `?q=word`                                       |
 | `/api/random-word`   | GET    | Random GRE word (crypto randomness)                                               |
 | `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, 8s timeout)                                 |
 | `/api/ngram`         | GET    | Google Books ngram usage data - `?word=word`                                      |
@@ -282,6 +298,12 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `lib/urbanDictionary.ts` - Urban Dictionary API with quality scoring/filtering
 - `lib/incelsWiki.ts` - Incel Wiki MediaWiki API client (supplemental context)
 - `lib/elevenlabs.ts` - ElevenLabs TTS client
+
+**SEO Word Pages:**
+
+- `app/word/[word]/page.tsx` - Cache-only SSR word pages (import graph must exclude research/LLM)
+- `app/word/import-graph.test.ts` - Enforces the no-LLM-in-module-graph budget invariant
+- `components/WordPageEntry.tsx` - Client shell reusing EtymologyCard for /word pages
 
 **Admin:**
 
