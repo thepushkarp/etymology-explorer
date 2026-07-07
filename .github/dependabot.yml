@@ -16,6 +16,13 @@ updates:
       dependencies:
         patterns:
           - '*'
+    ignore:
+      # Held back until the toolchain catches up (see PR #70): eslint-config-next
+      # lacks ESLint 10 support and @types/bun lacks TypeScript 6 support.
+      - dependency-name: 'eslint'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: 'github-actions'
     directory: '/'
