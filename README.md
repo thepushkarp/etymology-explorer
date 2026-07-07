@@ -21,6 +21,8 @@ Try it out at [etymex.com](https://etymex.com)
 - **Streaming UI**: Optional `?stream=true` server-sent events for source progress,
   token streaming, cached hits, and early error responses
 - **Smart Caching**: Redis-backed caching reduces costs and improves speed (30d etymology, 1yr audio)
+- **Shareable Word Pages**: Crawlable `/word/{word}` pages served strictly from the cache
+  (never trigger LLM spend), with per-word OG images and sitemap listings
 - **Rate Limiting**: Per-IP protection via Upstash Redis with automatic budget enforcement
 
 ## Getting Started
@@ -123,8 +125,9 @@ etymology-explorer/
 │   ├── faq/                # FAQ page with structured data
 │   ├── learn/              # Educational content pages
 │   │   └── what-is-etymology/
-│   ├── og/                 # Dynamic OG image generation
-│   ├── sitemap.ts          # Dynamic sitemap
+│   ├── og/                 # Dynamic OG image generation (brand + per-word cards)
+│   ├── word/[word]/        # Cache-only SSR word pages (SEO; never call the LLM)
+│   ├── sitemap.ts          # Dynamic sitemap (static pages + cached /word/ entries)
 │   ├── robots.ts           # Robots.txt configuration
 │   ├── layout.tsx          # Root layout with fonts
 │   └── page.tsx            # Main page with search UI
@@ -197,12 +200,10 @@ etymology-explorer/
 3. **Cache Check**: Redis cache lookup with versioned keys (`etymology:v2.2:`), schema validation on read, and negative cache (6h) for known no-source/invalid words. Without Redis, uncached searches return 503 (fail closed)
 4. **Grounded Etymology Pipeline**:
    - **Parser** (CPU-only): Extracts "from X, from Y" chains from raw source text
-   - **Agentic Research**: Multi-phase research pipeline:
-     - Phase 1: Fetch main word data from 6 sources in parallel (Etymonline, Wiktionary, Free Dictionary, Wikipedia, Urban Dictionary, Incel Wiki)
-     - Phase 2: Quick LLM call extracts root morphemes (e.g., "telephone" → ["tele", "phone"])
-     - Phase 3: Fetch etymology data for each identified root (up to 4 roots)
-     - Phase 4: Mine Etymonline linked entries and Wiktionary derivation formulas for better candidate terms
-     - Phase 5: Fetch a few related-term pages within the remaining fetch budget
+   - **Agentic Research**: Multi-phase research pipeline (aborts mid-flight if the client disconnects):
+     - Phase 1: Fire all 6 source fetches at once (Etymonline, Wiktionary, Free Dictionary, Wikipedia, Urban Dictionary, Incel Wiki); only Etymonline + Wiktionary gate the next phase — the rest join before synthesis. Raw Etymonline/Wiktionary pages are served from a 7-day Redis source cache when available
+     - Phase 2: Root morphemes extracted on-CPU from derivation formulas ("From X + Y", "equivalent to X + Y") and parsed-chain affixes (e.g., "telephone" → ["tele", "phone"]); a quick LLM call (15s timeout, truncated input) runs only when the CPU pass finds nothing
+     - Phase 3: One parallel wave fetches root pages (up to 4 roots, etymonline + wiktionary) and main-word related-term pages (etymonline only) within the 16-fetch budget
    - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
@@ -232,15 +233,14 @@ etymology-explorer/
                                │ cache miss
                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Grounded Etymology Pipeline                                                  │
-│ 1) Fetch 6 sources in parallel                                               │
-│ 2) Parse "from X, from Y" chains (CPU-only)                                  │
-│ 3) OpenRouter root extraction                                                │
-│ 4) Fetch root data                                                           │
-│ 5) Mine and fetch bounded related-term pages                                 │
-│ 6) OpenRouter synthesis (stream tokens when stream=true)                     │
-│ 7) Enrich ancestry graph + confidence/evidence                               │
-│ 8) Cache result in Redis                                                     │
+│ Grounded Etymology Pipeline (client disconnect aborts in-flight work)        │
+│ 1) Fire 6 source fetches at once (etymonline/wiktionary via 7d source cache) │
+│ 2) Parse "from X, from Y" chains once etymonline+wiktionary land (CPU-only)  │
+│ 3) CPU root extraction from derivation formulas; LLM fallback if none found  │
+│ 4) ONE parallel wave: root pages + related-term pages (16-fetch budget)      │
+│ 5) OpenRouter synthesis (stream tokens when stream=true)                     │
+│ 6) Enrich ancestry graph + confidence/evidence                               │
+│ 7) Cache result in Redis                                                     │
 └──────────────────────────────┬───────────────────────────────────────────────┘
                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐

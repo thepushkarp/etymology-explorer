@@ -59,6 +59,9 @@ interface ConfidenceDistribution {
   unscored: number
 }
 
+/** How the pipeline arrived at the identified roots for a word. */
+type RootProvenance = 'cpu' | 'llm' | 'none'
+
 interface WordBenchmark {
   word: string
   bucket: Bucket
@@ -73,9 +76,9 @@ interface WordBenchmark {
     synthesis: number
     total: number
   }
-  // Synthesis-call usage only: conductAgenticResearch does not expose the
-  // root-extraction LLM usage yet (wired up when fix/safety-hardening lands).
   synthesisTokens: { input: number; output: number }
+  extractionTokens: { input: number; output: number }
+  rootProvenance: RootProvenance
   rootCount: number
   ancestryStageCount: number
   confidence: ConfidenceDistribution
@@ -161,6 +164,14 @@ async function benchmarkWord(
     const parsingDone = marks.parsingDone ?? researchDone
     const rootsDone = marks.rootsDone ?? parsingDone
 
+    // context.llmUsage is only set when the root-extraction LLM call ran;
+    // roots without usage means they were derived on-CPU (no LLM spend).
+    const rootProvenance: RootProvenance = context.llmUsage
+      ? 'llm'
+      : context.identifiedRoots.length > 0
+        ? 'cpu'
+        : 'none'
+
     const record: WordBenchmark = {
       word,
       bucket,
@@ -175,6 +186,11 @@ async function benchmarkWord(
         total: Math.round(synthesisDone - startedAt),
       },
       synthesisTokens: { input: usage.inputTokens, output: usage.outputTokens },
+      extractionTokens: {
+        input: context.llmUsage?.inputTokens ?? 0,
+        output: context.llmUsage?.outputTokens ?? 0,
+      },
+      rootProvenance,
       rootCount: result.roots.length,
       ancestryStageCount: stages.length,
       confidence: distributeConfidence(stages),
@@ -200,6 +216,8 @@ async function benchmarkWord(
         total: Math.round(performance.now() - startedAt),
       },
       synthesisTokens: { input: 0, output: 0 },
+      extractionTokens: { input: 0, output: 0 },
+      rootProvenance: 'none',
       rootCount: 0,
       ancestryStageCount: 0,
       confidence: { high: 0, medium: 0, low: 0, unscored: 0 },
@@ -216,10 +234,12 @@ function formatWordLine(record: WordBenchmark): string {
 
   const { confidence: c, latencyMs } = record
   const seconds = (latencyMs.total / 1000).toFixed(1)
+  const totalIn = record.synthesisTokens.input + record.extractionTokens.input
+  const totalOut = record.synthesisTokens.output + record.extractionTokens.output
   return (
     `ok   ${record.word} [${record.bucket}] ${seconds}s | ` +
-    `${record.synthesisTokens.input} in / ${record.synthesisTokens.output} out tok | ` +
-    `${record.rootCount} roots, ${record.ancestryStageCount} stages ` +
+    `${totalIn} in / ${totalOut} out tok | ` +
+    `${record.rootCount} roots (${record.rootProvenance}), ${record.ancestryStageCount} stages ` +
     `(${c.high}h/${c.medium}m/${c.low}l/${c.unscored}u) | ` +
     `${record.ungroundedReconstructedStages} ungrounded reconstructed`
   )
@@ -270,6 +290,11 @@ interface Aggregates {
   schemaValidCount: number
   synthesisInputTokens: number
   synthesisOutputTokens: number
+  extractionInputTokens: number
+  extractionOutputTokens: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  cpuRootWords: number
   totalLatencyP50: number
   synthesisLatencyP50: number
   ungroundedReconstructed: number
@@ -295,14 +320,34 @@ function aggregate(summary: BenchmarkSummary): Aggregates {
     confidence.unscored += record.confidence.unscored
   }
 
+  const synthesisInputTokens = okRecords.reduce(
+    (sum, record) => sum + record.synthesisTokens.input,
+    0
+  )
+  const synthesisOutputTokens = okRecords.reduce(
+    (sum, record) => sum + record.synthesisTokens.output,
+    0
+  )
+  // extractionTokens/rootProvenance may be absent in summaries from older harness versions.
+  const extractionInputTokens = okRecords.reduce(
+    (sum, record) => sum + (record.extractionTokens?.input ?? 0),
+    0
+  )
+  const extractionOutputTokens = okRecords.reduce(
+    (sum, record) => sum + (record.extractionTokens?.output ?? 0),
+    0
+  )
+
   return {
     okCount: okRecords.length,
     schemaValidCount: summary.words.filter((record) => record.schemaValid).length,
-    synthesisInputTokens: okRecords.reduce((sum, record) => sum + record.synthesisTokens.input, 0),
-    synthesisOutputTokens: okRecords.reduce(
-      (sum, record) => sum + record.synthesisTokens.output,
-      0
-    ),
+    synthesisInputTokens,
+    synthesisOutputTokens,
+    extractionInputTokens,
+    extractionOutputTokens,
+    totalInputTokens: synthesisInputTokens + extractionInputTokens,
+    totalOutputTokens: synthesisOutputTokens + extractionOutputTokens,
+    cpuRootWords: okRecords.filter((record) => record.rootProvenance === 'cpu').length,
     totalLatencyP50: percentile(totals, 0.5),
     synthesisLatencyP50: percentile(synthesis, 0.5),
     ungroundedReconstructed: okRecords.reduce(
@@ -319,7 +364,10 @@ function formatAggregates(summary: BenchmarkSummary): string {
   const c = agg.confidence
   return [
     `Completed: ${agg.okCount}/${total} | schema-valid: ${agg.schemaValidCount}/${total}`,
-    `Tokens (synthesis only): ${agg.synthesisInputTokens} in / ${agg.synthesisOutputTokens} out`,
+    `Tokens: ${agg.totalInputTokens} in / ${agg.totalOutputTokens} out ` +
+      `(synthesis ${agg.synthesisInputTokens}/${agg.synthesisOutputTokens}, ` +
+      `extraction ${agg.extractionInputTokens}/${agg.extractionOutputTokens})`,
+    `Roots from CPU (no extraction LLM call): ${agg.cpuRootWords}/${agg.okCount} words`,
     `Latency p50: ${agg.totalLatencyP50}ms total, ${agg.synthesisLatencyP50}ms synthesis`,
     `Confidence: ${c.high} high / ${c.medium} medium / ${c.low} low / ${c.unscored} unscored`,
     `Ungrounded reconstructed stages: ${agg.ungroundedReconstructed}`,
@@ -365,12 +413,15 @@ function compareLabels(labelA: string, labelB: string): void {
 
   console.log(compareRow('completed words', aggA.okCount, aggB.okCount))
   console.log(compareRow('schema-valid words', aggA.schemaValidCount, aggB.schemaValidCount))
+  console.log(compareRow('input tokens (total)', aggA.totalInputTokens, aggB.totalInputTokens))
   console.log(
     compareRow('input tokens (synthesis)', aggA.synthesisInputTokens, aggB.synthesisInputTokens)
   )
   console.log(
-    compareRow('output tokens (synthesis)', aggA.synthesisOutputTokens, aggB.synthesisOutputTokens)
+    compareRow('input tokens (extraction)', aggA.extractionInputTokens, aggB.extractionInputTokens)
   )
+  console.log(compareRow('output tokens (total)', aggA.totalOutputTokens, aggB.totalOutputTokens))
+  console.log(compareRow('words with CPU-derived roots', aggA.cpuRootWords, aggB.cpuRootWords))
   console.log(compareRow('latency p50 total (ms)', aggA.totalLatencyP50, aggB.totalLatencyP50))
   console.log(
     compareRow('latency p50 synthesis (ms)', aggA.synthesisLatencyP50, aggB.synthesisLatencyP50)
@@ -389,7 +440,7 @@ function compareLabels(labelA: string, labelB: string): void {
     )
   )
 
-  console.log('\nPer-word total latency (ms) and schema validity:')
+  console.log('\nPer-word total latency (ms), schema validity, and root provenance:')
   for (const { word } of BENCHMARK_WORDS) {
     const a = summaryA.words.find((record) => record.word === word)
     const b = summaryB.words.find((record) => record.word === word)
@@ -397,7 +448,8 @@ function compareLabels(labelA: string, labelB: string): void {
     const validB = b ? (b.schemaValid ? 'valid' : 'INVALID') : 'missing'
     console.log(
       `${word.padEnd(16)} ${String(a?.latencyMs.total ?? '-').padStart(8)} -> ` +
-        `${String(b?.latencyMs.total ?? '-').padStart(8)}   ${validA} -> ${validB}`
+        `${String(b?.latencyMs.total ?? '-').padStart(8)}   ${validA} -> ${validB}   ` +
+        `roots: ${a?.rootProvenance ?? '?'} -> ${b?.rootProvenance ?? '?'}`
     )
   }
 }

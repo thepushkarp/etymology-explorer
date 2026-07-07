@@ -4,14 +4,18 @@ import { CONFIG } from './config'
 
 const WIKIPEDIA_REST_API = 'https://en.wikipedia.org/api/rest_v1/page/summary'
 
-export async function fetchWikipedia(word: string): Promise<SourceData | null> {
+export async function fetchWikipedia(
+  word: string,
+  signal?: AbortSignal
+): Promise<SourceData | null> {
   try {
     const response = await fetchWithTimeout(
       `${WIKIPEDIA_REST_API}/${encodeURIComponent(word)}`,
       {
         headers: { 'User-Agent': 'EtymologyExplorer/1.0' },
       },
-      CONFIG.timeouts.source
+      CONFIG.timeouts.source,
+      signal
     )
 
     if (!response.ok) return null

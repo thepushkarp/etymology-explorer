@@ -295,7 +295,8 @@ function buildHeaders(): HeadersInit {
 
 export async function createOpenRouterResponse(
   request: OpenRouterRequest,
-  timeoutMs = CONFIG.timeouts.llm
+  timeoutMs: number = CONFIG.timeouts.llm,
+  signal?: AbortSignal
 ): Promise<OpenRouterResponseLike> {
   const response = await fetchWithTimeout(
     OPENROUTER_RESPONSES_URL,
@@ -304,7 +305,8 @@ export async function createOpenRouterResponse(
       headers: buildHeaders(),
       body: JSON.stringify(request),
     },
-    timeoutMs
+    timeoutMs,
+    signal
   )
 
   const payload = (await response.json()) as OpenRouterResponseLike
@@ -335,7 +337,8 @@ function parseSseDataBlocks(chunk: string): string[] {
 export async function streamOpenRouterResponse(
   request: OpenRouterRequest,
   onText: (delta: string) => void,
-  timeoutMs = CONFIG.timeouts.llm
+  timeoutMs: number = CONFIG.timeouts.llm,
+  signal?: AbortSignal
 ): Promise<OpenRouterResponseLike> {
   const response = await fetchWithTimeout(
     OPENROUTER_RESPONSES_URL,
@@ -344,7 +347,8 @@ export async function streamOpenRouterResponse(
       headers: buildHeaders(),
       body: JSON.stringify({ ...request, stream: true }),
     },
-    timeoutMs
+    timeoutMs,
+    signal
   )
 
   if (!response.ok) {
