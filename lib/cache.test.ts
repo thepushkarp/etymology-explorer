@@ -13,6 +13,9 @@ interface FakeRedis {
 
 let currentRedis: FakeRedis | null = null
 const revalidateTagMock = mock(() => undefined)
+// after() defers until the response finishes; for the unit test the callback
+// runs inline so its revalidateTag call is observable synchronously.
+const afterMock = mock((task: () => void) => task())
 
 mock.module('@/lib/redis', () => ({
   getRedis: () => currentRedis,
@@ -23,6 +26,12 @@ mock.module('@/lib/redis', () => ({
 mock.module('next/cache', () => ({
   unstable_cache: (fn: (...args: unknown[]) => unknown) => fn,
   revalidateTag: revalidateTagMock,
+}))
+
+const realNextServer = await import('next/server')
+mock.module('next/server', () => ({
+  ...realNextServer,
+  after: afterMock,
 }))
 
 const { cacheEtymology } = await import('./cache')
@@ -47,6 +56,7 @@ function fakeRedis(overrides: Partial<FakeRedis> = {}): FakeRedis {
 
 beforeEach(() => {
   revalidateTagMock.mockClear()
+  afterMock.mockClear()
   currentRedis = null
 })
 
@@ -58,7 +68,7 @@ describe('cacheEtymology word-page revalidation', () => {
 
     expect(currentRedis.set).toHaveBeenCalledTimes(1)
     expect(revalidateTagMock).toHaveBeenCalledTimes(1)
-    expect(revalidateTagMock).toHaveBeenCalledWith('etymology-word:nice', 'max')
+    expect(revalidateTagMock).toHaveBeenCalledWith('etymology-word:nice', { expire: 0 })
   })
 
   test('does not revalidate when the Redis write fails', async () => {
@@ -81,10 +91,10 @@ describe('cacheEtymology word-page revalidation', () => {
     expect(revalidateTagMock).not.toHaveBeenCalled()
   })
 
-  test('a revalidateTag failure (no request scope) does not break caching', async () => {
+  test('a revalidation failure (no request scope) does not break caching', async () => {
     currentRedis = fakeRedis()
-    revalidateTagMock.mockImplementationOnce(() => {
-      throw new Error('static generation store missing')
+    afterMock.mockImplementationOnce(() => {
+      throw new Error('after() called outside a request scope')
     })
 
     await expect(cacheEtymology('nice', RESULT)).resolves.toBeUndefined()

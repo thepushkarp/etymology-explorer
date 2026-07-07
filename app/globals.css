@@ -117,10 +117,13 @@ body {
 
 /* Keyboard focus: restore a visible ring everywhere, including controls
    whose default outline was removed with `outline-none`. This rule is
-   unlayered, so it wins over Tailwind's layered utilities. */
+   unlayered, so it wins over Tailwind's layered utilities. The ring must
+   appear instantly — transition-all on many controls would otherwise
+   animate outline-width from 0 and delay the focus indicator. */
 :focus-visible {
   outline: 2px solid var(--accent-oxblood);
   outline-offset: 2px;
+  transition-property: none;
 }
 
 /* Honor reduced-motion preferences: collapse animations and transitions to

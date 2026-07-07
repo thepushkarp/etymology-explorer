@@ -146,9 +146,12 @@ URL. Crawler traffic must never cost LLM money:
   ONLY when a short-lived sessionStorage flag written by the in-app navigation handler
   (`lib/hooks/useWordNavigation.ts`) is present. Direct loads and crawlers — even JS-executing
   ones — get the "Trace it live" button instead; a human click is required to spend budget.
-- **Revalidation**: `cacheEtymology` (`lib/cache.ts`) calls
-  `revalidateTag('etymology-word:{word}', 'max')` after storing a new result, so a freshly
-  traced word's page serves content immediately instead of the ISR miss page.
+- **Revalidation**: after storing a new result, `cacheEtymology` (`lib/cache.ts`) schedules
+  `revalidateTag('etymology-word:{word}', { expire: 0 })` inside `after()` — the deferral is
+  required because streaming responses flush pending revalidations when the handler returns,
+  and `{ expire: 0 }` hard-expires the tag (the `'max'` profile would only mark it
+  stale-while-revalidate). A freshly traced word's page serves content on the next load
+  instead of the ISR miss page.
 - **`app/sitemap.ts`** - SCANs cached etymology keys (cursor-paginated, capped at 1000) using
   the exported `CACHE_VERSION`/`ETYMOLOGY_PREFIX` constants from `lib/cache.ts`.
 - **`app/og/route.tsx`** - `/og?word={word}` renders a per-word OG card; without a valid
