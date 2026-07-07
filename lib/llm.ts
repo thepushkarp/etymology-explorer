@@ -1,4 +1,4 @@
-import { EtymologyResult, SourceReference, ResearchContext } from './types'
+import { EtymologyResult, LlmUsage, SourceReference, ResearchContext } from './types'
 import { SYSTEM_PROMPT, buildRichUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph, pruneUngroundedStages } from './etymologyEnricher'
@@ -14,13 +14,13 @@ import {
 
 export interface SynthesisResult {
   result: EtymologyResult
-  usage: { inputTokens: number; outputTokens: number }
+  usage: LlmUsage
 }
 
 class MalformedModelOutputError extends Error {
-  readonly usage: { inputTokens: number; outputTokens: number }
+  readonly usage: LlmUsage
 
-  constructor(message: string, usage: { inputTokens: number; outputTokens: number }) {
+  constructor(message: string, usage: LlmUsage) {
     super(message)
     this.name = 'MalformedModelOutputError'
     this.usage = usage
@@ -31,12 +31,12 @@ function isMalformedModelOutputError(error: unknown): error is MalformedModelOut
   return error instanceof MalformedModelOutputError
 }
 
-function addUsage(
-  total: { inputTokens: number; outputTokens: number },
-  delta: { inputTokens: number; outputTokens: number }
-): void {
+function addUsage(total: LlmUsage, delta: LlmUsage): void {
   total.inputTokens += delta.inputTokens
   total.outputTokens += delta.outputTokens
+  if (delta.costUSD !== undefined) {
+    total.costUSD = (total.costUSD ?? 0) + delta.costUSD
+  }
 }
 
 function isAbortLikeError(error: unknown): boolean {
@@ -272,7 +272,7 @@ async function callLlm(
   model?: string
 ): Promise<{
   text: string
-  usage: { inputTokens: number; outputTokens: number }
+  usage: LlmUsage
 }> {
   const request = buildSynthesisRequest(userPrompt, model)
   request.instructions = SYSTEM_PROMPT
@@ -298,9 +298,9 @@ async function generateEtymologyResponse(
   model?: string
 ): Promise<{
   result: EtymologyResult
-  usage: { inputTokens: number; outputTokens: number }
+  usage: LlmUsage
 }> {
-  const totalUsage = { inputTokens: 0, outputTokens: 0 }
+  const totalUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
   const maxAttempts = CONFIG.retries.malformedOutputRetries + 1
   let lastMalformedError: MalformedModelOutputError | null = null
 
@@ -488,7 +488,7 @@ export async function streamSynthesis(
   request.instructions = SYSTEM_PROMPT
 
   let fullText = ''
-  let usage = { inputTokens: 0, outputTokens: 0 }
+  let usage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
 
   try {
     const response = await streamOpenRouterResponse(

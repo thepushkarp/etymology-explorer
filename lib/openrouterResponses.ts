@@ -1,6 +1,7 @@
 import { CONFIG } from '@/lib/config'
 import { getEnv } from '@/lib/env'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
+import type { LlmUsage } from '@/lib/types'
 
 const ROOTS_JSON_SCHEMA = {
   type: 'object',
@@ -49,6 +50,7 @@ type OpenRouterResponseOutputItem = {
 type OpenRouterUsage = {
   input_tokens?: number
   output_tokens?: number
+  cost?: number | null // OpenRouter-reported USD cost (present on unary + streaming)
   output_tokens_details?: {
     reasoning_tokens?: number
   } | null
@@ -254,13 +256,12 @@ export function extractOutputText(response: OpenRouterResponseLike): string {
   )
 }
 
-export function extractUsage(response: OpenRouterResponseLike): {
-  inputTokens: number
-  outputTokens: number
-} {
+export function extractUsage(response: OpenRouterResponseLike): LlmUsage {
+  const cost = response.usage?.cost
   return {
     inputTokens: response.usage?.input_tokens ?? 0,
     outputTokens: response.usage?.output_tokens ?? 0,
+    ...(typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? { costUSD: cost } : {}),
   }
 }
 

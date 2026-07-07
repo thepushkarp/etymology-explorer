@@ -16,7 +16,6 @@ export const CONFIG = {
   // Input validation
   maxWordLength: 35,
   wordPattern: /^[\p{L}][\p{L}'\-]*[\p{L}]$|^[\p{L}]$/u, // Unicode letters + internal '/-
-  maxRequestBodyBytes: 1024,
 
   // Rate limits (per IP)
   rateLimit: {
@@ -46,18 +45,21 @@ export const CONFIG = {
     tts: 8_000, // ElevenLabs
   },
 
-  // Singleflight deduplication
+  // Singleflight deduplication (owner-token locks, see lib/singleflight.ts)
   singleflight: {
-    lockTTL: 30, // seconds — auto-expires if holder crashes
-    pollIntervalMs: 500,
-    maxPolls: 16, // 8s total wait
+    lockTTLSeconds: 90, // auto-expires if holder crashes; holder heartbeats to extend
+    heartbeatIntervalMs: 30_000, // holder re-EXPIREs the lock while the pipeline runs
+    waiterPollIntervalMs: 2_000, // waiters re-check the cache at this cadence
+    streamWaiterMaxWaitMs: 150_000, // streaming waiters keep the SSE open this long
+    unaryWaiterMaxWaitMs: 10_000, // non-streaming waiters give up (429) after this
+    failureMarkerTTLSeconds: 60, // holder-failure marker; blocks waiter promotion, not retries
   },
 
   // USD-based cost tracking
   costTracking: {
-    pricingPerMillionTokens: { input: 0.75, output: 4.5 },
+    pricingPerMillionTokens: { input: 0.75, output: 4.5 }, // fallback when OpenRouter omits cost
     monthlyLimitUSD: 10.0,
-    cacheOnlyAtPercent: 1.0, // serve only cached results at 100%
+    cacheOnlyAtPercent: 0.9, // serve only cached results at 90% of budget
   },
 
   // Feature flags

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchNgram } from '@/lib/ngrams'
+import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { ApiResponse } from '@/lib/types'
 
 export async function GET(request: NextRequest) {
@@ -12,7 +13,16 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const result = await fetchNgram(word)
+  const normalized = canonicalizeWord(word)
+
+  if (!normalized || !isValidWord(normalized)) {
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: 'Invalid word' },
+      { status: 400 }
+    )
+  }
+
+  const result = await fetchNgram(normalized)
 
   if (!result || result.data.length === 0) {
     return NextResponse.json<ApiResponse<null>>(

@@ -186,13 +186,15 @@ etymology-explorer/
 | `/api/pronunciation` | GET    | Get pronunciation audio                                       | No                |
 | `/api/suggestions`   | GET    | Get autocomplete and typo suggestions                         | No                |
 | `/api/random-word`   | GET    | Get a random word                                             | No                |
-| `/api/admin/stats`   | GET    | Get budget/usage statistics                                   | Admin secret      |
+| `/api/ngram`         | GET    | Get Google Books usage-over-time data (`?word=X`)             | No                |
+| `/api/health`        | GET    | Liveness check                                                | No                |
+| `/api/admin/stats`   | GET    | Get budget/usage statistics and counters                      | Admin secret      |
 
 ## How It Works
 
-1. **Request Deduplication**: Singleflight mechanism prevents duplicate concurrent searches
+1. **Request Deduplication**: Singleflight owner-token locks (90s TTL, heartbeat-extended) ensure one pipeline run per word; waiters poll the cache for the holder's result, and streaming waiters can take over if the holder crashes
 2. **Rate Limiting**: Per-IP rate limiting (20 req/min + 200 req/day) via Upstash Redis
-3. **Cache Check**: Redis cache lookup with versioned keys (`etymology:v2.1:`), schema validation on read, and negative cache (6h) for known no-source/invalid words
+3. **Cache Check**: Redis cache lookup with versioned keys (`etymology:v2.2:`), schema validation on read, and negative cache (6h) for known no-source/invalid words. Without Redis, uncached searches return 503 (fail closed)
 4. **Grounded Etymology Pipeline**:
    - **Parser** (CPU-only): Extracts "from X, from Y" chains from raw source text
    - **Agentic Research**: Multi-phase research pipeline:
@@ -204,7 +206,7 @@ etymology-explorer/
    - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
-6. **Budget Enforcement**: Cost guard tracks monthly spend and enforces protection modes (normal → protected_503 → cache_only → blocked) against a $10/month cap using `openai/gpt-5.4-mini` pricing
+6. **Budget Enforcement**: Cost guard tracks monthly spend (OpenRouter-reported cost, with `openai/gpt-5.4-mini` pricing as fallback) against a $10/month cap and switches from normal to cache_only mode at 90% of budget; both the root-extraction and synthesis LLM calls are counted
 7. **Rich Display**: Etymology rendered with expandable roots, ancestry graph with confidence badges, POS tags, modern usage, related words, and source attribution (supplemental sources are only surfaced when significance checks pass)
 
 ### Architecture Diagram
@@ -217,15 +219,15 @@ etymology-explorer/
                │ GET /api/etymology?word=X[&stream=true]
                ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Edge + Route Entry                                                           │
+│ Middleware (Node) + Route Entry                                              │
 │ proxy.ts: rate limit + CSP   →   app/api/etymology/route.ts: validate input  │
 └──────────────────────────────┬───────────────────────────────────────────────┘
                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Control Plane                                                                │
 │ cache hit? → return cached result                                            │
-│ singleflight lock → dedupe concurrent lookups                                │
-│ cost guard → normal | protected_503 | cache_only | blocked                  │
+│ cost guard → normal | cache_only (at 90% of monthly budget)                 │
+│ singleflight lock → dedupe concurrent lookups (Redis down → 503 uncached)   │
 └──────────────────────────────┬───────────────────────────────────────────────┘
                                │ cache miss
                                ▼
