@@ -21,8 +21,9 @@ Try it out at [etymex.com](https://etymex.com)
 - **Streaming UI**: Optional `?stream=true` server-sent events for source progress,
   per-section synthesis events, cached hits, and early error responses
 - **Smart Caching**: Redis-backed caching reduces costs and improves speed (30d etymology, 1yr audio)
-- **Shareable Word Pages**: Crawlable `/word/{word}` pages served strictly from the cache
-  (never trigger LLM spend), with per-word OG images and sitemap listings
+- **Shareable Word Pages**: `/word/{word}` is the primary search URL — cached words are
+  server-rendered straight from the cache (crawlers never trigger LLM spend), uncached words
+  host the live streaming trace with progressive section-by-section rendering
 - **Rate Limiting**: Per-IP protection via Upstash Redis with automatic budget enforcement
 
 ## Getting Started
@@ -126,11 +127,11 @@ etymology-explorer/
 │   ├── learn/              # Educational content pages
 │   │   └── what-is-etymology/
 │   ├── og/                 # Dynamic OG image generation (brand + per-word cards)
-│   ├── word/[word]/        # Cache-only SSR word pages (SEO; never call the LLM)
+│   ├── word/[word]/        # Primary word pages: cached → SSR, uncached → live trace UI
 │   ├── sitemap.ts          # Dynamic sitemap (static pages + cached /word/ entries)
 │   ├── robots.ts           # Robots.txt configuration
 │   ├── layout.tsx          # Root layout with fonts
-│   └── page.tsx            # Main page with search UI
+│   └── page.tsx            # Landing/search page (/?q= redirects to /word/{word})
 ├── proxy.ts               # Rate limiting + CSP headers
 ├── components/
 │   ├── AncestryTree.tsx    # Visual etymology graph
@@ -171,7 +172,7 @@ etymology-explorer/
 │   ├── validation.ts       # Input validation
 │   ├── wordlist.ts         # GRE word utilities
 │   ├── hooks/              # React hooks (localStorage, history, search)
-│   │   └── useStreamingEtymology.ts # Primary streaming search hook (SSE)
+│   │   └── useStreamingEtymology.ts # SSE transport over the pure stream reducer
 │   └── schemas/
 │       ├── etymology.ts    # Zod schema for cache validation
 │       └── llm-schema.ts   # Strict-mode JSON Schema for LLM structured outputs
