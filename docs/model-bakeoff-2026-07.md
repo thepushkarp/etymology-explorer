@@ -76,6 +76,34 @@ interesting challenger because it is much cheaper and higher-confidence, but
 its 36.6s p50 synthesis latency is too slow for the current public UX. DeepSeek
 Flash is cheaper but slower still. GLM failed the 15/15 schema-valid gate.
 
+## Root Extraction Fallback Model
+
+The `--model` flag overrides the synthesis model only; the root extraction
+fallback (`extractRootsQuick` in `lib/research.ts`, request built by
+`buildRootExtractionRequest` in `lib/openrouterResponses.ts`) stays on the
+production default `openai/gpt-5.4-mini`. It is deliberately left there rather
+than pointed at a cheaper model:
+
+- **Never benchmarked.** This bakeoff measured synthesis only. Swapping the
+  extraction model would ship an unmeasured production change, which is the
+  opposite of this branch's "no production model change" conclusion.
+- **Tight timeout + strict schema.** The extraction call uses strict
+  `json_schema` mode with `reasoning.effort = "none"` under a hard 15s timeout
+  (`CONFIG.timeouts.rootExtraction`). The cheap challengers here were slow:
+  DeepSeek V4 Flash ran 43.4s p50 synthesis. Even on the smaller extraction
+  schema and truncated input, a model that slow risks blowing the 15s timeout,
+  which makes the fallback silently return no roots and degrades breadth.
+  `openai/gpt-5.4-nano` is entirely unmeasured for strict-schema reliability on
+  this path.
+- **Negligible cost upside.** Extraction is capped at 100 output tokens
+  (`CONFIG.rootExtractionMaxTokens`) and only fires when CPU root extraction
+  finds nothing, so its cost is a small fraction of synthesis (now recorded
+  separately by the benchmark harness). A cheaper extraction model would save
+  little while risking timeout and schema failures.
+
+If a cheaper extraction model is wanted later, benchmark it on the extraction
+path specifically (strict schema, 15s budget) before switching.
+
 ## Source Clipping State
 
 After PR #71 follow-up commit `55e64b7`, synthesis source blocks no longer
