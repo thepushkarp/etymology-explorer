@@ -1,20 +1,21 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { EtymologyResult, StreamEvent } from '@/lib/types'
+import { useCallback, useEffect, useReducer, useRef } from 'react'
+import { StreamEvent } from '@/lib/types'
 import { useHistory } from '@/lib/hooks/useHistory'
-import { StreamingUiError, toStreamingUiError } from '@/lib/streamingError'
-
-export type StreamingState = 'idle' | 'loading' | 'success' | 'error'
+import { initialStreamState, streamReducer } from '@/lib/streamReducer'
 
 const MAX_RETRIES = 2
 const RETRY_BASE_DELAY_MS = 600
 
+/**
+ * Streaming etymology search over SSE. All progress state lives in the pure
+ * reducer (lib/streamReducer.ts); this hook owns only the transport: the
+ * EventSource lifecycle, reconnection with backoff, and the non-streaming
+ * fallback fetch.
+ */
 export function useStreamingEtymology() {
-  const [state, setState] = useState<StreamingState>('idle')
-  const [events, setEvents] = useState<StreamEvent[]>([])
-  const [partialResult, setPartialResult] = useState<EtymologyResult | null>(null)
-  const [error, setError] = useState<StreamingUiError | null>(null)
+  const [progress, dispatch] = useReducer(streamReducer, initialStreamState)
 
   const eventSourceRef = useRef<EventSource | null>(null)
   const activeRequestRef = useRef(0)
@@ -29,25 +30,28 @@ export function useStreamingEtymology() {
         if (activeRequestRef.current !== requestId) return
 
         if (!response.ok || !payload.success || !payload.data) {
-          setState('error')
-          setError({
-            type: 'network-error',
-            message: payload.error ?? 'Search failed',
-            suggestions: [],
+          dispatch({
+            type: 'fallback_error',
+            error: {
+              type: 'network-error',
+              message: payload.error ?? 'Search failed',
+              suggestions: [],
+            },
           })
           return
         }
 
-        setPartialResult(payload.data as EtymologyResult)
-        setState('success')
+        dispatch({ type: 'fallback_success', result: payload.data })
         addToHistory(word)
       } catch {
         if (activeRequestRef.current !== requestId) return
-        setState('error')
-        setError({
-          type: 'network-error',
-          message: 'Unable to load etymology right now',
-          suggestions: [],
+        dispatch({
+          type: 'fallback_error',
+          error: {
+            type: 'network-error',
+            message: 'Unable to load etymology right now',
+            suggestions: [],
+          },
         })
       }
     },
@@ -72,11 +76,7 @@ export function useStreamingEtymology() {
       const requestId = activeRequestRef.current + 1
       activeRequestRef.current = requestId
 
-      // Reset state
-      setState('loading')
-      setEvents([])
-      setPartialResult(null)
-      setError(null)
+      dispatch({ type: 'search_started' })
 
       // Close any existing connection
       if (eventSourceRef.current) {
@@ -96,22 +96,15 @@ export function useStreamingEtymology() {
           try {
             const streamEvent: StreamEvent = JSON.parse(event.data)
 
-            // Accumulate event
-            setEvents((prev) => [...prev, streamEvent])
+            dispatch({ type: 'stream_event', event: streamEvent })
 
-            // Handle result event
             if (streamEvent.type === 'result') {
-              setPartialResult(streamEvent.data)
-              setState('success')
               addToHistory(trimmed)
               eventSource.close()
               eventSourceRef.current = null
             }
 
-            // Handle error event
             if (streamEvent.type === 'error') {
-              setState('error')
-              setError(toStreamingUiError(streamEvent))
               eventSource.close()
               eventSourceRef.current = null
             }
@@ -161,21 +154,16 @@ export function useStreamingEtymology() {
   )
 
   const reset = useCallback(() => {
+    activeRequestRef.current += 1
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
       eventSourceRef.current = null
     }
-    setState('idle')
-    setEvents([])
-    setPartialResult(null)
-    setError(null)
+    dispatch({ type: 'reset' })
   }, [])
 
   return {
-    state,
-    events,
-    partialResult,
-    error,
+    progress,
     search,
     reset,
   }
