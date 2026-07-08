@@ -20,10 +20,10 @@ import { parseArgs } from 'node:util'
 
 import { CONFIG } from '@/lib/config'
 import { safeError } from '@/lib/errorUtils'
-import { synthesizeFromResearch } from '@/lib/llm'
+import { getLlmUsageFromError, synthesizeFromResearch } from '@/lib/llm'
 import { conductAgenticResearch } from '@/lib/research'
 import { EtymologyResultSchema } from '@/lib/schemas/etymology'
-import type { AncestryStage, EtymologyResult } from '@/lib/types'
+import type { AncestryStage, EtymologyResult, ResearchContext } from '@/lib/types'
 
 const RESULTS_DIR = join(process.cwd(), 'bench-results')
 
@@ -78,6 +78,8 @@ interface WordBenchmark {
   }
   synthesisTokens: { input: number; output: number }
   extractionTokens: { input: number; output: number }
+  /** OpenRouter-reported USD cost per call, when the provider returns it. */
+  costUSD: { synthesis: number | null; extraction: number | null }
   rootProvenance: RootProvenance
   rootCount: number
   ancestryStageCount: number
@@ -149,9 +151,12 @@ async function benchmarkWord(
 ): Promise<WordBenchmark> {
   const marks: { parsingDone?: number; rootsDone?: number } = {}
   const startedAt = performance.now()
+  // Hoisted so the catch block can still read root-extraction usage when
+  // synthesis fails after research (and the extraction LLM) already ran.
+  let context: ResearchContext | undefined
 
   try {
-    const context = await conductAgenticResearch(word, undefined, (event) => {
+    context = await conductAgenticResearch(word, undefined, (event) => {
       if (event.type === 'parsing_complete') marks.parsingDone = performance.now()
       if (event.type === 'roots_identified') marks.rootsDone = performance.now()
     })
@@ -190,6 +195,10 @@ async function benchmarkWord(
         input: context.llmUsage?.inputTokens ?? 0,
         output: context.llmUsage?.outputTokens ?? 0,
       },
+      costUSD: {
+        synthesis: usage.costUSD ?? null,
+        extraction: context.llmUsage ? (context.llmUsage.costUSD ?? null) : null,
+      },
       rootProvenance,
       rootCount: result.roots.length,
       ancestryStageCount: stages.length,
@@ -201,6 +210,12 @@ async function benchmarkWord(
     writeFileSync(join(outputDir, `${word}.json`), JSON.stringify({ ...record, result }, null, 2))
     return record
   } catch (error) {
+    // OpenRouter still billed any call that completed before the failure.
+    // Synthesis errors thrown after the model ran carry their usage; the
+    // root-extraction call's usage lives on the (hoisted) research context.
+    // Transport failures (timeouts, aborts) carry neither, so these stay null.
+    const failedSynthesisUsage = getLlmUsageFromError(error)
+    const extractionUsage = context?.llmUsage
     return {
       word,
       bucket,
@@ -215,8 +230,18 @@ async function benchmarkWord(
         synthesis: 0,
         total: Math.round(performance.now() - startedAt),
       },
-      synthesisTokens: { input: 0, output: 0 },
-      extractionTokens: { input: 0, output: 0 },
+      synthesisTokens: {
+        input: failedSynthesisUsage?.inputTokens ?? 0,
+        output: failedSynthesisUsage?.outputTokens ?? 0,
+      },
+      extractionTokens: {
+        input: extractionUsage?.inputTokens ?? 0,
+        output: extractionUsage?.outputTokens ?? 0,
+      },
+      costUSD: {
+        synthesis: failedSynthesisUsage?.costUSD ?? null,
+        extraction: extractionUsage?.costUSD ?? null,
+      },
       rootProvenance: 'none',
       rootCount: 0,
       ancestryStageCount: 0,
@@ -299,6 +324,8 @@ interface Aggregates {
   synthesisLatencyP50: number
   ungroundedReconstructed: number
   confidence: ConfidenceDistribution
+  /** Sum of OpenRouter-reported per-call costs; null when no call reported one. */
+  reportedCostUSD: number | null
 }
 
 function percentile(sorted: number[], fraction: number): number {
@@ -320,23 +347,35 @@ function aggregate(summary: BenchmarkSummary): Aggregates {
     confidence.unscored += record.confidence.unscored
   }
 
-  const synthesisInputTokens = okRecords.reduce(
+  // Token and cost totals span ALL words, not just okRecords: failed words
+  // were still billed for any call that completed before the failure, so
+  // excluding them would understate true run spend.
+  const synthesisInputTokens = summary.words.reduce(
     (sum, record) => sum + record.synthesisTokens.input,
     0
   )
-  const synthesisOutputTokens = okRecords.reduce(
+  const synthesisOutputTokens = summary.words.reduce(
     (sum, record) => sum + record.synthesisTokens.output,
     0
   )
   // extractionTokens/rootProvenance may be absent in summaries from older harness versions.
-  const extractionInputTokens = okRecords.reduce(
+  const extractionInputTokens = summary.words.reduce(
     (sum, record) => sum + (record.extractionTokens?.input ?? 0),
     0
   )
-  const extractionOutputTokens = okRecords.reduce(
+  const extractionOutputTokens = summary.words.reduce(
     (sum, record) => sum + (record.extractionTokens?.output ?? 0),
     0
   )
+
+  // costUSD may be absent in summaries from older harness versions.
+  const reportedCosts = summary.words.flatMap((record) => [
+    record.costUSD?.synthesis,
+    record.costUSD?.extraction,
+  ])
+  const knownCosts = reportedCosts.filter((cost): cost is number => typeof cost === 'number')
+  const reportedCostUSD =
+    knownCosts.length > 0 ? knownCosts.reduce((sum, cost) => sum + cost, 0) : null
 
   return {
     okCount: okRecords.length,
@@ -355,6 +394,7 @@ function aggregate(summary: BenchmarkSummary): Aggregates {
       0
     ),
     confidence,
+    reportedCostUSD,
   }
 }
 
@@ -371,6 +411,10 @@ function formatAggregates(summary: BenchmarkSummary): string {
     `Latency p50: ${agg.totalLatencyP50}ms total, ${agg.synthesisLatencyP50}ms synthesis`,
     `Confidence: ${c.high} high / ${c.medium} medium / ${c.low} low / ${c.unscored} unscored`,
     `Ungrounded reconstructed stages: ${agg.ungroundedReconstructed}`,
+    agg.reportedCostUSD === null
+      ? 'Reported cost: not returned by provider'
+      : `Reported cost: $${agg.reportedCostUSD.toFixed(4)} total ` +
+        `($${(agg.reportedCostUSD / Math.max(1, total)).toFixed(5)}/word attempted)`,
   ].join('\n')
 }
 
