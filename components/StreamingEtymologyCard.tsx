@@ -44,7 +44,7 @@ export function StreamingEtymologyCard({
 
   return (
     <div className="relative animate-fadeIn">
-      {sections.ancestryGraph && sections.ancestryGraph.branches?.length > 0 ? (
+      {sections.ancestryGraph && sections.ancestryGraph.branches.length > 0 ? (
         <AncestrySection graph={sections.ancestryGraph} word={resolvedWord} />
       ) : (
         <AncestrySkeleton />
