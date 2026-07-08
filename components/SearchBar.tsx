@@ -176,9 +176,6 @@ export function SearchBar({
           </div>
 
           <div className="relative flex items-center gap-2 rounded-[1.25rem] px-3 py-3 sm:px-4">
-            <span className="pl-2 text-charcoal-light/58">
-              <MagnifyingGlassIcon className="h-5 w-5" />
-            </span>
             <input
               ref={inputRef}
               type="text"
