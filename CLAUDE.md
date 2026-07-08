@@ -132,22 +132,34 @@ Pipeline flow: Raw sources → Parser (CPU) → LLM (validates/extends) → Enri
 
 New optional fields on `AncestryStage`: `isReconstructed`, `confidence`, `evidence[]` (backward compatible)
 
-### SEO Word Pages
+### Word Pages (primary search URL)
 
-Shareable, crawlable per-word pages that must never cost LLM money:
+`/word/{word}` is the canonical, crawlable page for every word AND the primary in-app search
+URL. Crawler traffic must never cost LLM money:
 
 - **`app/word/[word]/page.tsx`** - SSR strictly from `getCachedEtymology` (`lib/cache.ts`).
   The module graph must never include `lib/research.ts`, `lib/llm.ts`, or
-  `lib/openrouterResponses.ts` — enforced by `app/word/import-graph.test.ts`. Cache miss
-  renders a noindex page with a "Trace it live" CTA to `/?q={word}`. ISR via
-  `revalidate = 86400`.
+  `lib/openrouterResponses.ts` — enforced by `app/word/import-graph.test.ts`. ISR via
+  `revalidate = 86400`. Cache hit renders `WordPageEntry`; cache miss renders a noindex page
+  hosting `WordTraceExperience` (client), which streams the live trace via `/api/etymology`.
+- **Auto-trace gating** (`lib/traceIntent.ts`): an uncached word page auto-starts its trace
+  ONLY when a short-lived sessionStorage flag written by the in-app navigation handler
+  (`lib/hooks/useWordNavigation.ts`) is present. Direct loads and crawlers — even JS-executing
+  ones — get the "Trace it live" button instead; a human click is required to spend budget.
+- **Revalidation**: after storing a new result, `cacheEtymology` (`lib/cache.ts`) schedules
+  `revalidateTag('etymology-word:{word}', { expire: 0 })` inside `after()` — the deferral is
+  required because streaming responses flush pending revalidations when the handler returns,
+  and `{ expire: 0 }` hard-expires the tag (the `'max'` profile would only mark it
+  stale-while-revalidate). A freshly traced word's page serves content on the next load
+  instead of the ISR miss page.
 - **`app/sitemap.ts`** - SCANs cached etymology keys (cursor-paginated, capped at 1000) using
   the exported `CACHE_VERSION`/`ETYMOLOGY_PREFIX` constants from `lib/cache.ts`.
 - **`app/og/route.tsx`** - `/og?word={word}` renders a per-word OG card; without a valid
   `word` it falls back to the brand card.
-- **Canonicals**: `/?q=word` canonicalizes to `/word/{word}` (`app/page.tsx`
-  `generateMetadata`); bare `/` keeps canonical `/`. `ShareMenu` copies `/word/{word}` links.
-  Client search UX stays on `/?q=`.
+- **Canonicals & redirects**: legacy `/?q=word` deep links permanently redirect (308) to
+  `/word/{word}` (`app/page.tsx`); bare `/` is the landing/search page with canonical `/`.
+  `ShareMenu` copies `window.location.href` (already canonical). All in-app navigation —
+  search submits, history, suggestions, related words, random word — routes to `/word/{word}`.
 
 ### Research Pipeline Limits
 
@@ -207,7 +219,12 @@ and the output is guaranteed-shape JSON.
 
 **Key hooks**:
 
-- `lib/hooks/useStreamingEtymology.ts` - Main streaming search state management (SSE progress + synthesis_section events)
+- `lib/hooks/useStreamingEtymology.ts` - SSE transport for streaming search; all progress
+  state folds through the pure reducer in `lib/streamReducer.ts` (per-source states with
+  timing, phase, accumulated `synthesis_section` events, final result)
+- `lib/hooks/useWordNavigation.ts` - All in-app word navigation (marks trace intent, pushes
+  `/word/{word}`, keyboard history back/forward)
+- `lib/hooks/useNgram.ts` - Usage-chart data, fetched as soon as the word is known
 - `lib/hooks/useLocalStorage.ts` - Persistent client state
 - `lib/hooks/useHistory.ts` - Search history management
 
@@ -299,11 +316,15 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `lib/incelsWiki.ts` - Incel Wiki MediaWiki API client (supplemental context)
 - `lib/elevenlabs.ts` - ElevenLabs TTS client
 
-**SEO Word Pages:**
+**Word Pages (primary search URL):**
 
 - `app/word/[word]/page.tsx` - Cache-only SSR word pages (import graph must exclude research/LLM)
 - `app/word/import-graph.test.ts` - Enforces the no-LLM-in-module-graph budget invariant
-- `components/WordPageEntry.tsx` - Client shell reusing EtymologyCard for /word pages
+- `components/WordPageEntry.tsx` - Client shell for cached word pages (EtymologyCard + ngram + shortcuts)
+- `components/WordTraceExperience.tsx` - Live streaming trace UI for uncached word pages
+- `components/StreamingEtymologyCard.tsx` - Progressive card: skeletons hydrate per synthesis_section
+- `lib/streamReducer.ts` - Pure reducer folding SSE events into structured progress state
+- `lib/traceIntent.ts` - sessionStorage in-app-navigation flag gating auto-trace (crawler cost invariant)
 
 **Admin:**
 

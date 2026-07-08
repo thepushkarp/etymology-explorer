@@ -3,6 +3,8 @@
  * Reduces API costs by caching LLM synthesis results.
  */
 
+import { revalidateTag } from 'next/cache'
+import { after } from 'next/server'
 import { EtymologyResult } from './types'
 import { EtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
@@ -78,13 +80,39 @@ export async function cacheEtymology(word: string, result: EtymologyResult): Pro
   const redis = getRedis()
   if (!redis) return
 
-  const key = `${ETYMOLOGY_PREFIX}${word.toLowerCase().trim()}`
+  const normalized = word.toLowerCase().trim()
+  const key = `${ETYMOLOGY_PREFIX}${normalized}`
   try {
     await redis.set(key, result, { ex: jitterTTL(ETYMOLOGY_TTL) })
     console.log(`[Cache] Stored etymology for "${word}"`)
   } catch (error) {
     console.error('[Cache] Etymology set error:', safeError(error))
     // Fail silently - result was already returned to user
+    return
+  }
+
+  // A freshly traced word must surface on /word/{word} immediately: purge
+  // the page's tagged data cache (tag planted by app/word/[word]/page.tsx)
+  // so the ISR miss page doesn't outlive the trace.
+  //
+  // Two subtleties, both verified against next@16 internals:
+  // - Streaming: pending tag revalidations are flushed when the route
+  //   handler RETURNS its Response — before a streaming body runs this
+  //   code. after() re-flushes new revalidations once the response
+  //   finishes (withExecuteRevalidates), so the purge lands on both the
+  //   streaming and unary paths.
+  // - { expire: 0 } hard-expires the tag. The 'max' profile would only
+  //   mark it stale-while-revalidate, letting the very next load still
+  //   serve the miss page.
+  //
+  // Best-effort — outside a Next request scope (tests, scripts) after()
+  // throws and the page refreshes on its hourly data-cache window instead.
+  try {
+    after(() => {
+      revalidateTag(`etymology-word:${normalized}`, { expire: 0 })
+    })
+  } catch (error) {
+    console.warn('[Cache] Word page revalidation skipped:', safeError(error))
   }
 }
 
