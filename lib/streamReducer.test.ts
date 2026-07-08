@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   initialStreamState,
   streamReducer,
+  toPartialResult,
   type StreamAction,
   type StreamState,
 } from './streamReducer'
@@ -302,5 +303,30 @@ describe('fallback and reset', () => {
     ])
 
     expect(state).toEqual(initialStreamState)
+  })
+})
+
+describe('toPartialResult', () => {
+  test('falls back to the searched word and empty defaults before sections arrive', () => {
+    const partial = toPartialResult('perfidious', {})
+
+    expect(partial.word).toBe('perfidious')
+    expect(partial.pronunciation).toBe('')
+    expect(partial.definition).toBe('')
+    expect(partial.roots).toEqual([])
+    expect(partial.ancestryGraph).toEqual({ branches: [] })
+    expect(partial.sources).toEqual([])
+  })
+
+  test('prefers streamed sections and attaches the ngram when supplied', () => {
+    const ngram = { word: 'perfidious', data: [{ year: 1900, count: 5 }], corpus: 'en' }
+    const partial = toPartialResult(
+      'perfidious',
+      { word: 'perfidious', definition: 'Deceitful.' },
+      ngram
+    )
+
+    expect(partial.definition).toBe('Deceitful.')
+    expect(partial.ngram).toBe(ngram)
   })
 })
