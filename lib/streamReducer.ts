@@ -8,7 +8,7 @@
  * there is no growing event array to rebuild from on every render.
  */
 
-import type { EtymologyResult, StreamEvent } from './types'
+import type { EtymologyResult, NgramResult, StreamEvent } from './types'
 import { StreamingUiError, toStreamingUiError } from './streamingError'
 
 export type StreamStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -43,6 +43,32 @@ export type SectionKey = (typeof SECTION_KEYS)[number]
 
 /** Progressive slice of the final result, hydrated one section at a time */
 export type PartialEtymology = Partial<Pick<EtymologyResult, SectionKey>>
+
+/**
+ * Fill the streamed sections into a full-shaped EtymologyResult, defaulting
+ * every not-yet-arrived field to an empty value. Shared by the persistent
+ * TraceHeader and the StreamingEtymologyCard body so their partial-render
+ * views never drift.
+ */
+export function toPartialResult(
+  word: string,
+  sections: PartialEtymology,
+  ngram?: NgramResult | null
+): EtymologyResult {
+  return {
+    word: sections.word ?? word,
+    pronunciation: sections.pronunciation ?? '',
+    definition: sections.definition ?? '',
+    roots: sections.roots ?? [],
+    ancestryGraph: sections.ancestryGraph ?? { branches: [] },
+    lore: sections.lore ?? '',
+    sources: sections.sources ?? [],
+    partsOfSpeech: sections.partsOfSpeech,
+    suggestions: sections.suggestions,
+    modernUsage: sections.modernUsage,
+    ngram: ngram ?? undefined,
+  }
+}
 
 export interface StreamState {
   status: StreamStatus
