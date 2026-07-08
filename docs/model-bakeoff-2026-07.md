@@ -72,17 +72,18 @@ Keep `openai/gpt-5.4-mini` as the production synthesis model.
 Rationale: it is the only candidate that balanced strict-schema reliability,
 usable latency, cost, and confidence quality. Gemini is faster but more
 expensive and lower-confidence on this benchmark. Minimax M3 is the most
-interesting challenger because it is much cheaper and higher-confidence, but
-its 36.6s p50 synthesis latency is too slow for the current public UX. DeepSeek
-Flash is cheaper but slower still. GLM failed the 15/15 schema-valid gate.
+interesting challenger because it is much cheaper and higher-confidence, but its
+33.5s p50 synthesis latency (36.6s total) is too slow for the current public UX.
+DeepSeek Flash is cheaper but slower still. GLM failed the 15/15 schema-valid
+gate.
 
-MiniMax M3's 36.6s p50 was measured with reasoning disabled
+MiniMax M3's 33.5s p50 synth was measured reasoning-disabled
 (`{ enabled: false, exclude: true }`), so its slowness is inherent to model /
 provider throughput, not reasoning overhead — there is no faster no-thinking
 mode left to unlock on this route. A dedicated (non-OpenRouter) MiniMax endpoint
-is the only untested speed lever, worth probing only for a future
-non-interactive / background synthesis path where M3's ~4x lower cost and higher
-confidence would pay off.
+is the only untested speed lever, relevant only for a future non-interactive /
+background synthesis path where M3's ~4x lower cost and higher confidence would
+pay off.
 
 ## Root Extraction Fallback Model
 
