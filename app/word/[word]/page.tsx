@@ -2,10 +2,10 @@ import type { Metadata } from 'next'
 import { unstable_cache } from 'next/cache'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { EditorialPageFrame } from '@/components/EditorialPageFrame'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { WordPageEntry } from '@/components/WordPageEntry'
+import { WordTraceExperience } from '@/components/WordTraceExperience'
 import { getCachedEtymology } from '@/lib/cache'
 import { SITE_SHORT_NAME } from '@/lib/site'
 import type { EtymologyResult } from '@/lib/types'
@@ -14,7 +14,9 @@ import { canonicalizeWord, isValidWord } from '@/lib/validation'
 // Shareable, crawlable word pages served STRICTLY from the Redis cache.
 // This module's import graph must never include lib/research.ts or lib/llm.ts
 // (enforced by app/word/import-graph.test.ts) so crawler traffic cannot
-// trigger LLM spend. Cache misses render a noindex page with a live-trace CTA.
+// trigger LLM spend. Cache misses render a noindex page whose live-trace UI
+// (client-side, via /api/etymology) auto-starts only for in-app navigations;
+// direct loads and crawlers must click "Trace it live" (lib/traceIntent.ts).
 export const revalidate = 86400
 
 // No build-time prerenders; paths are generated on demand and ISR-cached
@@ -118,33 +120,6 @@ export async function generateMetadata({ params }: WordPageProps): Promise<Metad
   }
 }
 
-function UntracedWordPage({ word }: { word: string }) {
-  return (
-    <EditorialPageFrame
-      eyebrow="uncharted entry"
-      title={word}
-      subtitle="This word has not been traced in the archive yet. Its older forms and borrowed meanings are still waiting to be followed back."
-    >
-      <section className="mx-auto max-w-3xl">
-        <div className="editorial-card flex flex-col gap-6 p-8 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="font-serif text-xl italic text-charcoal-light">no entry on file</p>
-            <p className="mt-2 font-serif text-3xl tracking-[-0.03em] text-charcoal">
-              Trace it live and watch the roots surface.
-            </p>
-          </div>
-          <Link
-            href={`/?q=${encodeURIComponent(word)}`}
-            className="editorial-chip self-start font-serif italic sm:self-center"
-          >
-            Trace &ldquo;{word}&rdquo; live &rarr;
-          </Link>
-        </div>
-      </section>
-    </EditorialPageFrame>
-  )
-}
-
 export default async function WordPage({ params }: WordPageProps) {
   const { word: rawWord } = await params
   const word = resolveWord(rawWord)
@@ -152,7 +127,13 @@ export default async function WordPage({ params }: WordPageProps) {
 
   const result = await loadCachedEtymology(word)
   if (!result) {
-    return <UntracedWordPage word={word} />
+    // key={word} forces a fresh mount per word: without it, an in-app
+    // navigation between two uncached words reuses this client instance
+    // (same type + position), so startedRef and the stream reducer state
+    // would persist — the new word would never trace and the prior result
+    // would leak. The cached branch (WordPageEntry) is prop-driven and needs
+    // no key.
+    return <WordTraceExperience key={word} word={word} />
   }
 
   return (

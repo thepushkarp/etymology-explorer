@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { useHistory } from '@/lib/hooks/useHistory'
 import { SearchSuggestions, useSuggestionItems } from '@/components/SearchSuggestions'
@@ -28,22 +27,11 @@ export function SearchBar({
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const { history: historyEntries } = useHistory()
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const searchParams = useSearchParams()
 
   const historyWords = useMemo(() => historyEntries.map((entry) => entry.word), [historyEntries])
   const suggestionItems = useSuggestionItems(inputValue, historyWords)
   const shouldShowSuggestions =
     isFocused && showSuggestions && inputValue.trim().length >= 2 && suggestionItems.length > 0
-
-  // Sync with URL on mount - intentional URL → state sync pattern
-  useEffect(() => {
-    const q = searchParams.get('q')
-    if (q && q !== value) {
-      setValue(q)
-      setInputValue(q)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams])
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -53,11 +41,9 @@ export function SearchBar({
     return () => clearTimeout(timeout)
   }, [value])
 
-  useEffect(() => {
-    if (selectedIndex >= suggestionItems.length) {
-      setSelectedIndex(-1)
-    }
-  }, [selectedIndex, suggestionItems.length])
+  // Derived clamp: when the suggestion list shrinks below the stored index,
+  // treat it as "nothing selected" instead of resetting state in an effect.
+  const effectiveSelectedIndex = selectedIndex < suggestionItems.length ? selectedIndex : -1
 
   useEffect(() => {
     onSuggestionsVisibilityChange?.(shouldShowSuggestions)
@@ -146,9 +132,13 @@ export function SearchBar({
         return
       }
 
-      if (event.key === 'Enter' && selectedIndex >= 0 && selectedIndex < suggestionItems.length) {
+      if (
+        event.key === 'Enter' &&
+        effectiveSelectedIndex >= 0 &&
+        effectiveSelectedIndex < suggestionItems.length
+      ) {
         event.preventDefault()
-        handleSuggestionSelect(suggestionItems[selectedIndex].word)
+        handleSuggestionSelect(suggestionItems[effectiveSelectedIndex].word)
         return
       }
 
@@ -157,7 +147,7 @@ export function SearchBar({
         setSelectedIndex(-1)
       }
     },
-    [handleSuggestionSelect, selectedIndex, suggestionItems]
+    [handleSuggestionSelect, effectiveSelectedIndex, suggestionItems]
   )
 
   return (
@@ -228,7 +218,7 @@ export function SearchBar({
           items={suggestionItems}
           isVisible={shouldShowSuggestions}
           onSelect={handleSuggestionSelect}
-          selectedIndex={selectedIndex}
+          selectedIndex={effectiveSelectedIndex}
         />
       </div>
     </form>

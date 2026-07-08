@@ -26,11 +26,8 @@ export function ShareMenu({ result }: ShareMenuProps) {
 
   const handleCopyLink = async () => {
     try {
-      const word = result.word.trim().toLowerCase()
-      const shareUrl = word
-        ? `${window.location.origin}/word/${encodeURIComponent(word)}`
-        : window.location.href
-      await navigator.clipboard.writeText(shareUrl)
+      // /word/{word} is the canonical URL and the page we're on — share it as-is
+      await navigator.clipboard.writeText(window.location.href)
       showFeedback()
       setIsOpen(false)
     } catch (err) {

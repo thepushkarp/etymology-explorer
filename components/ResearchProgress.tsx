@@ -1,100 +1,20 @@
 'use client'
 
-import { StreamEvent } from '@/lib/types'
+import type { SourceProgress, SourceStatus } from '@/lib/streamReducer'
 
 interface ResearchProgressProps {
-  events: StreamEvent[]
+  sources: SourceProgress[]
+  parsingComplete: boolean
+  sharedWaitMs: number | null
   query?: string
 }
 
-type SourceStatus = 'pending' | 'complete' | 'failed'
-
-interface SourceState {
-  name: string
-  status: SourceStatus
-  timing?: number
-}
-
-const SOURCE_LABELS: Record<string, string> = {
-  etymonline: 'Etymonline',
-  wiktionary: 'Wiktionary',
-  freedictionary: 'Free Dictionary',
-  wikipedia: 'Wikipedia',
-  urbandictionary: 'Urban Dictionary',
-  incelswiki: 'Incels Wiki',
-}
-
-const DEFAULT_SOURCE_ORDER = [
-  'etymonline',
-  'wiktionary',
-  'freedictionary',
-  'wikipedia',
-  'urbandictionary',
-  'incelswiki',
-]
-
-function normalizeSourceKey(source: string): string {
-  return source.toLowerCase().replace(/\s+/g, '')
-}
-
-export default function ResearchProgress({ events, query }: ResearchProgressProps) {
-  // Build source states from events
-  const sources: Record<string, SourceState> = {}
-  const sourceOrder: string[] = []
-
-  let parsingComplete = false
-  let synthesisStarted = false
-  let enrichmentDone = false
-
-  const ensureSource = (source: string): string => {
-    const sourceKey = normalizeSourceKey(source)
-    if (!sources[sourceKey]) {
-      sources[sourceKey] = {
-        name: SOURCE_LABELS[sourceKey] ?? source,
-        status: 'pending',
-      }
-      sourceOrder.push(sourceKey)
-    }
-    return sourceKey
-  }
-
-  // Process events to update states
-  events.forEach((event) => {
-    if (event.type === 'source_started') {
-      ensureSource(event.source)
-    } else if (event.type === 'source_complete') {
-      const sourceKey = ensureSource(event.source)
-      sources[sourceKey].status = 'complete'
-      sources[sourceKey].timing = event.timing
-    } else if (event.type === 'source_failed') {
-      const sourceKey = ensureSource(event.source)
-      sources[sourceKey].status = 'failed'
-    } else if (event.type === 'parsing_complete') {
-      parsingComplete = true
-    } else if (event.type === 'synthesis_started') {
-      synthesisStarted = true
-    } else if (event.type === 'enrichment_done') {
-      enrichmentDone = true
-    }
-  })
-
-  // Fallback during the very first render before streaming events arrive.
-  if (sourceOrder.length === 0) {
-    for (const sourceKey of DEFAULT_SOURCE_ORDER) {
-      sources[sourceKey] = {
-        name: SOURCE_LABELS[sourceKey] ?? sourceKey,
-        status: 'pending',
-      }
-      sourceOrder.push(sourceKey)
-    }
-  }
-
-  const collapseSourceChips = parsingComplete
-  const synthesisPhaseLabel = enrichmentDone ? 'Finalizing grounded result' : 'Composing the entry'
-  const synthesisPhaseDetail = enrichmentDone
-    ? 'Aligning the generated explanation with evidence...'
-    : 'Putting the explanation together...'
-
+export default function ResearchProgress({
+  sources,
+  parsingComplete,
+  sharedWaitMs,
+  query,
+}: ResearchProgressProps) {
   return (
     <section className="editorial-shell animate-fadeIn p-6 sm:p-8 lg:p-10">
       <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr]">
@@ -117,22 +37,14 @@ export default function ResearchProgress({ events, query }: ResearchProgressProp
               </div>
             )}
 
-            {synthesisStarted && (
+            {sharedWaitMs !== null && (
               <div className="animate-fadeIn">
                 <div className="inline-flex items-center gap-2 text-sm text-charcoal/60">
-                  {enrichmentDone ? <StatusMark complete /> : <StatusMark />}
-                  <span className="font-serif italic">{synthesisPhaseLabel}</span>
+                  <StatusMark />
+                  <span className="font-serif italic">
+                    Another lookup for this word is already running — sharing its result
+                  </span>
                 </div>
-                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-charcoal-light">
-                  {synthesisPhaseDetail}
-                </p>
-              </div>
-            )}
-
-            {enrichmentDone && (
-              <div className="inline-flex items-center gap-2 text-sm text-charcoal/60">
-                <StatusMark complete />
-                <span className="font-serif italic">Matching evidence to the final reading</span>
               </div>
             )}
           </div>
@@ -148,49 +60,46 @@ export default function ResearchProgress({ events, query }: ResearchProgressProp
           <div
             className={`
               mt-5 overflow-hidden transition-all duration-500 ease-out
-              ${collapseSourceChips ? 'opacity-85' : 'opacity-100'}
+              ${parsingComplete ? 'opacity-85' : 'opacity-100'}
             `}
           >
             <div className="space-y-3">
-              {sourceOrder.map((key, index) => {
-                const source = sources[key]
-                return (
-                  <div
-                    key={key}
-                    className={`
-                      animate-fadeIn rounded-[0.95rem] border px-4 py-3
-                      ${
-                        source.status === 'complete'
-                          ? 'border-border-strong bg-surface'
-                          : source.status === 'failed'
-                            ? 'border-red-500/25 bg-red-500/[0.04]'
-                            : 'border-border-soft bg-paper-deep/45'
+              {sources.map((source, index) => (
+                <div
+                  key={source.key}
+                  className={`
+                    animate-fadeIn rounded-[0.95rem] border px-4 py-3
+                    ${
+                      source.status === 'complete'
+                        ? 'border-border-strong bg-surface'
+                        : source.status === 'failed'
+                          ? 'border-red-500/25 bg-red-500/[0.04]'
+                          : 'border-border-soft bg-paper-deep/45'
+                    }
+                  `}
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <div className="flex items-center gap-3">
+                    <SourceIcon status={source.status} />
+                    <span
+                      className={
+                        source.status === 'failed'
+                          ? 'font-medium text-red-700/85 dark:text-red-300/85'
+                          : 'font-medium text-charcoal/82'
                       }
-                    `}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <SourceIcon status={source.status} />
-                      <span
-                        className={
-                          source.status === 'failed'
-                            ? 'font-medium text-red-700/85 dark:text-red-300/85'
-                            : 'font-medium text-charcoal/82'
-                        }
-                      >
-                        {source.name}
-                      </span>
-                      <span className="ml-auto text-xs uppercase tracking-[0.16em] text-charcoal-light/56">
-                        {source.status === 'complete'
-                          ? source.timing
-                            ? `${(source.timing / 1000).toFixed(1)}s`
-                            : 'done'
-                          : source.status}
-                      </span>
-                    </div>
+                    >
+                      {source.label}
+                    </span>
+                    <span className="ml-auto text-xs uppercase tracking-[0.16em] text-charcoal-light/56">
+                      {source.status === 'complete'
+                        ? source.timing
+                          ? `${(source.timing / 1000).toFixed(1)}s`
+                          : 'done'
+                        : source.status}
+                    </span>
                   </div>
-                )
-              })}
+                </div>
+              ))}
             </div>
           </div>
         </aside>
