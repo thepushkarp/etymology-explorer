@@ -76,6 +76,14 @@ interesting challenger because it is much cheaper and higher-confidence, but
 its 36.6s p50 synthesis latency is too slow for the current public UX. DeepSeek
 Flash is cheaper but slower still. GLM failed the 15/15 schema-valid gate.
 
+MiniMax M3's 36.6s p50 was measured with reasoning disabled
+(`{ enabled: false, exclude: true }`), so its slowness is inherent to model /
+provider throughput, not reasoning overhead — there is no faster no-thinking
+mode left to unlock on this route. A dedicated (non-OpenRouter) MiniMax endpoint
+is the only untested speed lever, worth probing only for a future
+non-interactive / background synthesis path where M3's ~4x lower cost and higher
+confidence would pay off.
+
 ## Root Extraction Fallback Model
 
 The `--model` flag overrides the synthesis model only; the root extraction
