@@ -9,7 +9,9 @@ import ResearchProgress from '@/components/ResearchProgress'
 import { ShareMenu } from '@/components/ShareMenu'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
+import { SourceSummaryLine } from '@/components/SourceSummaryLine'
 import { StreamingEtymologyCard } from '@/components/StreamingEtymologyCard'
+import { TraceHeader } from '@/components/TraceHeader'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { usePronunciation } from '@/lib/hooks/usePronunciation'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
@@ -108,22 +110,33 @@ export function WordTraceExperience({ word }: WordTraceExperienceProps) {
         <div className="mt-8">
           {!hasStarted && <TraceGate word={word} onStart={startTrace} />}
 
-          {showResearchProgress && (
-            <ResearchProgress
-              sources={progress.sources}
-              parsingComplete={progress.parsingComplete}
-              sharedWaitMs={progress.sharedWaitMs}
-              query={word}
-            />
-          )}
+          {isLoading && (
+            <article aria-busy="true" className="editorial-shell animate-fadeIn p-6 sm:p-8 md:p-12">
+              <TraceHeader
+                word={word}
+                sections={progress.sections}
+                summary={
+                  showStreamingCard ? <SourceSummaryLine sources={progress.sources} /> : null
+                }
+              />
 
-          {showStreamingCard && (
-            <StreamingEtymologyCard
-              word={word}
-              sections={progress.sections}
-              ngram={ngram}
-              onWordClick={navigateToWord}
-            />
+              {showResearchProgress && (
+                <ResearchProgress
+                  sources={progress.sources}
+                  parsingComplete={progress.parsingComplete}
+                  sharedWaitMs={progress.sharedWaitMs}
+                />
+              )}
+
+              {showStreamingCard && (
+                <StreamingEtymologyCard
+                  word={word}
+                  sections={progress.sections}
+                  ngram={ngram}
+                  onWordClick={navigateToWord}
+                />
+              )}
+            </article>
           )}
 
           {progress.status === 'error' && progress.error && (
