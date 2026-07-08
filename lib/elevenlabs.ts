@@ -71,10 +71,11 @@ export async function generatePronunciation(word: string): Promise<ArrayBuffer> 
       },
       body: JSON.stringify({
         text: word,
-        model_id: 'eleven_turbo_v2_5',
+        model_id: 'eleven_v3',
         voice_settings: {
-          stability: 0.75,
+          stability: 0.5,
           similarity_boost: 0.75,
+          use_speaker_boost: true,
         },
       }),
     },

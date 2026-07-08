@@ -82,7 +82,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/config.ts`** - Centralized configuration:
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
   - USD monthly limit: $10/month (`openai/gpt-5.4-mini` pricing in `costTracking` as fallback; OpenRouter-reported cost preferred)
-  - Timeouts: source fetches 5s, synthesis LLM 90s, root-extraction LLM 15s, TTS 8s
+  - Timeouts: source fetches 5s, synthesis LLM 90s, root-extraction LLM 15s, TTS 15s
   - Tiered prompt character budgets (`promptBudget`: main 1500 / supplemental 800 / root 700 / related 450)
   - Rate limits, singleflight settings, feature flags
 
@@ -266,7 +266,7 @@ When adding UI: _"Would this feel at home in a beautifully typeset etymology dic
 | `/api/etymology`     | GET    | Main synthesis - `?word=X`; optional `?stream=true` for SSE (server-side API key) |
 | `/api/suggestions`   | GET    | Autocomplete + typo suggestions - `?q=word`                                       |
 | `/api/random-word`   | GET    | Random GRE word (crypto randomness)                                               |
-| `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, 8s timeout)                                 |
+| `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, 15s timeout)                                |
 | `/api/ngram`         | GET    | Google Books ngram usage data - `?word=word`                                      |
 | `/api/health`        | GET    | Liveness check                                                                    |
 | `/api/admin/stats`   | GET    | Budget + counter stats (requires `x-admin-secret` header)                         |

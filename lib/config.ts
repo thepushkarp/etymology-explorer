@@ -51,7 +51,7 @@ export const CONFIG = {
     source: 5_000,
     llm: 90_000, // synthesis call — benchmark p95 is ~22s, 90s leaves retry room in maxDuration
     rootExtraction: 15_000, // ~100-token output; no reason to inherit the synthesis timeout
-    tts: 8_000, // ElevenLabs
+    tts: 15_000, // ElevenLabs eleven_v3 is higher-latency than turbo; route maxDuration is 60s so 15s is safe, and audio is cached ~1yr so the slower call is one-time per word
   },
 
   // Singleflight deduplication (owner-token locks, see lib/singleflight.ts)
