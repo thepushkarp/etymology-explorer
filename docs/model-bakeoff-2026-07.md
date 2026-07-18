@@ -1,5 +1,11 @@
 # Synthesis Model Bakeoff - July 7, 2026
 
+> **July 18 follow-up:** Production synthesis now uses `openai/gpt-5.6-luna`
+> at low reasoning after a fresh 15-word run and identical-context paired
+> comparisons showed materially lower latency with acceptable cost. Root
+> extraction also uses Luna, with reasoning disabled. The July 7 results and
+> decision below are retained as the historical baseline.
+
 This note records the OpenRouter model reruns from branch `feat/model-bakeoff`,
 after PR #71 (`feat/structured-synthesis`) added strict Responses schema mode,
 model-specific reasoning profiles, and source clipping that preserves tail

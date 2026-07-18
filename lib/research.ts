@@ -36,6 +36,19 @@ export interface RootExtraction {
   usage: LlmUsage | null // null when no LLM call was made (or it failed before billing)
 }
 
+/**
+ * Decide whether the main-word bundle has enough independent evidence to
+ * justify synthesis. Curated dictionary/encyclopedia hits can confirm a real
+ * word when the two etymology-specific sources miss or are temporarily down;
+ * community-only sources are not sufficient on their own.
+ */
+export function hasCredibleMainSource(context: ResearchContext): boolean {
+  const { mainWord } = context
+  return Boolean(
+    mainWord.etymonline || mainWord.wiktionary || mainWord.freeDictionary || mainWord.wikipedia
+  )
+}
+
 export async function extractRootsQuick(
   word: string,
   etymonlineText: string | null,

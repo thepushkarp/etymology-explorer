@@ -12,7 +12,7 @@ Users search for a word, and the app:
 2. Pre-parses etymological chains from source text (CPU-only)
 3. Uses OpenRouter to extract root morphemes from the first-pass source bundle
 4. Expands breadth with a bounded second pass over root pages and high-signal related pages from Etymonline and Wiktionary
-5. Sends the enriched research bundle to OpenRouter's Responses API using `openai/gpt-5.4-mini` for structured synthesis
+5. Sends the enriched research bundle to OpenRouter's Responses API using `openai/gpt-5.6-luna` for structured synthesis
 6. Post-processes LLM output to match ancestry stages to parsed evidence and assign programmatic confidence scores
 
 **Live**: https://etymex.com
@@ -50,8 +50,8 @@ GET /api/etymology?word=X[&stream=true]   (maxDuration 300s)
     ├── Singleflight lock (lib/singleflight.ts, owner-token lock; Redis down → 503 for uncached)
     ├── Agentic Research Pipeline (lib/research.ts; request.signal aborts in-flight work):
     │   ├── Phase 1: Fire all 6 source fetches at once (3 core + 3 optional);
-    │   │           only etymonline + wiktionary gate the next phase, the rest
-    │   │           join before synthesis. Raw etymonline/wiktionary pages come
+    │   │           only etymonline + wiktionary gate root expansion, while
+    │   │           Free Dictionary/Wikipedia can still admit synthesis. Raw pages come
     │   │           from a 7d Redis source cache when available (lib/sourceCache.ts)
     │   ├── Phase 1.5: Pre-parse "from X, from Y" chains (lib/etymologyParser.ts, CPU-only)
     │   ├── Phase 2: CPU root extraction (derivation formulas + chain affixes);
@@ -81,7 +81,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/config.ts`** - Centralized configuration:
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
-  - USD monthly limit: $10/month (`openai/gpt-5.4-mini` pricing in `costTracking` as fallback; OpenRouter-reported cost preferred)
+  - USD monthly limit: $10/month (`openai/gpt-5.6-luna` pricing in `costTracking` as fallback; OpenRouter-reported cost preferred)
   - Timeouts: source fetches 5s, synthesis LLM 90s, root-extraction LLM 15s, TTS 15s
   - Tiered prompt character budgets (`promptBudget`: main 1500 / supplemental 800 / root 700 / related 450)
   - Rate limits, singleflight settings, feature flags
@@ -100,7 +100,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
   - Etymology results: 30 day TTL, versioned keys (`etymology:v2.2:`)
   - TTS audio: 1 year TTL
-  - Negative cache: 6 hour TTL for admitted types (`no_sources`, `invalid_word`)
+  - Negative cache: 30 minute TTL for admitted types (`no_sources`, `invalid_word`)
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
 - **`lib/sourceCache.ts`** - 7-day Redis cache for raw etymonline/wiktionary page data (`src:v1:<source>:<word>`). Fail-open: no Redis or a Redis error means a live fetch. Saves repeated scrapes across result-cache misses and overlapping root/related lookups.
@@ -209,7 +209,7 @@ and the output is guaranteed-shape JSON.
 - Rate limit counters (per-IP, sliding windows)
 - Monthly spend counters (atomic accumulation) + operational counters (cache_hit/miss/error)
 - Singleflight owner-token locks (90s TTL, heartbeat-extended while work runs)
-- Negative cache for admitted invalid/no-source words (6hr TTL)
+- Negative cache for admitted invalid/no-source words (30m TTL)
 
 **Client-side** (localStorage):
 
@@ -295,7 +295,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 **Core Pipeline:**
 
 - `lib/research.ts` - Agentic research orchestrator (6-source parallel fetch)
-- `lib/llm.ts` - LLM client (OpenRouter Responses API for `openai/gpt-5.4-mini`; unified streaming/unary synthesis)
+- `lib/llm.ts` - LLM client (OpenRouter Responses API for `openai/gpt-5.6-luna`; unified streaming/unary synthesis)
 - `lib/sectionScanner.ts` - Incremental scanner emitting each top-level JSON field as it closes (powers synthesis_section SSE events)
 - `lib/responseAdapter.ts` - SSE/JSON response adapter for the etymology route's early returns
 - `lib/prompts.ts` - System prompt for LLM synthesis (content/grounding rules; shape enforced by schema)

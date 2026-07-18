@@ -58,7 +58,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ### Configuration
 
 The app runs in **public mode** using a server-side OpenRouter API key and the
-`openai/gpt-5.4-mini` model on OpenRouter's Responses API. All searches are
+`openai/gpt-5.6-luna` model on OpenRouter's Responses API. All searches are
 rate-limited and cost-budgeted with a monthly spend cap. Set the
 `OPENROUTER_API_KEY` environment variable to enable it.
 
@@ -98,7 +98,7 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
 - **Framework**: [Next.js 16.1](https://nextjs.org/) with App Router
 - **UI**: [React 19.2](https://react.dev/) + [Tailwind CSS v4](https://tailwindcss.com/)
 - **LLM**: [OpenRouter Responses API](https://openrouter.ai/docs/api/api-reference/responses/create-responses)
-  using `openai/gpt-5.4-mini` with structured outputs
+  using `openai/gpt-5.6-luna` with structured outputs
 - **Validation**: [Zod 4.x](https://zod.dev/) for schema validation
 - **Caching/Rate Limiting**: [@upstash/redis](https://upstash.com/) + [@upstash/ratelimit](https://github.com/upstash/ratelimit)
 - **Analytics**: [@vercel/analytics](https://vercel.com/analytics)
@@ -199,17 +199,17 @@ etymology-explorer/
 
 1. **Request Deduplication**: Singleflight owner-token locks (90s TTL, heartbeat-extended) ensure one pipeline run per word; waiters poll the cache for the holder's result, and streaming waiters can take over if the holder crashes
 2. **Rate Limiting**: Per-IP rate limiting (20 req/min + 200 req/day) via Upstash Redis
-3. **Cache Check**: Redis cache lookup with versioned keys (`etymology:v2.2:`), schema validation on read, and negative cache (6h) for known no-source/invalid words. Without Redis, uncached searches return 503 (fail closed)
+3. **Cache Check**: Redis cache lookup with versioned keys (`etymology:v2.2:`), schema validation on read, and negative cache (30m) for known no-source/invalid words. Without Redis, uncached searches return 503 (fail closed)
 4. **Grounded Etymology Pipeline**:
    - **Parser** (CPU-only): Extracts "from X, from Y" chains from raw source text
    - **Agentic Research**: Multi-phase research pipeline (aborts mid-flight if the client disconnects):
-     - Phase 1: Fire all 6 source fetches at once (Etymonline, Wiktionary, Free Dictionary, Wikipedia, Urban Dictionary, Incel Wiki); only Etymonline + Wiktionary gate the next phase — the rest join before synthesis. Raw Etymonline/Wiktionary pages are served from a 7-day Redis source cache when available
+     - Phase 1: Fire all 6 source fetches at once (Etymonline, Wiktionary, Free Dictionary, Wikipedia, Urban Dictionary, Incel Wiki); Etymonline + Wiktionary gate root expansion, while a Free Dictionary or Wikipedia hit can still admit synthesis when both primary sources miss. Raw Etymonline/Wiktionary pages are served from a 7-day Redis source cache when available
      - Phase 2: Root morphemes extracted on-CPU from derivation formulas ("From X + Y", "equivalent to X + Y") and parsed-chain affixes (e.g., "telephone" → ["tele", "phone"]); a quick LLM call (15s timeout, truncated input) runs only when the CPU pass finds nothing
      - Phase 3: One parallel wave fetches root pages (up to 4 roots, etymonline + wiktionary) and main-word related-term pages (etymonline only) within the 16-fetch budget
    - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
-6. **Budget Enforcement**: Cost guard tracks monthly spend (OpenRouter-reported cost, with `openai/gpt-5.4-mini` pricing as fallback) against a $10/month cap and switches from normal to cache_only mode at 90% of budget; both the root-extraction and synthesis LLM calls are counted
+6. **Budget Enforcement**: Cost guard tracks monthly spend (OpenRouter-reported cost, with `openai/gpt-5.6-luna` pricing as fallback) against a $10/month cap and switches from normal to cache_only mode at 90% of budget; both the root-extraction and synthesis LLM calls are counted
 7. **Rich Display**: Etymology rendered with expandable roots, ancestry graph with confidence badges, POS tags, modern usage, related words, and source attribution (supplemental sources are only surfaced when significance checks pass)
 
 ### Architecture Diagram
@@ -290,5 +290,5 @@ MIT
 - Modern slang definitions from [Urban Dictionary](https://www.urbandictionary.com/)
 - Supplemental community slang context from [Incel Wiki](https://incels.wiki/)
 - Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)
-- Powered by [OpenRouter](https://openrouter.ai/) `openai/gpt-5.4-mini`
+- Powered by [OpenRouter](https://openrouter.ai/) `openai/gpt-5.6-luna`
 - Rate limiting and caching by [Upstash](https://upstash.com/)

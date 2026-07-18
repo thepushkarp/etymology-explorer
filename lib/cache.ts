@@ -149,14 +149,14 @@ export async function cacheAudio(word: string, audioBase64: string): Promise<voi
 }
 
 /**
- * Check if a word is in the negative cache (known bad/gibberish words).
+ * Check if a word is in the negative cache (known invalid/no-source words).
  * Returns false on error (fail open).
  */
 export async function getNegativeCache(word: string): Promise<boolean> {
   const redis = getRedis()
   if (!redis) return false
 
-  const key = `neg:v1:${word.toLowerCase().trim()}`
+  const key = `neg:v2:${word.toLowerCase().trim()}`
   try {
     const exists = await redis.exists(key)
     return exists === 1
@@ -167,7 +167,7 @@ export async function getNegativeCache(word: string): Promise<boolean> {
 }
 
 /**
- * Mark a word in the negative cache to prevent repeated fetches for gibberish.
+ * Mark a word in the negative cache to prevent repeated no-source fetches.
  * Only caches specific error types — transient errors should NOT be cached.
  * Fails silently.
  */
@@ -179,7 +179,7 @@ export async function cacheNegative(word: string, errorType: string): Promise<vo
     return
   }
 
-  const key = `neg:v1:${word.toLowerCase().trim()}`
+  const key = `neg:v2:${word.toLowerCase().trim()}`
   try {
     await redis.set(key, '1', { ex: jitterTTL(CONFIG.negativeCacheTTL) })
   } catch (error) {

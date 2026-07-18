@@ -11,7 +11,7 @@ describe('openrouterResponses', () => {
   test('buildSynthesisRequest uses strict json_schema mode with low reasoning', () => {
     const request = buildSynthesisRequest('Analyze this word')
 
-    expect(request.model).toBe('openai/gpt-5.4-mini')
+    expect(request.model).toBe('openai/gpt-5.6-luna')
     expect(request.reasoning).toEqual({ effort: 'low' })
     expect(request.max_output_tokens).toBe(9000)
     expect(request.text.format).toMatchObject({
@@ -25,6 +25,9 @@ describe('openrouterResponses', () => {
   })
 
   test('buildSynthesisRequest adapts reasoning to model capabilities', () => {
+    expect(buildSynthesisRequest('Analyze', 'openai/gpt-5.6-luna').reasoning).toEqual({
+      effort: 'low',
+    })
     expect(buildSynthesisRequest('Analyze', 'google/gemini-3.5-flash').reasoning).toEqual({
       effort: 'minimal',
       exclude: true,
@@ -57,7 +60,7 @@ describe('openrouterResponses', () => {
   test('buildRootExtractionRequest disables reasoning for tiny root extraction output', () => {
     const request = buildRootExtractionRequest('Analyze roots')
 
-    expect(request.model).toBe('openai/gpt-5.4-mini')
+    expect(request.model).toBe('openai/gpt-5.6-luna')
     expect(request.reasoning).toEqual({ effort: 'none' })
     // require_parameters is synthesis-only: adding it here slow-routed the
     // ~100-token extraction call from ~1s to 15s+ in live tests.

@@ -97,8 +97,8 @@ type OpenRouterStreamEvent = {
 const OPENROUTER_RESPONSES_URL = 'https://openrouter.ai/api/v1/responses'
 
 const SYNTHESIS_REASONING_BY_MODEL: Record<string, ReasoningConfig | undefined> = {
-  // Production baseline: keep the existing low-effort synthesis behavior.
-  'openai/gpt-5.4-mini': { effort: 'low' },
+  // Production models use low-effort synthesis to balance grounding and latency.
+  'openai/gpt-5.6-luna': { effort: 'low' },
   // Gemini 3.5 Flash rejects disabled/none reasoning; minimal is the cheapest
   // valid setting per /api/v1/models and live probe.
   'google/gemini-3.5-flash': { effort: 'minimal', exclude: true },
