@@ -5,7 +5,7 @@
 
 export const CONFIG = {
   // LLM
-  model: 'openai/gpt-5.4-mini',
+  model: 'openai/gpt-5.6-luna',
   synthesisMaxTokens: 9000,
   rootExtractionMaxTokens: 100,
 
@@ -43,7 +43,7 @@ export const CONFIG = {
   // Cache TTLs (seconds)
   etymologyCacheTTL: 30 * 24 * 60 * 60, // 30 days
   audioCacheTTL: 365 * 24 * 60 * 60, // 1 year
-  negativeCacheTTL: 6 * 60 * 60, // 6 hours — prevents repeated fetches for gibberish
+  negativeCacheTTL: 30 * 60, // 30m — limits repeat misses without cementing transient source failures
   sourceCacheTTL: 7 * 24 * 60 * 60, // 7 days — raw etymonline/wiktionary page data
 
   // Timeouts (milliseconds)
@@ -66,7 +66,7 @@ export const CONFIG = {
 
   // USD-based cost tracking
   costTracking: {
-    pricingPerMillionTokens: { input: 0.75, output: 4.5 }, // fallback when OpenRouter omits cost
+    pricingPerMillionTokens: { input: 1, output: 6 }, // Luna fallback when OpenRouter omits cost
     monthlyLimitUSD: 10.0,
     cacheOnlyAtPercent: 0.9, // serve only cached results at 90% of budget
   },

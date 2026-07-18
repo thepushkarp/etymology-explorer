@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { EtymologyResult, StreamEvent, StageConfidence, ResearchContext } from '@/lib/types'
 import { synthesizeFromResearch, getLlmUsageFromError, SynthesisResult } from '@/lib/llm'
-import { conductAgenticResearch } from '@/lib/research'
+import { conductAgenticResearch, hasCredibleMainSource } from '@/lib/research'
 import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
@@ -165,7 +165,7 @@ export async function GET(request: NextRequest) {
         onProgress
       )
 
-      if (!researchContext.mainWord.etymonline && !researchContext.mainWord.wiktionary) {
+      if (!hasCredibleMainSource(researchContext)) {
         // Awaited so the entry lands BEFORE the lock releases — waiters
         // poll the negative cache to learn this word has no sources.
         await cacheNegative(normalizedWord, 'no_sources')

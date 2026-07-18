@@ -5,6 +5,7 @@ import {
   extractRootsQuick,
   extractRelatedTerms,
   extractRootsCpu,
+  hasCredibleMainSource,
 } from '@/lib/research'
 import { extractEtymonlineRelatedEntries, fetchEtymonline } from '@/lib/etymonline'
 import { parseSourceTexts } from '@/lib/etymologyParser'
@@ -128,6 +129,39 @@ describe('extractRootsCpu', () => {
 })
 
 describe('research breadth', () => {
+  test('admits credible supplemental sources when primary etymology sources miss', () => {
+    const context: ResearchContext = {
+      mainWord: {
+        word: 'validword',
+        etymonline: null,
+        wiktionary: null,
+        freeDictionary: null,
+        wikipedia: null,
+        urbanDictionary: null,
+        incelsWiki: null,
+      },
+      identifiedRoots: [],
+      rootResearch: [],
+      relatedResearch: [],
+      totalSourcesFetched: 6,
+    }
+
+    expect(hasCredibleMainSource(context)).toBe(false)
+
+    context.mainWord.wikipedia = {
+      text: 'A documented English word.',
+      url: 'https://en.wikipedia.org/wiki/Validword',
+    }
+    expect(hasCredibleMainSource(context)).toBe(true)
+
+    context.mainWord.wikipedia = null
+    context.mainWord.urbanDictionary = {
+      text: 'Community slang definition only.',
+      url: 'https://www.urbandictionary.com/define.php?term=validword',
+    }
+    expect(hasCredibleMainSource(context)).toBe(false)
+  })
+
   test('extractEtymonlineRelatedEntries finds linked relation entries from escaped page payloads', () => {
     const html = String.raw`{\"word\":\"contradict\",\"desc\":\"assert the contrary\"},{\"word\":\"contra\",\"desc\":\"Latin preposition meaning against\"},{\"word\":\"*deik-\",\"desc\":\"PIE root meaning to show\"},{\"key\":\"syn_ant\",\"word\":\"contravene\",\"desc\":\"from Latin contra + venire\"},{\"word\":\"gainsay\",\"desc\":\"literally say against\"},{\"word\":\"contradictory\"}`
 
