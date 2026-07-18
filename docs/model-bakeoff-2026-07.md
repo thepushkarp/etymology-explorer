@@ -1,15 +1,158 @@
 # Synthesis Model Bakeoff - July 7, 2026
 
-> **July 18 follow-up:** Production synthesis now uses `openai/gpt-5.6-luna`
-> at low reasoning after a fresh 15-word run and identical-context paired
-> comparisons showed materially lower latency with acceptable cost. Root
-> extraction also uses Luna, with reasoning disabled. The July 7 results and
-> decision below are retained as the historical baseline.
+> **July 18 follow-up:** Production now uses `openai/gpt-5.6-luna` for both
+> synthesis and the root-extraction fallback. A fresh paired 15-word run showed
+> materially lower synthesis latency at a modest cost increase. The July 7
+> results and decision below are retained as the historical baseline.
 
 This note records the OpenRouter model reruns from branch `feat/model-bakeoff`,
 after PR #71 (`feat/structured-synthesis`) added strict Responses schema mode,
 model-specific reasoning profiles, and source clipping that preserves tail
 evidence.
+
+## July 18 Follow-up: Luna Re-evaluation
+
+### Candidate screen
+
+The follow-up focused on models that could plausibly replace GPT-5.4 Mini without
+changing the synthesis transport contract. A synthesis candidate must work
+through OpenRouter's Responses endpoint, advertise strict JSON Schema support
+for `provider.require_parameters = true`, and remain fast enough for an
+interactive public endpoint. Root extraction has a separate, lighter gate
+described below.
+
+- [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna-20260709)
+  advertised `response_format` and `structured_outputs`, with list pricing of
+  $1/M input tokens and $6/M output tokens. It advanced to the full benchmark.
+- [`thinkingmachines/inkling`](https://openrouter.ai/thinkingmachines/inkling)
+  was also reviewed. Its $1/M input and $4.05/M output pricing was attractive,
+  but the OpenRouter model metadata on July 18 did not advertise
+  `response_format` or `structured_outputs`. Because strict schema support is a
+  hard synthesis gate, Inkling did not pass the metadata eligibility screen and
+  was not sent through the paid 15-word run. Its strict Responses compatibility
+  was not live-tested; reconsider it if its OpenRouter capabilities change.
+
+The screen intentionally did not treat a lower list price as sufficient. This
+pipeline depends on schema correctness, predictable latency, and evidence-aware
+output. A model that does not advertise the strict Responses capabilities is
+not eligible for a paid synthesis benchmark without a separate compatibility
+probe.
+
+### Follow-up method
+
+Two full-pipeline runs were started together against the fixed 15-word set:
+
+```bash
+bun scripts/benchmark.ts --label bench-2026-07-18-gpt54-control \
+  --model openai/gpt-5.4-mini
+bun scripts/benchmark.ts --label bench-2026-07-18-gpt56-luna \
+  --model openai/gpt-5.6-luna
+```
+
+Running the pair concurrently reduced time-of-day and upstream-service drift.
+Both used the same code, word set, schemas, prompt budgets, and low synthesis
+reasoning profile. The `--model` override applied only to synthesis, so the
+root-extraction fallback remained GPT-5.4 Mini during both benchmark runs.
+
+This is a paired full-pipeline comparison, not a frozen-prompt laboratory test.
+Each run fetched and expanded its own research context, so source latency,
+network variance, and nondeterministic root extraction can affect total latency,
+input tokens, and the evidence available to synthesis. Synthesis latency and
+schema validity are the strongest signals; small confidence differences should
+not be interpreted as a controlled model-quality score.
+
+### Follow-up results
+
+| model                 | valid | p50 total | p50 synth | total cost | cost/word | synth under 10s | confidence high/med/low/unscored | total tokens in/out |
+| --------------------- | ----: | --------: | --------: | ---------: | --------: | --------------: | -------------------------------- | ------------------- |
+| `openai/gpt-5.4-mini` | 15/15 |    11.26s |     9.57s |    $0.1281 |  $0.00854 |           10/15 | 22/23/13/28                      | 60371/18410         |
+| `openai/gpt-5.6-luna` | 15/15 |    10.10s |     6.29s |    $0.1564 |  $0.01043 |           14/15 | 11/29/19/26                      | 58665/14171         |
+
+Costs include OpenRouter-reported synthesis and root-extraction spend. Because
+the benchmark's root fallback still used GPT-5.4 Mini in both runs, the cost
+difference primarily reflects synthesis. The control reported $0.12465 for
+synthesis and $0.00347 for six extraction calls; the Luna run reported $0.15324
+for synthesis and $0.00315 for six GPT-5.4 Mini extraction calls.
+
+Relative to the control, Luna:
+
+- reduced p50 synthesis latency by 34.3 percent (9.57s to 6.29s);
+- reduced p50 end-to-end latency by 10.3 percent (11.26s to 10.10s);
+- produced the faster synthesis result for 13 of 15 words and the faster total
+  result for 11 of 15;
+- reduced total output tokens by 23.0 percent (18,410 to 14,171);
+- increased reported cost per attempted word by 22.1 percent ($0.00854 to
+  $0.01043); and
+- remained schema-valid for all 15 words, with zero ungrounded reconstructed
+  stages in both runs.
+
+Here, `valid` means the final post-processed result passed
+`EtymologyResultSchema`. The unary synthesis path can retry malformed output
+once, but this benchmark version did not record attempt or retry counts.
+Therefore, 15/15 is final schema validity, not evidence that every first model
+response passed without a retry.
+
+The confidence distribution moved away from `high` toward `medium` and `low`.
+That is a real caution signal, but confidence is assigned after synthesis by
+matching stages against the independently gathered source evidence; it is not a
+blinded human quality judgment. No separate blinded preference evaluation was
+recorded in this session, so the result supports an operational latency/cost
+decision rather than a claim that Luna is categorically better at etymology.
+
+### Root-extraction smoke test
+
+After changing the production default, the exact Luna root-extraction request
+was probed separately because the full benchmark had kept that call on GPT-5.4
+Mini. The probe used `bread` with the production prompt, strict root schema,
+100-token output cap, and `reasoning = { effort: "none" }`. It returned
+`{"roots":["bread"]}` in about 1.5 seconds at a reported cost of $0.000149.
+
+`provider.require_parameters` remains synthesis-only. Prior live testing showed
+that adding it to this tiny extraction request changed routing from roughly one
+second to 15 seconds or more, consuming the entire extraction timeout. The root
+request still asks for strict JSON Schema; application code then parses and
+normalizes a `roots` array, caps it at four entries, and safely returns no roots
+when output is unusable.
+
+This single call verifies route compatibility, valid shape, latency, and billing
+on one representative single-root input. It is not an extraction-quality or
+reliability benchmark. A stronger follow-up would compare Luna and GPT-5.4 Mini
+over single-root, multi-root, affix-heavy, no-source, malformed-output, and
+timeout cases.
+
+### July 18 decision and implementation
+
+Switch every application LLM request to `openai/gpt-5.6-luna`:
+
+- synthesis uses low reasoning;
+- root extraction uses no reasoning;
+- there is no application-level fallback to GPT-5.4 Mini or another model; and
+- the $1/M input and $6/M output values in `CONFIG.costTracking` are accounting
+  fallbacks only, used when OpenRouter omits `usage.cost`. They do not select a
+  fallback model.
+
+In this non-frozen full-pipeline run, the change cost roughly $0.0019 more per
+uncached benchmark word and coincided with a 3.28-second improvement in p50
+synthesis latency. The existing $10 monthly budget, cache-only threshold,
+30-day result cache, and singleflight request deduplication continue to bound
+the production impact.
+
+The three uses of “fallback” are distinct:
+
+| fallback type | current behavior                                                                       |
+| ------------- | -------------------------------------------------------------------------------------- |
+| model         | none; every LLM request names Luna                                                     |
+| algorithmic   | CPU root extraction runs first; Luna is called only when CPU extraction finds no roots |
+| accounting    | configured Luna prices estimate spend only when OpenRouter omits `usage.cost`          |
+
+The change is implemented in draft PR
+[#79](https://github.com/thepushkarp/etymology-explorer/pull/79) alongside the
+orthogonal valid-word admission fix. Verification for the combined change
+included 216 passing tests, a successful production build, ESLint with zero
+errors, changed-file Prettier validation, and the live Luna extraction smoke test
+above.
+
+## July 7 Historical Baseline
 
 ## Method
 
@@ -71,7 +214,7 @@ current production candidate.
 | `moonshotai/kimi-k2.6`     | first word produced no artifact before manual stop                              | stalled with reasoning disabled               |
 | `tencent/hy3`              | tiny strict-schema probe timed out after 70s                                    | unsuitable for Responses structured synthesis |
 
-## Decision
+## July 7 Decision (Historical)
 
 Keep `openai/gpt-5.4-mini` as the production synthesis model.
 
@@ -91,7 +234,7 @@ is the only untested speed lever, relevant only for a future non-interactive /
 background synthesis path where M3's ~4x lower cost and higher confidence would
 pay off.
 
-## Root Extraction Fallback Model
+## July 7 Root Extraction Position (Historical)
 
 The `--model` flag overrides the synthesis model only; the root extraction
 fallback (`extractRootsQuick` in `lib/research.ts`, request built by
