@@ -24,6 +24,15 @@ export interface ParsedEtymChain {
   word: string
   links: ParsedEtymLink[] // ordered modern → oldest
   dateAttested?: string // "1590s"
+  historyId?: string
+  evidenceScopeId?: string
+  provider?: 'wiktionaryEnglish' | 'wiktionaryNative'
+}
+
+export interface ParsedChainIdentity {
+  historyId: string
+  evidenceScopeId: string
+  provider: 'wiktionaryEnglish' | 'wiktionaryNative'
 }
 
 /**
@@ -298,8 +307,12 @@ export function parseEtymonlineText(text: string, word: string): ParsedEtymChain
  * Wiktionary uses similar "from" patterns but also has:
  *   "Borrowed from French X, from Latin Y" and parenthesized meanings.
  */
-export function parseWiktionaryText(text: string, word: string): ParsedEtymChain {
-  return parseSourceText(text, word, 'wiktionary')
+export function parseWiktionaryText(
+  text: string,
+  word: string,
+  identity?: ParsedChainIdentity
+): ParsedEtymChain {
+  return { ...parseSourceText(text, word, 'wiktionary'), ...identity }
 }
 
 /**
@@ -353,7 +366,8 @@ export function formatParsedChainsForPrompt(chains: ParsedEtymChain[]): string {
   ]
 
   for (const chain of chains) {
-    sections.push(`--- Chain from ${escapeXml(chain.source)} ---`)
+    const scope = chain.historyId ? ` for history ${escapeXml(chain.historyId)}` : ''
+    sections.push(`--- Chain from ${escapeXml(chain.provider ?? chain.source)}${scope} ---`)
     if (chain.dateAttested) {
       sections.push(`First attested: ${chain.dateAttested}`)
     }

@@ -14,6 +14,7 @@ export interface LanguageDefinition {
   englishWiktionaryHeading: string
   nativeWiktionaryHeading: string
   etymologyHeading: RegExp
+  formHeading: RegExp
   ngramCorpus: string | null
 }
 
@@ -27,6 +28,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     englishWiktionaryHeading: 'English',
     nativeWiktionaryHeading: 'English',
     etymologyHeading: /^Etymology(?:\s+\d+)?$/i,
+    formHeading: /^(?:Noun|Verb|Adjective|Adverb|Pronoun|Participle)$/i,
     ngramCorpus: 'eng-2019',
   },
   it: {
@@ -38,6 +40,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     englishWiktionaryHeading: 'Italian',
     nativeWiktionaryHeading: 'Italiano',
     etymologyHeading: /^Etimologia(?:\s*\/\s*Derivazione)?(?:\s+\d+)?$/i,
+    formHeading: /^(?:Forma flessa|Voce verbale|Participio|Coniugazione)/i,
     ngramCorpus: 'ita-2019',
   },
   es: {
@@ -49,6 +52,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     englishWiktionaryHeading: 'Spanish',
     nativeWiktionaryHeading: 'Español',
     etymologyHeading: /^Etimología(?:\s+\d+)?$/i,
+    formHeading: /^(?:Forma verbal|Forma nominal|Participio|Conjugación)/i,
     ngramCorpus: 'spa-2019',
   },
   fr: {
@@ -60,6 +64,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     englishWiktionaryHeading: 'French',
     nativeWiktionaryHeading: 'Français',
     etymologyHeading: /^Étymologie(?:\s+\d+)?$/i,
+    formHeading: /^Forme de /i,
     ngramCorpus: 'fre-2019',
   },
   pt: {
@@ -71,6 +76,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     englishWiktionaryHeading: 'Portuguese',
     nativeWiktionaryHeading: 'Português',
     etymologyHeading: /^Etimologia(?:\s+\d+)?$/i,
+    formHeading: /^(?:Forma verbal|Forma nominal|Particípio|Conjugação)/i,
     ngramCorpus: null,
   },
 }

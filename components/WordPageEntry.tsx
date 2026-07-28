@@ -12,7 +12,7 @@ import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
 import { consumeTraceIntent } from '@/lib/traceIntent'
 import type { EtymologyResult } from '@/lib/types'
 import type { BetaLanguageCode } from '@/lib/languages'
-import { localizeResult, type ResultLocale } from '@/lib/resultLocalization'
+import { localizeHistoryChoices, localizeResult, type ResultLocale } from '@/lib/resultLocalization'
 
 interface WordPageEntryProps {
   result: EtymologyResult
@@ -28,6 +28,9 @@ export function WordPageEntry({ result }: WordPageEntryProps) {
   const [contentLocale, setContentLocale] = useState<ResultLocale>(
     language === 'en' ? 'en' : 'local'
   )
+  const [activeHistoryId, setActiveHistoryId] = useState<string | undefined>(
+    'primaryHistoryId' in result ? result.primaryHistoryId : undefined
+  )
   const { navigateToWord, historyBack, historyForward } = useWordNavigation(result.word, language)
   const { addToHistory } = useHistory()
   const ngram = useNgram(result.word, language)
@@ -42,8 +45,12 @@ export function WordPageEntry({ result }: WordPageEntryProps) {
 
   const resultWithNgram = useMemo(() => {
     const enriched = { ...result, ngram: ngram && ngram.word === result.word ? ngram : undefined }
-    return localizeResult(enriched, contentLocale)
-  }, [result, ngram, contentLocale])
+    return localizeResult(enriched, contentLocale, activeHistoryId)
+  }, [result, ngram, contentLocale, activeHistoryId])
+  const historyChoices = useMemo(
+    () => localizeHistoryChoices(result, contentLocale),
+    [result, contentLocale]
+  )
 
   const headerActions = useMemo(
     () => (
@@ -72,6 +79,9 @@ export function WordPageEntry({ result }: WordPageEntryProps) {
         onWordClick={navigateToWord}
         headerActions={headerActions}
         contentLocale={contentLocale}
+        historyChoices={historyChoices}
+        activeHistoryId={activeHistoryId}
+        onHistoryChange={setActiveHistoryId}
       />
       <KeyboardShortcuts
         onHistoryBack={historyBack}

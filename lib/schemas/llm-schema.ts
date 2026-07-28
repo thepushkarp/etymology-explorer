@@ -227,6 +227,7 @@ export const ETYMOLOGY_LLM_SCHEMA = {
 } as const
 
 const TRANSLATABLE_TEXT_KEYS = new Set([
+  'label',
   'definition',
   'meaning',
   'note',
@@ -303,11 +304,79 @@ export const BETA_ETYMOLOGY_LLM_SCHEMA = (() => {
     'synthesized',
   ]
 
+  const history = {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      label: bilingualTextSchema(false),
+      entryKind: { type: 'string', enum: ['lemma', 'form', 'unresolved'] },
+      queryNodeId: { type: 'string' },
+      lemmaNodeId: { type: 'string' },
+      formOf: {
+        type: ['object', 'null'],
+        properties: {
+          word: { type: 'string' },
+          language: { type: 'string' },
+        },
+        required: ['word', 'language'],
+        additionalProperties: false,
+      },
+      evidenceScopeIds: { type: 'array', items: { type: 'string' } },
+      pronunciation: properties.pronunciation,
+      definition: properties.definition,
+      ancestryGraph: properties.ancestryGraph,
+      roots: properties.roots,
+      lore: properties.lore,
+      partsOfSpeech: properties.partsOfSpeech,
+    },
+    required: [
+      'id',
+      'label',
+      'entryKind',
+      'queryNodeId',
+      'lemmaNodeId',
+      'formOf',
+      'evidenceScopeIds',
+      'pronunciation',
+      'definition',
+      'ancestryGraph',
+      'roots',
+      'lore',
+      'partsOfSpeech',
+    ],
+    additionalProperties: false,
+  }
+
   schema.properties = {
     language: { type: 'string', enum: ['it', 'es', 'fr', 'pt'] },
-    ...properties,
+    word: properties.word,
+    primaryHistoryId: { type: 'string' },
+    histories: { type: 'array', minItems: 1, maxItems: 4, items: history },
+    pronunciation: properties.pronunciation,
+    definition: properties.definition,
+    ancestryGraph: properties.ancestryGraph,
+    roots: properties.roots,
+    lore: properties.lore,
+    partsOfSpeech: properties.partsOfSpeech,
+    suggestions: properties.suggestions,
+    modernUsage: properties.modernUsage,
+    sources: properties.sources,
   }
-  schema.required = ['language', ...(schema.required as string[])]
+  schema.required = [
+    'language',
+    'word',
+    'primaryHistoryId',
+    'histories',
+    'pronunciation',
+    'definition',
+    'ancestryGraph',
+    'roots',
+    'lore',
+    'partsOfSpeech',
+    'suggestions',
+    'modernUsage',
+    'sources',
+  ]
   return schema
 })()
 

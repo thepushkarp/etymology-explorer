@@ -31,12 +31,14 @@ export type CacheableSource =
   | 'dicionarioAberto'
 
 const SOURCE_CACHE_PREFIX = 'src:v1:'
+const BETA_SOURCE_CACHE_PREFIX = 'src:v4:'
 
 function sourceKey(source: CacheableSource, word: string, language: LanguageCode): string {
   const normalized = word.toLowerCase().trim()
+  const prefix = language === 'en' ? SOURCE_CACHE_PREFIX : BETA_SOURCE_CACHE_PREFIX
   return language === 'en'
-    ? `${SOURCE_CACHE_PREFIX}${source}:${normalized}`
-    : `${SOURCE_CACHE_PREFIX}${source}:${language}:${normalized}`
+    ? `${prefix}${source}:${normalized}`
+    : `${prefix}${source}:${language}:${normalized}`
 }
 
 function isSourceData(value: unknown): value is SourceData {

@@ -9,13 +9,22 @@ import { LANGUAGES, type BetaLanguageCode } from './languages'
 
 export type ResultLocale = 'en' | 'local'
 
+export interface DisplayHistoryChoice {
+  id: string
+  label: string
+  entryKind: 'lemma' | 'form' | 'unresolved'
+  formOf?: { word: string; language: string }
+  partsOfSpeech: string[]
+}
+
 function pick(text: BilingualText, locale: ResultLocale): string {
   return text[locale]
 }
 
 export function localizeResult(
   result: EtymologyResult,
-  locale: ResultLocale = 'local'
+  locale: ResultLocale = 'local',
+  historyId?: string
 ): DisplayEtymologyResult {
   const language = result.language ?? 'en'
   if (language === 'en') {
@@ -24,36 +33,46 @@ export function localizeResult(
   }
 
   const beta = result as BetaEtymologyResult
+  // Progressive beta sections and legacy in-memory fixtures may not have
+  // received the histories field yet. Their top-level entry remains a safe
+  // projection until the terminal, schema-validated result arrives.
+  const histories = beta.histories ?? []
+  const history =
+    histories.find((candidate) => candidate.id === historyId) ??
+    histories.find((candidate) => candidate.id === beta.primaryHistoryId) ??
+    histories[0] ??
+    beta
   return {
     ...beta,
-    definition: pick(beta.definition, locale),
-    lore: pick(beta.lore, locale),
-    roots: beta.roots.map((root) => ({ ...root, meaning: pick(root.meaning, locale) })),
+    pronunciation: history.pronunciation,
+    definition: pick(history.definition, locale),
+    lore: pick(history.lore, locale),
+    roots: history.roots.map((root) => ({ ...root, meaning: pick(root.meaning, locale) })),
     // The beta schema does not yet attach language identity to suggestion
     // strings, so they must not become guessed selected-language links.
     suggestions: undefined,
     ancestryGraph: {
-      ...beta.ancestryGraph,
-      branches: beta.ancestryGraph.branches.map((branch) => ({
+      ...history.ancestryGraph,
+      branches: history.ancestryGraph.branches.map((branch) => ({
         ...branch,
         stages: branch.stages.map((stage) => ({ ...stage, note: pick(stage.note, locale) })),
       })),
-      convergencePoints: beta.ancestryGraph.convergencePoints?.map((point) => ({
+      convergencePoints: history.ancestryGraph.convergencePoints?.map((point) => ({
         ...point,
         meaning: pick(point.meaning, locale),
       })),
-      mergePoint: beta.ancestryGraph.mergePoint
+      mergePoint: history.ancestryGraph.mergePoint
         ? {
-            ...beta.ancestryGraph.mergePoint,
-            note: pick(beta.ancestryGraph.mergePoint.note, locale),
+            ...history.ancestryGraph.mergePoint,
+            note: pick(history.ancestryGraph.mergePoint.note, locale),
           }
         : undefined,
-      postMerge: beta.ancestryGraph.postMerge?.map((stage) => ({
+      postMerge: history.ancestryGraph.postMerge?.map((stage) => ({
         ...stage,
         note: pick(stage.note, locale),
       })),
     },
-    partsOfSpeech: beta.partsOfSpeech?.map((part) => ({
+    partsOfSpeech: history.partsOfSpeech?.map((part) => ({
       ...part,
       definition: pick(part.definition, locale),
     })),
@@ -71,6 +90,25 @@ export function localizeResult(
         }
       : undefined,
   }
+}
+
+export function localizeHistoryChoices(
+  result: EtymologyResult,
+  locale: ResultLocale = 'local'
+): DisplayHistoryChoice[] {
+  if (
+    (result.language ?? 'en') === 'en' ||
+    !('histories' in result) ||
+    !Array.isArray(result.histories)
+  )
+    return []
+  return result.histories.map((history) => ({
+    id: history.id,
+    label: pick(history.label, locale),
+    entryKind: history.entryKind,
+    formOf: history.formOf,
+    partsOfSpeech: Array.from(new Set((history.partsOfSpeech ?? []).map((part) => part.pos))),
+  }))
 }
 
 type SectionLabels = {

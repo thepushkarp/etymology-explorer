@@ -1,5 +1,6 @@
 import {
   AncestryGraph,
+  BetaEtymologyResult,
   EtymologyResult,
   LlmUsage,
   SourceReference,
@@ -548,6 +549,71 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
   return result
 }
 
+function sameStrings(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false
+  const sortedRight = [...right].sort()
+  return [...left].sort().every((value, index) => value === sortedRight[index])
+}
+
+function finalizeBetaHistories(
+  result: BetaEtymologyResult,
+  researchContext: ResearchContext
+): void {
+  const candidates = researchContext.lexicalGraph?.histories ?? []
+  if (candidates.length === 0) {
+    throw new Error('Schema validation failed: selected-language research has no entry histories')
+  }
+
+  const returnedIds = result.histories.map((history) => history.id)
+  const expectedIds = candidates.map((history) => history.id)
+  if (!sameStrings(returnedIds, expectedIds)) {
+    throw new Error('Schema validation failed: model changed the source-defined history set')
+  }
+  if (result.primaryHistoryId !== expectedIds[0]) {
+    throw new Error('Schema validation failed: primary history must be the first source history')
+  }
+
+  for (const history of result.histories) {
+    const candidate = candidates.find((entry) => entry.id === history.id)
+    const formOfMatches = candidate?.formOf
+      ? history.formOf?.word === candidate.formOf.word &&
+        history.formOf.language === candidate.formOf.language
+      : history.formOf === undefined
+    if (
+      !candidate ||
+      history.queryNodeId !== candidate.queryNodeId ||
+      history.lemmaNodeId !== candidate.lemmaNodeId ||
+      history.entryKind !== candidate.entryKind ||
+      !formOfMatches ||
+      !sameStrings(history.evidenceScopeIds, candidate.evidenceScopeIds)
+    ) {
+      throw new Error(`Schema validation failed: history identity changed for ${history.id}`)
+    }
+
+    const scopedChains = (researchContext.parsedChains ?? []).filter(
+      (chain) =>
+        chain.historyId === history.id &&
+        Boolean(chain.evidenceScopeId) &&
+        history.evidenceScopeIds.includes(chain.evidenceScopeId as string)
+    )
+    if (scopedChains.length > 0) {
+      enrichAncestryGraph(history.ancestryGraph, scopedChains)
+      pruneUngroundedStages(history.ancestryGraph)
+    }
+  }
+
+  const primary = result.histories.find((history) => history.id === result.primaryHistoryId)
+  if (!primary) {
+    throw new Error('Schema validation failed: primary history is missing')
+  }
+  result.pronunciation = primary.pronunciation
+  result.definition = primary.definition
+  result.roots = primary.roots
+  result.ancestryGraph = primary.ancestryGraph
+  result.lore = primary.lore
+  result.partsOfSpeech = primary.partsOfSpeech
+}
+
 function finalizeResult(
   result: EtymologyResult,
   researchContext: ResearchContext,
@@ -555,7 +621,9 @@ function finalizeResult(
 ): EtymologyResult {
   sanitizeModernUsage(result, researchContext)
 
-  if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
+  if (researchContext.language && researchContext.language !== 'en') {
+    finalizeBetaHistories(result as BetaEtymologyResult, researchContext)
+  } else if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
     const graph = result.ancestryGraph as AncestryGraph<ResultText>
     enrichAncestryGraph(graph, researchContext.parsedChains)
     const pruned = pruneUngroundedStages(graph)

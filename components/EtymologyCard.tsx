@@ -3,8 +3,11 @@
 import { memo } from 'react'
 import { DisplayEtymologyResult } from '@/lib/types'
 import type { BetaLanguageCode } from '@/lib/languages'
-import type { ResultLocale } from '@/lib/resultLocalization'
-import { resultLabels } from '@/lib/resultLocalization'
+import {
+  resultLabels,
+  type DisplayHistoryChoice,
+  type ResultLocale,
+} from '@/lib/resultLocalization'
 import HistoricalContext, { wikipediaSourceUrl } from './HistoricalContext'
 import { AncestrySection } from './etymology-card/AncestrySection'
 import { EntryHeader } from './etymology-card/EntryHeader'
@@ -14,12 +17,16 @@ import { RelatedWordsSection } from './etymology-card/RelatedWordsSection'
 import { SourcesSection } from './etymology-card/SourcesSection'
 import { StorySection } from './etymology-card/StorySection'
 import { UsageSection } from './etymology-card/UsageSection'
+import { EntrySelector } from './etymology-card/EntrySelector'
 
 interface EtymologyCardProps {
   result: DisplayEtymologyResult
   onWordClick: (word: string) => void
   headerActions?: React.ReactNode
   contentLocale?: ResultLocale
+  historyChoices?: DisplayHistoryChoice[]
+  activeHistoryId?: string
+  onHistoryChange?: (historyId: string) => void
 }
 
 export const EtymologyCard = memo(function EtymologyCard({
@@ -27,7 +34,11 @@ export const EtymologyCard = memo(function EtymologyCard({
   onWordClick,
   headerActions,
   contentLocale = 'en',
+  historyChoices = [],
+  activeHistoryId,
+  onHistoryChange,
 }: EtymologyCardProps) {
+  const hasAncestry = Boolean(result.ancestryGraph?.branches?.length)
   const labels =
     result.language === 'en'
       ? undefined
@@ -35,9 +46,22 @@ export const EtymologyCard = memo(function EtymologyCard({
   return (
     <article className="editorial-shell animate-fadeIn p-4 sm:p-7 lg:p-9">
       <div className="relative">
-        <EntryHeader result={result} headerActions={headerActions} />
+        <EntryHeader
+          result={result}
+          headerActions={headerActions}
+          historySelector={
+            activeHistoryId && onHistoryChange ? (
+              <EntrySelector
+                word={result.word}
+                entries={historyChoices}
+                activeEntryId={activeHistoryId}
+                onChange={onHistoryChange}
+              />
+            ) : undefined
+          }
+        />
 
-        {result.ancestryGraph?.branches?.length > 0 && (
+        {hasAncestry && (
           <AncestrySection
             graph={result.ancestryGraph}
             word={result.word}
@@ -46,7 +70,7 @@ export const EtymologyCard = memo(function EtymologyCard({
           />
         )}
 
-        <StorySection lore={result.lore} title={labels?.story} />
+        <StorySection lore={result.lore} title={labels?.story} first={!hasAncestry} />
 
         {result.ngram && result.ngram.data.length > 0 && (
           <UsageSection ngram={result.ngram} title={labels?.usage} />

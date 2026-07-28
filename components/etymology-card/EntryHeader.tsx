@@ -7,6 +7,7 @@ import { PronunciationButton } from '../PronunciationButton'
 interface EntryHeaderProps {
   result: DisplayEtymologyResult
   headerActions?: React.ReactNode
+  historySelector?: React.ReactNode
 }
 
 function shortenMeaning(meaning: string): string {
@@ -31,7 +32,7 @@ function buildOriginHook(result: DisplayEtymologyResult): string | null {
   return `From ${parts.join(' + ')}.`
 }
 
-export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
+export function EntryHeader({ result, headerActions, historySelector }: EntryHeaderProps) {
   const originHook = buildOriginHook(result)
   const sectionLinks: Array<{ label: string; href: string }> = [
     { label: 'Ancestry', href: '#entry-ancestry' },
@@ -81,6 +82,8 @@ export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
           )}
         </div>
       </div>
+
+      {historySelector}
 
       <p className="mt-5 max-w-3xl font-serif text-lg leading-relaxed text-charcoal/88 sm:text-[1.35rem]">
         {result.definition}

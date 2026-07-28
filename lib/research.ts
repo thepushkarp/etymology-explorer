@@ -14,10 +14,12 @@ import {
   LlmUsage,
   RelatedTermResearchData,
   ResearchContext,
+  ResearchEntryContext,
   RootResearchData,
   StreamEvent,
 } from './types'
 import {
+  parseWiktionaryText,
   parseSourceTexts,
   formatParsedChainsForPrompt,
   type ParsedEtymChain,
@@ -38,6 +40,8 @@ import {
   fetchNativeWiktionary,
   fetchWikidataLexeme,
 } from './multilingualSources'
+import { buildLexicalResearchGraph } from './lexemeGraph'
+import { deriveEntryContexts } from './lexemeEntries'
 
 export interface RootExtraction {
   roots: string[]
@@ -102,11 +106,28 @@ async function conductBetaResearch(
   const byName = Object.fromEntries(sources.map(([name], index) => [name, results[index]]))
   const wiktionaryEnglish = byName.wiktionaryEnglish ?? null
   const wiktionaryNative = byName.wiktionaryNative ?? null
-  const parsedChains = parseSourceTexts(
+  // One edition defines the source-local entry boundaries. Prefer the native
+  // edition when it exposes structured groups; English Wiktionary remains
+  // independent supporting evidence and is never concatenated into a chain.
+  const primarySource = wiktionaryNative?.entryGroups?.length
+    ? (['wiktionaryNative', wiktionaryNative] as const)
+    : (['wiktionaryEnglish', wiktionaryEnglish] as const)
+  const entryContexts: ResearchEntryContext[] = deriveEntryContexts(
     word,
-    null,
-    [wiktionaryEnglish?.text, wiktionaryNative?.text].filter(Boolean).join('\n\n')
+    language,
+    primarySource[0],
+    primarySource[1],
+    byName.wikidataLexeme ?? null
   )
+  const parsedChains = entryContexts.flatMap((entry) => {
+    const chain = parseWiktionaryText(entry.text, word, {
+      historyId: entry.id,
+      evidenceScopeId: entry.evidenceScopeId,
+      provider: entry.source,
+    })
+    return chain.links.length > 0 ? [chain] : []
+  })
+  const lexicalGraph = buildLexicalResearchGraph(word, language, entryContexts, parsedChains)
   const identifiedRootLexemes = parsedChains
     .flatMap((chain) => chain.links)
     .filter((link) => link.form.toLocaleLowerCase() !== word.toLocaleLowerCase())
@@ -139,6 +160,8 @@ async function conductBetaResearch(
     rootResearch: [],
     relatedResearch: [],
     parsedChains,
+    entryContexts,
+    lexicalGraph,
     // Wikidata uses search + entity-detail requests; all beta research stays
     // well below the shared 16-fetch ceiling (5 normally, 6 for Portuguese).
     totalSourcesFetched: sources.length + (byName.wikidataLexeme ? 1 : 0),
@@ -881,9 +904,28 @@ export function buildResearchPrompt(context: ResearchContext): string {
       `\n<source_data name="wiktionary">\n${sanitizeSourceText(context.mainWord.wiktionary.text, mainSourceChars)}\n</source_data>`
     )
   }
+  if (context.entryContexts?.length) {
+    sections.push('\n=== Immutable Lexical Histories ===')
+    sections.push(
+      'Keep every history ID independent. Do not merge, split, rename, or move evidence between histories.'
+    )
+    for (const entry of context.entryContexts) {
+      sections.push(
+        `\n<source_data name="${entry.source}" history_id="${entry.id}" evidence_scope_id="${entry.evidenceScopeId}">\n${sanitizeSourceText(entry.text, mainSourceChars)}\n</source_data>`
+      )
+      if (entry.sectionHeadings.length > 0) {
+        sections.push(`Section context: ${entry.sectionHeadings.join(' > ')}`)
+      }
+    }
+  }
+
   const betaMainSources = [
-    ['wiktionary_english_selected_language', context.mainWord.wiktionaryEnglish],
-    ['wiktionary_native_edition', context.mainWord.wiktionaryNative],
+    ...(context.entryContexts?.length
+      ? []
+      : ([
+          ['wiktionary_english_selected_language', context.mainWord.wiktionaryEnglish],
+          ['wiktionary_native_edition', context.mainWord.wiktionaryNative],
+        ] as const)),
     ['freedictionaryapi_senses_only', context.mainWord.multilingualDictionary],
     ['wikidata_lexeme', context.mainWord.wikidataLexeme],
     ['dicionario_aberto_historical', context.mainWord.dicionarioAberto],
@@ -925,6 +967,16 @@ export function buildResearchPrompt(context: ResearchContext): string {
       `Language-tagged ancestors: ${context.identifiedRootLexemes
         .map((lexeme) => `${lexeme.language}:${lexeme.word}`)
         .join(', ')}`
+    )
+  }
+  if (context.lexicalGraph) {
+    const graphSummary = {
+      histories: context.lexicalGraph.histories,
+      nodes: context.lexicalGraph.nodes,
+      edges: context.lexicalGraph.edges,
+    }
+    sections.push(
+      `\n=== Source-Built Lexical Graph ===\n${sanitizeSourceText(JSON.stringify(graphSummary), mainSourceChars * 2)}`
     )
   }
 

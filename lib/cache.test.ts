@@ -112,6 +112,22 @@ describe('cacheEtymology word-page revalidation', () => {
       ancestryGraph: { branches: [] },
       lore: { en: 'Salt has an old story.', local: 'Il sale ha una storia antica.' },
       sources: [],
+      primaryHistoryId: 'it:sale:main',
+      histories: [
+        {
+          id: 'it:sale:main',
+          label: { en: 'salt', local: 'sale' },
+          entryKind: 'lemma',
+          queryNodeId: 'query:it:sale:main',
+          lemmaNodeId: 'query:it:sale:main',
+          evidenceScopeIds: ['wiktionaryNative:sale:main'],
+          pronunciation: '/ˈsa.le/',
+          definition: { en: 'salt', local: 'sale' },
+          roots: [],
+          ancestryGraph: { branches: [] },
+          lore: { en: 'Salt has an old story.', local: 'Il sale ha una storia antica.' },
+        },
+      ],
     }
 
     await cacheEtymology('sale', betaResult, 'it')
@@ -119,7 +135,7 @@ describe('cacheEtymology word-page revalidation', () => {
     await cacheAudio('sale', 'audio-fr', 'fr')
 
     expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
-      'etymology:v2.2:it:sale',
+      'etymology:beta:v5:it:sale',
       'audio:v1:it:sale',
       'audio:v1:fr:sale',
     ])

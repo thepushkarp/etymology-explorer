@@ -4,15 +4,9 @@ import { fetchWithTimeout } from './fetchUtils'
 import { LANGUAGES, type BetaLanguageCode } from './languages'
 import { cacheSource, getCachedSource, type CacheableSource } from './sourceCache'
 import type { SourceData } from './types'
+import { extractWiktionaryEntryGroups, type WiktionaryTocSection } from './wiktionaryEntryGroups'
 
-interface TocSection {
-  index: string
-  line: string
-  anchor: string
-  hLevel?: number
-  level?: string
-  number: string
-}
+type TocSection = WiktionaryTocSection
 
 interface ParseResponse {
   parse?: {
@@ -21,19 +15,6 @@ interface ParseResponse {
     tocdata?: { sections?: TocSection[] }
   }
   error?: { info?: string }
-}
-
-function comparableHeading(value: string): string {
-  return value
-    .replace(/<[^>]+>/g, '')
-    .normalize('NFKD')
-    .replace(/\p{Diacritic}/gu, '')
-    .trim()
-    .toLocaleLowerCase()
-}
-
-function headingLevel(section: TocSection): number {
-  return section.hLevel ?? Number(section.level)
 }
 
 function stripHtml(value: string): string {
@@ -52,12 +33,6 @@ function stripHtml(value: string): string {
     .trim()
 }
 
-function anchorOffset(html: string, anchor: string): number {
-  const escaped = anchor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const match = html.match(new RegExp(`(?:id|href)=["']#?${escaped}["']`, 'i'))
-  return match?.index ?? -1
-}
-
 /** Extracts only the selected language's etymology blocks using MediaWiki tocdata. */
 export function extractTocEtymology(
   html: string,
@@ -65,38 +40,16 @@ export function extractTocEtymology(
   languageHeading: string,
   etymologyHeading: RegExp
 ): string | null {
-  const language = sections.find(
-    (section) => comparableHeading(section.line) === comparableHeading(languageHeading)
-  )
-  if (!language) return null
-
-  const languageLevel = headingLevel(language)
-  const languageIndex = sections.indexOf(language)
-  const nextLanguage = sections
-    .slice(languageIndex + 1)
-    .find((section) => headingLevel(section) <= languageLevel)
-  const withinLanguage = sections.slice(
-    languageIndex + 1,
-    nextLanguage ? sections.indexOf(nextLanguage) : sections.length
-  )
-  const etymologies = withinLanguage.filter((section) =>
-    etymologyHeading.test(section.line.replace(/<[^>]+>/g, '').trim())
-  )
-
-  const selected = etymologies.length > 0 ? etymologies : [language]
-  const blocks = selected.slice(0, 4).map((section) => {
-    const start = anchorOffset(html, section.anchor)
-    if (start < 0) return ''
-    const sectionLevel = headingLevel(section)
-    const currentIndex = sections.indexOf(section)
-    const next = sections
-      .slice(currentIndex + 1)
-      .find((candidate) => headingLevel(candidate) <= sectionLevel)
-    const end = next ? anchorOffset(html, next.anchor) : html.length
-    return stripHtml(html.slice(start, end > start ? end : html.length))
-  })
-
-  const text = blocks.filter(Boolean).join('\n\n')
+  const groups = extractWiktionaryEntryGroups(
+    html,
+    sections,
+    languageHeading,
+    etymologyHeading
+  ).slice(0, 4)
+  const text = groups
+    .map((group) => group.text)
+    .filter(Boolean)
+    .join('\n\n')
   return text.length > 0 ? text.slice(0, 6000) : null
 }
 
@@ -134,12 +87,23 @@ async function fetchWiktionaryEdition(
 
     const languageHeading =
       edition === 'en' ? config.englishWiktionaryHeading : config.nativeWiktionaryHeading
-    const text = extractTocEtymology(html, sections, languageHeading, config.etymologyHeading)
+    const entryGroups = extractWiktionaryEntryGroups(
+      html,
+      sections,
+      languageHeading,
+      edition === 'en' ? LANGUAGES.en.etymologyHeading : config.etymologyHeading
+    ).slice(0, 4)
+    const text = entryGroups
+      .map((group) => group.text)
+      .filter(Boolean)
+      .join('\n\n')
+      .slice(0, 6000)
     if (!text) return null
 
     const result = {
       text,
       url: `https://${edition}.wiktionary.org/wiki/${encodeURIComponent(word)}`,
+      entryGroups,
     }
     void cacheSource(source, word, result, undefined, language)
     return result
@@ -196,6 +160,100 @@ export async function fetchFreeDictionaryApi(
   }
 }
 
+const WIKIDATA_LANGUAGE_ENTITY: Record<BetaLanguageCode, string> = {
+  it: 'Q652',
+  es: 'Q1321',
+  fr: 'Q150',
+  pt: 'Q5146',
+}
+
+interface WikidataMonolingualText {
+  language?: string
+  value?: string
+}
+
+interface WikidataLexemeEntity {
+  id?: string
+  type?: string
+  language?: string
+  lemmas?: Record<string, WikidataMonolingualText>
+  forms?: Array<{
+    id?: string
+    representations?: Record<string, WikidataMonolingualText>
+    grammaticalFeatures?: string[]
+  }>
+  senses?: Array<{
+    id?: string
+    glosses?: Record<string, WikidataMonolingualText>
+  }>
+  claims?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+function compactWikidataLexeme(entity: WikidataLexemeEntity) {
+  const lexicalClaims = Object.fromEntries(
+    Object.entries(entity.claims ?? {}).filter(([, statements]) =>
+      JSON.stringify(statements).includes('"entity-type":"lexeme"')
+    )
+  )
+  return {
+    id: entity.id,
+    type: entity.type,
+    language: entity.language,
+    lemmas: entity.lemmas,
+    forms: (entity.forms ?? []).map((form) => ({
+      id: form.id,
+      representations: form.representations,
+      grammaticalFeatures: form.grammaticalFeatures,
+    })),
+    senses: (entity.senses ?? []).map((sense) => ({
+      id: sense.id,
+      glosses: sense.glosses,
+    })),
+    ...(Object.keys(lexicalClaims).length > 0 ? { lexicalClaims } : {}),
+  }
+}
+
+function normalizedLexicalValue(value: string, language: BetaLanguageCode): string {
+  return value.normalize('NFKC').trim().toLocaleLowerCase(language)
+}
+
+function isRequestedLanguageText(
+  text: WikidataMonolingualText,
+  language: BetaLanguageCode,
+  normalizedWord: string
+): boolean {
+  if (typeof text?.language !== 'string' || typeof text.value !== 'string') return false
+  const primaryLanguage = text.language.toLocaleLowerCase().split('-')[0]
+  return (
+    primaryLanguage === language && normalizedLexicalValue(text.value, language) === normalizedWord
+  )
+}
+
+function isMatchingLexeme(
+  entity: WikidataLexemeEntity,
+  language: BetaLanguageCode,
+  normalizedWord: string
+): entity is WikidataLexemeEntity & { id: string } {
+  if (
+    typeof entity.id !== 'string' ||
+    entity.type !== 'lexeme' ||
+    entity.language !== WIKIDATA_LANGUAGE_ENTITY[language]
+  ) {
+    return false
+  }
+
+  const lemmaMatches = Object.values(entity.lemmas ?? {}).some((lemma) =>
+    isRequestedLanguageText(lemma, language, normalizedWord)
+  )
+  const formMatches = (Array.isArray(entity.forms) ? entity.forms : []).some((form) =>
+    Object.values(form.representations ?? {}).some((representation) =>
+      isRequestedLanguageText(representation, language, normalizedWord)
+    )
+  )
+  return lemmaMatches || formMatches
+}
+
 export async function fetchWikidataLexeme(
   word: string,
   language: BetaLanguageCode,
@@ -209,32 +267,42 @@ export async function fetchWikidataLexeme(
   search.searchParams.set('language', language)
   search.searchParams.set('uselang', language)
   search.searchParams.set('type', 'lexeme')
-  search.searchParams.set('limit', '5')
+  // Search result language controls ranking/localization, not the lexeme's
+  // language. Fetch a wider candidate set and validate the entities below.
+  search.searchParams.set('limit', '20')
   search.searchParams.set('format', 'json')
   search.searchParams.set('origin', '*')
   try {
     const response = await fetchWithTimeout(search, {}, CONFIG.timeouts.source, signal)
     if (!response.ok) return null
-    const data = (await response.json()) as { search?: Array<{ id?: string; label?: string }> }
-    const matches = (data.search ?? []).filter(
-      (entry) => entry.label?.toLocaleLowerCase() === word.toLocaleLowerCase()
-    )
-    if (matches.length === 0) return null
-    const ids = matches
+    const data = (await response.json()) as { search?: Array<{ id?: string }> }
+    const ids = (data.search ?? [])
       .map((entry) => entry.id)
       .filter((id): id is string => Boolean(id))
-      .slice(0, 3)
+    if (ids.length === 0) return null
     const entitiesUrl = new URL('https://www.wikidata.org/w/api.php')
     entitiesUrl.searchParams.set('action', 'wbgetentities')
     entitiesUrl.searchParams.set('ids', ids.join('|'))
-    entitiesUrl.searchParams.set('props', 'lemmas|forms|senses|claims')
+    // Lexeme subentities are part of the default entity representation;
+    // wbgetentities does not accept lemmas/forms/senses as `props` values.
     entitiesUrl.searchParams.set('languages', language)
     entitiesUrl.searchParams.set('format', 'json')
     entitiesUrl.searchParams.set('origin', '*')
     const entitiesResponse = await fetchWithTimeout(entitiesUrl, {}, CONFIG.timeouts.source, signal)
-    const entities = entitiesResponse.ok ? await entitiesResponse.json() : { search: matches }
+    if (!entitiesResponse.ok) return null
+    const entityData = (await entitiesResponse.json()) as {
+      entities?: Record<string, WikidataLexemeEntity>
+    }
+    const normalizedWord = normalizedLexicalValue(word, language)
+    const matches = Object.values(entityData.entities ?? {}).filter((entity) =>
+      isMatchingLexeme(entity, language, normalizedWord)
+    )
+    if (matches.length === 0) return null
+    const entities = Object.fromEntries(
+      matches.map((entity) => [entity.id, compactWikidataLexeme(entity)])
+    )
     const result = {
-      text: JSON.stringify(entities).slice(0, 6000),
+      text: JSON.stringify({ entities }),
       url: `https://www.wikidata.org/wiki/${matches[0].id}`,
     }
     void cacheSource('wikidataLexeme', word, result, undefined, language)

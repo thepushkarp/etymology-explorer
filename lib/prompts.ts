@@ -1,5 +1,5 @@
 /**
- * Prompt templates for OpenRouter-backed GPT-5.4 mini etymology synthesis
+ * Prompt templates for OpenRouter-backed GPT-5.6 Luna etymology synthesis
  */
 
 export const SYSTEM_PROMPT = `You are an etymology expert who makes word origins memorable and fascinating for vocabulary learners (especially GRE/TOEFL students).
@@ -48,7 +48,9 @@ export function buildBetaSystemPrompt(languageName: string, languageCode: string
 
   return `${SYSTEM_PROMPT}
 
-BETA BILINGUAL OUTPUT: the searched lexeme is explicitly ${languageName}; never reinterpret it as an English word. Every schema field shaped as {en, local} must contain complete, natural prose in English and ${languageName}. Both versions must describe the same shared facts, forms, dates, evidence, confidence, and citations. Do not translate forms, IPA, language names, or source facts. If the research does not establish this ${languageName} entry, do not invent an English fallback.${portugueseRule}`
+BETA BILINGUAL OUTPUT: the searched lexeme is explicitly ${languageName}; never reinterpret it as an English word. Every schema field shaped as {en, local} must contain complete, natural prose in English and ${languageName}. Both versions must describe the same shared facts, forms, dates, evidence, confidence, and citations. Do not translate forms, IPA, language names, or source facts. If the research does not establish this ${languageName} entry, do not invent an English fallback.
+
+LEXICAL HISTORIES: when immutable history IDs are present in the research, emit exactly one history for every supplied ID. Copy each id, queryNodeId, lemmaNodeId, evidenceScopeIds, and any formOf target exactly. Never merge two histories because their spelling matches, and never move evidence between scopes. Keep related senses that share one source history together; keep inflected forms and unrelated homographs separate. Set primaryHistoryId to the first supplied history. The legacy top-level pronunciation, definition, ancestryGraph, roots, lore, and partsOfSpeech must be an exact copy of that primary history; the server verifies and re-projects it.${portugueseRule}`
 }
 
 /**
@@ -75,8 +77,9 @@ export function buildBetaUserPrompt(
     `Analyze the ${languageName} (${languageCode}) lexeme: "${word}".\n\n` +
     `Research data on this selected-language entry and its language-tagged ancestors:\n\n` +
     researchData +
-    `\n\nProduce one shared factual graph with paired English and ${languageName} prose. ` +
-    `Do not infer a different language from spelling and do not substitute an English entry.`
+    `\n\nProduce source-scoped histories with paired English and ${languageName} prose. ` +
+    `Preserve every immutable history and graph identity exactly. Do not infer a different ` +
+    `language from spelling and do not substitute an English entry.`
   )
 }
 

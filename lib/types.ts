@@ -1,6 +1,7 @@
 import type { ParsedEtymChain } from './etymologyParser'
 import type { FreeDictionaryEntry } from './freeDictionary'
 import type { BetaLanguageCode, LanguageCode } from './languages'
+import type { WiktionaryEntryGroup } from './wiktionaryEntryGroups'
 
 export interface BilingualText {
   en: string
@@ -12,6 +13,76 @@ export type ResultText = string | BilingualText
 export interface LexemeRef {
   word: string
   language: string
+}
+
+export type SourceFamilyId = 'etymonline' | 'wiktionary' | 'wikidata' | 'dicionarioAberto' | 'other'
+
+export type LexicalRelation =
+  | 'inherited_from'
+  | 'borrowed_from'
+  | 'derived_from'
+  | 'compound_from'
+  | 'calqued_from'
+  | 'form_of'
+  | 'variant_of'
+  | 'semantic_extension_of'
+  | 'cognate_with'
+
+export type LexicalEdgeRole = 'ancestry' | 'morphology' | 'semantics' | 'context'
+
+export interface LexemeIdentity {
+  language: string
+  lemma: string
+  normalizedLemma: string
+  authorityId?: string
+}
+
+export interface LexicalNode {
+  id: string
+  kind: 'lexeme' | 'form' | 'etymon'
+  lexeme: LexemeIdentity
+  displayForm: string
+  grammaticalFeatures?: string[]
+  isReconstructed?: boolean
+  senseIds: string[]
+}
+
+export interface LexicalEvidence {
+  id: string
+  provider: string
+  sourceFamily: SourceFamilyId
+  sourceUrl: string
+  evidenceScopeId: string
+  subjectKind: 'node' | 'edge'
+  snippet: string
+}
+
+export interface LexicalEdge {
+  id: string
+  from: string
+  to: string
+  relation: LexicalRelation
+  role: LexicalEdgeRole
+  evidenceIds: string[]
+  confidence: StageConfidence
+}
+
+export interface LexicalHistoryCandidate {
+  id: string
+  entryKind: 'lemma' | 'form' | 'unresolved'
+  queryNodeId: string
+  lemmaNodeId: string
+  formOf?: LexemeRef
+  nodeIds: string[]
+  edgeIds: string[]
+  evidenceScopeIds: string[]
+}
+
+export interface LexicalResearchGraph {
+  nodes: Record<string, LexicalNode>
+  edges: Record<string, LexicalEdge>
+  evidence: Record<string, LexicalEvidence>
+  histories: LexicalHistoryCandidate[]
 }
 
 /**
@@ -200,11 +271,31 @@ export interface EtymologyResultBase<Language extends LanguageCode, Text extends
   }
 }
 
+/** One independently selectable lexical history for a same-spelling query. */
+export interface LexicalHistory<Text extends ResultText> {
+  id: string
+  label: Text
+  entryKind: 'lemma' | 'form' | 'unresolved'
+  queryNodeId: string
+  lemmaNodeId: string
+  formOf?: LexemeRef
+  evidenceScopeIds: string[]
+  pronunciation: string
+  definition: Text
+  roots: Root<Text>[]
+  ancestryGraph: AncestryGraph<Text>
+  lore: Text
+  partsOfSpeech?: POSDefinition<Text>[]
+}
+
 export type EnglishEtymologyResult = Omit<EtymologyResultBase<'en', string>, 'language'> & {
   /** Legacy cache entries predate language identity; absence always means English. */
   language?: 'en'
 }
-export type BetaEtymologyResult = EtymologyResultBase<BetaLanguageCode, BilingualText>
+export type BetaEtymologyResult = EtymologyResultBase<BetaLanguageCode, BilingualText> & {
+  primaryHistoryId: string
+  histories: LexicalHistory<BilingualText>[]
+}
 export type EtymologyResult = EnglishEtymologyResult | BetaEtymologyResult
 export type DisplayEtymologyResult = EtymologyResultBase<LanguageCode, string>
 
@@ -241,6 +332,19 @@ export interface SourceData {
   text: string
   url: string
   relatedEntries?: string[]
+  entryGroups?: WiktionaryEntryGroup[]
+}
+
+export interface ResearchEntryContext {
+  id: string
+  source: 'wiktionaryEnglish' | 'wiktionaryNative'
+  heading: string
+  text: string
+  sectionHeadings: string[]
+  evidenceScopeId: string
+  sourceUrl: string
+  entryKind: 'lemma' | 'form' | 'unresolved'
+  formOf?: LexemeRef
 }
 
 /**
@@ -297,6 +401,8 @@ export interface ResearchContext {
   relatedResearch: RelatedTermResearchData[]
   totalSourcesFetched: number
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
+  entryContexts?: ResearchEntryContext[]
+  lexicalGraph?: LexicalResearchGraph
   llmUsage?: LlmUsage // root-extraction LLM usage, counted toward the budget
   rawSources?: {
     wikipedia?: string

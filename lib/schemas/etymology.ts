@@ -7,7 +7,7 @@ import { z } from 'zod'
 
 const BilingualTextSchema = z.object({ en: z.string().min(1), local: z.string().min(1) }).strict()
 
-function createResultSchema<Text extends z.ZodTypeAny>(text: Text, extendedSources = false) {
+function createEntryFields<Text extends z.ZodTypeAny>(text: Text) {
   const root = z.object({
     root: z.string(),
     origin: z.string(),
@@ -49,6 +49,26 @@ function createResultSchema<Text extends z.ZodTypeAny>(text: Text, extendedSourc
     postMerge: z.array(stage).optional(),
   })
 
+  return {
+    pronunciation: z.string(),
+    definition: text,
+    roots: z.array(root),
+    lore: text,
+    ancestryGraph,
+    partsOfSpeech: z
+      .array(
+        z.object({
+          pos: z.string(),
+          definition: text,
+          pronunciation: z.string().optional(),
+        })
+      )
+      .optional(),
+  }
+}
+
+function createResultSchema<Text extends z.ZodTypeAny>(text: Text, extendedSources = false) {
+  const entry = createEntryFields(text)
   const sourceBase = {
     name: z.string(),
     url: z.string().optional(),
@@ -67,21 +87,8 @@ function createResultSchema<Text extends z.ZodTypeAny>(text: Text, extendedSourc
   return z
     .object({
       word: z.string(),
-      pronunciation: z.string(),
-      definition: text,
-      roots: z.array(root),
-      lore: text,
+      ...entry,
       sources: z.array(source),
-      ancestryGraph,
-      partsOfSpeech: z
-        .array(
-          z.object({
-            pos: z.string(),
-            definition: text,
-            pronunciation: z.string().optional(),
-          })
-        )
-        .optional(),
       suggestions: WordSuggestionsSchema.optional(),
       modernUsage: z
         .object({
@@ -109,9 +116,45 @@ const WordSuggestionsSchema = z
 
 const EnglishResultSchema = createResultSchema(z.string())
 
-export const BetaEtymologyResultSchema = createResultSchema(BilingualTextSchema, true).extend({
-  language: z.enum(['it', 'es', 'fr', 'pt']),
-})
+export const BetaEtymologyResultSchema = createResultSchema(BilingualTextSchema, true)
+  .extend({
+    language: z.enum(['it', 'es', 'fr', 'pt']),
+    primaryHistoryId: z.string().min(1),
+    histories: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            label: BilingualTextSchema,
+            entryKind: z.enum(['lemma', 'form', 'unresolved']),
+            queryNodeId: z.string().min(1),
+            lemmaNodeId: z.string().min(1),
+            formOf: z.object({ word: z.string().min(1), language: z.string().min(1) }).optional(),
+            evidenceScopeIds: z.array(z.string().min(1)).min(1),
+            ...createEntryFields(BilingualTextSchema),
+          })
+          .strict()
+      )
+      .min(1)
+      .max(4),
+  })
+  .superRefine((result, context) => {
+    const ids = result.histories.map((history) => history.id)
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['histories'],
+        message: 'History IDs must be unique',
+      })
+    }
+    if (!ids.includes(result.primaryHistoryId)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['primaryHistoryId'],
+        message: 'Primary history must reference an existing history',
+      })
+    }
+  })
 
 /**
  * Main EtymologyResult schema for cache validation.

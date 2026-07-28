@@ -27,6 +27,31 @@ describe('TraceHeader', () => {
     expect(markup).not.toContain('animate-pulse')
   })
 
+  test('projects bilingual streamed prose before rendering a beta header', () => {
+    const sections = {
+      word: 'exemple',
+      pronunciation: '/ɛɡ.zɑ̃pl/',
+      definition: { en: 'A representative instance.', local: 'Un cas représentatif.' },
+      roots: [
+        {
+          root: 'exemplum',
+          origin: 'Latin',
+          meaning: { en: 'sample', local: 'modèle' },
+          relatedWords: [],
+        },
+      ],
+    } as unknown as PartialEtymology
+
+    const markup = renderToStaticMarkup(
+      <TraceHeader word="exemple" language="fr" sections={sections} />
+    )
+
+    expect(markup).toContain('Un cas représentatif.')
+    expect(markup).toContain('Latin exemplum (modèle)')
+    expect(markup).not.toContain('A representative instance.')
+    expect(markup).not.toContain('[object Object]')
+  })
+
   test('renders the summary slot beneath the header', () => {
     const markup = renderToStaticMarkup(
       <TraceHeader word="perfidious" sections={{}} summary={<p>6 sources · 2.3s</p>} />

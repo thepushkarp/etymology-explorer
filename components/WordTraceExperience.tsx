@@ -20,7 +20,7 @@ import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
 import { consumeTraceIntent } from '@/lib/traceIntent'
 import type { StreamState } from '@/lib/streamReducer'
 import { BETA_SYMBOL, type BetaLanguageCode, type LanguageCode } from '@/lib/languages'
-import { localizeResult, type ResultLocale } from '@/lib/resultLocalization'
+import { localizeHistoryChoices, localizeResult, type ResultLocale } from '@/lib/resultLocalization'
 
 interface WordTraceExperienceProps {
   word: string
@@ -55,6 +55,7 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
   const [contentLocale, setContentLocale] = useState<ResultLocale>(
     language === 'en' ? 'en' : 'local'
   )
+  const [activeHistoryId, setActiveHistoryId] = useState<string | undefined>()
   const startedRef = useRef(false)
   const { navigateToWord, historyBack, historyForward } = useWordNavigation(word, language)
   // Derived, not stored: the trace has started once the stream reducer left
@@ -62,6 +63,11 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
   const hasStarted = progress.status !== 'idle'
   const ngram = useNgram(hasStarted ? word : null, language)
   const { play: playPronunciation } = usePronunciation(word, language)
+  const selectedHistoryId =
+    activeHistoryId ??
+    (progress.result && 'primaryHistoryId' in progress.result
+      ? progress.result.primaryHistoryId
+      : undefined)
 
   const startTrace = useCallback(() => {
     if (startedRef.current) return
@@ -81,8 +87,12 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
       ...progress.result,
       ngram: ngram && ngram.word === progress.result.word ? ngram : undefined,
     }
-    return localizeResult(enriched, contentLocale)
-  }, [progress.result, ngram, contentLocale])
+    return localizeResult(enriched, contentLocale, selectedHistoryId)
+  }, [progress.result, ngram, contentLocale, selectedHistoryId])
+  const historyChoices = useMemo(
+    () => (progress.result ? localizeHistoryChoices(progress.result, contentLocale) : []),
+    [progress.result, contentLocale]
+  )
 
   const headerActions = useMemo(
     () =>
@@ -134,6 +144,7 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
             <article aria-busy="true" className="editorial-shell animate-fadeIn p-4 sm:p-7 lg:p-9">
               <TraceHeader
                 word={word}
+                language={language}
                 sections={progress.sections}
                 summary={
                   showStreamingCard ? <SourceSummaryLine sources={progress.sources} /> : null
@@ -174,6 +185,9 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
               onWordClick={navigateToWord}
               headerActions={headerActions}
               contentLocale={contentLocale}
+              historyChoices={historyChoices}
+              activeHistoryId={selectedHistoryId}
+              onHistoryChange={setActiveHistoryId}
             />
           )}
         </div>

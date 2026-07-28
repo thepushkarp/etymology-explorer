@@ -23,6 +23,8 @@ function jitterTTL(ttl: number): number {
 // Bump version when EtymologyResult schema or sourcing behavior changes
 export const CACHE_VERSION = '2.2'
 export const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
+export const BETA_CACHE_VERSION = '5'
+export const BETA_ETYMOLOGY_PREFIX = `etymology:beta:v${BETA_CACHE_VERSION}:`
 const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
 
 // Audio cache (longer TTL - pronunciations don't change)
@@ -45,7 +47,7 @@ function etymologyKey(word: string, language: LanguageCode): string {
   const normalized = word.toLowerCase().trim()
   return language === 'en'
     ? `${ETYMOLOGY_PREFIX}${normalized}`
-    : `${ETYMOLOGY_PREFIX}${language}:${normalized}`
+    : `${BETA_ETYMOLOGY_PREFIX}${language}:${normalized}`
 }
 
 export function etymologyWordTag(word: string, language: LanguageCode = 'en'): string {

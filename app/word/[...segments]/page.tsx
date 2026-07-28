@@ -6,7 +6,7 @@ import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { WordPageEntry } from '@/components/WordPageEntry'
 import { WordTraceExperience } from '@/components/WordTraceExperience'
-import { etymologyWordTag, getCachedEtymology } from '@/lib/cache'
+import { BETA_CACHE_VERSION, etymologyWordTag, getCachedEtymology } from '@/lib/cache'
 import {
   LANGUAGES,
   isBetaLanguage,
@@ -70,7 +70,7 @@ function loadCachedEtymology(word: string, language: LanguageCode) {
   const cacheKey =
     language === 'en'
       ? ['word-page-etymology', word]
-      : ['multilingual-word-page-etymology', language, word]
+      : ['multilingual-word-page-etymology', BETA_CACHE_VERSION, language, word]
   return unstable_cache(() => getCachedEtymology(word, language), cacheKey, {
     revalidate: 3600,
     tags: [etymologyWordTag(word, language)],

@@ -22,6 +22,29 @@ const RESULT: BetaEtymologyResult = {
   },
   lore: pair('A humble hut became a home.', 'Una modesta capanna divenne una casa.'),
   sources: [{ name: 'wiktionaryNative', sourceFamily: 'wiktionary' }],
+  primaryHistoryId: 'it:casa:main',
+  histories: [
+    {
+      id: 'it:casa:main',
+      label: pair('house', 'casa'),
+      entryKind: 'lemma',
+      queryNodeId: 'query:it:casa:main',
+      lemmaNodeId: 'query:it:casa:main',
+      evidenceScopeIds: ['wiktionaryNative:casa:main'],
+      pronunciation: '/ˈka.za/',
+      definition: pair('house', 'abitazione'),
+      roots: [{ root: 'casa', origin: 'Latin', meaning: pair('hut', 'capanna'), relatedWords: [] }],
+      ancestryGraph: {
+        branches: [
+          {
+            root: 'casa',
+            stages: [{ stage: 'Latin', form: 'casa', note: pair('a hut', 'una capanna') }],
+          },
+        ],
+      },
+      lore: pair('A humble hut became a home.', 'Una modesta capanna divenne una casa.'),
+    },
+  ],
 }
 
 describe('beta bilingual results', () => {
@@ -38,6 +61,16 @@ describe('beta bilingual results', () => {
     const incomplete = structuredClone(RESULT) as unknown as Record<string, unknown>
     incomplete.definition = { en: 'house' }
     expect(BetaEtymologyResultSchema.safeParse(incomplete).success).toBe(false)
+  })
+
+  test('rejects duplicate or dangling history identity', () => {
+    const dangling = structuredClone(RESULT)
+    dangling.primaryHistoryId = 'missing'
+    expect(BetaEtymologyResultSchema.safeParse(dangling).success).toBe(false)
+
+    const duplicate = structuredClone(RESULT)
+    duplicate.histories.push(structuredClone(duplicate.histories[0]))
+    expect(BetaEtymologyResultSchema.safeParse(duplicate).success).toBe(false)
   })
 
   test('neutral Portuguese and regional-label rules are explicit', () => {
