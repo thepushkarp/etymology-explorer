@@ -16,12 +16,64 @@ import {
   type LanguageCode,
 } from '@/lib/languages'
 
-const CURATED_IDLE_WORDS = [
-  { word: 'nice', teaser: "once meant 'foolish'" },
-  { word: 'villain', teaser: 'used to mean farmworker' },
-  { word: 'muscle', teaser: "Latin for 'little mouse'" },
-  { word: 'window', teaser: "Old Norse for 'wind-eye'" },
-]
+interface CuratedWordSet {
+  heading: string
+  description: string
+  words: Array<{ word: string; teaser: string }>
+}
+
+const CURATED_WORDS: Record<LanguageCode, CuratedWordSet> = {
+  en: {
+    heading: 'Start with a word that already has a story.',
+    description: 'Begin with a familiar word, then follow its older forms and borrowed meanings.',
+    words: [
+      { word: 'nice', teaser: "once meant 'foolish'" },
+      { word: 'villain', teaser: 'used to mean farmworker' },
+      { word: 'muscle', teaser: "Latin for 'little mouse'" },
+      { word: 'window', teaser: "Old Norse for 'wind-eye'" },
+    ],
+  },
+  it: {
+    heading: 'Start with an Italian word.',
+    description: 'Choose a familiar word and trace the forms it inherited or borrowed.',
+    words: [
+      { word: 'casa', teaser: "Latin for 'hut'" },
+      { word: 'ciao', teaser: "began as 'your servant'" },
+      { word: 'finestra', teaser: 'inherited from Latin fenestra' },
+      { word: 'lavoro', teaser: "from Latin labor, 'toil'" },
+    ],
+  },
+  es: {
+    heading: 'Start with a Spanish word.',
+    description: 'Follow words shaped by Latin, Arabic, Basque, and everyday speech.',
+    words: [
+      { word: 'ojalá', teaser: 'from an Arabic expression' },
+      { word: 'izquierda', teaser: 'borrowed from Basque' },
+      { word: 'ventana', teaser: "built from the word for 'wind'" },
+      { word: 'alcalde', teaser: "from Arabic for 'judge'" },
+    ],
+  },
+  fr: {
+    heading: 'Start with a French word.',
+    description: 'Trace familiar French forms back through Latin and older French.',
+    words: [
+      { word: 'fenêtre', teaser: 'inherited from Latin fenestra' },
+      { word: 'fromage', teaser: "from Latin for something 'formed'" },
+      { word: 'travail', teaser: 'linked to Latin tripalium' },
+      { word: "aujourd'hui", teaser: "still carries an old word for 'today'" },
+    ],
+  },
+  pt: {
+    heading: 'Start with a Portuguese word.',
+    description: 'Explore words shaped by Latin and the wider history of Iberia.',
+    words: [
+      { word: 'janela', teaser: "Latin for 'little door'" },
+      { word: 'obrigado', teaser: "literally 'obliged'" },
+      { word: 'esquerda', teaser: 'a Basque loan shared across Iberia' },
+      { word: 'saudade', teaser: 'an origin etymologists still debate' },
+    ],
+  },
+}
 
 const HistorySidebar = dynamic(
   () => import('@/components/HistorySidebar').then((mod) => ({ default: mod.HistorySidebar })),
@@ -42,6 +94,7 @@ export function ExploreExperience() {
   const { history, clearHistory, removeFromHistory } = useHistory()
   const { navigateToWord, historyBack, historyForward } = useWordNavigation(null, language)
   const [suggestionsVisible, setSuggestionsVisible] = useState(false)
+  const curatedWords = CURATED_WORDS[language]
 
   return (
     <div className="flex min-h-screen flex-col bg-cream text-charcoal">
@@ -56,7 +109,7 @@ export function ExploreExperience() {
 
       <main className="relative flex-1 overflow-hidden">
         <div className="mx-auto max-w-[1100px] px-4 pb-12 pt-8 sm:px-6 sm:pt-10 lg:px-8 lg:pt-12">
-          <section className="border-b border-border-soft pb-9 sm:pb-11">
+          <section className="pb-9 sm:pb-11">
             <div className="w-full">
               <div className="max-w-4xl">
                 <h1 className="font-serif text-[clamp(3.05rem,14vw,5.55rem)] leading-[0.98] tracking-[-0.045em] text-charcoal sm:tracking-[-0.055em]">
@@ -105,79 +158,38 @@ export function ExploreExperience() {
             </div>
           </section>
 
-          {language === 'en' && (
-            <section className="pt-9">
-              <div className="border-y border-border-soft py-7 sm:py-9">
-                <section>
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
-                    try these words
-                  </p>
-                  <h2 className="mt-3 max-w-3xl font-serif text-[2rem] leading-tight tracking-[-0.045em] text-charcoal sm:text-4xl">
-                    Start with a word that already has a story.
-                  </h2>
-                  <p className="mt-3 max-w-2xl font-serif italic leading-relaxed text-charcoal-light">
-                    Begin with a familiar word, then follow its older forms and borrowed meanings.
-                  </p>
-                  <div className="mt-7 grid border-t border-border-soft sm:grid-cols-2">
-                    {CURATED_IDLE_WORDS.map((entry, index) => (
-                      <button
-                        key={entry.word}
-                        onClick={() => navigateToWord(entry.word)}
-                        className="animate-fadeIn border-b border-border-soft px-1 py-5 text-left transition-colors duration-200 hover:bg-surface/55 sm:px-4 sm:[&:nth-child(odd)]:border-r"
-                        style={{
-                          animationDelay: `${index * 70}ms`,
-                          animationFillMode: 'backwards',
-                        }}
-                      >
-                        <span className="block font-serif text-2xl text-charcoal">
-                          {entry.word}
-                        </span>
-                        <span className="mt-2 block font-serif text-base italic leading-relaxed text-charcoal-light">
-                          {entry.teaser}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              </div>
-            </section>
-          )}
-
-          {language !== 'en' && (
-            <section className="pt-9" aria-label={`${LANGUAGES[language].nativeName} beta edition`}>
-              <div className="border-y border-border-soft py-7 sm:py-9">
-                <div className="flex flex-wrap items-baseline justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.24em] text-charcoal-light/62">
-                      research edition
-                    </p>
-                    <h2 className="mt-2 font-serif text-3xl tracking-[-0.04em] text-charcoal sm:text-4xl">
-                      {LANGUAGES[language].nativeName}{' '}
-                      <span className="normal-case text-accent-amber">{BETA_SYMBOL}</span>
-                    </h2>
-                  </div>
-                  <p className="max-w-xl font-serif italic leading-relaxed text-charcoal-light">
-                    Search this language explicitly. Every entry keeps one evidence trail with
-                    paired English and {LANGUAGES[language].nativeName} commentary.
-                  </p>
-                </div>
-                <dl className="mt-7 grid gap-5 border-t border-border-soft pt-6 sm:grid-cols-3">
-                  <EditionDetail
-                    term="No guessing"
-                    detail="The selected edition defines the lexeme."
-                  />
-                  <EditionDetail
-                    term="Paired reading"
-                    detail="Switch the whole entry between both languages."
-                  />
-                  <EditionDetail
-                    term="Native evidence"
-                    detail="Language-specific Wiktionary and lexeme sources."
-                  />
-                </dl>
-              </div>
-            </section>
-          )}
+          <section
+            className="border-t border-border-soft pt-8 sm:pt-9"
+            aria-label={`${LANGUAGES[language].englishName} sample words`}
+          >
+            <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+              try these words
+            </p>
+            <h2 className="mt-3 max-w-3xl font-serif text-[2rem] leading-tight tracking-[-0.045em] text-charcoal sm:text-4xl">
+              {curatedWords.heading}
+            </h2>
+            <p className="mt-3 max-w-2xl font-serif italic leading-relaxed text-charcoal-light">
+              {curatedWords.description}
+            </p>
+            <div className="mt-7 grid border-t border-border-soft sm:grid-cols-2">
+              {curatedWords.words.map((entry, index) => (
+                <button
+                  key={`${language}:${entry.word}`}
+                  onClick={() => navigateToWord(entry.word, language)}
+                  className="animate-fadeIn border-b border-border-soft px-1 py-5 text-left transition-colors duration-200 hover:bg-surface/55 sm:px-4 sm:[&:nth-child(odd)]:border-r"
+                  style={{
+                    animationDelay: `${index * 70}ms`,
+                    animationFillMode: 'backwards',
+                  }}
+                >
+                  <span className="block font-serif text-2xl text-charcoal">{entry.word}</span>
+                  <span className="mt-2 block font-serif text-base italic leading-relaxed text-charcoal-light">
+                    {entry.teaser}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
         </div>
       </main>
 
@@ -188,15 +200,6 @@ export function ExploreExperience() {
       />
 
       <SiteFooter />
-    </div>
-  )
-}
-
-function EditionDetail({ term, detail }: { term: string; detail: string }) {
-  return (
-    <div>
-      <dt className="text-[10px] uppercase tracking-[0.2em] text-charcoal-light/62">{term}</dt>
-      <dd className="mt-2 font-serif text-base leading-relaxed text-charcoal/82">{detail}</dd>
     </div>
   )
 }
