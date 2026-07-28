@@ -5,71 +5,97 @@
 
 import { z } from 'zod'
 
-// Root object schema
-const RootSchema = z.object({
-  root: z.string(),
-  origin: z.string(),
-  meaning: z.string(),
-  relatedWords: z.array(z.string()),
-  ancestorRoots: z.array(z.string()).optional(),
-  descendantWords: z.array(z.string()).optional(),
-})
+const BilingualTextSchema = z.object({ en: z.string().min(1), local: z.string().min(1) }).strict()
 
-// Ancestry stage schema (includes optional enrichment fields added post-LLM)
-const AncestryStageSchema = z.object({
-  stage: z.string(),
-  form: z.string(),
-  note: z.string().optional(),
-  isReconstructed: z.boolean().optional(),
-  confidence: z.enum(['high', 'medium', 'low']).optional(),
-  evidence: z
-    .array(
-      z.object({
-        source: z.string(),
-        snippet: z.string(),
-      })
-    )
-    .optional(),
-})
+function createResultSchema<Text extends z.ZodTypeAny>(text: Text, extendedSources = false) {
+  const root = z.object({
+    root: z.string(),
+    origin: z.string(),
+    meaning: text,
+    relatedWords: z.array(z.string()),
+    ancestorRoots: z.array(z.string()).optional(),
+    descendantWords: z.array(z.string()).optional(),
+  })
 
-// Ancestry branch schema
-const AncestryBranchSchema = z.object({
-  root: z.string(),
-  stages: z.array(AncestryStageSchema),
-})
+  const stage = z.object({
+    stage: z.string(),
+    form: z.string(),
+    note: text.optional(),
+    isReconstructed: z.boolean().optional(),
+    confidence: z.enum(['high', 'medium', 'low']).optional(),
+    evidence: z
+      .array(
+        z.object({
+          source: z.string(),
+          snippet: z.string(),
+          sourceFamily: z.string().optional(),
+        })
+      )
+      .optional(),
+  })
 
-// Convergence point schema (for shared PIE roots)
-const ConvergencePointSchema = z.object({
-  pieRoot: z.string(),
-  meaning: z.string(),
-  branchIndices: z.array(z.number()),
-})
+  const ancestryGraph = z.object({
+    branches: z.array(z.object({ root: z.string(), stages: z.array(stage) })),
+    convergencePoints: z
+      .array(
+        z.object({
+          pieRoot: z.string(),
+          meaning: text,
+          branchIndices: z.array(z.number()),
+        })
+      )
+      .optional(),
+    mergePoint: z.object({ form: z.string(), note: text.optional() }).optional(),
+    postMerge: z.array(stage).optional(),
+  })
 
-// Ancestry graph schema
-const AncestryGraphSchema = z.object({
-  branches: z.array(AncestryBranchSchema),
-  convergencePoints: z.array(ConvergencePointSchema).optional(),
-  mergePoint: z
+  const sourceBase = {
+    name: z.string(),
+    url: z.string().optional(),
+    word: z.string().optional(),
+  }
+  const source = z.object(
+    extendedSources
+      ? {
+          ...sourceBase,
+          sourceFamily: z.string().optional(),
+          license: z.string().optional(),
+        }
+      : sourceBase
+  )
+
+  return z
     .object({
-      form: z.string(),
-      note: z.string().optional(),
+      word: z.string(),
+      pronunciation: z.string(),
+      definition: text,
+      roots: z.array(root),
+      lore: text,
+      sources: z.array(source),
+      ancestryGraph,
+      partsOfSpeech: z
+        .array(
+          z.object({
+            pos: z.string(),
+            definition: text,
+            pronunciation: z.string().optional(),
+          })
+        )
+        .optional(),
+      suggestions: WordSuggestionsSchema.optional(),
+      modernUsage: z
+        .object({
+          hasSlangMeaning: z.boolean(),
+          slangDefinition: text.optional(),
+          popularizedBy: text.optional(),
+          contexts: z.array(text).optional(),
+          notableReferences: z.array(text).optional(),
+        })
+        .passthrough()
+        .optional(),
     })
-    .optional(),
-  postMerge: z.array(AncestryStageSchema).optional(),
-})
-
-// Source reference schema
-const SourceReferenceSchema = z.object({
-  name: z.string(),
-  url: z.string().optional(),
-  word: z.string().optional(),
-})
-
-const POSDefinitionSchema = z.object({
-  pos: z.string(),
-  definition: z.string(),
-  pronunciation: z.string().optional(),
-})
+    .passthrough()
+}
 
 const WordSuggestionsSchema = z
   .object({
@@ -81,37 +107,20 @@ const WordSuggestionsSchema = z
   })
   .passthrough()
 
-const ModernUsageSchema = z
-  .object({
-    hasSlangMeaning: z.boolean(),
-    slangDefinition: z.string().optional(),
-    popularizedBy: z.string().optional(),
-    contexts: z.array(z.string()).optional(),
-    notableReferences: z.array(z.string()).optional(),
-  })
-  .passthrough()
+const EnglishResultSchema = createResultSchema(z.string())
+
+export const BetaEtymologyResultSchema = createResultSchema(BilingualTextSchema, true).extend({
+  language: z.enum(['it', 'es', 'fr', 'pt']),
+})
 
 /**
  * Main EtymologyResult schema for cache validation.
  * Uses .passthrough() to allow additional fields for forward compatibility.
  */
-export const EtymologyResultSchema = z
-  .object({
-    // Required core fields
-    word: z.string(),
-    pronunciation: z.string(),
-    definition: z.string(),
-    roots: z.array(RootSchema),
-    lore: z.string(),
-    sources: z.array(SourceReferenceSchema),
-
-    // Required graph (LLM schema requires this)
-    ancestryGraph: AncestryGraphSchema,
-
-    partsOfSpeech: z.array(POSDefinitionSchema).optional(),
-    suggestions: WordSuggestionsSchema.optional(),
-    modernUsage: ModernUsageSchema.optional(),
-  })
-  .passthrough() // Allow additional unknown fields for forward compatibility
+export const EtymologyResultSchema = EnglishResultSchema
+export const CachedEtymologyResultSchema = z.union([
+  BetaEtymologyResultSchema,
+  EtymologyResultSchema,
+])
 
 export type ValidatedEtymologyResult = z.infer<typeof EtymologyResultSchema>

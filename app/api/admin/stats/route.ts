@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, timingSafeEqual } from 'crypto'
 import { getSpendStats } from '@/lib/costGuard'
-import { getCounters } from '@/lib/counters'
+import { getCounters, getLanguageCounters } from '@/lib/counters'
 import { getEnv } from '@/lib/env'
 
 function sha256(value: string): Buffer {
@@ -30,7 +30,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
 
-  const [spend, counters] = await Promise.all([getSpendStats(), getCounters()])
+  const [spend, counters, languageCounters] = await Promise.all([
+    getSpendStats(),
+    getCounters(),
+    getLanguageCounters(),
+  ])
 
   if (!spend) {
     return NextResponse.json(
@@ -45,6 +49,7 @@ export async function GET(request: NextRequest) {
       month: spend.period,
       spend,
       counters,
+      languageCounters,
     },
   })
 }

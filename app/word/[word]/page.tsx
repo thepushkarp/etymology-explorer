@@ -10,6 +10,8 @@ import { getCachedEtymology } from '@/lib/cache'
 import { SITE_SHORT_NAME } from '@/lib/site'
 import type { EtymologyResult } from '@/lib/types'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
+import { etymologyWordTag } from '@/lib/cache'
+import { localizeResult } from '@/lib/resultLocalization'
 
 // Shareable, crawlable word pages served STRICTLY from the Redis cache.
 // This module's import graph must never include lib/research.ts or lib/llm.ts
@@ -35,7 +37,7 @@ const DESCRIPTION_MAX_CHARS = 155
 function loadCachedEtymology(word: string): Promise<EtymologyResult | null> {
   return unstable_cache(() => getCachedEtymology(word), ['word-page-etymology', word], {
     revalidate: 3600,
-    tags: [`etymology-word:${word}`],
+    tags: [etymologyWordTag(word, 'en')],
   })()
 }
 
@@ -70,7 +72,8 @@ function truncateAtWordBoundary(text: string, maxChars: number): string {
 }
 
 function buildWordDescription(result: EtymologyResult): string {
-  const combined = [result.definition, result.lore]
+  const display = localizeResult(result, 'en')
+  const combined = [display.definition, display.lore]
     .filter(Boolean)
     .join(' ')
     .replace(/\s+/g, ' ')

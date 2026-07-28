@@ -7,13 +7,14 @@ import { FIRST_SECTION_CLASS, MobileSection, SECTION_TITLE_CLASS } from './Mobil
 interface AncestrySectionProps {
   graph: AncestryGraph
   word: string
+  title?: string
 }
 
-export function AncestrySection({ graph, word }: AncestrySectionProps) {
+export function AncestrySection({ graph, word, title = 'Word Ancestry' }: AncestrySectionProps) {
   return (
     <MobileSection
       id="entry-ancestry"
-      title="Word Ancestry"
+      title={title}
       titleTextClassName={SECTION_TITLE_CLASS}
       dividerClassName={FIRST_SECTION_CLASS}
       defaultOpenMobile

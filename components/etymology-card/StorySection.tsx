@@ -4,13 +4,14 @@ import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './Mob
 
 interface StorySectionProps {
   lore: string
+  title?: string
 }
 
-export function StorySection({ lore }: StorySectionProps) {
+export function StorySection({ lore, title = 'The Story' }: StorySectionProps) {
   return (
     <MobileSection
       id="entry-story"
-      title="The Story"
+      title={title}
       titleTextClassName={SECTION_TITLE_CLASS}
       dividerClassName={SECTION_DIVIDER_CLASS}
       defaultOpenMobile

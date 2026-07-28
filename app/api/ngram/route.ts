@@ -2,9 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { fetchNgram } from '@/lib/ngrams'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { ApiResponse } from '@/lib/types'
+import { BETA_SYMBOL, LANGUAGES, parseLanguageCode } from '@/lib/languages'
 
 export async function GET(request: NextRequest) {
   const word = request.nextUrl.searchParams.get('word')
+  const language = parseLanguageCode(request.nextUrl.searchParams.get('language'))
+
+  if (!language) {
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: 'Unsupported language' },
+      { status: 400 }
+    )
+  }
 
   if (!word?.trim()) {
     return NextResponse.json<ApiResponse<null>>(
@@ -22,7 +31,18 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const result = await fetchNgram(normalized)
+  const corpus = LANGUAGES[language].ngramCorpus
+  if (!corpus) {
+    return NextResponse.json<ApiResponse<null>>(
+      {
+        success: false,
+        error: `Dados históricos de uso indisponíveis em português (${BETA_SYMBOL}).`,
+      },
+      { status: 404 }
+    )
+  }
+
+  const result = await fetchNgram(normalized, { corpus })
 
   if (!result || result.data.length === 0) {
     return NextResponse.json<ApiResponse<null>>(

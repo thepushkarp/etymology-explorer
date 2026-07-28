@@ -48,6 +48,17 @@ describe('source cache', () => {
     expect(await getCachedSource('wiktionary', 'telephone', store)).toBeNull()
   })
 
+  test('same-spelling beta lexemes use language-qualified source keys', async () => {
+    const store = createStore()
+    await cacheSource('wiktionaryNative', 'sale', DATA, store, 'it')
+    await cacheSource('wiktionaryNative', 'sale', DATA, store, 'fr')
+
+    expect(store.keys().sort()).toEqual([
+      'src:v1:wiktionaryNative:fr:sale',
+      'src:v1:wiktionaryNative:it:sale',
+    ])
+  })
+
   test('fails open without a Redis client', async () => {
     expect(await getCachedSource('etymonline', 'telephone', null)).toBeNull()
     await cacheSource('etymonline', 'telephone', DATA, null) // must not throw

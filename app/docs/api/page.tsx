@@ -3,12 +3,12 @@ import { EditorialPageFrame } from '@/components/EditorialPageFrame'
 const ENDPOINTS = [
   {
     method: 'GET',
-    path: '/api/etymology?word=<word>[&stream=true]',
+    path: '/api/etymology?word=<word>[&language=it][&stream=true]',
     description: 'Grounded etymology synthesis with optional streaming mode.',
   },
   {
     method: 'GET',
-    path: '/api/suggestions?q=<partial-word>',
+    path: '/api/suggestions?q=<partial-word>[&language=it]',
     description: 'Spelling and typo suggestions for user input.',
   },
   {
@@ -18,12 +18,12 @@ const ENDPOINTS = [
   },
   {
     method: 'GET',
-    path: '/api/pronunciation?word=<word>',
+    path: '/api/pronunciation?word=<word>[&language=it]',
     description: 'Returns pronunciation audio metadata for a word.',
   },
   {
     method: 'GET',
-    path: '/api/ngram?word=<word>',
+    path: '/api/ngram?word=<word>[&language=it]',
     description: 'Returns usage timeline data for charting.',
   },
   {

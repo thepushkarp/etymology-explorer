@@ -5,6 +5,7 @@
 
 import { fetchWithTimeout } from './fetchUtils'
 import { CONFIG } from './config'
+import type { LanguageCode } from './languages'
 
 const ELEVENLABS_API = 'https://api.elevenlabs.io/v1'
 const DEFAULT_OUTPUT_FORMAT = 'mp3_44100_128'
@@ -54,7 +55,10 @@ export function isElevenLabsConfigured(): boolean {
  *
  * @throws Error if API call fails
  */
-export async function generatePronunciation(word: string): Promise<ArrayBuffer> {
+export async function generatePronunciation(
+  word: string,
+  language: LanguageCode = 'en'
+): Promise<ArrayBuffer> {
   const voiceId = process.env.ELEVENLABS_VOICE_ID
   if (!voiceId) {
     throw new Error('ELEVENLABS_VOICE_ID is required for pronunciation audio')
@@ -72,6 +76,9 @@ export async function generatePronunciation(word: string): Promise<ArrayBuffer> 
       body: JSON.stringify({
         text: word,
         model_id: 'eleven_v3',
+        // This selects language and text normalization. The configured voice
+        // still determines accent; pt intentionally does not imply BR or PT.
+        language_code: language,
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.75,

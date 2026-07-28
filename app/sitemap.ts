@@ -5,6 +5,7 @@ import { safeError } from '@/lib/errorUtils'
 import { getRedis } from '@/lib/redis'
 import { SITE_ORIGIN } from '@/lib/site'
 import { isValidWord } from '@/lib/validation'
+import { isBetaLanguage, isLanguageCode, wordPagePath, type LanguageCode } from '@/lib/languages'
 
 export const revalidate = 86400
 
@@ -17,11 +18,16 @@ const SCAN_BATCH_SIZE = 200
  * under the versioned etymology prefix. Fails open to an empty list so the
  * static sitemap entries always ship.
  */
-async function scanCachedWords(): Promise<string[]> {
+interface CachedLexeme {
+  language: LanguageCode
+  word: string
+}
+
+async function scanCachedWords(): Promise<CachedLexeme[]> {
   const redis = getRedis()
   if (!redis) return []
 
-  const words = new Set<string>()
+  const words = new Map<string, CachedLexeme>()
   let cursor = '0'
   try {
     do {
@@ -31,19 +37,23 @@ async function scanCachedWords(): Promise<string[]> {
       })
       cursor = String(nextCursor)
       for (const key of keys) {
-        const word = key.slice(ETYMOLOGY_PREFIX.length)
+        const suffix = key.slice(ETYMOLOGY_PREFIX.length)
+        const separator = suffix.indexOf(':')
+        const possibleLanguage = separator > 0 ? suffix.slice(0, separator) : 'en'
+        const language = isLanguageCode(possibleLanguage) ? possibleLanguage : 'en'
+        const word = isBetaLanguage(language) ? suffix.slice(separator + 1) : suffix
         if (isValidWord(word)) {
-          words.add(word)
+          words.set(`${language}:${word}`, { language, word })
         }
         if (words.size >= MAX_WORD_ENTRIES) {
-          return Array.from(words)
+          return Array.from(words.values())
         }
       }
     } while (cursor !== '0')
   } catch (error) {
     console.error('[Sitemap] Redis scan failed:', safeError(error))
   }
-  return Array.from(words)
+  return Array.from(words.values())
 }
 
 // unstable_cache keeps the Upstash client's no-store fetches from flipping
@@ -76,12 +86,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const words = await getCachedWords()
   // Copy before sorting: unstable_cache may hand back a shared in-memory array
-  const wordEntries: MetadataRoute.Sitemap = [...words].sort().map((word) => ({
-    url: `${SITE_ORIGIN}/word/${encodeURIComponent(word)}`,
-    lastModified: new Date(),
-    changeFrequency: 'monthly',
-    priority: 0.6,
-  }))
+  const wordEntries: MetadataRoute.Sitemap = [...words]
+    .sort((a, b) => `${a.language}:${a.word}`.localeCompare(`${b.language}:${b.word}`))
+    .map(({ language, word }) => ({
+      url: `${SITE_ORIGIN}${wordPagePath(word, language)}`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.6,
+    }))
 
   return [...staticEntries, ...wordEntries]
 }

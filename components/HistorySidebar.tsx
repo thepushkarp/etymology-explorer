@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { HistoryEntry } from '@/lib/types'
+import { BETA_SYMBOL, type LanguageCode } from '@/lib/languages'
 
 interface HistorySidebarProps {
   history: HistoryEntry[]
-  onWordClick: (word: string) => void
+  onWordClick: (word: string, language: LanguageCode) => void
   onClearHistory: () => void
-  onRemoveEntry: (word: string) => void
+  onRemoveEntry: (word: string, language?: LanguageCode) => void
 }
 
 // Format relative time - pure function
@@ -42,9 +43,9 @@ export function HistorySidebar({
     return () => clearInterval(interval)
   }, [])
 
-  const handleWordClick = (word: string) => {
+  const handleWordClick = (word: string, language: LanguageCode) => {
     setIsOpen(false)
-    onWordClick(word)
+    onWordClick(word, language)
   }
 
   return (
@@ -195,7 +196,7 @@ export function HistorySidebar({
             <ul className="space-y-1">
               {history.map((entry, index) => (
                 <li
-                  key={entry.word}
+                  key={`${entry.language ?? 'en'}:${entry.word}`}
                   className="animate-fadeIn"
                   style={{ animationDelay: `${index * 30}ms` }}
                 >
@@ -210,7 +211,7 @@ export function HistorySidebar({
                   "
                   >
                     <button
-                      onClick={() => handleWordClick(entry.word)}
+                      onClick={() => handleWordClick(entry.word, entry.language ?? 'en')}
                       className="
                         flex-1
                         flex items-center justify-between
@@ -227,6 +228,11 @@ export function HistorySidebar({
                       "
                       >
                         {entry.word}
+                        {entry.language && entry.language !== 'en' && (
+                          <small className="ml-2 uppercase text-charcoal-light/55">
+                            {entry.language} · {BETA_SYMBOL}
+                          </small>
+                        )}
                       </span>
                       <span
                         className="
@@ -242,7 +248,7 @@ export function HistorySidebar({
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        onRemoveEntry(entry.word)
+                        onRemoveEntry(entry.word, entry.language ?? 'en')
                       }}
                       className="
                         px-2 py-2

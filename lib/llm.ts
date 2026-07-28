@@ -1,8 +1,21 @@
-import { EtymologyResult, LlmUsage, SourceReference, ResearchContext } from './types'
-import { SYSTEM_PROMPT, buildRichUserPrompt } from './prompts'
+import {
+  AncestryGraph,
+  EtymologyResult,
+  LlmUsage,
+  SourceReference,
+  ResearchContext,
+  ModernUsage,
+  ResultText,
+} from './types'
+import {
+  SYSTEM_PROMPT,
+  buildBetaSystemPrompt,
+  buildBetaUserPrompt,
+  buildRichUserPrompt,
+} from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph, pruneUngroundedStages } from './etymologyEnricher'
-import { EtymologyResultSchema } from './schemas/etymology'
+import { BetaEtymologyResultSchema, EtymologyResultSchema } from './schemas/etymology'
 import { stripNullsDeep } from './schemas/llm-schema'
 import { createSectionScanner } from './sectionScanner'
 import { CONFIG } from './config'
@@ -13,6 +26,7 @@ import {
   extractUsage,
   streamOpenRouterResponse,
 } from './openrouterResponses'
+import { LANGUAGES, type LanguageCode } from './languages'
 
 export interface SynthesisResult {
   result: EtymologyResult
@@ -247,6 +261,13 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
     return
   }
 
+  // Beta research deliberately excludes slang-only English sources.
+  if (result.language && result.language !== 'en') {
+    result.modernUsage = { hasSlangMeaning: false }
+    return
+  }
+  const englishUsage = modernUsage as ModernUsage<string>
+
   const supplementalSignals = getSupplementalSourceSignals(researchContext)
   const hasSupplementalSlangEvidence =
     supplementalSignals.urbanDictionary || supplementalSignals.incelsWiki
@@ -256,15 +277,15 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
   }
 
   const compact = (value: string) => value.replace(/\s+/g, ' ').trim()
-  const slangDefinition = modernUsage.slangDefinition ? compact(modernUsage.slangDefinition) : ''
-  const popularizedBy = modernUsage.popularizedBy ? compact(modernUsage.popularizedBy) : ''
+  const slangDefinition = englishUsage.slangDefinition ? compact(englishUsage.slangDefinition) : ''
+  const popularizedBy = englishUsage.popularizedBy ? compact(englishUsage.popularizedBy) : ''
   const contexts = dedupeStrings(
-    (modernUsage.contexts ?? [])
+    (englishUsage.contexts ?? [])
       .map(compact)
       .filter((context) => context.length >= 3 && context.length <= 50)
   ).slice(0, 4)
   const notableReferences = dedupeStrings(
-    (modernUsage.notableReferences ?? [])
+    (englishUsage.notableReferences ?? [])
       .map(compact)
       .filter((reference) => reference.length >= 6 && reference.length <= 140)
   ).slice(0, 3)
@@ -296,6 +317,7 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
 interface SynthesisOptions {
   model?: string
   signal?: AbortSignal
+  language?: LanguageCode
   /**
    * Streams the LLM response and fires once per closed top-level field of
    * the response JSON, in schema (render) order — ~10 events per response.
@@ -313,8 +335,12 @@ async function callLlm(
   text: string
   usage: LlmUsage
 }> {
-  const request = buildSynthesisRequest(userPrompt, options?.model)
-  request.instructions = SYSTEM_PROMPT
+  const language = options?.language ?? 'en'
+  const request = buildSynthesisRequest(userPrompt, options?.model, language)
+  request.instructions =
+    language === 'en'
+      ? SYSTEM_PROMPT
+      : buildBetaSystemPrompt(LANGUAGES[language].englishName, language)
   const onSection = options?.onSection
 
   try {
@@ -418,6 +444,33 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
   const sources: SourceReference[] = []
   const supplementalSignals = getSupplementalSourceSignals(researchContext)
   const mainWord = researchContext.mainWord.word
+  const language = researchContext.language ?? 'en'
+
+  if (language !== 'en') {
+    const betaSources = [
+      ['wiktionaryEnglish', researchContext.mainWord.wiktionaryEnglish, 'wiktionary'],
+      ['wiktionaryNative', researchContext.mainWord.wiktionaryNative, 'wiktionary'],
+      ['wikidataLexeme', researchContext.mainWord.wikidataLexeme, 'wikidata'],
+      ['multilingualDictionary', researchContext.mainWord.multilingualDictionary, 'wiktionary'],
+      ['dicionarioAberto', researchContext.mainWord.dicionarioAberto, 'dicionarioAberto'],
+    ] as const
+
+    for (const [name, data, sourceFamily] of betaSources) {
+      if (data) {
+        sources.push({
+          name,
+          url: data.url,
+          word: mainWord,
+          sourceFamily,
+          ...(name === 'multilingualDictionary'
+            ? { license: 'Per-entry attribution and license are provided by FreeDictionaryAPI' }
+            : {}),
+        })
+      }
+    }
+    result.sources = sources.length > 0 ? sources : [{ name: 'synthesized' }]
+    return result
+  }
 
   if (researchContext.mainWord.etymonline) {
     sources.push({
@@ -503,8 +556,9 @@ function finalizeResult(
   sanitizeModernUsage(result, researchContext)
 
   if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
-    enrichAncestryGraph(result.ancestryGraph, researchContext.parsedChains)
-    const pruned = pruneUngroundedStages(result.ancestryGraph)
+    const graph = result.ancestryGraph as AncestryGraph<ResultText>
+    enrichAncestryGraph(graph, researchContext.parsedChains)
+    const pruned = pruneUngroundedStages(graph)
     if (pruned > 0) {
       console.warn(
         `[LLM] Pruned ${pruned} ungrounded reconstructed stage(s) for "${researchContext.mainWord.word}"`
@@ -514,7 +568,10 @@ function finalizeResult(
 
   attachSources(result, researchContext)
 
-  const validated = EtymologyResultSchema.safeParse(result)
+  const validated =
+    researchContext.language && researchContext.language !== 'en'
+      ? BetaEtymologyResultSchema.safeParse(result)
+      : EtymologyResultSchema.safeParse(result)
   if (!validated.success) {
     const issue = validated.error.issues[0]
     console.error(
@@ -538,9 +595,22 @@ export async function synthesizeFromResearch(
   options?: SynthesisOptions
 ): Promise<SynthesisResult> {
   const researchData = buildResearchPrompt(researchContext)
-  const userPrompt = buildRichUserPrompt(researchContext.mainWord.word, researchData)
+  const language = researchContext.language ?? 'en'
+  const userPrompt =
+    language === 'en'
+      ? buildRichUserPrompt(researchContext.mainWord.word, researchData)
+      : buildBetaUserPrompt(
+          researchContext.mainWord.word,
+          LANGUAGES[language].englishName,
+          language,
+          researchData
+        )
 
-  const { result, usage } = await generateEtymologyResponse(userPrompt, options)
+  const { result, usage } = await generateEtymologyResponse(userPrompt, { ...options, language })
+
+  if (language !== 'en' && result.language !== language) {
+    throw new Error(`Schema validation failed: expected language ${language}`)
+  }
 
   try {
     return {

@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline'
 import { useHistory } from '@/lib/hooks/useHistory'
 import { SearchSuggestions, useSuggestionItems } from '@/components/SearchSuggestions'
+import type { LanguageCode } from '@/lib/languages'
 
 interface SearchBarProps {
   onSearch: (word: string) => void
@@ -11,6 +12,7 @@ interface SearchBarProps {
   initialValue?: string
   inputRef?: React.RefObject<HTMLInputElement | null>
   onSuggestionsVisibilityChange?: (visible: boolean) => void
+  language?: LanguageCode
 }
 
 export function SearchBar({
@@ -19,6 +21,7 @@ export function SearchBar({
   initialValue = '',
   inputRef,
   onSuggestionsVisibilityChange,
+  language = 'en',
 }: SearchBarProps) {
   const [value, setValue] = useState(initialValue)
   const [inputValue, setInputValue] = useState(initialValue)
@@ -28,8 +31,14 @@ export function SearchBar({
   const { history: historyEntries } = useHistory()
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const historyWords = useMemo(() => historyEntries.map((entry) => entry.word), [historyEntries])
-  const suggestionItems = useSuggestionItems(inputValue, historyWords)
+  const historyWords = useMemo(
+    () =>
+      historyEntries
+        .filter((entry) => (entry.language ?? 'en') === language)
+        .map((entry) => entry.word),
+    [historyEntries, language]
+  )
+  const suggestionItems = useSuggestionItems(inputValue, historyWords, language)
   const shouldShowSuggestions =
     isFocused && showSuggestions && inputValue.trim().length >= 2 && suggestionItems.length > 0
 

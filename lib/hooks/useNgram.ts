@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { ApiResponse, NgramResult } from '@/lib/types'
+import type { LanguageCode } from '@/lib/languages'
 
 /**
  * Fetches Google Books ngram usage data for a word. Fired as soon as the
@@ -9,7 +10,7 @@ import type { ApiResponse, NgramResult } from '@/lib/types'
  * the time the etymology card finishes rendering instead of popping in
  * afterwards. Pass null to skip fetching.
  */
-export function useNgram(word: string | null): NgramResult | null {
+export function useNgram(word: string | null, language: LanguageCode = 'en'): NgramResult | null {
   const [ngram, setNgram] = useState<NgramResult | null>(null)
   const trimmed = word?.trim() || null
 
@@ -18,7 +19,9 @@ export function useNgram(word: string | null): NgramResult | null {
 
     const controller = new AbortController()
 
-    fetch(`/api/ngram?word=${encodeURIComponent(trimmed)}`, { signal: controller.signal })
+    fetch(`/api/ngram?word=${encodeURIComponent(trimmed)}&language=${language}`, {
+      signal: controller.signal,
+    })
       .then((response) => {
         if (!response.ok) return null
         return response.json() as Promise<ApiResponse<NgramResult>>
@@ -35,7 +38,7 @@ export function useNgram(word: string | null): NgramResult | null {
       })
 
     return () => controller.abort()
-  }, [trimmed])
+  }, [trimmed, language])
 
   // Derived staleness guard instead of a reset-in-effect: data fetched for a
   // previous word is never surfaced for the current one.

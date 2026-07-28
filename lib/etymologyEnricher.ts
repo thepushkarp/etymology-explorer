@@ -6,7 +6,13 @@
  * The LLM does NOT self-assess confidence — we determine it programmatically.
  */
 
-import type { AncestryGraph, AncestryStage, StageConfidence, StageEvidence } from './types'
+import type {
+  AncestryGraph,
+  AncestryStage,
+  ResultText,
+  StageConfidence,
+  StageEvidence,
+} from './types'
 import type { ParsedEtymChain, ParsedEtymLink } from './etymologyParser'
 
 /**
@@ -61,7 +67,7 @@ interface MatchResult {
  * because the LLM and sources often use different language labels
  * (e.g., "Latin" vs "Late Latin").
  */
-function findMatches(stage: AncestryStage, chains: ParsedEtymChain[]): MatchResult[] {
+function findMatches(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]): MatchResult[] {
   const matches: MatchResult[] = []
 
   for (const chain of chains) {
@@ -79,9 +85,9 @@ function findMatches(stage: AncestryStage, chains: ParsedEtymChain[]): MatchResu
  * Determine confidence from the number of distinct sources that attest a stage.
  */
 function determineConfidence(matches: MatchResult[]): StageConfidence {
-  const sources = new Set(matches.map((m) => m.source))
-  if (sources.size >= 2) return 'high'
-  if (sources.size === 1) return 'medium'
+  const families = new Set(matches.map((match) => match.source))
+  if (families.size >= 2) return 'high'
+  if (families.size === 1) return 'medium'
   return 'low'
 }
 
@@ -98,6 +104,7 @@ function buildEvidence(matches: MatchResult[]): StageEvidence[] {
     evidence.push({
       source: match.source,
       snippet: match.link.rawSnippet,
+      sourceFamily: match.source,
     })
   }
 
@@ -109,7 +116,7 @@ function buildEvidence(matches: MatchResult[]): StageEvidence[] {
  * The stage comes straight from LLM output and is only Zod-validated
  * AFTER enrichment, so missing fields must not crash here.
  */
-function isReconstructedStage(stage: AncestryStage): boolean {
+function isReconstructedStage(stage: AncestryStage<ResultText>): boolean {
   if (typeof stage.form === 'string' && stage.form.startsWith('*')) return true
   if (typeof stage.stage !== 'string') return false
   const lower = stage.stage.toLowerCase()
@@ -122,7 +129,7 @@ function isReconstructedStage(stage: AncestryStage): boolean {
  * Enrich a single AncestryStage with confidence and evidence.
  * Mutates the stage in-place for efficiency.
  */
-function enrichStage(stage: AncestryStage, chains: ParsedEtymChain[]): void {
+function enrichStage(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]): void {
   // Set reconstructed flag
   stage.isReconstructed = isReconstructedStage(stage)
 
@@ -144,7 +151,10 @@ function enrichStage(stage: AncestryStage, chains: ParsedEtymChain[]): void {
  *
  * Call this AFTER the LLM returns its response, BEFORE sending to the client.
  */
-export function enrichAncestryGraph(graph: AncestryGraph, parsedChains: ParsedEtymChain[]): void {
+export function enrichAncestryGraph<Text extends ResultText>(
+  graph: AncestryGraph<Text>,
+  parsedChains: ParsedEtymChain[]
+): void {
   if (!graph || !parsedChains.length) return
 
   // Enrich each branch's stages
@@ -173,11 +183,11 @@ export function enrichAncestryGraph(graph: AncestryGraph, parsedChains: ParsedEt
  * Must be called after enrichAncestryGraph() — relies on isReconstructed
  * and confidence fields set by that function.
  */
-export function pruneUngroundedStages(graph: AncestryGraph): number {
+export function pruneUngroundedStages<Text extends ResultText>(graph: AncestryGraph<Text>): number {
   if (!graph?.branches) return 0
   let pruned = 0
 
-  const isUngrounded = (s: AncestryStage) => s.isReconstructed && s.confidence === 'low'
+  const isUngrounded = (s: AncestryStage<ResultText>) => s.isReconstructed && s.confidence === 'low'
 
   for (const branch of graph.branches) {
     const before = branch.stages.length

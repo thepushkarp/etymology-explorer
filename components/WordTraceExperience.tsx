@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ErrorState } from '@/components/ErrorState'
 import { EtymologyCard } from '@/components/EtymologyCard'
@@ -18,9 +18,12 @@ import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
 import { consumeTraceIntent } from '@/lib/traceIntent'
 import type { StreamState } from '@/lib/streamReducer'
+import { BETA_SYMBOL, LANGUAGES, type BetaLanguageCode, type LanguageCode } from '@/lib/languages'
+import { localizeResult, type ResultLocale } from '@/lib/resultLocalization'
 
 interface WordTraceExperienceProps {
   word: string
+  language?: LanguageCode
 }
 
 function announcementFor(progress: StreamState, word: string): string {
@@ -46,15 +49,18 @@ function announcementFor(progress: StreamState, word: string): string {
  * JS-executing ones — see the server-rendered "Trace it live" gate and a
  * human click is required to spend LLM budget.
  */
-export function WordTraceExperience({ word }: WordTraceExperienceProps) {
-  const { progress, search } = useStreamingEtymology()
+export function WordTraceExperience({ word, language = 'en' }: WordTraceExperienceProps) {
+  const { progress, search } = useStreamingEtymology(language)
+  const [contentLocale, setContentLocale] = useState<ResultLocale>(
+    language === 'en' ? 'en' : 'local'
+  )
   const startedRef = useRef(false)
-  const { navigateToWord, historyBack, historyForward } = useWordNavigation(word)
+  const { navigateToWord, historyBack, historyForward } = useWordNavigation(word, language)
   // Derived, not stored: the trace has started once the stream reducer left
   // idle. The ngram fetch keys off the same signal (word known at start).
   const hasStarted = progress.status !== 'idle'
-  const ngram = useNgram(hasStarted ? word : null)
-  const { play: playPronunciation } = usePronunciation(word)
+  const ngram = useNgram(hasStarted ? word : null, language)
+  const { play: playPronunciation } = usePronunciation(word, language)
 
   const startTrace = useCallback(() => {
     if (startedRef.current) return
@@ -63,22 +69,45 @@ export function WordTraceExperience({ word }: WordTraceExperienceProps) {
   }, [search, word])
 
   useEffect(() => {
-    if (consumeTraceIntent(word)) {
+    if (consumeTraceIntent(word, language)) {
       startTrace()
     }
-  }, [word, startTrace])
+  }, [word, language, startTrace])
 
   const resultWithNgram = useMemo(() => {
     if (!progress.result) return null
-    return {
+    const enriched = {
       ...progress.result,
       ngram: ngram && ngram.word === progress.result.word ? ngram : undefined,
     }
-  }, [progress.result, ngram])
+    return localizeResult(enriched, contentLocale)
+  }, [progress.result, ngram, contentLocale])
 
   const headerActions = useMemo(
-    () => (resultWithNgram ? <ShareMenu result={resultWithNgram} /> : undefined),
-    [resultWithNgram]
+    () =>
+      resultWithNgram ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {language !== 'en' && (
+            <div className="inline-flex rounded-full border border-border-soft bg-surface p-1">
+              {(['en', 'local'] as ResultLocale[]).map((locale) => (
+                <button
+                  key={locale}
+                  type="button"
+                  onClick={() => setContentLocale(locale)}
+                  aria-pressed={contentLocale === locale}
+                  className={`rounded-full px-3 py-1.5 text-xs ${
+                    contentLocale === locale ? 'bg-charcoal text-cream' : 'text-charcoal-light'
+                  }`}
+                >
+                  {locale === 'en' ? 'English' : LANGUAGES[language as BetaLanguageCode].nativeName}
+                </button>
+              ))}
+            </div>
+          )}
+          <ShareMenu result={resultWithNgram} />
+        </div>
+      ) : undefined,
+    [resultWithNgram, language, contentLocale]
   )
 
   const handlePlayPronunciation = useCallback(() => {
@@ -89,7 +118,7 @@ export function WordTraceExperience({ word }: WordTraceExperienceProps) {
 
   const isLoading = hasStarted && progress.status === 'loading'
   const showResearchProgress = isLoading && progress.phase !== 'synthesis'
-  const showStreamingCard = isLoading && progress.phase === 'synthesis'
+  const showStreamingCard = isLoading && progress.phase === 'synthesis' && language === 'en'
 
   return (
     <div className="min-h-screen bg-cream text-charcoal">
@@ -108,7 +137,7 @@ export function WordTraceExperience({ word }: WordTraceExperienceProps) {
         </div>
 
         <div className="mt-8">
-          {!hasStarted && <TraceGate word={word} onStart={startTrace} />}
+          {!hasStarted && <TraceGate word={word} language={language} onStart={startTrace} />}
 
           {isLoading && (
             <article aria-busy="true" className="editorial-shell animate-fadeIn p-6 sm:p-8 md:p-12">
@@ -153,6 +182,7 @@ export function WordTraceExperience({ word }: WordTraceExperienceProps) {
               result={resultWithNgram}
               onWordClick={navigateToWord}
               headerActions={headerActions}
+              contentLocale={contentLocale}
             />
           )}
         </div>
@@ -169,12 +199,20 @@ export function WordTraceExperience({ word }: WordTraceExperienceProps) {
   )
 }
 
-function TraceGate({ word, onStart }: { word: string; onStart: () => void }) {
+function TraceGate({
+  word,
+  language,
+  onStart,
+}: {
+  word: string
+  language: LanguageCode
+  onStart: () => void
+}) {
   return (
     <>
       <header className="max-w-3xl pb-8">
         <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/66">
-          uncharted entry
+          uncharted entry {language !== 'en' && `· ${BETA_SYMBOL}`}
         </p>
         <h1 className="mt-3 font-serif text-5xl tracking-[-0.05em] text-charcoal sm:text-6xl lg:text-[4.8rem]">
           {word}

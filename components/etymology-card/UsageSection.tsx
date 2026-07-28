@@ -6,13 +6,14 @@ import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './Mob
 
 interface UsageSectionProps {
   ngram: NgramResult
+  title?: string
 }
 
-export function UsageSection({ ngram }: UsageSectionProps) {
+export function UsageSection({ ngram, title = 'Usage over time' }: UsageSectionProps) {
   return (
     <MobileSection
       id="entry-usage"
-      title="Usage over time"
+      title={title}
       titleTextClassName={SECTION_TITLE_CLASS}
       dividerClassName={SECTION_DIVIDER_CLASS}
     >

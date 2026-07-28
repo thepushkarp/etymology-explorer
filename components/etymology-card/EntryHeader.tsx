@@ -1,10 +1,11 @@
 'use client'
 
-import { EtymologyResult } from '@/lib/types'
+import { DisplayEtymologyResult } from '@/lib/types'
+import { BETA_SYMBOL } from '@/lib/languages'
 import { PronunciationButton } from '../PronunciationButton'
 
 interface EntryHeaderProps {
-  result: EtymologyResult
+  result: DisplayEtymologyResult
   headerActions?: React.ReactNode
 }
 
@@ -16,7 +17,7 @@ function shortenOrigin(origin: string): string {
   return origin.replace(/^Ancient\s+/i, '').replace(/^Old\s+/i, 'O.')
 }
 
-function buildOriginHook(result: EtymologyResult): string | null {
+function buildOriginHook(result: DisplayEtymologyResult): string | null {
   if (!result.roots || result.roots.length === 0) return null
 
   const meaningful = result.roots.filter((r) => !r.root.startsWith('-')).slice(0, 3)
@@ -46,7 +47,17 @@ export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
     <header className="border-b border-border-soft pb-10">
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div className="min-w-0 flex-1">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">entry</p>
+          <p className="flex items-center gap-2 text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+            <span>entry</span>
+            {result.language !== 'en' && (
+              <span
+                aria-label="Beta"
+                className="rounded-full border border-accent-amber/45 px-2 py-0.5 tracking-[0.16em] text-accent-amber"
+              >
+                {BETA_SYMBOL}
+              </span>
+            )}
+          </p>
           <div className="flex flex-wrap items-baseline gap-3 sm:gap-4">
             <h1 className="mt-3 font-serif text-5xl font-semibold tracking-[-0.06em] text-charcoal md:text-7xl">
               {result.word}
@@ -54,7 +65,7 @@ export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
 
             <span className="inline-flex items-center gap-1 pt-2 text-base italic text-charcoal-light sm:text-lg">
               {result.pronunciation}
-              <PronunciationButton word={result.word} />
+              <PronunciationButton word={result.word} language={result.language} />
             </span>
           </div>
 

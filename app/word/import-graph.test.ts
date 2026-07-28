@@ -10,6 +10,7 @@ import { dirname, join, resolve } from 'node:path'
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..')
 const ENTRY = join(REPO_ROOT, 'app', 'word', '[word]', 'page.tsx')
+const BETA_ENTRY = join(REPO_ROOT, 'app', 'word', '[language]', '[word]', 'page.tsx')
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts']
 
@@ -79,6 +80,15 @@ describe('/word/[word] module graph (LLM spend invariant)', () => {
       // Guard: if the module was renamed, this test must be updated, not skipped
       expect(existsSync(absolutePath)).toBe(true)
       expect(graph.has(absolutePath)).toBe(false)
+    }
+  })
+
+  test('multilingual pages preserve the same cache-only server graph', () => {
+    const betaGraph = collectModuleGraph(BETA_ENTRY)
+    expect(betaGraph.has(BETA_ENTRY)).toBe(true)
+    expect(betaGraph.has(join(REPO_ROOT, 'lib', 'cache.ts'))).toBe(true)
+    for (const relativePath of ['lib/research.ts', 'lib/llm.ts', 'lib/openrouterResponses.ts']) {
+      expect(betaGraph.has(join(REPO_ROOT, relativePath))).toBe(false)
     }
   })
 })

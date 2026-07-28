@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { ImageResponse } from 'next/og'
 import { SITE_HOST, SITE_SHORT_NAME } from '@/lib/site'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
+import { BETA_SYMBOL, LANGUAGES, parseLanguageCode, type LanguageCode } from '@/lib/languages'
 
 const fontDirectory = join(process.cwd(), 'public/fonts')
 
@@ -117,7 +118,7 @@ function BrandCard() {
   )
 }
 
-function WordCard({ word }: { word: string }) {
+function WordCard({ word, language }: { word: string; language: LanguageCode }) {
   const [initial, rest] = splitLeadingGrapheme(word)
   return (
     <div
@@ -144,7 +145,9 @@ function WordCard({ word }: { word: string }) {
           marginBottom: 34,
         }}
       >
-        the etymology of
+        {language === 'en'
+          ? 'the etymology of'
+          : `${LANGUAGES[language].nativeName} · etymologia · ${BETA_SYMBOL}`}
       </div>
       <div
         style={{
@@ -208,10 +211,14 @@ export async function GET(request: Request) {
   ]
 
   const rawWord = new URL(request.url).searchParams.get('word')
+  const language = parseLanguageCode(new URL(request.url).searchParams.get('language')) ?? 'en'
   const word = rawWord ? canonicalizeWord(rawWord) : ''
 
   if (word && isValidWord(word)) {
-    return new ImageResponse(<WordCard word={word} />, { ...IMAGE_OPTIONS, fonts })
+    return new ImageResponse(<WordCard word={word} language={language} />, {
+      ...IMAGE_OPTIONS,
+      fonts,
+    })
   }
 
   return new ImageResponse(<BrandCard />, { ...IMAGE_OPTIONS, fonts })

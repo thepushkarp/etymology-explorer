@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { rankMatches } from '@/lib/suggestionRanking'
 import type { ApiResponse, WordSuggestion } from '@/lib/types'
+import type { LanguageCode } from '@/lib/languages'
 
 interface SearchSuggestionsProps {
   items: SuggestionItem[]
@@ -29,7 +30,11 @@ export const MIN_QUERY_LENGTH = 2
  * are cancelled, and previously fetched words that still match the query are
  * kept visible while the fresh response is in flight.
  */
-export function useSuggestionItems(query: string, history: string[]): SuggestionItem[] {
+export function useSuggestionItems(
+  query: string,
+  history: string[],
+  language: LanguageCode = 'en'
+): SuggestionItem[] {
   const normalizedQuery = query.toLowerCase().trim()
   const [fetched, setFetched] = useState<{ query: string; words: string[] }>({
     query: '',
@@ -43,7 +48,7 @@ export function useSuggestionItems(query: string, history: string[]): Suggestion
 
     const controller = new AbortController()
 
-    fetch(`/api/suggestions?q=${encodeURIComponent(normalizedQuery)}`, {
+    fetch(`/api/suggestions?q=${encodeURIComponent(normalizedQuery)}&language=${language}`, {
       signal: controller.signal,
     })
       .then((response) => {
@@ -65,7 +70,7 @@ export function useSuggestionItems(query: string, history: string[]): Suggestion
       })
 
     return () => controller.abort()
-  }, [normalizedQuery])
+  }, [normalizedQuery, language])
 
   return useMemo(() => {
     if (normalizedQuery.length < MIN_QUERY_LENGTH) {

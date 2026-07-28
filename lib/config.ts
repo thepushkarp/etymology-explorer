@@ -6,6 +6,9 @@
 export const CONFIG = {
   // LLM
   model: 'openai/gpt-5.6-luna',
+  // OpenRouter tries these in order only when the production primary fails.
+  // Explicit benchmark model overrides remain single-model runs.
+  modelFallbacks: ['openai/gpt-5.4-mini', 'google/gemini-3.5-flash'] as const,
   synthesisMaxTokens: 9000,
   rootExtractionMaxTokens: 100,
 
@@ -66,7 +69,9 @@ export const CONFIG = {
 
   // USD-based cost tracking
   costTracking: {
-    pricingPerMillionTokens: { input: 1, output: 6 }, // Luna fallback when OpenRouter omits cost
+    // Conservative ceiling across the production fallback chain when
+    // OpenRouter omits its authoritative provider-reported cost.
+    pricingPerMillionTokens: { input: 1.5, output: 9 },
     monthlyLimitUSD: 10.0,
     cacheOnlyAtPercent: 0.9, // serve only cached results at 90% of budget
   },

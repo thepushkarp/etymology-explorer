@@ -34,7 +34,7 @@ mock.module('next/server', () => ({
   after: afterMock,
 }))
 
-const { cacheEtymology } = await import('./cache')
+const { cacheAudio, cacheEtymology, getCachedEtymology } = await import('./cache')
 
 const RESULT: EtymologyResult = {
   word: 'nice',
@@ -99,5 +99,35 @@ describe('cacheEtymology word-page revalidation', () => {
 
     await expect(cacheEtymology('nice', RESULT)).resolves.toBeUndefined()
     expect(currentRedis.set).toHaveBeenCalledTimes(1)
+  })
+
+  test('isolates same-spelling beta result and audio keys by language', async () => {
+    currentRedis = fakeRedis()
+    const betaResult: EtymologyResult = {
+      language: 'it',
+      word: 'sale',
+      pronunciation: '/ˈsa.le/',
+      definition: { en: 'salt', local: 'sale' },
+      roots: [],
+      ancestryGraph: { branches: [] },
+      lore: { en: 'Salt has an old story.', local: 'Il sale ha una storia antica.' },
+      sources: [],
+    }
+
+    await cacheEtymology('sale', betaResult, 'it')
+    await cacheAudio('sale', 'audio-it', 'it')
+    await cacheAudio('sale', 'audio-fr', 'fr')
+
+    expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
+      'etymology:v2.2:it:sale',
+      'audio:v1:it:sale',
+      'audio:v1:fr:sale',
+    ])
+    expect(revalidateTagMock).toHaveBeenCalledWith('etymology-word:it:sale', { expire: 0 })
+  })
+
+  test('never returns an English object from a beta cache key', async () => {
+    currentRedis = fakeRedis({ get: mock(async () => RESULT) })
+    expect(await getCachedEtymology('sale', 'it')).toBeNull()
   })
 })

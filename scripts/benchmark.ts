@@ -23,7 +23,12 @@ import { safeError } from '@/lib/errorUtils'
 import { getLlmUsageFromError, synthesizeFromResearch } from '@/lib/llm'
 import { conductAgenticResearch } from '@/lib/research'
 import { EtymologyResultSchema } from '@/lib/schemas/etymology'
-import type { AncestryStage, EtymologyResult, ResearchContext } from '@/lib/types'
+import type {
+  AncestryStage,
+  EnglishEtymologyResult,
+  EtymologyResult,
+  ResearchContext,
+} from '@/lib/types'
 
 const RESULTS_DIR = join(process.cwd(), 'bench-results')
 
@@ -121,8 +126,12 @@ function assertRequiredEnv(): void {
 }
 
 function collectStages(graph: EtymologyResult['ancestryGraph']): AncestryStage[] {
-  const stages = graph.branches.flatMap((branch) => branch.stages)
-  return graph.postMerge ? [...stages, ...graph.postMerge] : stages
+  const stages: AncestryStage[] = []
+  for (const branch of graph.branches) {
+    stages.push(...(branch.stages as AncestryStage[]))
+  }
+  if (graph.postMerge) stages.push(...(graph.postMerge as AncestryStage[]))
+  return stages
 }
 
 function distributeConfidence(stages: AncestryStage[]): ConfidenceDistribution {
@@ -162,7 +171,9 @@ async function benchmarkWord(
     })
     const researchDone = performance.now()
 
-    const { result, usage } = await synthesizeFromResearch(context, { model })
+    const synthesis = await synthesizeFromResearch(context, { model })
+    const result = synthesis.result as EnglishEtymologyResult
+    const { usage } = synthesis
     const synthesisDone = performance.now()
 
     const stages = collectStages(result.ancestryGraph)

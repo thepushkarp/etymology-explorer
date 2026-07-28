@@ -9,6 +9,12 @@ import { SurpriseButton } from '@/components/SurpriseButton'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
+import {
+  BETA_SYMBOL,
+  LANGUAGES,
+  SUPPORTED_LANGUAGE_CODES,
+  type LanguageCode,
+} from '@/lib/languages'
 
 const CURATED_IDLE_WORDS = [
   { word: 'nice', teaser: "once meant 'foolish'" },
@@ -31,9 +37,10 @@ const HistorySidebar = dynamic(
  * /word/{word} page, which hosts the live tracing experience.
  */
 export function ExploreExperience() {
+  const [language, setLanguage] = useState<LanguageCode>('en')
   const searchInputRef = useRef<HTMLInputElement>(null)
   const { history, clearHistory, removeFromHistory } = useHistory()
-  const { navigateToWord, historyBack, historyForward } = useWordNavigation(null)
+  const { navigateToWord, historyBack, historyForward } = useWordNavigation(null, language)
   const [suggestionsVisible, setSuggestionsVisible] = useState(false)
 
   return (
@@ -42,7 +49,7 @@ export function ExploreExperience() {
 
       <HistorySidebar
         history={history}
-        onWordClick={navigateToWord}
+        onWordClick={(word, entryLanguage) => navigateToWord(word, entryLanguage)}
         onClearHistory={clearHistory}
         onRemoveEntry={removeFromHistory}
       />
@@ -62,12 +69,34 @@ export function ExploreExperience() {
               </div>
 
               <div className="mt-8 w-full">
+                <div className="mb-3 flex items-center gap-3">
+                  <label
+                    htmlFor="search-language"
+                    className="text-[11px] uppercase tracking-[0.2em] text-charcoal-light/70"
+                  >
+                    Language
+                  </label>
+                  <select
+                    id="search-language"
+                    value={language}
+                    onChange={(event) => setLanguage(event.target.value as LanguageCode)}
+                    className="rounded-full border border-border-soft bg-surface px-4 py-2 font-serif text-sm text-charcoal outline-none focus:border-border-strong"
+                  >
+                    {SUPPORTED_LANGUAGE_CODES.map((code) => (
+                      <option key={code} value={code}>
+                        {LANGUAGES[code].nativeName}
+                        {LANGUAGES[code].beta ? ` · ${BETA_SYMBOL}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <SearchBar
-                  onSearch={navigateToWord}
+                  onSearch={(word) => navigateToWord(word, language)}
+                  language={language}
                   inputRef={searchInputRef}
                   onSuggestionsVisibilityChange={setSuggestionsVisible}
                 />
-                {!suggestionsVisible && (
+                {!suggestionsVisible && language === 'en' && (
                   <div className="mt-5 flex justify-center">
                     <SurpriseButton onWordSelected={navigateToWord} />
                   </div>
@@ -76,39 +105,43 @@ export function ExploreExperience() {
             </div>
           </section>
 
-          <section className="pt-10">
-            <div>
-              <section className="editorial-panel p-8 sm:p-10">
-                <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
-                  try these words
-                </p>
-                <h2 className="mt-3 font-serif text-3xl tracking-[-0.04em] text-charcoal sm:text-4xl">
-                  Start with a word that already has a story.
-                </h2>
-                <p className="mt-3 max-w-2xl font-serif italic leading-relaxed text-charcoal-light">
-                  Begin with a familiar word, then follow its older forms and borrowed meanings.
-                </p>
-                <div className="mt-8 grid gap-3 sm:grid-cols-2">
-                  {CURATED_IDLE_WORDS.map((entry, index) => (
-                    <button
-                      key={entry.word}
-                      onClick={() => navigateToWord(entry.word)}
-                      className="animate-fadeIn rounded-[1rem] border border-border-soft bg-[color:var(--surface-muted)]/28 px-4 py-5 text-left transition-all duration-200 hover:-translate-y-px hover:border-border-strong hover:bg-surface"
-                      style={{
-                        animationDelay: `${index * 70}ms`,
-                        animationFillMode: 'backwards',
-                      }}
-                    >
-                      <span className="block font-serif text-2xl text-charcoal">{entry.word}</span>
-                      <span className="mt-2 block font-serif text-base italic leading-relaxed text-charcoal-light">
-                        {entry.teaser}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            </div>
-          </section>
+          {language === 'en' && (
+            <section className="pt-10">
+              <div>
+                <section className="editorial-panel p-8 sm:p-10">
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
+                    try these words
+                  </p>
+                  <h2 className="mt-3 font-serif text-3xl tracking-[-0.04em] text-charcoal sm:text-4xl">
+                    Start with a word that already has a story.
+                  </h2>
+                  <p className="mt-3 max-w-2xl font-serif italic leading-relaxed text-charcoal-light">
+                    Begin with a familiar word, then follow its older forms and borrowed meanings.
+                  </p>
+                  <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                    {CURATED_IDLE_WORDS.map((entry, index) => (
+                      <button
+                        key={entry.word}
+                        onClick={() => navigateToWord(entry.word)}
+                        className="animate-fadeIn rounded-[1rem] border border-border-soft bg-[color:var(--surface-muted)]/28 px-4 py-5 text-left transition-all duration-200 hover:-translate-y-px hover:border-border-strong hover:bg-surface"
+                        style={{
+                          animationDelay: `${index * 70}ms`,
+                          animationFillMode: 'backwards',
+                        }}
+                      >
+                        <span className="block font-serif text-2xl text-charcoal">
+                          {entry.word}
+                        </span>
+                        <span className="mt-2 block font-serif text-base italic leading-relaxed text-charcoal-light">
+                          {entry.teaser}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            </section>
+          )}
         </div>
       </main>
 

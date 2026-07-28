@@ -19,6 +19,12 @@ export async function GET() {
           summary: 'Get etymology for a word',
           parameters: [
             { name: 'word', in: 'query', required: true, schema: { type: 'string' } },
+            {
+              name: 'language',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ['en', 'it', 'es', 'fr', 'pt'], default: 'en' },
+            },
             { name: 'stream', in: 'query', required: false, schema: { type: 'boolean' } },
           ],
         },
@@ -26,7 +32,15 @@ export async function GET() {
       '/api/suggestions': {
         get: {
           summary: 'Get suggestion words',
-          parameters: [{ name: 'q', in: 'query', required: true, schema: { type: 'string' } }],
+          parameters: [
+            { name: 'q', in: 'query', required: true, schema: { type: 'string' } },
+            {
+              name: 'language',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ['en', 'it', 'es', 'fr', 'pt'], default: 'en' },
+            },
+          ],
         },
       },
       '/api/random-word': {
@@ -37,13 +51,29 @@ export async function GET() {
       '/api/pronunciation': {
         get: {
           summary: 'Get pronunciation data',
-          parameters: [{ name: 'word', in: 'query', required: true, schema: { type: 'string' } }],
+          parameters: [
+            { name: 'word', in: 'query', required: true, schema: { type: 'string' } },
+            {
+              name: 'language',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ['en', 'it', 'es', 'fr', 'pt'], default: 'en' },
+            },
+          ],
         },
       },
       '/api/ngram': {
         get: {
           summary: 'Get usage timeline data',
-          parameters: [{ name: 'word', in: 'query', required: true, schema: { type: 'string' } }],
+          parameters: [
+            { name: 'word', in: 'query', required: true, schema: { type: 'string' } },
+            {
+              name: 'language',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ['en', 'it', 'es', 'fr', 'pt'], default: 'en' },
+            },
+          ],
         },
       },
       '/api/health': {

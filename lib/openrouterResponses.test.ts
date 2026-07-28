@@ -12,7 +12,8 @@ describe('openrouterResponses', () => {
     const request = buildSynthesisRequest('Analyze this word')
 
     expect(request.model).toBe('openai/gpt-5.6-luna')
-    expect(request.reasoning).toEqual({ effort: 'low' })
+    expect(request.reasoning).toEqual({ effort: 'low', exclude: true })
+    expect(request.models).toEqual(['openai/gpt-5.4-mini', 'google/gemini-3.5-flash'])
     expect(request.max_output_tokens).toBe(9000)
     expect(request.text.format).toMatchObject({
       type: 'json_schema',
@@ -24,12 +25,25 @@ describe('openrouterResponses', () => {
     expect('temperature' in request).toBe(false)
   })
 
+  test('selects the strict paired-prose schema for an explicit beta language', () => {
+    const request = buildSynthesisRequest('Analizza casa', undefined, 'it')
+    const format = request.text.format
+    expect(format.type).toBe('json_schema')
+    if (format.type !== 'json_schema') throw new Error('expected json schema')
+    const schema = format.schema as {
+      properties: { language: { enum: string[] }; definition: { properties: object } }
+    }
+    expect(schema.properties.language.enum).toContain('it')
+    expect(Object.keys(schema.properties.definition.properties)).toEqual(['en', 'local'])
+  })
+
   test('buildSynthesisRequest adapts reasoning to model capabilities', () => {
     expect(buildSynthesisRequest('Analyze', 'openai/gpt-5.6-luna').reasoning).toEqual({
       effort: 'low',
+      exclude: true,
     })
     expect(buildSynthesisRequest('Analyze', 'google/gemini-3.5-flash').reasoning).toEqual({
-      effort: 'minimal',
+      effort: 'low',
       exclude: true,
     })
     expect(buildSynthesisRequest('Analyze', 'moonshotai/kimi-k2.6').reasoning).toEqual({
@@ -57,11 +71,12 @@ describe('openrouterResponses', () => {
     )
   })
 
-  test('buildRootExtractionRequest disables reasoning for tiny root extraction output', () => {
+  test('buildRootExtractionRequest keeps Luna reasoning low and private', () => {
     const request = buildRootExtractionRequest('Analyze roots')
 
     expect(request.model).toBe('openai/gpt-5.6-luna')
-    expect(request.reasoning).toEqual({ effort: 'none' })
+    expect(request.reasoning).toEqual({ effort: 'low', exclude: true })
+    expect(request.models).toEqual(['openai/gpt-5.4-mini', 'google/gemini-3.5-flash'])
     // require_parameters is synthesis-only: adding it here slow-routed the
     // ~100-token extraction call from ~1s to 15s+ in live tests.
     expect('provider' in request).toBe(false)
@@ -83,6 +98,14 @@ describe('openrouterResponses', () => {
       },
     })
     expect('temperature' in request).toBe(false)
+  })
+
+  test('an explicit model override does not inherit production fallbacks', () => {
+    const request = buildSynthesisRequest('Analyze', 'openai/gpt-5.6-luna')
+
+    expect(request.model).toBe('openai/gpt-5.6-luna')
+    expect('models' in request).toBe(false)
+    expect(request.reasoning).toEqual({ effort: 'low', exclude: true })
   })
 
   test('extractOutputText prefers output_text and falls back to output content text', () => {
@@ -264,5 +287,24 @@ describe('openrouterResponses', () => {
         }
       )
     ).toThrow('Provider disconnected unexpectedly')
+  })
+
+  test('reduceStreamEvent never forwards reasoning deltas as user-visible text', () => {
+    expect(
+      reduceStreamEvent(
+        {
+          fullText: 'visible',
+          finalResponse: null,
+        },
+        {
+          type: 'response.reasoning_summary_text.delta',
+          delta: 'private reasoning',
+        }
+      )
+    ).toEqual({
+      emittedText: '',
+      fullText: 'visible',
+      finalResponse: null,
+    })
   })
 })

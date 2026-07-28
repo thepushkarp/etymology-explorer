@@ -8,6 +8,7 @@ Try it out at [etymex.com](https://etymex.com)
 
 - **Public Mode**: No client-side API keys needed — uses a server-side LLM with rate limiting, caching, and budget controls
 - **Grounded Etymology**: Source-backed confidence scoring (high/medium/low) for each ancestral stage
+- **Romance-language Beta**: Explicit Italian, Spanish, French, and neutral Portuguese lookup with paired local/English prose and no spelling-based language inference
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
 - **Part of Speech Tags**: See grammatical categories (noun/verb/adjective) with alternate pronunciations for words like "record"
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
@@ -88,6 +89,9 @@ RATE_LIMIT_ENABLED=true
 
 `ELEVENLABS_VOICE_ID` must be a voice available to your account in `My Voices`.
 Free-tier accounts cannot use Voice Library/community voices through the API.
+Pronunciation requests pass the selected ISO 639-1 `language_code` to `eleven_v3` for
+language selection and text normalization. Accent still depends on the configured voice;
+`pt` does not select a Brazilian or European accent.
 
 See `.env.example` for full documentation.
 
@@ -105,6 +109,10 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
 - **Data Sources**:
   - [Etymonline](https://www.etymonline.com/) - Historical etymology
   - [Wiktionary](https://en.wiktionary.org/) - Definitions and linguistic data
+  - Native Italian, Spanish, French, and Portuguese Wiktionary editions - selected-language etymology sections
+  - [Wikidata Lexemes](https://www.wikidata.org/wiki/Wikidata:Lexicographical_data/Documentation) - language-tagged lemmas, forms, senses, and lexical claims
+  - [FreeDictionaryAPI](https://freedictionaryapi.com/) - multilingual senses, forms, and IPA (not etymology)
+  - [Dicionário Aberto](https://api.dicionario-aberto.net/index.html) - older Portuguese dictionary evidence
   - [Free Dictionary API](https://dictionaryapi.dev/) - Definitions, pronunciation hints, and origin data
   - [Wikipedia](https://en.wikipedia.org/) - Encyclopedic context
   - [Urban Dictionary](https://www.urbandictionary.com/) - Modern slang (quality-filtered)
@@ -185,15 +193,15 @@ etymology-explorer/
 
 ## API Endpoints
 
-| Endpoint             | Method | Description                                                   | Auth Required     |
-| -------------------- | ------ | ------------------------------------------------------------- | ----------------- |
-| `/api/etymology`     | GET    | Synthesize etymology (`?word=X`, optional `?stream=true` SSE) | No (rate-limited) |
-| `/api/pronunciation` | GET    | Get pronunciation audio                                       | No                |
-| `/api/suggestions`   | GET    | Get autocomplete and typo suggestions                         | No                |
-| `/api/random-word`   | GET    | Get a random word                                             | No                |
-| `/api/ngram`         | GET    | Get Google Books usage-over-time data (`?word=X`)             | No                |
-| `/api/health`        | GET    | Liveness check                                                | No                |
-| `/api/admin/stats`   | GET    | Get budget/usage statistics and counters                      | Admin secret      |
+| Endpoint             | Method | Description                                                        | Auth Required     |
+| -------------------- | ------ | ------------------------------------------------------------------ | ----------------- |
+| `/api/etymology`     | GET    | Synthesize etymology (`?word=X`, optional `language` and `stream`) | No (rate-limited) |
+| `/api/pronunciation` | GET    | Get pronunciation audio (`?word=X&language=it`)                    | No                |
+| `/api/suggestions`   | GET    | Get language-aware autocomplete suggestions                        | No                |
+| `/api/random-word`   | GET    | Get a random word                                                  | No                |
+| `/api/ngram`         | GET    | Get language-aware Google Books usage data (`?word=X`)             | No                |
+| `/api/health`        | GET    | Liveness check                                                     | No                |
+| `/api/admin/stats`   | GET    | Get budget/usage statistics and counters                           | Admin secret      |
 
 ## How It Works
 
@@ -209,8 +217,25 @@ etymology-explorer/
    - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
-6. **Budget Enforcement**: Cost guard tracks monthly spend (OpenRouter-reported cost, with `openai/gpt-5.6-luna` pricing as fallback) against a $10/month cap and switches from normal to cache_only mode at 90% of budget; both the root-extraction and synthesis LLM calls are counted
+6. **Budget Enforcement**: Cost guard tracks monthly spend (OpenRouter-reported cost, with a conservative fallback-chain pricing ceiling when cost is omitted) against a $10/month cap and switches from normal to cache_only mode at 90% of budget; both the root-extraction and synthesis LLM calls are counted
 7. **Rich Display**: Etymology rendered with expandable roots, ancestry graph with confidence badges, POS tags, modern usage, related words, and source attribution (supplemental sources are only surfaced when significance checks pass)
+
+### LLM routing and fallbacks
+
+Production synthesis and LLM root extraction use `openai/gpt-5.6-luna` through
+OpenRouter's Responses API. Both paths explicitly set low reasoning and exclude
+the reasoning trace from the response. Reasoning remains enabled internally but
+is never returned to the browser.
+
+OpenRouter tries these model fallbacks in order when Luna is unavailable,
+rate-limited, or rejected by provider routing:
+
+1. `openai/gpt-5.4-mini` — closest proven fallback; passed the project's 15-word strict-schema bakeoff.
+2. `google/gemini-3.5-flash` — cross-provider redundancy; also passed the strict-schema bakeoff.
+
+Explicit `--model` benchmark overrides do not inherit the production fallback
+chain. `openai/gpt-5.6-terra` is a compatible future candidate, but remains
+disabled until it completes the same etymology-quality and latency bakeoff.
 
 ### Architecture Diagram
 

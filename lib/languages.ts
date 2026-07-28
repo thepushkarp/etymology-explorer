@@ -1,0 +1,107 @@
+export const SUPPORTED_LANGUAGE_CODES = ['en', 'it', 'es', 'fr', 'pt'] as const
+
+export type LanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number]
+export type BetaLanguageCode = Exclude<LanguageCode, 'en'>
+
+export const BETA_SYMBOL = 'β'
+
+export interface LanguageDefinition {
+  code: LanguageCode
+  englishName: string
+  nativeName: string
+  beta: boolean
+  wiktionaryEdition: string
+  englishWiktionaryHeading: string
+  nativeWiktionaryHeading: string
+  etymologyHeading: RegExp
+  ngramCorpus: string | null
+}
+
+export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
+  en: {
+    code: 'en',
+    englishName: 'English',
+    nativeName: 'English',
+    beta: false,
+    wiktionaryEdition: 'en',
+    englishWiktionaryHeading: 'English',
+    nativeWiktionaryHeading: 'English',
+    etymologyHeading: /^Etymology(?:\s+\d+)?$/i,
+    ngramCorpus: 'eng-2019',
+  },
+  it: {
+    code: 'it',
+    englishName: 'Italian',
+    nativeName: 'Italiano',
+    beta: true,
+    wiktionaryEdition: 'it',
+    englishWiktionaryHeading: 'Italian',
+    nativeWiktionaryHeading: 'Italiano',
+    etymologyHeading: /^Etimologia(?:\s*\/\s*Derivazione)?(?:\s+\d+)?$/i,
+    ngramCorpus: 'ita-2019',
+  },
+  es: {
+    code: 'es',
+    englishName: 'Spanish',
+    nativeName: 'Español',
+    beta: true,
+    wiktionaryEdition: 'es',
+    englishWiktionaryHeading: 'Spanish',
+    nativeWiktionaryHeading: 'Español',
+    etymologyHeading: /^Etimología(?:\s+\d+)?$/i,
+    ngramCorpus: 'spa-2019',
+  },
+  fr: {
+    code: 'fr',
+    englishName: 'French',
+    nativeName: 'Français',
+    beta: true,
+    wiktionaryEdition: 'fr',
+    englishWiktionaryHeading: 'French',
+    nativeWiktionaryHeading: 'Français',
+    etymologyHeading: /^Étymologie(?:\s+\d+)?$/i,
+    ngramCorpus: 'fre-2019',
+  },
+  pt: {
+    code: 'pt',
+    englishName: 'Portuguese',
+    nativeName: 'Português',
+    beta: true,
+    wiktionaryEdition: 'pt',
+    englishWiktionaryHeading: 'Portuguese',
+    nativeWiktionaryHeading: 'Português',
+    etymologyHeading: /^Etimologia(?:\s+\d+)?$/i,
+    ngramCorpus: null,
+  },
+}
+
+export function isLanguageCode(value: unknown): value is LanguageCode {
+  return (
+    typeof value === 'string' &&
+    (SUPPORTED_LANGUAGE_CODES as readonly string[]).includes(value.toLowerCase())
+  )
+}
+
+export function parseLanguageCode(value: string | null | undefined): LanguageCode | null {
+  if (!value) return 'en'
+  const normalized = value.toLowerCase()
+  return isLanguageCode(normalized) ? normalized : null
+}
+
+export function isBetaLanguage(language: LanguageCode): language is BetaLanguageCode {
+  return language !== 'en'
+}
+
+export function languageDisplayName(language: LanguageCode): string {
+  return LANGUAGES[language].nativeName
+}
+
+export function wordPagePath(word: string, language: LanguageCode = 'en'): string {
+  const normalizedWord = word.normalize('NFKC').trim().toLowerCase()
+  const encodedWord = encodeURIComponent(normalizedWord)
+  return language === 'en' ? `/word/${encodedWord}` : `/word/${language}/${encodedWord}`
+}
+
+export function lexemeKey(language: LanguageCode, word: string): string {
+  return `${language}:${word.normalize('NFKC').trim().toLowerCase()}`
+}

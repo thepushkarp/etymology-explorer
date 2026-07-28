@@ -8,7 +8,13 @@
  * there is no growing event array to rebuild from on every render.
  */
 
-import type { EtymologyResult, NgramResult, StreamEvent } from './types'
+import type {
+  DisplayEtymologyResult,
+  EnglishEtymologyResult,
+  EtymologyResult,
+  NgramResult,
+  StreamEvent,
+} from './types'
 import { StreamingUiError, toStreamingUiError } from './streamingError'
 
 export type StreamStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -42,7 +48,7 @@ export const SECTION_KEYS = [
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 /** Progressive slice of the final result, hydrated one section at a time */
-export type PartialEtymology = Partial<Pick<EtymologyResult, SectionKey>>
+export type PartialEtymology = Partial<Pick<EnglishEtymologyResult, SectionKey>>
 
 /**
  * Fill the streamed sections into a full-shaped EtymologyResult, defaulting
@@ -54,8 +60,9 @@ export function toPartialResult(
   word: string,
   sections: PartialEtymology,
   ngram?: NgramResult | null
-): EtymologyResult {
+): DisplayEtymologyResult {
   return {
+    language: 'en',
     word: sections.word ?? word,
     pronunciation: sections.pronunciation ?? '',
     definition: sections.definition ?? '',

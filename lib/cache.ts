@@ -6,11 +6,13 @@
 import { revalidateTag } from 'next/cache'
 import { after } from 'next/server'
 import { EtymologyResult } from './types'
-import { EtymologyResultSchema } from './schemas/etymology'
+import { CachedEtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
 import { getRedis } from './redis'
 import { safeError } from './errorUtils'
 import { emitSecurityEvent } from './telemetry'
+import type { LanguageCode } from './languages'
+import { lexemeKey } from './languages'
 
 /** Apply ±jitter to a TTL to prevent synchronized cache stampedes */
 function jitterTTL(ttl: number): number {
@@ -39,17 +41,34 @@ export function isCacheConfigured(): boolean {
  * Returns null if not cached, invalid schema, or on error (fail open)
  * Uses Zod validation to detect schema mismatches from old cache entries
  */
-export async function getCachedEtymology(word: string): Promise<EtymologyResult | null> {
+function etymologyKey(word: string, language: LanguageCode): string {
+  const normalized = word.toLowerCase().trim()
+  return language === 'en'
+    ? `${ETYMOLOGY_PREFIX}${normalized}`
+    : `${ETYMOLOGY_PREFIX}${language}:${normalized}`
+}
+
+export function etymologyWordTag(word: string, language: LanguageCode = 'en'): string {
+  const normalized = word.toLowerCase().trim()
+  return language === 'en'
+    ? `etymology-word:${normalized}`
+    : `etymology-word:${lexemeKey(language, normalized)}`
+}
+
+export async function getCachedEtymology(
+  word: string,
+  language: LanguageCode = 'en'
+): Promise<EtymologyResult | null> {
   const redis = getRedis()
   if (!redis) return null
 
-  const key = `${ETYMOLOGY_PREFIX}${word.toLowerCase().trim()}`
+  const key = etymologyKey(word, language)
   try {
     const raw = await redis.get(key)
     if (!raw) return null
 
     // Validate against current schema - treats invalid data as cache miss
-    const parsed = EtymologyResultSchema.safeParse(raw)
+    const parsed = CachedEtymologyResultSchema.safeParse(raw)
     if (!parsed.success) {
       console.warn(
         `[Cache] Schema mismatch for "${word}":`,
@@ -63,7 +82,15 @@ export async function getCachedEtymology(word: string): Promise<EtymologyResult 
       return null // Treat as cache miss, will re-fetch from LLM
     }
 
-    return parsed.data as EtymologyResult
+    const result = parsed.data as EtymologyResult
+    const resultLanguage = result.language ?? 'en'
+    if (resultLanguage !== language) {
+      console.warn(
+        `[Cache] Language mismatch for "${word}": requested ${language}, cached ${resultLanguage}`
+      )
+      return null
+    }
+    return result.language ? result : { ...result, language: 'en' }
   } catch (error) {
     console.error('[Cache] Etymology get error:', safeError(error))
     return null // Fail open - continue without cache
@@ -76,12 +103,16 @@ export async function getCachedEtymology(word: string): Promise<EtymologyResult 
  * already validated by finalizeResult in lib/llm.ts, and reads re-validate
  * for forward compatibility.
  */
-export async function cacheEtymology(word: string, result: EtymologyResult): Promise<void> {
+export async function cacheEtymology(
+  word: string,
+  result: EtymologyResult,
+  language: LanguageCode = result.language ?? 'en'
+): Promise<void> {
   const redis = getRedis()
   if (!redis) return
 
   const normalized = word.toLowerCase().trim()
-  const key = `${ETYMOLOGY_PREFIX}${normalized}`
+  const key = etymologyKey(normalized, language)
   try {
     await redis.set(key, result, { ex: jitterTTL(ETYMOLOGY_TTL) })
     console.log(`[Cache] Stored etymology for "${word}"`)
@@ -109,7 +140,7 @@ export async function cacheEtymology(word: string, result: EtymologyResult): Pro
   // throws and the page refreshes on its hourly data-cache window instead.
   try {
     after(() => {
-      revalidateTag(`etymology-word:${normalized}`, { expire: 0 })
+      revalidateTag(etymologyWordTag(normalized, language), { expire: 0 })
     })
   } catch (error) {
     console.warn('[Cache] Word page revalidation skipped:', safeError(error))
@@ -119,11 +150,14 @@ export async function cacheEtymology(word: string, result: EtymologyResult): Pro
 /**
  * Get cached audio (as base64 string)
  */
-export async function getCachedAudio(word: string): Promise<string | null> {
+export async function getCachedAudio(
+  word: string,
+  language: LanguageCode = 'en'
+): Promise<string | null> {
   const redis = getRedis()
   if (!redis) return null
 
-  const key = `${AUDIO_PREFIX}${word.toLowerCase().trim()}`
+  const key = `${AUDIO_PREFIX}${lexemeKey(language, word)}`
   try {
     return await redis.get<string>(key)
   } catch (error) {
@@ -135,11 +169,15 @@ export async function getCachedAudio(word: string): Promise<string | null> {
 /**
  * Cache audio (as base64 string)
  */
-export async function cacheAudio(word: string, audioBase64: string): Promise<void> {
+export async function cacheAudio(
+  word: string,
+  audioBase64: string,
+  language: LanguageCode = 'en'
+): Promise<void> {
   const redis = getRedis()
   if (!redis) return
 
-  const key = `${AUDIO_PREFIX}${word.toLowerCase().trim()}`
+  const key = `${AUDIO_PREFIX}${lexemeKey(language, word)}`
   try {
     await redis.set(key, audioBase64, { ex: jitterTTL(AUDIO_TTL) })
     console.log(`[Cache] Stored audio for "${word}"`)
@@ -152,11 +190,16 @@ export async function cacheAudio(word: string, audioBase64: string): Promise<voi
  * Check if a word is in the negative cache (known invalid/no-source words).
  * Returns false on error (fail open).
  */
-export async function getNegativeCache(word: string): Promise<boolean> {
+export async function getNegativeCache(
+  word: string,
+  language: LanguageCode = 'en'
+): Promise<boolean> {
   const redis = getRedis()
   if (!redis) return false
 
-  const key = `neg:v2:${word.toLowerCase().trim()}`
+  const normalized = word.toLowerCase().trim()
+  const key =
+    language === 'en' ? `neg:v2:${normalized}` : `neg:v2:${lexemeKey(language, normalized)}`
   try {
     const exists = await redis.exists(key)
     return exists === 1
@@ -171,7 +214,11 @@ export async function getNegativeCache(word: string): Promise<boolean> {
  * Only caches specific error types — transient errors should NOT be cached.
  * Fails silently.
  */
-export async function cacheNegative(word: string, errorType: string): Promise<void> {
+export async function cacheNegative(
+  word: string,
+  errorType: string,
+  language: LanguageCode = 'en'
+): Promise<void> {
   const redis = getRedis()
   if (!redis) return
 
@@ -179,7 +226,9 @@ export async function cacheNegative(word: string, errorType: string): Promise<vo
     return
   }
 
-  const key = `neg:v2:${word.toLowerCase().trim()}`
+  const normalized = word.toLowerCase().trim()
+  const key =
+    language === 'en' ? `neg:v2:${normalized}` : `neg:v2:${lexemeKey(language, normalized)}`
   try {
     await redis.set(key, '1', { ex: jitterTTL(CONFIG.negativeCacheTTL) })
   } catch (error) {

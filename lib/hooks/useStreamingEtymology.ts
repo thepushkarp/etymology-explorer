@@ -4,6 +4,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { StreamEvent } from '@/lib/types'
 import { useHistory } from '@/lib/hooks/useHistory'
 import { initialStreamState, streamReducer } from '@/lib/streamReducer'
+import type { LanguageCode } from '@/lib/languages'
 
 const MAX_RETRIES = 2
 const RETRY_BASE_DELAY_MS = 600
@@ -14,7 +15,7 @@ const RETRY_BASE_DELAY_MS = 600
  * EventSource lifecycle, reconnection with backoff, and the non-streaming
  * fallback fetch.
  */
-export function useStreamingEtymology() {
+export function useStreamingEtymology(language: LanguageCode = 'en') {
   const [progress, dispatch] = useReducer(streamReducer, initialStreamState)
 
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -24,7 +25,9 @@ export function useStreamingEtymology() {
   const fallbackFetch = useCallback(
     async (word: string, requestId: number) => {
       try {
-        const response = await fetch(`/api/etymology?word=${encodeURIComponent(word)}`)
+        const response = await fetch(
+          `/api/etymology?word=${encodeURIComponent(word)}&language=${language}`
+        )
         const payload = await response.json()
 
         if (activeRequestRef.current !== requestId) return
@@ -42,7 +45,7 @@ export function useStreamingEtymology() {
         }
 
         dispatch({ type: 'fallback_success', result: payload.data })
-        addToHistory(word)
+        addToHistory(word, language)
       } catch {
         if (activeRequestRef.current !== requestId) return
         dispatch({
@@ -55,7 +58,7 @@ export function useStreamingEtymology() {
         })
       }
     },
-    [addToHistory]
+    [addToHistory, language]
   )
 
   // Cleanup EventSource on unmount
@@ -86,7 +89,7 @@ export function useStreamingEtymology() {
       const connect = (attempt: number) => {
         if (activeRequestRef.current !== requestId) return
 
-        const url = `/api/etymology?word=${encodeURIComponent(trimmed)}&stream=true`
+        const url = `/api/etymology?word=${encodeURIComponent(trimmed)}&language=${language}&stream=true`
         const eventSource = new EventSource(url)
         eventSourceRef.current = eventSource
 
@@ -99,7 +102,7 @@ export function useStreamingEtymology() {
             dispatch({ type: 'stream_event', event: streamEvent })
 
             if (streamEvent.type === 'result') {
-              addToHistory(trimmed)
+              addToHistory(trimmed, language)
               eventSource.close()
               eventSourceRef.current = null
             }
@@ -150,7 +153,7 @@ export function useStreamingEtymology() {
         void fallbackFetch(trimmed, requestId)
       }
     },
-    [addToHistory, fallbackFetch]
+    [addToHistory, fallbackFetch, language]
   )
 
   const reset = useCallback(() => {
