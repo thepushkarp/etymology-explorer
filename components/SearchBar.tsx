@@ -169,7 +169,7 @@ export function SearchBar({
       >
         <div
           className={`
-            absolute inset-0 rounded-[1.25rem] border bg-surface/96 shadow-[0_22px_60px_-34px_var(--shadow-heavy)]
+            absolute inset-0 rounded-[1rem] border bg-surface/96 shadow-[0_18px_48px_-34px_var(--shadow-heavy)]
             transition-all duration-300
             ${
               isFocused
@@ -179,12 +179,12 @@ export function SearchBar({
           `}
         />
 
-        <div className="relative rounded-[1.25rem]">
-          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[1.25rem]">
+        <div className="relative rounded-[1rem]">
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[1rem]">
             <div className="h-px w-full bg-gradient-to-r from-transparent via-border-strong/80 to-transparent" />
           </div>
 
-          <div className="relative flex items-center gap-2 rounded-[1.25rem] px-3 py-3 sm:px-4">
+          <div className="relative flex items-center gap-2 rounded-[1rem] px-2.5 py-2.5 sm:px-3">
             <input
               ref={inputRef}
               type="text"
@@ -196,7 +196,7 @@ export function SearchBar({
               placeholder="Enter a word..."
               disabled={isLoading}
               className="
-                min-w-0 flex-1 rounded-[1rem] border border-transparent bg-transparent px-2 py-4 text-lg
+                min-w-0 flex-1 rounded-[0.8rem] border border-transparent bg-transparent px-2 py-3 text-lg
                 font-serif tracking-[0.01em] text-charcoal outline-none placeholder:text-charcoal-light/68
                 placeholder:italic disabled:opacity-50 sm:text-[1.45rem]
               "
@@ -208,7 +208,7 @@ export function SearchBar({
               type="submit"
               disabled={isLoading || !value.trim()}
               className="
-                inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-charcoal/12
+                inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-charcoal/12
                 bg-charcoal text-cream shadow-sm transition-all duration-300 hover:scale-[1.03]
                 hover:border-charcoal/25 hover:bg-charcoal/92 disabled:cursor-not-allowed disabled:opacity-30
                 disabled:hover:scale-100 disabled:hover:bg-charcoal

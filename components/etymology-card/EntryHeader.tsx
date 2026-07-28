@@ -44,22 +44,27 @@ export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
   ]
 
   return (
-    <header className="border-b border-border-soft pb-10">
-      <div className="flex flex-wrap items-start justify-between gap-6">
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
-            <span>entry</span>
-            {result.language !== 'en' && (
-              <span
-                aria-label="Beta"
-                className="rounded-full border border-accent-amber/45 px-2 py-0.5 tracking-[0.16em] text-accent-amber"
-              >
-                {BETA_SYMBOL}
-              </span>
-            )}
-          </p>
+    <header className="border-b border-border-soft pb-8 sm:pb-9">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-soft/70 pb-4">
+        <p className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-charcoal-light/66">
+          <span>entry</span>
+          {result.language !== 'en' && (
+            <span
+              aria-label="Beta"
+              className="normal-case rounded-full border border-accent-amber/45 px-2 py-0.5 font-serif tracking-normal text-accent-amber"
+            >
+              {BETA_SYMBOL}
+            </span>
+          )}
+        </p>
+
+        {headerActions && <div className="min-w-0 shrink-0">{headerActions}</div>}
+      </div>
+
+      <div className="mt-4">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-3 sm:gap-4">
-            <h1 className="mt-3 font-serif text-5xl font-semibold tracking-[-0.06em] text-charcoal md:text-7xl">
+            <h1 className="min-w-0 break-words font-serif text-[clamp(2.7rem,13vw,4.5rem)] font-semibold leading-[0.98] tracking-[-0.06em] text-charcoal">
               {result.word}
             </h1>
 
@@ -75,11 +80,9 @@ export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
             </span>
           )}
         </div>
-
-        {headerActions && <div className="shrink-0 pt-1 md:pt-4">{headerActions}</div>}
       </div>
 
-      <p className="mt-6 max-w-3xl font-serif text-xl leading-relaxed text-charcoal/84 sm:text-2xl">
+      <p className="mt-5 max-w-3xl font-serif text-lg leading-relaxed text-charcoal/88 sm:text-[1.35rem]">
         {result.definition}
       </p>
 
@@ -106,7 +109,7 @@ export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
         </div>
       )}
 
-      <nav className="mt-7 flex flex-wrap gap-2">
+      <nav className="mt-6 flex flex-wrap gap-2">
         {sectionLinks.map(({ label, href }) => (
           <a key={href} href={href} className="editorial-chip font-serif italic">
             {label}

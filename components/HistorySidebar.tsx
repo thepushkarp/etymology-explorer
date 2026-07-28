@@ -54,12 +54,14 @@ export function HistorySidebar({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          fixed bottom-24 left-0 z-40 inline-flex items-center gap-2 rounded-r-[1rem] border border-l-0
-          border-border-soft bg-surface/96 px-2.5 py-3 text-charcoal-light shadow-[0_18px_44px_-28px_var(--shadow-heavy)]
+          fixed bottom-4 left-4 z-30 inline-flex h-11 w-11 items-center justify-center rounded-full border
+          border-border-soft bg-surface text-charcoal-light shadow-[0_18px_44px_-24px_var(--shadow-heavy)]
           transition-all duration-300 hover:bg-cream-dark/55 hover:text-charcoal md:hidden
-          ${isOpen ? 'pointer-events-none opacity-0' : 'translate-x-0 opacity-100'}
+          ${isOpen ? 'pointer-events-none scale-90 opacity-0' : 'scale-100 opacity-100'}
         `}
         aria-label={isOpen ? 'Close history' : 'Open history'}
+        aria-expanded={isOpen}
+        aria-controls="exploration-history"
       >
         <svg
           className={`h-5 w-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
@@ -88,6 +90,8 @@ export function HistorySidebar({
           ${isOpen ? 'translate-x-72' : 'translate-x-0'}
         `}
         aria-label={isOpen ? 'Close history' : 'Open history'}
+        aria-expanded={isOpen}
+        aria-controls="exploration-history"
       >
         <svg
           className={`h-5 w-5 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
@@ -117,23 +121,29 @@ export function HistorySidebar({
 
       {/* Drawer panel */}
       <aside
+        id="exploration-history"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="exploration-history-title"
+        aria-hidden={!isOpen}
+        inert={!isOpen}
         className={`
-          fixed z-30 flex flex-col bg-surface/97 shadow-[0_24px_60px_-30px_var(--shadow-heavy)]
+          fixed bottom-0 left-0 top-0 z-50 flex w-[min(21rem,88vw)] flex-col border-r border-border-soft bg-surface
+          shadow-[0_24px_70px_-24px_var(--shadow-heavy)]
           transition-transform duration-300 ease-out
-          left-3 bottom-3 top-[12rem] right-3 rounded-[1.15rem] border border-border-soft
-          md:left-0 md:right-auto md:top-0 md:bottom-0 md:w-72 md:rounded-none md:border-r md:border-l-0 md:border-y-0
-          ${isOpen ? 'translate-x-0' : '-translate-x-[105%] md:-translate-x-full'}
+          md:w-72
+          ${isOpen ? 'translate-x-0' : 'pointer-events-none -translate-x-full'}
         `}
       >
         {/* Header */}
         <div
           className="
           flex items-center justify-between
-          px-6 py-5
+          px-5 py-5
           border-b border-border-soft
         "
         >
-          <div className="flex items-start gap-3">
+          <div className="min-w-0 flex items-start gap-3">
             <button
               onClick={() => setIsOpen(false)}
               className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-border-soft bg-surface text-charcoal-light transition-colors hover:bg-cream-dark/55 hover:text-charcoal md:hidden"
@@ -149,11 +159,16 @@ export function HistorySidebar({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <div>
+            <div className="min-w-0">
               <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
                 history
               </p>
-              <h2 className="mt-2 font-serif text-lg text-charcoal">Exploration Trail</h2>
+              <h2
+                id="exploration-history-title"
+                className="mt-1.5 truncate font-serif text-lg text-charcoal"
+              >
+                Exploration Trail
+              </h2>
             </div>
           </div>
 
@@ -161,7 +176,7 @@ export function HistorySidebar({
             <button
               onClick={onClearHistory}
               className="
-                text-xs font-serif
+                shrink-0 text-xs font-serif
                 text-charcoal-light/60
                 hover:text-red-600 dark:hover:text-red-400
                 transition-colors
@@ -230,7 +245,8 @@ export function HistorySidebar({
                         {entry.word}
                         {entry.language && entry.language !== 'en' && (
                           <small className="ml-2 uppercase text-charcoal-light/55">
-                            {entry.language} · {BETA_SYMBOL}
+                            {entry.language} ·{' '}
+                            <span className="normal-case font-serif">{BETA_SYMBOL}</span>
                           </small>
                         )}
                       </span>
@@ -254,7 +270,7 @@ export function HistorySidebar({
                         px-2 py-2
                         text-charcoal-light/50
                         hover:text-red-500 dark:hover:text-red-400
-                        opacity-0 group-hover:opacity-100
+                        opacity-70 sm:opacity-0 sm:group-hover:opacity-100
                         transition-all
                       "
                       aria-label={`Remove ${entry.word}`}
@@ -295,8 +311,8 @@ export function HistorySidebar({
       {isOpen && (
         <div
           className="
-            fixed inset-0 z-20
-            bg-charcoal/10
+            fixed inset-0 z-40
+            bg-charcoal/35 backdrop-blur-[1px]
             md:hidden
           "
           onClick={() => setIsOpen(false)}

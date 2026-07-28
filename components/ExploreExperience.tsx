@@ -44,7 +44,7 @@ export function ExploreExperience() {
   const [suggestionsVisible, setSuggestionsVisible] = useState(false)
 
   return (
-    <div className="min-h-screen bg-cream text-charcoal">
+    <div className="flex min-h-screen flex-col bg-cream text-charcoal">
       <SiteHeader />
 
       <HistorySidebar
@@ -54,33 +54,33 @@ export function ExploreExperience() {
         onRemoveEntry={removeFromHistory}
       />
 
-      <main className="relative overflow-hidden">
-        <div className="mx-auto max-w-[1180px] px-4 pb-16 pt-8 sm:px-6 sm:pt-10 lg:px-8 lg:pt-14">
-          <section className="border-b border-border-soft pb-10 sm:pb-12">
+      <main className="relative flex-1 overflow-hidden">
+        <div className="mx-auto max-w-[1100px] px-4 pb-12 pt-8 sm:px-6 sm:pt-10 lg:px-8 lg:pt-12">
+          <section className="border-b border-border-soft pb-9 sm:pb-11">
             <div className="w-full">
               <div className="max-w-4xl">
-                <h1 className="font-serif leading-[0.98] tracking-[-0.04em] text-charcoal text-[clamp(3.35rem,14.8vw,5.8rem)] sm:tracking-[-0.05em]">
+                <h1 className="font-serif text-[clamp(3.05rem,14vw,5.55rem)] leading-[0.98] tracking-[-0.045em] text-charcoal sm:tracking-[-0.055em]">
                   Trace any <span className="text-accent-soft">word</span> back to its{' '}
                   <span className="text-accent-soft">root</span>.
                 </h1>
-                <p className="mt-6 max-w-2xl font-serif text-lg italic leading-relaxed text-charcoal-light sm:text-[1.35rem]">
+                <p className="mt-5 max-w-2xl font-serif text-lg italic leading-relaxed text-charcoal-light sm:text-[1.3rem]">
                   Trace words through older forms, borrowed meanings, and hidden roots.
                 </p>
               </div>
 
-              <div className="mt-8 w-full">
-                <div className="mb-3 flex items-center gap-3">
+              <div className="mt-8 w-full max-w-5xl">
+                <div className="mb-2 flex items-center justify-between gap-4 border-b border-border-soft px-1 pb-2">
                   <label
                     htmlFor="search-language"
-                    className="text-[11px] uppercase tracking-[0.2em] text-charcoal-light/70"
+                    className="text-[10px] uppercase tracking-[0.22em] text-charcoal-light/72"
                   >
-                    Language
+                    Dictionary edition
                   </label>
                   <select
                     id="search-language"
                     value={language}
                     onChange={(event) => setLanguage(event.target.value as LanguageCode)}
-                    className="rounded-full border border-border-soft bg-surface px-4 py-2 font-serif text-sm text-charcoal outline-none focus:border-border-strong"
+                    className="min-w-0 border-0 bg-transparent py-1 pl-3 pr-1 text-right font-serif text-sm text-charcoal outline-none sm:text-base"
                   >
                     {SUPPORTED_LANGUAGE_CODES.map((code) => (
                       <option key={code} value={code}>
@@ -97,7 +97,7 @@ export function ExploreExperience() {
                   onSuggestionsVisibilityChange={setSuggestionsVisible}
                 />
                 {!suggestionsVisible && language === 'en' && (
-                  <div className="mt-5 flex justify-center">
+                  <div className="mt-4 flex justify-center">
                     <SurpriseButton onWordSelected={navigateToWord} />
                   </div>
                 )}
@@ -106,24 +106,24 @@ export function ExploreExperience() {
           </section>
 
           {language === 'en' && (
-            <section className="pt-10">
-              <div>
-                <section className="editorial-panel p-8 sm:p-10">
+            <section className="pt-9">
+              <div className="border-y border-border-soft py-7 sm:py-9">
+                <section>
                   <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">
                     try these words
                   </p>
-                  <h2 className="mt-3 font-serif text-3xl tracking-[-0.04em] text-charcoal sm:text-4xl">
+                  <h2 className="mt-3 max-w-3xl font-serif text-[2rem] leading-tight tracking-[-0.045em] text-charcoal sm:text-4xl">
                     Start with a word that already has a story.
                   </h2>
                   <p className="mt-3 max-w-2xl font-serif italic leading-relaxed text-charcoal-light">
                     Begin with a familiar word, then follow its older forms and borrowed meanings.
                   </p>
-                  <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-7 grid border-t border-border-soft sm:grid-cols-2">
                     {CURATED_IDLE_WORDS.map((entry, index) => (
                       <button
                         key={entry.word}
                         onClick={() => navigateToWord(entry.word)}
-                        className="animate-fadeIn rounded-[1rem] border border-border-soft bg-[color:var(--surface-muted)]/28 px-4 py-5 text-left transition-all duration-200 hover:-translate-y-px hover:border-border-strong hover:bg-surface"
+                        className="animate-fadeIn border-b border-border-soft px-1 py-5 text-left transition-colors duration-200 hover:bg-surface/55 sm:px-4 sm:[&:nth-child(odd)]:border-r"
                         style={{
                           animationDelay: `${index * 70}ms`,
                           animationFillMode: 'backwards',
@@ -142,6 +142,42 @@ export function ExploreExperience() {
               </div>
             </section>
           )}
+
+          {language !== 'en' && (
+            <section className="pt-9" aria-label={`${LANGUAGES[language].nativeName} beta edition`}>
+              <div className="border-y border-border-soft py-7 sm:py-9">
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-charcoal-light/62">
+                      research edition
+                    </p>
+                    <h2 className="mt-2 font-serif text-3xl tracking-[-0.04em] text-charcoal sm:text-4xl">
+                      {LANGUAGES[language].nativeName}{' '}
+                      <span className="normal-case text-accent-amber">{BETA_SYMBOL}</span>
+                    </h2>
+                  </div>
+                  <p className="max-w-xl font-serif italic leading-relaxed text-charcoal-light">
+                    Search this language explicitly. Every entry keeps one evidence trail with
+                    paired English and {LANGUAGES[language].nativeName} commentary.
+                  </p>
+                </div>
+                <dl className="mt-7 grid gap-5 border-t border-border-soft pt-6 sm:grid-cols-3">
+                  <EditionDetail
+                    term="No guessing"
+                    detail="The selected edition defines the lexeme."
+                  />
+                  <EditionDetail
+                    term="Paired reading"
+                    detail="Switch the whole entry between both languages."
+                  />
+                  <EditionDetail
+                    term="Native evidence"
+                    detail="Language-specific Wiktionary and lexeme sources."
+                  />
+                </dl>
+              </div>
+            </section>
+          )}
         </div>
       </main>
 
@@ -152,6 +188,15 @@ export function ExploreExperience() {
       />
 
       <SiteFooter />
+    </div>
+  )
+}
+
+function EditionDetail({ term, detail }: { term: string; detail: string }) {
+  return (
+    <div>
+      <dt className="text-[10px] uppercase tracking-[0.2em] text-charcoal-light/62">{term}</dt>
+      <dd className="mt-2 font-serif text-base leading-relaxed text-charcoal/82">{detail}</dd>
     </div>
   )
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
+import { ResultEditionSwitch } from '@/components/ResultEditionSwitch'
 import { ShareMenu } from '@/components/ShareMenu'
 import { useHistory } from '@/lib/hooks/useHistory'
 import { useNgram } from '@/lib/hooks/useNgram'
@@ -10,7 +11,7 @@ import { usePronunciation } from '@/lib/hooks/usePronunciation'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
 import { consumeTraceIntent } from '@/lib/traceIntent'
 import type { EtymologyResult } from '@/lib/types'
-import { LANGUAGES, type BetaLanguageCode } from '@/lib/languages'
+import type { BetaLanguageCode } from '@/lib/languages'
 import { localizeResult, type ResultLocale } from '@/lib/resultLocalization'
 
 interface WordPageEntryProps {
@@ -46,23 +47,13 @@ export function WordPageEntry({ result }: WordPageEntryProps) {
 
   const headerActions = useMemo(
     () => (
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <div className="flex items-center justify-end gap-2">
         {language !== 'en' && (
-          <div
-            className="inline-flex rounded-full border border-border-soft bg-surface p-1"
-            role="group"
-            aria-label="Result language"
-          >
-            <ToggleButton active={contentLocale === 'en'} onClick={() => setContentLocale('en')}>
-              English
-            </ToggleButton>
-            <ToggleButton
-              active={contentLocale === 'local'}
-              onClick={() => setContentLocale('local')}
-            >
-              {LANGUAGES[language as BetaLanguageCode].nativeName}
-            </ToggleButton>
-          </div>
+          <ResultEditionSwitch
+            language={language as BetaLanguageCode}
+            locale={contentLocale}
+            onChange={setContentLocale}
+          />
         )}
         <ShareMenu result={resultWithNgram} />
       </div>
@@ -88,28 +79,5 @@ export function WordPageEntry({ result }: WordPageEntryProps) {
         onPlayPronunciation={handlePlayPronunciation}
       />
     </>
-  )
-}
-
-function ToggleButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
-        active ? 'bg-charcoal text-cream' : 'text-charcoal-light hover:text-charcoal'
-      }`}
-    >
-      {children}
-    </button>
   )
 }

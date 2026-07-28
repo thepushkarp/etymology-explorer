@@ -33,7 +33,7 @@ export const EtymologyCard = memo(function EtymologyCard({
       ? undefined
       : resultLabels(result.language as BetaLanguageCode, contentLocale)
   return (
-    <article className="editorial-shell animate-fadeIn p-6 sm:p-8 md:p-12">
+    <article className="editorial-shell animate-fadeIn p-4 sm:p-7 lg:p-9">
       <div className="relative">
         <EntryHeader result={result} headerActions={headerActions} />
 
@@ -41,6 +41,7 @@ export const EtymologyCard = memo(function EtymologyCard({
           <AncestrySection
             graph={result.ancestryGraph}
             word={result.word}
+            language={result.language}
             title={labels?.ancestry}
           />
         )}
@@ -122,7 +123,7 @@ const SCHOLARLY_REFERENCES: Record<BetaLanguageCode, Array<{ label: string; url:
 
 function ScholarlyReferences({ language, title }: { language: BetaLanguageCode; title: string }) {
   return (
-    <section className="mt-12 border-t border-border-soft pt-10">
+    <section className="mt-10 border-t border-border-soft pt-8">
       <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/66">
         {title}
       </p>

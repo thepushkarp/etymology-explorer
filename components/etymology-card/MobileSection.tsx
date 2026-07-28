@@ -4,8 +4,8 @@ import { useState } from 'react'
 
 export const SECTION_TITLE_CLASS =
   'text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/66'
-export const SECTION_DIVIDER_CLASS = 'mt-12 border-t border-border-soft pt-10'
-export const FIRST_SECTION_CLASS = 'mt-12 pt-2'
+export const SECTION_DIVIDER_CLASS = 'mt-10 border-t border-border-soft pt-8'
+export const FIRST_SECTION_CLASS = 'mt-9 pt-1'
 
 interface MobileSectionProps {
   children: React.ReactNode

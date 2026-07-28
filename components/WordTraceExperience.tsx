@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/ErrorState'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import ResearchProgress from '@/components/ResearchProgress'
+import { ResultEditionSwitch } from '@/components/ResultEditionSwitch'
 import { ShareMenu } from '@/components/ShareMenu'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
@@ -18,7 +19,7 @@ import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
 import { consumeTraceIntent } from '@/lib/traceIntent'
 import type { StreamState } from '@/lib/streamReducer'
-import { BETA_SYMBOL, LANGUAGES, type BetaLanguageCode, type LanguageCode } from '@/lib/languages'
+import { BETA_SYMBOL, type BetaLanguageCode, type LanguageCode } from '@/lib/languages'
 import { localizeResult, type ResultLocale } from '@/lib/resultLocalization'
 
 interface WordTraceExperienceProps {
@@ -86,23 +87,13 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
   const headerActions = useMemo(
     () =>
       resultWithNgram ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           {language !== 'en' && (
-            <div className="inline-flex rounded-full border border-border-soft bg-surface p-1">
-              {(['en', 'local'] as ResultLocale[]).map((locale) => (
-                <button
-                  key={locale}
-                  type="button"
-                  onClick={() => setContentLocale(locale)}
-                  aria-pressed={contentLocale === locale}
-                  className={`rounded-full px-3 py-1.5 text-xs ${
-                    contentLocale === locale ? 'bg-charcoal text-cream' : 'text-charcoal-light'
-                  }`}
-                >
-                  {locale === 'en' ? 'English' : LANGUAGES[language as BetaLanguageCode].nativeName}
-                </button>
-              ))}
-            </div>
+            <ResultEditionSwitch
+              language={language as BetaLanguageCode}
+              locale={contentLocale}
+              onChange={setContentLocale}
+            />
           )}
           <ShareMenu result={resultWithNgram} />
         </div>
@@ -123,7 +114,7 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
   return (
     <div className="min-h-screen bg-cream text-charcoal">
       <SiteHeader compact />
-      <main className="mx-auto max-w-[1180px] px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pt-14">
+      <main className="mx-auto max-w-[1040px] px-3 pb-14 pt-8 sm:px-6 sm:pt-10 lg:px-8 lg:pt-12">
         <Link
           href="/"
           className="editorial-link inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-charcoal-light/72 transition-colors hover:text-charcoal"
@@ -136,11 +127,11 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
           {announcementFor(progress, word)}
         </div>
 
-        <div className="mt-8">
+        <div className="mt-6 sm:mt-8">
           {!hasStarted && <TraceGate word={word} language={language} onStart={startTrace} />}
 
           {isLoading && (
-            <article aria-busy="true" className="editorial-shell animate-fadeIn p-6 sm:p-8 md:p-12">
+            <article aria-busy="true" className="editorial-shell animate-fadeIn p-4 sm:p-7 lg:p-9">
               <TraceHeader
                 word={word}
                 sections={progress.sections}
@@ -212,9 +203,14 @@ function TraceGate({
     <>
       <header className="max-w-3xl pb-8">
         <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/66">
-          uncharted entry {language !== 'en' && `· ${BETA_SYMBOL}`}
+          uncharted entry{' '}
+          {language !== 'en' && (
+            <span className="normal-case font-serif tracking-normal text-accent-amber">
+              · {BETA_SYMBOL}
+            </span>
+          )}
         </p>
-        <h1 className="mt-3 font-serif text-5xl tracking-[-0.05em] text-charcoal sm:text-6xl lg:text-[4.8rem]">
+        <h1 className="mt-3 break-words font-serif text-[clamp(2.8rem,13vw,4.8rem)] leading-[0.98] tracking-[-0.05em] text-charcoal">
           {word}
         </h1>
         <p className="mt-5 max-w-2xl font-serif text-xl italic leading-relaxed text-charcoal-light sm:text-[1.7rem]">
@@ -225,7 +221,7 @@ function TraceGate({
       </header>
 
       <section className="mx-auto max-w-3xl pt-10">
-        <div className="editorial-card flex flex-col gap-6 p-8 sm:flex-row sm:items-center sm:justify-between">
+        <div className="editorial-card flex flex-col gap-6 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-8">
           <div>
             <p className="font-serif text-xl italic text-charcoal-light">no entry on file</p>
             <p className="mt-2 font-serif text-3xl tracking-[-0.03em] text-charcoal">

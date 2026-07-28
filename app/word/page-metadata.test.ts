@@ -5,6 +5,7 @@ let cachedResult: EtymologyResult | null = null
 
 mock.module('@/lib/cache', () => ({
   getCachedEtymology: async () => cachedResult,
+  etymologyWordTag: (word: string, language: string) => `${language}:${word}`,
 }))
 
 // unstable_cache needs Next's incremental cache runtime; pass functions through
@@ -12,7 +13,7 @@ mock.module('next/cache', () => ({
   unstable_cache: (fn: (...args: unknown[]) => unknown) => fn,
 }))
 
-const { generateMetadata } = await import('./[word]/page')
+const { generateMetadata } = await import('./[...segments]/page')
 
 const fixture: EtymologyResult = {
   word: 'perfidious',
@@ -34,7 +35,7 @@ const fixture: EtymologyResult = {
 }
 
 function paramsFor(word: string) {
-  return { params: Promise.resolve({ word }) }
+  return { params: Promise.resolve({ segments: [word] }) }
 }
 
 describe('/word/[word] generateMetadata', () => {
