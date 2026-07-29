@@ -43,6 +43,7 @@ export function EntrySelector({ word, entries, activeEntryId, onChange }: EntryS
     }
     if (next === null) return
     event.preventDefault()
+    event.stopPropagation()
     activate(next)
   }
 

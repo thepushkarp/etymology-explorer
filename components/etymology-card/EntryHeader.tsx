@@ -8,6 +8,7 @@ interface EntryHeaderProps {
   result: DisplayEtymologyResult
   headerActions?: React.ReactNode
   historySelector?: React.ReactNode
+  usageUnavailable?: boolean
 }
 
 function shortenMeaning(meaning: string): string {
@@ -32,12 +33,19 @@ function buildOriginHook(result: DisplayEtymologyResult): string | null {
   return `From ${parts.join(' + ')}.`
 }
 
-export function EntryHeader({ result, headerActions, historySelector }: EntryHeaderProps) {
+export function EntryHeader({
+  result,
+  headerActions,
+  historySelector,
+  usageUnavailable = false,
+}: EntryHeaderProps) {
   const originHook = buildOriginHook(result)
   const sectionLinks: Array<{ label: string; href: string }> = [
     { label: 'Ancestry', href: '#entry-ancestry' },
     { label: 'Story', href: '#entry-story' },
-    ...(result.ngram?.data.length ? [{ label: 'Usage', href: '#entry-usage' }] : []),
+    ...(result.ngram?.data.length || usageUnavailable
+      ? [{ label: 'Usage', href: '#entry-usage' }]
+      : []),
     ...(result.suggestions ? [{ label: 'Related', href: '#entry-related' }] : []),
     ...(result.roots.length > 0 ? [{ label: 'Kin', href: '#entry-kin' }] : []),
     ...(result.rawSources?.wikipedia ? [{ label: 'Context', href: '#entry-context' }] : []),

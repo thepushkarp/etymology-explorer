@@ -122,15 +122,10 @@ export function ExploreExperience() {
               </div>
 
               <div className="mt-8 w-full max-w-5xl">
-                <div className="mb-2 flex items-center justify-between gap-4 border-b border-border-soft px-1 pb-2">
-                  <label
-                    htmlFor="search-language"
-                    className="text-[10px] uppercase tracking-[0.22em] text-charcoal-light/72"
-                  >
-                    Dictionary edition
-                  </label>
+                <div className="mb-2 flex justify-end px-1">
                   <select
                     id="search-language"
+                    aria-label="Search language"
                     value={language}
                     onChange={(event) => setLanguage(event.target.value as LanguageCode)}
                     className="min-w-0 border-0 bg-transparent py-1 pl-3 pr-1 text-right font-serif text-sm text-charcoal outline-none sm:text-base"

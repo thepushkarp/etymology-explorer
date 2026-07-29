@@ -61,7 +61,8 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
   // Derived, not stored: the trace has started once the stream reducer left
   // idle. The ngram fetch keys off the same signal (word known at start).
   const hasStarted = progress.status !== 'idle'
-  const ngram = useNgram(hasStarted ? word : null, language)
+  const ngramState = useNgram(hasStarted ? word : null, language)
+  const ngram = ngramState.status === 'ready' ? ngramState.data : null
   const { play: playPronunciation } = usePronunciation(word, language)
   const selectedHistoryId =
     activeHistoryId ??
@@ -164,6 +165,7 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
                   word={word}
                   sections={progress.sections}
                   ngram={ngram}
+                  usageUnavailable={ngramState.status === 'unavailable'}
                   onWordClick={navigateToWord}
                 />
               )}
@@ -188,6 +190,7 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
               historyChoices={historyChoices}
               activeHistoryId={selectedHistoryId}
               onHistoryChange={setActiveHistoryId}
+              usageUnavailable={ngramState.status === 'unavailable'}
             />
           )}
         </div>

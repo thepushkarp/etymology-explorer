@@ -115,6 +115,8 @@ type SectionLabels = {
   ancestry: string
   story: string
   usage: string
+  usageNote: string
+  usageUnavailable: string
   modernUsage: string
   related: string
   kin: string
@@ -127,6 +129,8 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
     ancestry: 'Ascendenza della parola',
     story: 'La storia',
     usage: 'Uso nel tempo',
+    usageNote: 'Nota sul corpus',
+    usageUnavailable: 'I dati storici sull’uso non sono ancora disponibili per questo corpus.',
     modernUsage: 'Uso moderno',
     related: 'Parole correlate',
     kin: 'Parenti linguistici',
@@ -137,6 +141,8 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
     ancestry: 'Ascendencia de la palabra',
     story: 'La historia',
     usage: 'Uso a través del tiempo',
+    usageNote: 'Nota del corpus',
+    usageUnavailable: 'Los datos históricos de uso aún no están disponibles para este corpus.',
     modernUsage: 'Uso moderno',
     related: 'Palabras relacionadas',
     kin: 'Familia lingüística',
@@ -147,6 +153,9 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
     ancestry: 'Ascendance du mot',
     story: "L'histoire",
     usage: 'Usage au fil du temps',
+    usageNote: 'Note sur le corpus',
+    usageUnavailable:
+      "Les données historiques d'usage ne sont pas encore disponibles pour ce corpus.",
     modernUsage: 'Usage moderne',
     related: 'Mots apparentés',
     kin: 'Parenté linguistique',
@@ -157,6 +166,8 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
     ancestry: 'Ascendência da palavra',
     story: 'A história',
     usage: 'Uso ao longo do tempo',
+    usageNote: 'Nota do corpus',
+    usageUnavailable: 'Os dados históricos de uso ainda não estão disponíveis para este corpus.',
     modernUsage: 'Uso moderno',
     related: 'Palavras relacionadas',
     kin: 'Família linguística',
@@ -169,6 +180,8 @@ const ENGLISH_LABELS: SectionLabels = {
   ancestry: 'Word Ancestry',
   story: 'The Story',
   usage: 'Usage over time',
+  usageNote: 'Corpus note',
+  usageUnavailable: 'Usage history is not available for this corpus yet.',
   modernUsage: 'Modern Usage',
   related: 'Related Words',
   kin: 'Kin & Kindred',

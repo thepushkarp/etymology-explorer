@@ -16,6 +16,27 @@ interface Shortcut {
   keys: string[]
 }
 
+const INTERACTIVE_SHORTCUT_TARGETS = [
+  'a[href]',
+  'button',
+  'input',
+  'select',
+  'textarea',
+  '[contenteditable="true"]',
+  '[role="button"]',
+  '[role="combobox"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="slider"]',
+  '[role="spinbutton"]',
+  '[role="tab"]',
+  '[role="textbox"]',
+].join(',')
+
+function isInteractiveShortcutTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(INTERACTIVE_SHORTCUT_TARGETS))
+}
+
 const SHORTCUTS: Shortcut[] = [
   {
     key: 'focus-search',
@@ -63,22 +84,23 @@ export function KeyboardShortcuts({
   // Handle keyboard events
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when typing in input/textarea
-      const target = e.target as HTMLElement
-      const isTyping =
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.contentEditable === 'true'
-
-      // Show overlay on '?' (always, even when typing)
-      if (e.key === '?') {
+      // Escape must remain available to dismiss the shortcut dialog itself.
+      if (e.key === 'Escape' && showOverlay) {
         e.preventDefault()
-        setShowOverlay(true)
+        setShowOverlay(false)
         return
       }
 
-      // Skip other shortcuts if typing
-      if (isTyping) {
+      // Component-level controls own their keyboard contract. Letting a tab,
+      // menu, link, or form field also trigger global navigation makes one
+      // keystroke perform two unrelated actions.
+      if (isInteractiveShortcutTarget(e.target)) {
+        return
+      }
+
+      if (e.key === '?') {
+        e.preventDefault()
+        setShowOverlay(true)
         return
       }
 
@@ -98,11 +120,7 @@ export function KeyboardShortcuts({
           break
         case 'Escape':
           e.preventDefault()
-          if (showOverlay) {
-            setShowOverlay(false)
-          } else {
-            onClosePanel?.()
-          }
+          onClosePanel?.()
           break
         case 'p':
         case 'P':

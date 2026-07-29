@@ -21,4 +21,21 @@ describe('EntryHeader beta identity', () => {
       renderToStaticMarkup(<EntryHeader result={{ ...base, language: 'en' }} />)
     ).not.toContain('β')
   })
+
+  test('links to the usage section when corpus data is unavailable', () => {
+    const result: DisplayEtymologyResult = {
+      word: 'sede',
+      language: 'pt',
+      pronunciation: '/ˈse.dʒi/',
+      definition: 'centro administrativo',
+      roots: [],
+      ancestryGraph: { branches: [] },
+      lore: 'história',
+      sources: [],
+    }
+
+    const markup = renderToStaticMarkup(<EntryHeader result={result} usageUnavailable={true} />)
+
+    expect(markup).toContain('href="#entry-usage"')
+  })
 })

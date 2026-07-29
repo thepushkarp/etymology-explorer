@@ -33,7 +33,8 @@ export function WordPageEntry({ result }: WordPageEntryProps) {
   )
   const { navigateToWord, historyBack, historyForward } = useWordNavigation(result.word, language)
   const { addToHistory } = useHistory()
-  const ngram = useNgram(result.word, language)
+  const ngramState = useNgram(result.word, language)
+  const ngram = ngramState.status === 'ready' ? ngramState.data : null
   const { play: playPronunciation } = usePronunciation(result.word, language)
 
   useEffect(() => {
@@ -82,6 +83,7 @@ export function WordPageEntry({ result }: WordPageEntryProps) {
         historyChoices={historyChoices}
         activeHistoryId={activeHistoryId}
         onHistoryChange={setActiveHistoryId}
+        usageUnavailable={ngramState.status === 'unavailable'}
       />
       <KeyboardShortcuts
         onHistoryBack={historyBack}

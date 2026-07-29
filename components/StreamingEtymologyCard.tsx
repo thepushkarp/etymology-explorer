@@ -14,13 +14,14 @@ import { ModernUsageSection } from './etymology-card/ModernUsageSection'
 import { RelatedWordsSection } from './etymology-card/RelatedWordsSection'
 import { SourcesSection } from './etymology-card/SourcesSection'
 import { StorySection } from './etymology-card/StorySection'
-import { UsageSection } from './etymology-card/UsageSection'
+import { UsageSection, UsageUnavailable } from './etymology-card/UsageSection'
 
 interface StreamingEtymologyCardProps {
   /** The searched word — known before any section arrives */
   word: string
   sections: PartialEtymology
   ngram?: NgramResult | null
+  usageUnavailable?: boolean
   onWordClick: (word: string) => void
 }
 
@@ -38,6 +39,7 @@ export function StreamingEtymologyCard({
   word,
   sections,
   ngram,
+  usageUnavailable = false,
   onWordClick,
 }: StreamingEtymologyCardProps) {
   const resolvedWord = sections.word ?? word
@@ -53,6 +55,8 @@ export function StreamingEtymologyCard({
       {sections.lore !== undefined ? <StorySection lore={sections.lore} /> : <StorySkeleton />}
 
       {ngram && ngram.data.length > 0 && <UsageSection ngram={ngram} />}
+
+      {!ngram && usageUnavailable && <UsageUnavailable />}
 
       {sections.modernUsage?.hasSlangMeaning && (
         <ModernUsageSection modernUsage={sections.modernUsage} />

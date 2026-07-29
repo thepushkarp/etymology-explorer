@@ -386,7 +386,8 @@ async function callLlm(
 
 async function generateEtymologyResponse(
   userPrompt: string,
-  options?: SynthesisOptions
+  options?: SynthesisOptions,
+  malformedAttemptLimit?: number
 ): Promise<{
   result: EtymologyResult
   usage: LlmUsage
@@ -395,7 +396,8 @@ async function generateEtymologyResponse(
   // json_schema strict mode makes malformed output rare. The unary path
   // keeps one retry as a safety net; the streaming path fails fast — its
   // section events are already on the wire and cannot be retracted.
-  const maxAttempts = options?.onSection ? 1 : CONFIG.retries.malformedOutputRetries + 1
+  const maxAttempts =
+    malformedAttemptLimit ?? (options?.onSection ? 1 : CONFIG.retries.malformedOutputRetries + 1)
   let lastMalformedError: MalformedModelOutputError | null = null
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -439,6 +441,15 @@ async function generateEtymologyResponse(
   throw lastMalformedError
     ? new MalformedModelOutputError(lastMalformedError.message, totalUsage)
     : new Error('Failed to parse LLM response after retries')
+}
+
+export function isRecoverableBetaValidationError(error: unknown, language: LanguageCode): boolean {
+  return (
+    language !== 'en' &&
+    error instanceof Error &&
+    error.message.startsWith('Schema validation failed:') &&
+    !isAbortLikeError(error)
+  )
 }
 
 function attachSources(result: EtymologyResult, researchContext: ResearchContext): EtymologyResult {
@@ -674,27 +685,63 @@ export async function synthesizeFromResearch(
           researchData
         )
 
-  const { result, usage } = await generateEtymologyResponse(userPrompt, { ...options, language })
+  const totalUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
+  const maxValidationAttempts = language === 'en' ? 1 : 2
 
-  if (language !== 'en' && result.language !== language) {
-    throw new Error(`Schema validation failed: expected language ${language}`)
+  for (let attempt = 0; attempt < maxValidationAttempts; attempt += 1) {
+    try {
+      // A recovery is deliberately unary and gets one model call. Invalid
+      // beta sections may already have crossed the first stream boundary;
+      // a second stream would duplicate and contradict them in the client.
+      const attemptOptions =
+        attempt === 0 ? { ...options, language } : { signal: options?.signal, language }
+      const generated = await generateEtymologyResponse(
+        userPrompt,
+        attemptOptions,
+        attempt === 0 ? undefined : 1
+      )
+      addUsage(totalUsage, generated.usage)
+
+      if (language !== 'en' && generated.result.language !== language) {
+        throw new Error(`Schema validation failed: expected language ${language}`)
+      }
+
+      return {
+        result: finalizeResult(
+          generated.result,
+          researchContext,
+          attempt === 0 && options?.onSection ? 'streaming' : 'standard'
+        ),
+        usage: totalUsage,
+      }
+    } catch (error) {
+      const errorUsage = getLlmUsageFromError(error)
+      if (errorUsage) {
+        addUsage(totalUsage, errorUsage)
+      }
+
+      if (
+        attempt < maxValidationAttempts - 1 &&
+        isRecoverableBetaValidationError(error, language)
+      ) {
+        console.warn(
+          '[LLM] Retrying beta synthesis after validation failure',
+          JSON.stringify({ word: researchContext.mainWord.word, language })
+        )
+        continue
+      }
+
+      // Validation and malformed-output failures occur after a billable
+      // request. Expose the accumulated usage so the route records every
+      // attempt, including the failed recovery.
+      if (error instanceof Error && !('usage' in error)) {
+        ;(error as Error & { usage?: LlmUsage }).usage = totalUsage
+      } else if (error instanceof Error) {
+        ;(error as Error & { usage: LlmUsage }).usage = totalUsage
+      }
+      throw error
+    }
   }
 
-  try {
-    return {
-      result: finalizeResult(
-        result,
-        researchContext,
-        options?.onSection ? 'streaming' : 'standard'
-      ),
-      usage,
-    }
-  } catch (error) {
-    // Post-processing failures (schema validation) still consumed a billed
-    // LLM call — attach the usage so the route can record the spend.
-    if (error instanceof Error && !('usage' in error)) {
-      ;(error as Error & { usage?: LlmUsage }).usage = usage
-    }
-    throw error
-  }
+  throw new Error('Beta synthesis exhausted its validation attempts')
 }

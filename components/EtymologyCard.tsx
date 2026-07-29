@@ -16,7 +16,7 @@ import { ModernUsageSection } from './etymology-card/ModernUsageSection'
 import { RelatedWordsSection } from './etymology-card/RelatedWordsSection'
 import { SourcesSection } from './etymology-card/SourcesSection'
 import { StorySection } from './etymology-card/StorySection'
-import { UsageSection } from './etymology-card/UsageSection'
+import { UsageSection, UsageUnavailable } from './etymology-card/UsageSection'
 import { EntrySelector } from './etymology-card/EntrySelector'
 
 interface EtymologyCardProps {
@@ -27,6 +27,7 @@ interface EtymologyCardProps {
   historyChoices?: DisplayHistoryChoice[]
   activeHistoryId?: string
   onHistoryChange?: (historyId: string) => void
+  usageUnavailable?: boolean
 }
 
 export const EtymologyCard = memo(function EtymologyCard({
@@ -37,6 +38,7 @@ export const EtymologyCard = memo(function EtymologyCard({
   historyChoices = [],
   activeHistoryId,
   onHistoryChange,
+  usageUnavailable = false,
 }: EtymologyCardProps) {
   const hasAncestry = Boolean(result.ancestryGraph?.branches?.length)
   const labels =
@@ -59,6 +61,7 @@ export const EtymologyCard = memo(function EtymologyCard({
               />
             ) : undefined
           }
+          usageUnavailable={usageUnavailable}
         />
 
         {hasAncestry && (
@@ -74,6 +77,14 @@ export const EtymologyCard = memo(function EtymologyCard({
 
         {result.ngram && result.ngram.data.length > 0 && (
           <UsageSection ngram={result.ngram} title={labels?.usage} />
+        )}
+
+        {!result.ngram && usageUnavailable && (
+          <UsageUnavailable
+            title={labels?.usage}
+            noteLabel={labels?.usageNote}
+            message={labels?.usageUnavailable}
+          />
         )}
 
         {result.modernUsage && result.modernUsage.hasSlangMeaning && (
