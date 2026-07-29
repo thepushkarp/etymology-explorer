@@ -9,7 +9,7 @@ export async function GET() {
     openapi: '3.0.3',
     info: {
       title: `${SITE_SHORT_NAME} API`,
-      version: '1.1.0',
+      version: '1.2.0',
       description: `Public endpoints powering ${SITE_SHORT_NAME}.`,
     },
     servers: [{ url: origin }],
@@ -57,6 +57,14 @@ export async function GET() {
       '/api/random-word': {
         get: {
           summary: 'Get random word',
+          parameters: [
+            {
+              name: 'language',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ['en', 'it', 'es', 'fr', 'pt'], default: 'en' },
+            },
+          ],
         },
       },
       '/api/pronunciation': {

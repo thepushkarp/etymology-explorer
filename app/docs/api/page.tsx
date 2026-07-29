@@ -13,8 +13,8 @@ const ENDPOINTS = [
   },
   {
     method: 'GET',
-    path: '/api/random-word',
-    description: 'Returns a random GRE word for exploration.',
+    path: '/api/random-word[?language=it]',
+    description: 'Returns a random word from the selected language for exploration.',
   },
   {
     method: 'GET',

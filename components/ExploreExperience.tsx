@@ -144,9 +144,9 @@ export function ExploreExperience() {
                   inputRef={searchInputRef}
                   onSuggestionsVisibilityChange={setSuggestionsVisible}
                 />
-                {!suggestionsVisible && language === 'en' && (
+                {!suggestionsVisible && (
                   <div className="mt-4 flex justify-center">
-                    <SurpriseButton onWordSelected={navigateToWord} />
+                    <SurpriseButton onWordSelected={navigateToWord} language={language} />
                   </div>
                 )}
               </div>
