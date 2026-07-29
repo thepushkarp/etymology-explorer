@@ -6,7 +6,7 @@ import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './Mob
 
 interface KinSectionProps {
   roots: Root[]
-  onWordClick: (word: string) => void
+  onWordClick?: (word: string) => void
   title?: string
 }
 

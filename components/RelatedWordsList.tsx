@@ -5,7 +5,7 @@ import { Root } from '@/lib/types'
 
 interface RelatedWordsListProps {
   roots: Root[]
-  onWordClick: (word: string) => void
+  onWordClick?: (word: string) => void
 }
 
 type WordCategory = 'cognates' | 'derived'
@@ -123,24 +123,34 @@ export const RelatedWordsList = memo(function RelatedWordsList({
                     </div>
 
                     <ul className="flex flex-wrap gap-2">
-                      {words.map((word, wordIndex) => (
-                        <li key={`${root.root}-${category}-${word}-${wordIndex}`}>
-                          <button
-                            onClick={() => onWordClick(word)}
-                            className="
-                              editorial-chip group rounded-full px-3 py-2 text-left font-serif italic
-                              transition-all duration-200 hover:bg-cream-dark/36
-                            "
-                            style={{
-                              animationDelay: `${
-                                rootIndex * 100 + categoryIndex * 80 + wordIndex * 30
-                              }ms`,
-                            }}
-                          >
-                            {word}
-                          </button>
-                        </li>
-                      ))}
+                      {words.map((word, wordIndex) => {
+                        const style = {
+                          animationDelay: `${
+                            rootIndex * 100 + categoryIndex * 80 + wordIndex * 30
+                          }ms`,
+                        }
+                        const className =
+                          'editorial-chip rounded-full px-3 py-2 text-left font-serif italic'
+
+                        return (
+                          <li key={`${root.root}-${category}-${word}-${wordIndex}`}>
+                            {onWordClick ? (
+                              <button
+                                type="button"
+                                onClick={() => onWordClick(word)}
+                                className={`${className} transition-all duration-200 hover:bg-cream-dark/36`}
+                                style={style}
+                              >
+                                {word}
+                              </button>
+                            ) : (
+                              <span className={`${className} inline-block`} style={style}>
+                                {word}
+                              </span>
+                            )}
+                          </li>
+                        )
+                      })}
                     </ul>
                   </div>
                 )

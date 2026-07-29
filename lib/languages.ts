@@ -9,6 +9,7 @@ export interface LanguageDefinition {
   code: LanguageCode
   englishName: string
   nativeName: string
+  nativeEtymologyLabel: string
   beta: boolean
   wiktionaryEdition: string
   englishWiktionaryHeading: string
@@ -23,6 +24,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'en',
     englishName: 'English',
     nativeName: 'English',
+    nativeEtymologyLabel: 'etymology',
     beta: false,
     wiktionaryEdition: 'en',
     englishWiktionaryHeading: 'English',
@@ -35,6 +37,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'it',
     englishName: 'Italian',
     nativeName: 'Italiano',
+    nativeEtymologyLabel: 'etimologia',
     beta: true,
     wiktionaryEdition: 'it',
     englishWiktionaryHeading: 'Italian',
@@ -47,6 +50,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'es',
     englishName: 'Spanish',
     nativeName: 'Español',
+    nativeEtymologyLabel: 'etimología',
     beta: true,
     wiktionaryEdition: 'es',
     englishWiktionaryHeading: 'Spanish',
@@ -59,6 +63,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'fr',
     englishName: 'French',
     nativeName: 'Français',
+    nativeEtymologyLabel: 'étymologie',
     beta: true,
     wiktionaryEdition: 'fr',
     englishWiktionaryHeading: 'French',
@@ -71,6 +76,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'pt',
     englishName: 'Portuguese',
     nativeName: 'Português',
+    nativeEtymologyLabel: 'etimologia',
     beta: true,
     wiktionaryEdition: 'pt',
     englishWiktionaryHeading: 'Portuguese',

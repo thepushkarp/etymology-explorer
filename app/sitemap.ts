@@ -1,11 +1,11 @@
 import type { MetadataRoute } from 'next'
 import { unstable_cache } from 'next/cache'
-import { ETYMOLOGY_PREFIX } from '@/lib/cache'
+import { ETYMOLOGY_SCAN_PATTERN, lexemeFromEtymologyCacheKey } from '@/lib/cache'
 import { safeError } from '@/lib/errorUtils'
 import { getRedis } from '@/lib/redis'
 import { SITE_ORIGIN } from '@/lib/site'
 import { isValidWord } from '@/lib/validation'
-import { isBetaLanguage, isLanguageCode, wordPagePath, type LanguageCode } from '@/lib/languages'
+import { wordPagePath, type LanguageCode } from '@/lib/languages'
 
 export const revalidate = 86400
 
@@ -32,18 +32,14 @@ async function scanCachedWords(): Promise<CachedLexeme[]> {
   try {
     do {
       const [nextCursor, keys] = await redis.scan(cursor, {
-        match: `${ETYMOLOGY_PREFIX}*`,
+        match: ETYMOLOGY_SCAN_PATTERN,
         count: SCAN_BATCH_SIZE,
       })
       cursor = String(nextCursor)
       for (const key of keys) {
-        const suffix = key.slice(ETYMOLOGY_PREFIX.length)
-        const separator = suffix.indexOf(':')
-        const possibleLanguage = separator > 0 ? suffix.slice(0, separator) : 'en'
-        const language = isLanguageCode(possibleLanguage) ? possibleLanguage : 'en'
-        const word = isBetaLanguage(language) ? suffix.slice(separator + 1) : suffix
-        if (isValidWord(word)) {
-          words.set(`${language}:${word}`, { language, word })
+        const lexeme = lexemeFromEtymologyCacheKey(key)
+        if (lexeme && isValidWord(lexeme.word)) {
+          words.set(`${lexeme.language}:${lexeme.word}`, lexeme)
         }
         if (words.size >= MAX_WORD_ENTRIES) {
           return Array.from(words.values())

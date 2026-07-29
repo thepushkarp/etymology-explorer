@@ -23,6 +23,23 @@ const RECENT_LIMIT = 3
 const SUGGESTED_LIMIT = 5
 export const MIN_QUERY_LENGTH = 2
 
+export interface SuggestionFetchState {
+  query: string
+  language: LanguageCode | null
+  words: string[]
+}
+
+export function visibleFetchedWords(
+  fetched: SuggestionFetchState,
+  normalizedQuery: string,
+  language: LanguageCode
+): string[] {
+  if (fetched.language !== language) return []
+  return fetched.query === normalizedQuery
+    ? fetched.words
+    : fetched.words.filter((word) => word.includes(normalizedQuery))
+}
+
 /**
  * Suggestion items for a query: recent searches matched locally, wordlist
  * matches fetched from /api/suggestions (keeps the GRE wordlist out of the
@@ -36,8 +53,9 @@ export function useSuggestionItems(
   language: LanguageCode = 'en'
 ): SuggestionItem[] {
   const normalizedQuery = query.toLowerCase().trim()
-  const [fetched, setFetched] = useState<{ query: string; words: string[] }>({
+  const [fetched, setFetched] = useState<SuggestionFetchState>({
     query: '',
+    language: null,
     words: [],
   })
 
@@ -59,6 +77,7 @@ export function useSuggestionItems(
         if (payload?.success && payload.data) {
           setFetched({
             query: normalizedQuery,
+            language,
             words: payload.data.suggestions.map((suggestion) => suggestion.word),
           })
         }
@@ -89,10 +108,7 @@ export function useSuggestionItems(
     // Results for the current query are shown as-is (they may be typo
     // corrections that don't contain the query); results still in flight from
     // a previous query are only shown while they literally match the new one.
-    const sourceWords =
-      fetched.query === normalizedQuery
-        ? fetched.words
-        : fetched.words.filter((word) => word.includes(normalizedQuery))
+    const sourceWords = visibleFetchedWords(fetched, normalizedQuery, language)
 
     const recentWords = new Set(recent.map((item) => item.word))
     const suggested = sourceWords
@@ -101,7 +117,7 @@ export function useSuggestionItems(
       .map((word) => ({ word, category: 'suggested' as const }))
 
     return [...recent, ...suggested]
-  }, [normalizedQuery, history, fetched])
+  }, [normalizedQuery, history, fetched, language])
 }
 
 export function SearchSuggestions({

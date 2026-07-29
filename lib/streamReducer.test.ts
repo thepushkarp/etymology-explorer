@@ -27,21 +27,12 @@ const RESULT: EtymologyResult = {
 }
 
 describe('search_started', () => {
-  test('seeds a loading state with all six sources pending', () => {
+  test('starts empty so source events define the providers for every language', () => {
     const state = run([{ type: 'search_started' }])
 
     expect(state.status).toBe('loading')
     expect(state.phase).toBe('sources')
-    expect(state.sources).toHaveLength(6)
-    expect(state.sources.map((s) => s.key)).toEqual([
-      'etymonline',
-      'wiktionary',
-      'freedictionary',
-      'wikipedia',
-      'urbandictionary',
-      'incelswiki',
-    ])
-    expect(state.sources.every((s) => s.status === 'pending')).toBe(true)
+    expect(state.sources).toEqual([])
   })
 
   test('clears any previous search state', () => {
@@ -86,7 +77,7 @@ describe('source events', () => {
 
     const urban = state.sources.find((s) => s.key === 'urbandictionary')
     expect(urban?.status).toBe('complete')
-    expect(state.sources).toHaveLength(6) // matched the seeded entry, no duplicate
+    expect(state.sources).toHaveLength(1)
   })
 
   test('out-of-order completion before start still lands', () => {
@@ -109,8 +100,29 @@ describe('source events', () => {
       ...events({ type: 'source_complete', source: 'somefuturewiki', timing: 100 }),
     ])
 
-    expect(state.sources).toHaveLength(7)
-    expect(state.sources[6]).toMatchObject({ key: 'somefuturewiki', status: 'complete' })
+    expect(state.sources).toHaveLength(1)
+    expect(state.sources[0]).toMatchObject({ key: 'somefuturewiki', status: 'complete' })
+  })
+
+  test('labels beta providers without leaving English providers pending', () => {
+    const state = run([
+      { type: 'search_started' },
+      ...events(
+        { type: 'source_started', source: 'wiktionaryEnglish' },
+        { type: 'source_started', source: 'wiktionaryNative' },
+        { type: 'source_started', source: 'multilingualDictionary' },
+        { type: 'source_started', source: 'wikidataLexeme' },
+        { type: 'source_started', source: 'dicionarioAberto' }
+      ),
+    ])
+
+    expect(state.sources).toEqual([
+      { key: 'wiktionaryenglish', label: 'English Wiktionary', status: 'pending' },
+      { key: 'wiktionarynative', label: 'Native Wiktionary', status: 'pending' },
+      { key: 'multilingualdictionary', label: 'FreeDictionaryAPI', status: 'pending' },
+      { key: 'wikidatalexeme', label: 'Wikidata Lexemes', status: 'pending' },
+      { key: 'dicionarioaberto', label: 'Dicionário Aberto', status: 'pending' },
+    ])
   })
 
   test('failure marks the source failed', () => {

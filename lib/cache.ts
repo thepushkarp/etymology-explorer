@@ -12,7 +12,7 @@ import { getRedis } from './redis'
 import { safeError } from './errorUtils'
 import { emitSecurityEvent } from './telemetry'
 import type { LanguageCode } from './languages'
-import { lexemeKey } from './languages'
+import { isBetaLanguage, lexemeKey, parseLanguageCode } from './languages'
 
 /** Apply ±jitter to a TTL to prevent synchronized cache stampedes */
 function jitterTTL(ttl: number): number {
@@ -25,6 +25,7 @@ export const CACHE_VERSION = '2.2'
 export const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
 export const BETA_CACHE_VERSION = '5'
 export const BETA_ETYMOLOGY_PREFIX = `etymology:beta:v${BETA_CACHE_VERSION}:`
+export const ETYMOLOGY_SCAN_PATTERN = 'etymology:*'
 const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
 
 // Audio cache (longer TTL - pronunciations don't change)
@@ -48,6 +49,26 @@ function etymologyKey(word: string, language: LanguageCode): string {
   return language === 'en'
     ? `${ETYMOLOGY_PREFIX}${normalized}`
     : `${BETA_ETYMOLOGY_PREFIX}${language}:${normalized}`
+}
+
+export function lexemeFromEtymologyCacheKey(
+  key: string
+): { language: LanguageCode; word: string } | null {
+  if (key.startsWith(BETA_ETYMOLOGY_PREFIX)) {
+    const suffix = key.slice(BETA_ETYMOLOGY_PREFIX.length)
+    const separator = suffix.indexOf(':')
+    if (separator <= 0) return null
+
+    const language = parseLanguageCode(suffix.slice(0, separator))
+    if (!language || !isBetaLanguage(language)) return null
+    return { language, word: suffix.slice(separator + 1) }
+  }
+
+  if (key.startsWith(ETYMOLOGY_PREFIX)) {
+    return { language: 'en', word: key.slice(ETYMOLOGY_PREFIX.length) }
+  }
+
+  return null
 }
 
 export function etymologyWordTag(word: string, language: LanguageCode = 'en'): string {
@@ -159,7 +180,7 @@ export async function getCachedAudio(
   const redis = getRedis()
   if (!redis) return null
 
-  const key = `${AUDIO_PREFIX}${lexemeKey(language, word)}`
+  const key = audioKey(word, language)
   try {
     return await redis.get<string>(key)
   } catch (error) {
@@ -179,13 +200,22 @@ export async function cacheAudio(
   const redis = getRedis()
   if (!redis) return
 
-  const key = `${AUDIO_PREFIX}${lexemeKey(language, word)}`
+  const key = audioKey(word, language)
   try {
     await redis.set(key, audioBase64, { ex: jitterTTL(AUDIO_TTL) })
     console.log(`[Cache] Stored audio for "${word}"`)
   } catch (error) {
     console.error('[Cache] Audio set error:', safeError(error))
   }
+}
+
+function audioKey(word: string, language: LanguageCode): string {
+  const normalized = word.normalize('NFKC').trim().toLowerCase()
+  // Preserve the established English namespace; only beta languages need a
+  // qualifier to prevent same-spelling pronunciations from colliding.
+  return language === 'en'
+    ? `${AUDIO_PREFIX}${normalized}`
+    : `${AUDIO_PREFIX}${lexemeKey(language, normalized)}`
 }
 
 /**

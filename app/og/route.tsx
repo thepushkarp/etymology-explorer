@@ -120,6 +120,8 @@ function BrandCard() {
 
 function WordCard({ word, language }: { word: string; language: LanguageCode }) {
   const [initial, rest] = splitLeadingGrapheme(word)
+  const languageDefinition = LANGUAGES[language]
+  const betaLabel = `${languageDefinition.nativeName.toLocaleUpperCase(language)} · ${languageDefinition.nativeEtymologyLabel.toLocaleUpperCase(language)} · ${BETA_SYMBOL}`
   return (
     <div
       style={{
@@ -138,16 +140,14 @@ function WordCard({ word, language }: { word: string; language: LanguageCode }) 
         style={{
           display: 'flex',
           fontSize: 26,
-          textTransform: 'uppercase',
+          textTransform: language === 'en' ? 'uppercase' : 'none',
           letterSpacing: '0.24em',
           color: '#1B1A17',
           opacity: 0.6,
           marginBottom: 34,
         }}
       >
-        {language === 'en'
-          ? 'the etymology of'
-          : `${LANGUAGES[language].nativeName} · etymologia · ${BETA_SYMBOL}`}
+        {language === 'en' ? 'the etymology of' : betaLabel}
       </div>
       <div
         style={{

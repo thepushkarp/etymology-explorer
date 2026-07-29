@@ -107,27 +107,15 @@ const SOURCE_LABELS: Record<string, string> = {
   wikipedia: 'Wikipedia',
   urbandictionary: 'Urban Dictionary',
   incelswiki: 'Incels Wiki',
+  wiktionaryenglish: 'English Wiktionary',
+  wiktionarynative: 'Native Wiktionary',
+  multilingualdictionary: 'FreeDictionaryAPI',
+  wikidatalexeme: 'Wikidata Lexemes',
+  dicionarioaberto: 'Dicionário Aberto',
 }
-
-const DEFAULT_SOURCE_ORDER = [
-  'etymonline',
-  'wiktionary',
-  'freedictionary',
-  'wikipedia',
-  'urbandictionary',
-  'incelswiki',
-]
 
 function normalizeSourceKey(source: string): string {
   return source.toLowerCase().replace(/\s+/g, '')
-}
-
-function defaultSources(): SourceProgress[] {
-  return DEFAULT_SOURCE_ORDER.map((key) => ({
-    key,
-    label: SOURCE_LABELS[key] ?? key,
-    status: 'pending',
-  }))
 }
 
 /**
@@ -238,7 +226,6 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
         ...initialStreamState,
         status: 'loading',
         phase: 'sources',
-        sources: defaultSources(),
       }
 
     case 'stream_event':

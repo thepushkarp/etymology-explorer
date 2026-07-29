@@ -107,7 +107,13 @@ export const EtymologyCard = memo(function EtymologyCard({
         )}
 
         {result.roots.length > 0 && (
-          <KinSection roots={result.roots} onWordClick={onWordClick} title={labels?.kin} />
+          <KinSection
+            roots={result.roots}
+            // Related terms in beta results are not language-tagged yet. Keep
+            // them readable without guessing a route or spending on the wrong lexeme.
+            onWordClick={result.language === 'en' ? onWordClick : undefined}
+            title={labels?.kin}
+          />
         )}
 
         <SourcesSection sources={result.sources} title={labels?.sources} />

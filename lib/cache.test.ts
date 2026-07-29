@@ -34,7 +34,14 @@ mock.module('next/server', () => ({
   after: afterMock,
 }))
 
-const { cacheAudio, cacheEtymology, getCachedEtymology } = await import('./cache')
+const {
+  ETYMOLOGY_SCAN_PATTERN,
+  cacheAudio,
+  cacheEtymology,
+  getCachedAudio,
+  getCachedEtymology,
+  lexemeFromEtymologyCacheKey,
+} = await import('./cache')
 
 const RESULT: EtymologyResult = {
   word: 'nice',
@@ -140,6 +147,31 @@ describe('cacheEtymology word-page revalidation', () => {
       'audio:v1:fr:sale',
     ])
     expect(revalidateTagMock).toHaveBeenCalledWith('etymology-word:it:sale', { expire: 0 })
+  })
+
+  test('keeps the established English audio key while qualifying beta languages', async () => {
+    currentRedis = fakeRedis({ get: mock(async () => 'audio-en') })
+
+    expect(await getCachedAudio('  NiCe ', 'en')).toBe('audio-en')
+    await cacheAudio('  NiCe ', 'audio-en', 'en')
+
+    expect(currentRedis.get).toHaveBeenCalledWith('audio:v1:nice')
+    expect(currentRedis.set).toHaveBeenCalledWith('audio:v1:nice', 'audio-en', {
+      ex: expect.any(Number),
+    })
+  })
+
+  test('decodes English and beta result keys from the shared sitemap scan', () => {
+    expect(ETYMOLOGY_SCAN_PATTERN).toBe('etymology:*')
+    expect(lexemeFromEtymologyCacheKey('etymology:v2.2:sale')).toEqual({
+      language: 'en',
+      word: 'sale',
+    })
+    expect(lexemeFromEtymologyCacheKey('etymology:beta:v5:it:sale')).toEqual({
+      language: 'it',
+      word: 'sale',
+    })
+    expect(lexemeFromEtymologyCacheKey('etymology:beta:v5:en:sale')).toBeNull()
   })
 
   test('never returns an English object from a beta cache key', async () => {
