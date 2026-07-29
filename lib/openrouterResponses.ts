@@ -1,8 +1,9 @@
 import { CONFIG } from '@/lib/config'
 import { getEnv } from '@/lib/env'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
-import { ETYMOLOGY_LLM_SCHEMA } from '@/lib/schemas/llm-schema'
+import { BETA_ETYMOLOGY_LLM_SCHEMA, ETYMOLOGY_LLM_SCHEMA } from '@/lib/schemas/llm-schema'
 import type { LlmUsage } from '@/lib/types'
+import type { LanguageCode } from '@/lib/languages'
 
 const ROOTS_JSON_SCHEMA = {
   type: 'object',
@@ -33,6 +34,8 @@ type ReasoningConfig =
 
 export type OpenRouterRequest = {
   model: string
+  /** Ordered OpenRouter model fallbacks; `model` remains the primary. */
+  models?: readonly string[]
   input: string
   reasoning?: ReasoningConfig
   max_output_tokens: number
@@ -97,11 +100,12 @@ type OpenRouterStreamEvent = {
 const OPENROUTER_RESPONSES_URL = 'https://openrouter.ai/api/v1/responses'
 
 const SYNTHESIS_REASONING_BY_MODEL: Record<string, ReasoningConfig | undefined> = {
-  // Production models use low-effort synthesis to balance grounding and latency.
-  'openai/gpt-5.6-luna': { effort: 'low' },
-  // Gemini 3.5 Flash rejects disabled/none reasoning; minimal is the cheapest
-  // valid setting per /api/v1/models and live probe.
-  'google/gemini-3.5-flash': { effort: 'minimal', exclude: true },
+  // Luna always reasons at low effort. Exclusion suppresses the reasoning
+  // trace from API responses without disabling the reasoning itself.
+  'openai/gpt-5.6-luna': { effort: 'low', exclude: true },
+  // Gemini 3.5 Flash requires reasoning and supports low effort. Matching the
+  // production request shape lets it participate in OpenRouter failover.
+  'google/gemini-3.5-flash': { effort: 'low', exclude: true },
   // These models otherwise spend hidden reasoning tokens on tiny strict-schema
   // probes; disabling reasoning produced schema-valid Responses output.
   'moonshotai/kimi-k2.6': { enabled: false, exclude: true },
@@ -123,7 +127,7 @@ function synthesisReasoningForModel(model: string): ReasoningConfig | undefined 
     return undefined
   }
 
-  return SYNTHESIS_REASONING_BY_MODEL[model] ?? { effort: 'low' }
+  return SYNTHESIS_REASONING_BY_MODEL[model] ?? { effort: 'low', exclude: true }
 }
 
 function buildRequest(
@@ -131,7 +135,8 @@ function buildRequest(
   maxOutputTokens: number,
   format: JsonSchemaFormat | TextFormat,
   reasoning: ReasoningConfig | undefined,
-  model?: string
+  model?: string,
+  fallbackModels?: readonly string[]
 ): OpenRouterRequest {
   const request: OpenRouterRequest = {
     model: model ?? CONFIG.model,
@@ -139,13 +144,20 @@ function buildRequest(
     max_output_tokens: maxOutputTokens,
     text: { format },
   }
+  if (fallbackModels && fallbackModels.length > 0) {
+    request.models = fallbackModels
+  }
   if (reasoning) {
     request.reasoning = reasoning
   }
   return request
 }
 
-export function buildSynthesisRequest(input: string, model?: string): OpenRouterRequest {
+export function buildSynthesisRequest(
+  input: string,
+  model?: string,
+  language: LanguageCode = 'en'
+): OpenRouterRequest {
   const resolvedModel = model ?? CONFIG.model
   const request = buildRequest(
     input,
@@ -154,10 +166,13 @@ export function buildSynthesisRequest(input: string, model?: string): OpenRouter
       type: 'json_schema',
       name: 'etymology_result',
       strict: true,
-      schema: ETYMOLOGY_LLM_SCHEMA,
+      schema: language === 'en' ? ETYMOLOGY_LLM_SCHEMA : BETA_ETYMOLOGY_LLM_SCHEMA,
     },
     synthesisReasoningForModel(resolvedModel),
-    resolvedModel
+    resolvedModel,
+    // A model override is an explicit benchmark/probe choice and must not be
+    // contaminated by transparent production fallback routing.
+    model === undefined ? CONFIG.modelFallbacks : undefined
   )
   request.provider = { require_parameters: true }
   return request
@@ -173,7 +188,9 @@ export function buildRootExtractionRequest(input: string): OpenRouterRequest {
       strict: true,
       schema: ROOTS_JSON_SCHEMA,
     },
-    { effort: 'none' }
+    synthesisReasoningForModel(CONFIG.model),
+    CONFIG.model,
+    CONFIG.modelFallbacks
   )
 }
 

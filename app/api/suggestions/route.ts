@@ -2,10 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAutocompleteSuggestions } from '@/lib/spellcheck'
 import { ApiResponse, WordSuggestion } from '@/lib/types'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
+import { LANGUAGES, parseLanguageCode } from '@/lib/languages'
+import { fetchWithTimeout } from '@/lib/fetchUtils'
+import { CONFIG } from '@/lib/config'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const query = searchParams.get('q')
+  const language = parseLanguageCode(searchParams.get('language'))
+
+  if (!language) {
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: 'Unsupported language' },
+      { status: 400 }
+    )
+  }
 
   if (!query) {
     return NextResponse.json<ApiResponse<null>>(
@@ -30,8 +41,26 @@ export async function GET(request: NextRequest) {
     'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
   }
 
-  // Prefix/substring wordlist matches first, near-miss corrections as filler
-  const suggestions = getAutocompleteSuggestions(normalized)
+  let suggestions: WordSuggestion[]
+  if (language === 'en') {
+    suggestions = getAutocompleteSuggestions(normalized)
+  } else {
+    const url = new URL(`https://${LANGUAGES[language].wiktionaryEdition}.wiktionary.org/w/api.php`)
+    url.searchParams.set('action', 'opensearch')
+    url.searchParams.set('search', normalized)
+    url.searchParams.set('limit', '8')
+    url.searchParams.set('namespace', '0')
+    url.searchParams.set('format', 'json')
+    url.searchParams.set('origin', '*')
+    try {
+      const response = await fetchWithTimeout(url, {}, CONFIG.timeouts.source)
+      const data = response.ok ? ((await response.json()) as unknown[]) : []
+      const words = Array.isArray(data[1]) ? (data[1] as string[]) : []
+      suggestions = words.map((word) => ({ word, distance: 0 }))
+    } catch {
+      suggestions = []
+    }
+  }
 
   return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>(
     {

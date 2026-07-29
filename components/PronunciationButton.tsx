@@ -1,18 +1,24 @@
 'use client'
 
 import { usePronunciation } from '@/lib/hooks/usePronunciation'
+import type { LanguageCode } from '@/lib/languages'
 
 interface PronunciationButtonProps {
   word: string
   className?: string
+  language?: LanguageCode
 }
 
 /**
  * Audio playback button for word pronunciation.
  * Fetches audio on-demand from ElevenLabs TTS API and caches locally.
  */
-export function PronunciationButton({ word, className = '' }: PronunciationButtonProps) {
-  const { play, isPlaying, isLoading, error } = usePronunciation(word)
+export function PronunciationButton({
+  word,
+  language = 'en',
+  className = '',
+}: PronunciationButtonProps) {
+  const { play, isPlaying, isLoading, error } = usePronunciation(word, language)
 
   return (
     <button

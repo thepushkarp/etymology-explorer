@@ -34,7 +34,14 @@ mock.module('next/server', () => ({
   after: afterMock,
 }))
 
-const { cacheEtymology } = await import('./cache')
+const {
+  ETYMOLOGY_SCAN_PATTERN,
+  cacheAudio,
+  cacheEtymology,
+  getCachedAudio,
+  getCachedEtymology,
+  lexemeFromEtymologyCacheKey,
+} = await import('./cache')
 
 const RESULT: EtymologyResult = {
   word: 'nice',
@@ -99,5 +106,76 @@ describe('cacheEtymology word-page revalidation', () => {
 
     await expect(cacheEtymology('nice', RESULT)).resolves.toBeUndefined()
     expect(currentRedis.set).toHaveBeenCalledTimes(1)
+  })
+
+  test('isolates same-spelling beta result and audio keys by language', async () => {
+    currentRedis = fakeRedis()
+    const betaResult: EtymologyResult = {
+      language: 'it',
+      word: 'sale',
+      pronunciation: '/ˈsa.le/',
+      definition: { en: 'salt', local: 'sale' },
+      roots: [],
+      ancestryGraph: { branches: [] },
+      lore: { en: 'Salt has an old story.', local: 'Il sale ha una storia antica.' },
+      sources: [],
+      primaryHistoryId: 'it:sale:main',
+      histories: [
+        {
+          id: 'it:sale:main',
+          label: { en: 'salt', local: 'sale' },
+          entryKind: 'lemma',
+          queryNodeId: 'query:it:sale:main',
+          lemmaNodeId: 'query:it:sale:main',
+          evidenceScopeIds: ['wiktionaryNative:sale:main'],
+          pronunciation: '/ˈsa.le/',
+          definition: { en: 'salt', local: 'sale' },
+          roots: [],
+          ancestryGraph: { branches: [] },
+          lore: { en: 'Salt has an old story.', local: 'Il sale ha una storia antica.' },
+        },
+      ],
+    }
+
+    await cacheEtymology('sale', betaResult, 'it')
+    await cacheAudio('sale', 'audio-it', 'it')
+    await cacheAudio('sale', 'audio-fr', 'fr')
+
+    expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
+      'etymology:beta:v5:it:sale',
+      'audio:v1:it:sale',
+      'audio:v1:fr:sale',
+    ])
+    expect(revalidateTagMock).toHaveBeenCalledWith('etymology-word:it:sale', { expire: 0 })
+  })
+
+  test('keeps the established English audio key while qualifying beta languages', async () => {
+    currentRedis = fakeRedis({ get: mock(async () => 'audio-en') })
+
+    expect(await getCachedAudio('  NiCe ', 'en')).toBe('audio-en')
+    await cacheAudio('  NiCe ', 'audio-en', 'en')
+
+    expect(currentRedis.get).toHaveBeenCalledWith('audio:v1:nice')
+    expect(currentRedis.set).toHaveBeenCalledWith('audio:v1:nice', 'audio-en', {
+      ex: expect.any(Number),
+    })
+  })
+
+  test('decodes English and beta result keys from the shared sitemap scan', () => {
+    expect(ETYMOLOGY_SCAN_PATTERN).toBe('etymology:*')
+    expect(lexemeFromEtymologyCacheKey('etymology:v2.2:sale')).toEqual({
+      language: 'en',
+      word: 'sale',
+    })
+    expect(lexemeFromEtymologyCacheKey('etymology:beta:v5:it:sale')).toEqual({
+      language: 'it',
+      word: 'sale',
+    })
+    expect(lexemeFromEtymologyCacheKey('etymology:beta:v5:en:sale')).toBeNull()
+  })
+
+  test('never returns an English object from a beta cache key', async () => {
+    currentRedis = fakeRedis({ get: mock(async () => RESULT) })
+    expect(await getCachedEtymology('sale', 'it')).toBeNull()
   })
 })

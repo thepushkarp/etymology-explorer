@@ -24,6 +24,15 @@ export interface ParsedEtymChain {
   word: string
   links: ParsedEtymLink[] // ordered modern → oldest
   dateAttested?: string // "1590s"
+  historyId?: string
+  evidenceScopeId?: string
+  provider?: 'wiktionaryEnglish' | 'wiktionaryNative'
+}
+
+export interface ParsedChainIdentity {
+  historyId: string
+  evidenceScopeId: string
+  provider: 'wiktionaryEnglish' | 'wiktionaryNative'
 }
 
 /**
@@ -77,6 +86,22 @@ const KNOWN_LANGUAGES = [
   'Gaelic',
   'Welsh',
   'PIE',
+  'Protoindoeuropeo',
+  'Proto-indo-europeu',
+  'Proto-indo-européen',
+  'Latino',
+  'Latín',
+  'Grego',
+  'Greco',
+  'Griego',
+  'Italien',
+  'Italiano',
+  'Espagnol',
+  'Español',
+  'Français',
+  'Francês',
+  'Portugais',
+  'Português',
 ]
 
 /**
@@ -189,6 +214,25 @@ function parseSegment(segment: string): ParsedEtymLink | null {
 function normalizeLanguageName(name: string): string {
   const lower = name.toLowerCase()
   if (lower === 'pie') return 'Proto-Indo-European'
+  const localized: Record<string, string> = {
+    protoindoeuropeo: 'Proto-Indo-European',
+    'proto-indo-europeu': 'Proto-Indo-European',
+    'proto-indo-européen': 'Proto-Indo-European',
+    latino: 'Latin',
+    latín: 'Latin',
+    greco: 'Greek',
+    grego: 'Greek',
+    griego: 'Greek',
+    italien: 'Italian',
+    italiano: 'Italian',
+    espagnol: 'Spanish',
+    español: 'Spanish',
+    français: 'French',
+    francês: 'French',
+    portugais: 'Portuguese',
+    português: 'Portuguese',
+  }
+  if (localized[lower]) return localized[lower]
   // Capitalize first letter of each word
   return name.replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -199,16 +243,20 @@ function normalizeLanguageName(name: string): string {
  */
 function splitFromSegments(text: string): string[] {
   // Split on "from " that's preceded by whitespace, comma, semicolon, or start
+  const normalizedText = text.replace(
+    /(?:\b(?:dal|dalla|dallo|del|della|dello|du|des|do|da)\b|\bde\b)\s+/gi,
+    ' from '
+  )
   const segments: string[] = []
   const pattern = /(?:^|[,;\s])\s*from\s+/gi
   let lastIndex = 0
   let match
 
-  while ((match = pattern.exec(text)) !== null) {
+  while ((match = pattern.exec(normalizedText)) !== null) {
     const segStart = match.index + match[0].length
     if (segments.length > 0) {
       // The previous segment ends where this "from" starts
-      segments[segments.length - 1] = text.slice(lastIndex, match.index).trim()
+      segments[segments.length - 1] = normalizedText.slice(lastIndex, match.index).trim()
     }
     segments.push('') // placeholder for this segment
     lastIndex = segStart
@@ -216,7 +264,7 @@ function splitFromSegments(text: string): string[] {
 
   // Close out the last segment
   if (segments.length > 0) {
-    segments[segments.length - 1] = text.slice(lastIndex).trim()
+    segments[segments.length - 1] = normalizedText.slice(lastIndex).trim()
   }
 
   return segments
@@ -259,8 +307,12 @@ export function parseEtymonlineText(text: string, word: string): ParsedEtymChain
  * Wiktionary uses similar "from" patterns but also has:
  *   "Borrowed from French X, from Latin Y" and parenthesized meanings.
  */
-export function parseWiktionaryText(text: string, word: string): ParsedEtymChain {
-  return parseSourceText(text, word, 'wiktionary')
+export function parseWiktionaryText(
+  text: string,
+  word: string,
+  identity?: ParsedChainIdentity
+): ParsedEtymChain {
+  return { ...parseSourceText(text, word, 'wiktionary'), ...identity }
 }
 
 /**
@@ -314,7 +366,8 @@ export function formatParsedChainsForPrompt(chains: ParsedEtymChain[]): string {
   ]
 
   for (const chain of chains) {
-    sections.push(`--- Chain from ${escapeXml(chain.source)} ---`)
+    const scope = chain.historyId ? ` for history ${escapeXml(chain.historyId)}` : ''
+    sections.push(`--- Chain from ${escapeXml(chain.provider ?? chain.source)}${scope} ---`)
     if (chain.dateAttested) {
       sections.push(`First attested: ${chain.dateAttested}`)
     }

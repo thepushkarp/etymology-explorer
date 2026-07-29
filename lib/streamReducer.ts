@@ -8,7 +8,13 @@
  * there is no growing event array to rebuild from on every render.
  */
 
-import type { EtymologyResult, NgramResult, StreamEvent } from './types'
+import type {
+  DisplayEtymologyResult,
+  EnglishEtymologyResult,
+  EtymologyResult,
+  NgramResult,
+  StreamEvent,
+} from './types'
 import { StreamingUiError, toStreamingUiError } from './streamingError'
 
 export type StreamStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -42,7 +48,7 @@ export const SECTION_KEYS = [
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 /** Progressive slice of the final result, hydrated one section at a time */
-export type PartialEtymology = Partial<Pick<EtymologyResult, SectionKey>>
+export type PartialEtymology = Partial<Pick<EnglishEtymologyResult, SectionKey>>
 
 /**
  * Fill the streamed sections into a full-shaped EtymologyResult, defaulting
@@ -54,8 +60,9 @@ export function toPartialResult(
   word: string,
   sections: PartialEtymology,
   ngram?: NgramResult | null
-): EtymologyResult {
+): DisplayEtymologyResult {
   return {
+    language: 'en',
     word: sections.word ?? word,
     pronunciation: sections.pronunciation ?? '',
     definition: sections.definition ?? '',
@@ -100,27 +107,15 @@ const SOURCE_LABELS: Record<string, string> = {
   wikipedia: 'Wikipedia',
   urbandictionary: 'Urban Dictionary',
   incelswiki: 'Incels Wiki',
+  wiktionaryenglish: 'English Wiktionary',
+  wiktionarynative: 'Native Wiktionary',
+  multilingualdictionary: 'FreeDictionaryAPI',
+  wikidatalexeme: 'Wikidata Lexemes',
+  dicionarioaberto: 'Dicionário Aberto',
 }
-
-const DEFAULT_SOURCE_ORDER = [
-  'etymonline',
-  'wiktionary',
-  'freedictionary',
-  'wikipedia',
-  'urbandictionary',
-  'incelswiki',
-]
 
 function normalizeSourceKey(source: string): string {
   return source.toLowerCase().replace(/\s+/g, '')
-}
-
-function defaultSources(): SourceProgress[] {
-  return DEFAULT_SOURCE_ORDER.map((key) => ({
-    key,
-    label: SOURCE_LABELS[key] ?? key,
-    status: 'pending',
-  }))
 }
 
 /**
@@ -231,7 +226,6 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
         ...initialStreamState,
         status: 'loading',
         phase: 'sources',
-        sources: defaultSources(),
       }
 
     case 'stream_event':

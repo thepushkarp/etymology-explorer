@@ -226,6 +226,160 @@ export const ETYMOLOGY_LLM_SCHEMA = {
   additionalProperties: false,
 } as const
 
+const TRANSLATABLE_TEXT_KEYS = new Set([
+  'label',
+  'definition',
+  'meaning',
+  'note',
+  'lore',
+  'slangDefinition',
+  'popularizedBy',
+])
+const TRANSLATABLE_TEXT_ARRAY_KEYS = new Set(['contexts', 'notableReferences'])
+
+function bilingualTextSchema(nullable: boolean) {
+  return {
+    type: nullable ? (['object', 'null'] as const) : 'object',
+    properties: {
+      en: { type: 'string' },
+      local: { type: 'string' },
+    },
+    required: ['en', 'local'],
+    additionalProperties: false,
+  }
+}
+
+function betaNode(value: unknown, key?: string): unknown {
+  if (!value || typeof value !== 'object') return value
+
+  const node = value as Record<string, unknown>
+  if (key && TRANSLATABLE_TEXT_KEYS.has(key)) {
+    const type = node.type
+    const nullable = Array.isArray(type) && type.includes('null')
+    return bilingualTextSchema(nullable)
+  }
+
+  if (key && TRANSLATABLE_TEXT_ARRAY_KEYS.has(key)) {
+    const type = node.type
+    const nullable = Array.isArray(type) && type.includes('null')
+    return {
+      ...node,
+      type: nullable ? ['array', 'null'] : 'array',
+      items: bilingualTextSchema(false),
+    }
+  }
+
+  if (Array.isArray(value)) return value.map((entry) => betaNode(entry))
+
+  const mapped: Record<string, unknown> = {}
+  for (const [childKey, childValue] of Object.entries(node)) {
+    if (childKey === 'properties' && childValue && typeof childValue === 'object') {
+      mapped[childKey] = Object.fromEntries(
+        Object.entries(childValue as Record<string, unknown>).map(([property, schema]) => [
+          property,
+          betaNode(schema, property),
+        ])
+      )
+    } else {
+      mapped[childKey] = betaNode(childValue)
+    }
+  }
+  return mapped
+}
+
+/** Strict bilingual schema. Facts stay scalar; every prose leaf is an en/local pair. */
+export const BETA_ETYMOLOGY_LLM_SCHEMA = (() => {
+  const schema = betaNode(ETYMOLOGY_LLM_SCHEMA) as Record<string, unknown>
+  const properties = schema.properties as Record<string, unknown>
+  const sources = properties.sources as {
+    items: { properties: { name: { enum: string[] } } }
+  }
+
+  sources.items.properties.name.enum = [
+    'wiktionaryEnglish',
+    'wiktionaryNative',
+    'wikidataLexeme',
+    'multilingualDictionary',
+    'dicionarioAberto',
+    'synthesized',
+  ]
+
+  const history = {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      label: bilingualTextSchema(false),
+      entryKind: { type: 'string', enum: ['lemma', 'form', 'unresolved'] },
+      queryNodeId: { type: 'string' },
+      lemmaNodeId: { type: 'string' },
+      formOf: {
+        type: ['object', 'null'],
+        properties: {
+          word: { type: 'string' },
+          language: { type: 'string' },
+        },
+        required: ['word', 'language'],
+        additionalProperties: false,
+      },
+      evidenceScopeIds: { type: 'array', items: { type: 'string' } },
+      pronunciation: properties.pronunciation,
+      definition: properties.definition,
+      ancestryGraph: properties.ancestryGraph,
+      roots: properties.roots,
+      lore: properties.lore,
+      partsOfSpeech: properties.partsOfSpeech,
+    },
+    required: [
+      'id',
+      'label',
+      'entryKind',
+      'queryNodeId',
+      'lemmaNodeId',
+      'formOf',
+      'evidenceScopeIds',
+      'pronunciation',
+      'definition',
+      'ancestryGraph',
+      'roots',
+      'lore',
+      'partsOfSpeech',
+    ],
+    additionalProperties: false,
+  }
+
+  schema.properties = {
+    language: { type: 'string', enum: ['it', 'es', 'fr', 'pt'] },
+    word: properties.word,
+    primaryHistoryId: { type: 'string' },
+    histories: { type: 'array', minItems: 1, maxItems: 4, items: history },
+    pronunciation: properties.pronunciation,
+    definition: properties.definition,
+    ancestryGraph: properties.ancestryGraph,
+    roots: properties.roots,
+    lore: properties.lore,
+    partsOfSpeech: properties.partsOfSpeech,
+    suggestions: properties.suggestions,
+    modernUsage: properties.modernUsage,
+    sources: properties.sources,
+  }
+  schema.required = [
+    'language',
+    'word',
+    'primaryHistoryId',
+    'histories',
+    'pronunciation',
+    'definition',
+    'ancestryGraph',
+    'roots',
+    'lore',
+    'partsOfSpeech',
+    'suggestions',
+    'modernUsage',
+    'sources',
+  ]
+  return schema
+})()
+
 /**
  * Convert the strict-mode null-union encoding back to the app's canonical
  * shape: object properties whose value is null are removed (recursively),

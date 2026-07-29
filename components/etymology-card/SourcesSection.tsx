@@ -5,6 +5,7 @@ import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './Mob
 
 interface SourcesSectionProps {
   sources: SourceReference[]
+  title?: string
 }
 
 export const SOURCE_LABELS: Record<string, string> = {
@@ -14,6 +15,11 @@ export const SOURCE_LABELS: Record<string, string> = {
   urbanDictionary: 'Urban Dictionary',
   incelsWiki: 'Incels Wiki',
   wikipedia: 'Wikipedia',
+  wiktionaryEnglish: 'English Wiktionary',
+  wiktionaryNative: 'Native Wiktionary',
+  wikidataLexeme: 'Wikidata Lexemes',
+  multilingualDictionary: 'FreeDictionaryAPI',
+  dicionarioAberto: 'Dicionário Aberto (historical)',
   synthesized: 'AI Synthesis',
 }
 
@@ -99,7 +105,7 @@ function SourceBadge({ source }: { source: SourceReference }) {
   return <span className={baseClasses}>{sourceLabel}</span>
 }
 
-export function SourcesSection({ sources }: SourcesSectionProps) {
+export function SourcesSection({ sources, title = 'Sources' }: SourcesSectionProps) {
   if (sources.length === 0) return null
 
   const groupedSources = groupSourcesByOrigin(sources)
@@ -107,7 +113,7 @@ export function SourcesSection({ sources }: SourcesSectionProps) {
   return (
     <MobileSection
       id="entry-sources"
-      title="Sources"
+      title={title}
       titleTextClassName={SECTION_TITLE_CLASS}
       dividerClassName={SECTION_DIVIDER_CLASS}
     >

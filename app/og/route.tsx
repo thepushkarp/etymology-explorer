@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { ImageResponse } from 'next/og'
 import { SITE_HOST, SITE_SHORT_NAME } from '@/lib/site'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
+import { BETA_SYMBOL, LANGUAGES, parseLanguageCode, type LanguageCode } from '@/lib/languages'
 
 const fontDirectory = join(process.cwd(), 'public/fonts')
 
@@ -117,8 +118,10 @@ function BrandCard() {
   )
 }
 
-function WordCard({ word }: { word: string }) {
+function WordCard({ word, language }: { word: string; language: LanguageCode }) {
   const [initial, rest] = splitLeadingGrapheme(word)
+  const languageDefinition = LANGUAGES[language]
+  const betaLabel = `${languageDefinition.nativeName.toLocaleUpperCase(language)} · ${languageDefinition.nativeEtymologyLabel.toLocaleUpperCase(language)} · ${BETA_SYMBOL}`
   return (
     <div
       style={{
@@ -137,14 +140,14 @@ function WordCard({ word }: { word: string }) {
         style={{
           display: 'flex',
           fontSize: 26,
-          textTransform: 'uppercase',
+          textTransform: language === 'en' ? 'uppercase' : 'none',
           letterSpacing: '0.24em',
           color: '#1B1A17',
           opacity: 0.6,
           marginBottom: 34,
         }}
       >
-        the etymology of
+        {language === 'en' ? 'the etymology of' : betaLabel}
       </div>
       <div
         style={{
@@ -208,10 +211,14 @@ export async function GET(request: Request) {
   ]
 
   const rawWord = new URL(request.url).searchParams.get('word')
+  const language = parseLanguageCode(new URL(request.url).searchParams.get('language')) ?? 'en'
   const word = rawWord ? canonicalizeWord(rawWord) : ''
 
   if (word && isValidWord(word)) {
-    return new ImageResponse(<WordCard word={word} />, { ...IMAGE_OPTIONS, fonts })
+    return new ImageResponse(<WordCard word={word} language={language} />, {
+      ...IMAGE_OPTIONS,
+      fonts,
+    })
   }
 
   return new ImageResponse(<BrandCard />, { ...IMAGE_OPTIONS, fonts })

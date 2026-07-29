@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
-import { ETYMOLOGY_LLM_SCHEMA, stripNullsDeep } from '@/lib/schemas/llm-schema'
-import { EtymologyResultSchema } from '@/lib/schemas/etymology'
+import {
+  BETA_ETYMOLOGY_LLM_SCHEMA,
+  ETYMOLOGY_LLM_SCHEMA,
+  stripNullsDeep,
+} from '@/lib/schemas/llm-schema'
+import { BetaEtymologyResultSchema, EtymologyResultSchema } from '@/lib/schemas/etymology'
 
 /**
  * Mechanical cross-check between the strict-mode JSON schema sent to the LLM
@@ -367,5 +371,62 @@ describe('stripNullsDeep', () => {
     const stripped = stripNullsDeep(llmShaped)
     const parsed = EtymologyResultSchema.safeParse(stripped)
     expect(parsed.success).toBe(true)
+  })
+})
+
+describe('BETA_ETYMOLOGY_LLM_SCHEMA histories', () => {
+  test('declares source histories before their compatibility projection', () => {
+    const properties = BETA_ETYMOLOGY_LLM_SCHEMA.properties as Record<string, unknown>
+    expect(Object.keys(properties)).toEqual([
+      'language',
+      'word',
+      'primaryHistoryId',
+      'histories',
+      'pronunciation',
+      'definition',
+      'ancestryGraph',
+      'roots',
+      'lore',
+      'partsOfSpeech',
+      'suggestions',
+      'modernUsage',
+      'sources',
+    ])
+  })
+
+  test('Zod rejects a history without both prose languages', () => {
+    const valid = {
+      language: 'it',
+      word: 'vite',
+      primaryHistoryId: 'vine',
+      histories: [
+        {
+          id: 'vine',
+          label: { en: 'vine', local: 'pianta' },
+          entryKind: 'lemma',
+          queryNodeId: 'query:vine',
+          lemmaNodeId: 'query:vine',
+          evidenceScopeIds: ['native:vite:vine'],
+          pronunciation: '/vite/',
+          definition: { en: 'vine', local: 'pianta' },
+          ancestryGraph: { branches: [] },
+          roots: [],
+          lore: { en: 'A vine history.', local: 'Una storia della vite.' },
+          partsOfSpeech: [],
+        },
+      ],
+      pronunciation: '/vite/',
+      definition: { en: 'vine', local: 'pianta' },
+      ancestryGraph: { branches: [] },
+      roots: [],
+      lore: { en: 'A vine history.', local: 'Una storia della vite.' },
+      partsOfSpeech: [],
+      suggestions: {},
+      modernUsage: { hasSlangMeaning: false },
+      sources: [],
+    }
+    expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(true)
+    valid.histories[0].label = { en: 'vine' } as { en: string; local: string }
+    expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(false)
   })
 })

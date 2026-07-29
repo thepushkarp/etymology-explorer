@@ -1,25 +1,30 @@
 'use client'
 
 import { useState } from 'react'
+import type { LanguageCode } from '@/lib/languages'
 
 interface SurpriseButtonProps {
-  onWordSelected: (word: string) => void
+  onWordSelected: (word: string, language: LanguageCode) => void
+  language?: LanguageCode
   disabled?: boolean
 }
 
-export function SurpriseButton({ onWordSelected, disabled }: SurpriseButtonProps) {
+export function SurpriseButton({ onWordSelected, language = 'en', disabled }: SurpriseButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
 
   const handleClick = async () => {
     if (isLoading || disabled) return
 
+    const requestedLanguage = language
     setIsLoading(true)
     try {
-      const response = await fetch('/api/random-word', { cache: 'no-store' })
+      const response = await fetch(`/api/random-word?language=${requestedLanguage}`, {
+        cache: 'no-store',
+      })
       const data = await response.json()
 
       if (data.success && data.data?.word) {
-        onWordSelected(data.data.word)
+        onWordSelected(data.data.word, requestedLanguage)
       }
     } catch (error) {
       console.error('Failed to fetch random word:', error)

@@ -6,6 +6,7 @@ import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './Mob
 interface RelatedWordsSectionProps {
   suggestions: WordSuggestions
   onWordClick: (word: string) => void
+  title?: string
 }
 
 /**
@@ -108,11 +109,15 @@ function SuggestionRow({
   )
 }
 
-export function RelatedWordsSection({ suggestions, onWordClick }: RelatedWordsSectionProps) {
+export function RelatedWordsSection({
+  suggestions,
+  onWordClick,
+  title = 'Related Words',
+}: RelatedWordsSectionProps) {
   return (
     <MobileSection
       id="entry-related"
-      title="Related Words"
+      title={title}
       titleTextClassName={SECTION_TITLE_CLASS}
       dividerClassName={SECTION_DIVIDER_CLASS}
     >

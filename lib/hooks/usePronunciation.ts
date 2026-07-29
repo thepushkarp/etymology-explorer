@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { LanguageCode } from '@/lib/languages'
 
 /**
  * Fetches TTS audio for a word from /api/pronunciation and plays it.
@@ -8,17 +9,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * changes. Concurrent play() calls are ignored while audio is loading or
  * playing, and a response that arrives after the word changed is dropped.
  */
-export function usePronunciation(word: string) {
+export function usePronunciation(word: string, language: LanguageCode = 'en') {
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const objectUrlRef = useRef<string | null>(null)
   const loadedWordRef = useRef<string | null>(null)
-  const activeWordRef = useRef(word)
+  const activeWordRef = useRef(`${language}:${word}`)
   const busyRef = useRef(false)
 
-  activeWordRef.current = word
+  const lexeme = `${language}:${word}`
+  activeWordRef.current = lexeme
 
   useEffect(
     () => () => {
@@ -36,7 +38,7 @@ export function usePronunciation(word: string) {
     setError(null)
 
     // Discard cached audio from a previous word
-    if (loadedWordRef.current !== word && audioRef.current) {
+    if (loadedWordRef.current !== lexeme && audioRef.current) {
       audioRef.current = null
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current)
@@ -62,7 +64,9 @@ export function usePronunciation(word: string) {
     busyRef.current = true
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/pronunciation?word=${encodeURIComponent(word)}`)
+      const response = await fetch(
+        `/api/pronunciation?word=${encodeURIComponent(word)}&language=${language}`
+      )
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
@@ -72,7 +76,7 @@ export function usePronunciation(word: string) {
       const blob = await response.blob()
 
       // The searched word changed while fetching - drop the stale audio
-      if (activeWordRef.current !== word) {
+      if (activeWordRef.current !== lexeme) {
         busyRef.current = false
         return
       }
@@ -92,7 +96,7 @@ export function usePronunciation(word: string) {
       }
 
       audioRef.current = audio
-      loadedWordRef.current = word
+      loadedWordRef.current = lexeme
       setIsPlaying(true)
       await audio.play()
     } catch (err) {
@@ -104,7 +108,7 @@ export function usePronunciation(word: string) {
     } finally {
       setIsLoading(false)
     }
-  }, [word])
+  }, [word, language, lexeme])
 
   return { play, isPlaying, isLoading, error }
 }

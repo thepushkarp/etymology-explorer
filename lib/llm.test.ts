@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { getLlmUsageFromError } from '@/lib/llm'
+import { getLlmUsageFromError, isRecoverableBetaValidationError } from '@/lib/llm'
 
 describe('getLlmUsageFromError', () => {
   test('extracts usage attached to a failed-synthesis error', () => {
@@ -29,5 +29,25 @@ describe('getLlmUsageFromError', () => {
     expect(
       getLlmUsageFromError(Object.assign(new Error('x'), { usage: { inputTokens: 'many' } }))
     ).toBe(undefined)
+  })
+})
+
+describe('isRecoverableBetaValidationError', () => {
+  test('admits selected-language post-processing validation failures', () => {
+    expect(
+      isRecoverableBetaValidationError(
+        new Error('Schema validation failed: model changed the source-defined history set'),
+        'es'
+      )
+    ).toBe(true)
+  })
+
+  test('does not retry English or non-validation failures', () => {
+    const validationError = new Error('Schema validation failed: primary history is missing')
+
+    expect(isRecoverableBetaValidationError(validationError, 'en')).toBe(false)
+    expect(isRecoverableBetaValidationError(new Error('OpenRouter request failed'), 'it')).toBe(
+      false
+    )
   })
 })

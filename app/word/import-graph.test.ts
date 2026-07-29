@@ -9,7 +9,7 @@ import { dirname, join, resolve } from 'node:path'
  */
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..')
-const ENTRY = join(REPO_ROOT, 'app', 'word', '[word]', 'page.tsx')
+const ENTRY = join(REPO_ROOT, 'app', 'word', '[...segments]', 'page.tsx')
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts']
 
@@ -79,6 +79,13 @@ describe('/word/[word] module graph (LLM spend invariant)', () => {
       // Guard: if the module was renamed, this test must be updated, not skipped
       expect(existsSync(absolutePath)).toBe(true)
       expect(graph.has(absolutePath)).toBe(false)
+    }
+  })
+
+  test('the shared multilingual route preserves the cache-only server graph', () => {
+    expect(graph.has(join(REPO_ROOT, 'lib', 'cache.ts'))).toBe(true)
+    for (const relativePath of ['lib/research.ts', 'lib/llm.ts', 'lib/openrouterResponses.ts']) {
+      expect(graph.has(join(REPO_ROOT, relativePath))).toBe(false)
     }
   })
 })

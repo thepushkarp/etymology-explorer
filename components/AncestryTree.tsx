@@ -8,6 +8,7 @@ import {
   ConvergencePoint,
   StageConfidence,
 } from '@/lib/types'
+import { LANGUAGES, type LanguageCode } from '@/lib/languages'
 import {
   branchColors,
   confidenceConfig,
@@ -21,6 +22,7 @@ import {
 interface AncestryTreeProps {
   graph: AncestryGraph
   word: string
+  language?: LanguageCode
 }
 
 /**
@@ -122,7 +124,7 @@ function StageNode({
       <div
         onClick={handleToggle}
         className={`
-          w-full rounded-[1rem] px-4 py-4
+          w-full rounded-[0.9rem] px-3 py-3.5 sm:px-4 sm:py-4
           ${isReconstructed ? 'border-2 border-dashed' : 'border-2'}
           ${
             isReconstructed
@@ -148,7 +150,7 @@ function StageNode({
         {/* Form */}
         <div
           className={`
-            font-serif text-sm sm:text-[15px]
+            font-serif text-[15px] sm:text-base
             ${isReconstructed ? 'italic text-stone-600 dark:text-stone-400' : ''}
             ${isLast ? 'font-semibold text-charcoal' : 'text-charcoal/90'}
           `}
@@ -262,9 +264,9 @@ function ConvergenceCallout({
  * Extract grid column class to avoid recreating inline strings
  */
 function gridColsClass(count: number): string {
-  if (count === 1) return 'grid-cols-1 max-w-xs mx-auto'
-  if (count === 2) return 'grid-cols-2 max-w-lg mx-auto'
-  return 'grid-cols-3 max-w-2xl mx-auto'
+  if (count === 1) return 'grid-cols-1 max-w-sm mx-auto'
+  if (count === 2) return 'grid-cols-1 sm:grid-cols-2 sm:max-w-lg sm:mx-auto'
+  return 'grid-cols-1 sm:grid-cols-3 sm:max-w-2xl sm:mx-auto'
 }
 
 function BranchColumn({
@@ -327,7 +329,11 @@ function BranchColumn({
   )
 }
 
-export const AncestryTree = memo(function AncestryTree({ graph, word }: AncestryTreeProps) {
+export const AncestryTree = memo(function AncestryTree({
+  graph,
+  word,
+  language = 'en',
+}: AncestryTreeProps) {
   if (!graph || !graph.branches || graph.branches.length === 0) return null
 
   const hasMerge = graph.mergePoint && graph.branches.length > 1
@@ -345,7 +351,7 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
           <ConvergenceCallout points={graph.convergencePoints!} branches={graph.branches} />
         )}
 
-        {/* Branches side by side on md+; stacked on mobile */}
+        {/* Narrow screens stack branches so evidence remains readable. */}
         <div className={`grid w-full items-end gap-4 ${gridColsClass(graph.branches.length)}`}>
           {graph.branches.map((branch, idx) => (
             <BranchColumn
@@ -471,7 +477,7 @@ export const AncestryTree = memo(function AncestryTree({ graph, word }: Ancestry
           }}
         >
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-charcoal-light">
-            Modern English
+            Modern {LANGUAGES[language].englishName}
           </div>
           <div className="font-serif text-xl font-bold text-charcoal">{word}</div>
         </div>

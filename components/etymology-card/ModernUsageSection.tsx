@@ -5,12 +5,16 @@ import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './Mob
 
 interface ModernUsageSectionProps {
   modernUsage: ModernUsage
+  title?: string
 }
 
-export function ModernUsageSection({ modernUsage }: ModernUsageSectionProps) {
+export function ModernUsageSection({
+  modernUsage,
+  title = 'Modern Usage',
+}: ModernUsageSectionProps) {
   return (
     <MobileSection
-      title="Modern Usage"
+      title={title}
       titleTextClassName={SECTION_TITLE_CLASS}
       dividerClassName={SECTION_DIVIDER_CLASS}
     >

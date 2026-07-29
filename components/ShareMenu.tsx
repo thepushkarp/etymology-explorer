@@ -2,10 +2,10 @@
 
 import { useRef, useState } from 'react'
 import { ArrowTopRightOnSquareIcon, DocumentTextIcon, ShareIcon } from '@heroicons/react/24/outline'
-import { EtymologyResult } from '@/lib/types'
+import { DisplayEtymologyResult } from '@/lib/types'
 
 interface ShareMenuProps {
-  result: EtymologyResult
+  result: DisplayEtymologyResult
 }
 
 export function ShareMenu({ result }: ShareMenuProps) {

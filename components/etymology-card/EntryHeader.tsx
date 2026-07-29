@@ -1,11 +1,14 @@
 'use client'
 
-import { EtymologyResult } from '@/lib/types'
+import { DisplayEtymologyResult } from '@/lib/types'
+import { BETA_SYMBOL } from '@/lib/languages'
 import { PronunciationButton } from '../PronunciationButton'
 
 interface EntryHeaderProps {
-  result: EtymologyResult
+  result: DisplayEtymologyResult
   headerActions?: React.ReactNode
+  historySelector?: React.ReactNode
+  usageUnavailable?: boolean
 }
 
 function shortenMeaning(meaning: string): string {
@@ -16,7 +19,7 @@ function shortenOrigin(origin: string): string {
   return origin.replace(/^Ancient\s+/i, '').replace(/^Old\s+/i, 'O.')
 }
 
-function buildOriginHook(result: EtymologyResult): string | null {
+function buildOriginHook(result: DisplayEtymologyResult): string | null {
   if (!result.roots || result.roots.length === 0) return null
 
   const meaningful = result.roots.filter((r) => !r.root.startsWith('-')).slice(0, 3)
@@ -30,12 +33,19 @@ function buildOriginHook(result: EtymologyResult): string | null {
   return `From ${parts.join(' + ')}.`
 }
 
-export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
+export function EntryHeader({
+  result,
+  headerActions,
+  historySelector,
+  usageUnavailable = false,
+}: EntryHeaderProps) {
   const originHook = buildOriginHook(result)
   const sectionLinks: Array<{ label: string; href: string }> = [
     { label: 'Ancestry', href: '#entry-ancestry' },
     { label: 'Story', href: '#entry-story' },
-    ...(result.ngram?.data.length ? [{ label: 'Usage', href: '#entry-usage' }] : []),
+    ...(result.ngram?.data.length || usageUnavailable
+      ? [{ label: 'Usage', href: '#entry-usage' }]
+      : []),
     ...(result.suggestions ? [{ label: 'Related', href: '#entry-related' }] : []),
     ...(result.roots.length > 0 ? [{ label: 'Kin', href: '#entry-kin' }] : []),
     ...(result.rawSources?.wikipedia ? [{ label: 'Context', href: '#entry-context' }] : []),
@@ -43,18 +53,33 @@ export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
   ]
 
   return (
-    <header className="border-b border-border-soft pb-10">
-      <div className="flex flex-wrap items-start justify-between gap-6">
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">entry</p>
+    <header className="border-b border-border-soft pb-8 sm:pb-9">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-soft/70 pb-4">
+        <p className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-charcoal-light/66">
+          <span>entry</span>
+          {result.language !== 'en' && (
+            <span
+              aria-label="Beta"
+              className="normal-case rounded-full border border-accent-amber/45 px-2 py-0.5 font-serif tracking-normal text-accent-amber"
+            >
+              {BETA_SYMBOL}
+            </span>
+          )}
+        </p>
+
+        {headerActions && <div className="min-w-0 shrink-0">{headerActions}</div>}
+      </div>
+
+      <div className="mt-4">
+        <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-3 sm:gap-4">
-            <h1 className="mt-3 font-serif text-5xl font-semibold tracking-[-0.06em] text-charcoal md:text-7xl">
+            <h1 className="min-w-0 break-words font-serif text-[clamp(2.7rem,13vw,4.5rem)] font-semibold leading-[0.98] tracking-[-0.06em] text-charcoal">
               {result.word}
             </h1>
 
             <span className="inline-flex items-center gap-1 pt-2 text-base italic text-charcoal-light sm:text-lg">
               {result.pronunciation}
-              <PronunciationButton word={result.word} />
+              <PronunciationButton word={result.word} language={result.language} />
             </span>
           </div>
 
@@ -64,11 +89,11 @@ export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
             </span>
           )}
         </div>
-
-        {headerActions && <div className="shrink-0 pt-1 md:pt-4">{headerActions}</div>}
       </div>
 
-      <p className="mt-6 max-w-3xl font-serif text-xl leading-relaxed text-charcoal/84 sm:text-2xl">
+      {historySelector}
+
+      <p className="mt-5 max-w-3xl font-serif text-lg leading-relaxed text-charcoal/88 sm:text-[1.35rem]">
         {result.definition}
       </p>
 
@@ -95,7 +120,7 @@ export function EntryHeader({ result, headerActions }: EntryHeaderProps) {
         </div>
       )}
 
-      <nav className="mt-7 flex flex-wrap gap-2">
+      <nav className="mt-6 flex flex-wrap gap-2">
         {sectionLinks.map(({ label, href }) => (
           <a key={href} href={href} className="editorial-chip font-serif italic">
             {label}

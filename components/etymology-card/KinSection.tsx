@@ -6,14 +6,15 @@ import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './Mob
 
 interface KinSectionProps {
   roots: Root[]
-  onWordClick: (word: string) => void
+  onWordClick?: (word: string) => void
+  title?: string
 }
 
-export function KinSection({ roots, onWordClick }: KinSectionProps) {
+export function KinSection({ roots, onWordClick, title = 'Kin & Kindred' }: KinSectionProps) {
   return (
     <MobileSection
       id="entry-kin"
-      title="Kin & Kindred"
+      title={title}
       titleTextClassName={SECTION_TITLE_CLASS}
       dividerClassName={SECTION_DIVIDER_CLASS}
     >

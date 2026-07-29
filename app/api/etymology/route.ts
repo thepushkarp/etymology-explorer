@@ -16,13 +16,14 @@ import {
   attemptPromotion,
   pollForResult,
 } from '@/lib/singleflight'
-import { incrCounter } from '@/lib/counters'
+import { incrCounter, incrLanguageCounter } from '@/lib/counters'
 import { safeError } from '@/lib/errorUtils'
 import { getEnv } from '@/lib/env'
 import { CONFIG } from '@/lib/config'
 import { emitSecurityEvent } from '@/lib/telemetry'
 import { createResponseAdapter } from '@/lib/responseAdapter'
 import { classifyApiError } from '@/lib/apiError'
+import { LANGUAGES, lexemeKey, parseLanguageCode } from '@/lib/languages'
 
 // Uncached searches run a multi-phase research + synthesis pipeline that can
 // take minutes; without this the function dies at the platform default.
@@ -34,11 +35,14 @@ const REDIS_DOWN_MESSAGE =
 const IN_PROGRESS_MESSAGE = 'Request in progress, please retry in a few seconds.'
 
 function countConfidence(result: EtymologyResult, level: StageConfidence): number {
-  const allStages = [
-    ...result.ancestryGraph.branches.flatMap((branch) => branch.stages),
-    ...(result.ancestryGraph.postMerge ?? []),
-  ]
-  return allStages.filter((stage) => stage.confidence === level).length
+  let count = 0
+  for (const branch of result.ancestryGraph.branches) {
+    for (const stage of branch.stages) if (stage.confidence === level) count += 1
+  }
+  for (const stage of result.ancestryGraph.postMerge ?? []) {
+    if (stage.confidence === level) count += 1
+  }
+  return count
 }
 
 function sleep(ms: number): Promise<void> {
@@ -79,6 +83,12 @@ export async function GET(request: NextRequest) {
     }
 
     const word = request.nextUrl.searchParams.get('word')
+    const language = parseLanguageCode(request.nextUrl.searchParams.get('language'))
+
+    if (!language) {
+      return respond.error('Unsupported language', { status: 400 })
+    }
+    await incrLanguageCounter(language, 'request')
 
     if (!word || typeof word !== 'string') {
       return respond.error('Word is required', { status: 400 })
@@ -97,15 +107,16 @@ export async function GET(request: NextRequest) {
     const costMode = await getCostMode()
 
     // Honor stream=true even for cached results so EventSource never receives JSON.
-    const cached = await getCachedEtymology(normalizedWord)
+    const cached = await getCachedEtymology(normalizedWord, language)
     if (cached) {
       console.log(`[Etymology API] Cache hit for "${normalizedWord}"`)
       emitSecurityEvent({
         type: 'cache_hit',
         timestamp: Date.now(),
-        detail: { word: normalizedWord },
+        detail: { word: normalizedWord, language },
       })
       await incrCounter('cache_hit')
+      await incrLanguageCounter(language, 'cache_hit')
       return respond.result(cached, {
         cached: true,
         headers: { 'X-Protection-Mode': costMode },
@@ -113,14 +124,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Negative cache — skip source fetches for known gibberish
-    const isNegCached = await getNegativeCache(normalizedWord)
+    const isNegCached = await getNegativeCache(normalizedWord, language)
     if (isNegCached) {
       console.log(`[Etymology API] Negative cache hit for "${normalizedWord}"`)
-      return respond.error(getQuirkyMessage('nonsense'), {
-        status: 404,
-        errorType: 'nonsense',
-        unaryData: { suggestion: getRandomWord() },
-      })
+      return respond.error(
+        language === 'en'
+          ? getQuirkyMessage('nonsense')
+          : `No ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
+        {
+          status: 404,
+          errorType: 'nonsense',
+          ...(language === 'en' ? { unaryData: { suggestion: getRandomWord() } } : {}),
+        }
+      )
     }
 
     // Reject uncached requests when monthly budget is exhausted
@@ -137,7 +153,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Singleflight: prevent duplicate LLM calls for the same word
-    const lockKey = `lock:etymology:${normalizedWord}`
+    const lockKey = `lock:etymology:${lexemeKey(language, normalizedWord)}`
     const acquisition = await tryAcquireLock(lockKey)
 
     // Fail closed: an uncached synthesis without Redis would run with no
@@ -161,14 +177,19 @@ export async function GET(request: NextRequest) {
       // client disconnects, so abandoned searches stop spending immediately.
       const researchContext = await conductAgenticResearch(
         normalizedWord,
-        { signal: request.signal },
+        { signal: request.signal, language },
         onProgress
       )
 
       if (!hasCredibleMainSource(researchContext)) {
         // Awaited so the entry lands BEFORE the lock releases — waiters
         // poll the negative cache to learn this word has no sources.
-        await cacheNegative(normalizedWord, 'no_sources')
+        await cacheNegative(normalizedWord, 'no_sources', language)
+        await incrLanguageCounter(language, 'no_source')
+
+        if (language !== 'en') {
+          return { kind: 'no_sources' }
+        }
 
         if (isLikelyTypo(normalizedWord)) {
           return {
@@ -229,11 +250,11 @@ export async function GET(request: NextRequest) {
 
         await recordSpend(synthesis.usage)
 
-        await cacheEtymology(normalizedWord, synthesis.result)
+        await cacheEtymology(normalizedWord, synthesis.result, language)
         emitSecurityEvent({
           type: 'cache_miss',
           timestamp: Date.now(),
-          detail: { word: normalizedWord, sources: researchContext.totalSourcesFetched },
+          detail: { word: normalizedWord, language, sources: researchContext.totalSourcesFetched },
         })
         await incrCounter('cache_miss')
 
@@ -245,6 +266,9 @@ export async function GET(request: NextRequest) {
         const failedCallUsage = getLlmUsageFromError(error)
         if (failedCallUsage) {
           await recordSpend(failedCallUsage)
+        }
+        if (safeError(error).toLowerCase().includes('schema validation')) {
+          await incrLanguageCounter(language, 'schema_failure')
         }
 
         // Distinguish "holder failed" from "holder crashed" for waiters:
@@ -287,12 +311,12 @@ export async function GET(request: NextRequest) {
           throw new DOMException('The operation was aborted', 'AbortError')
         }
 
-        const result = await getCachedEtymology(normalizedWord)
+        const result = await getCachedEtymology(normalizedWord, language)
         if (result) {
           return { kind: 'result', result }
         }
 
-        if (await getNegativeCache(normalizedWord)) {
+        if (await getNegativeCache(normalizedWord, language)) {
           return { kind: 'negative_cached' }
         }
 
@@ -353,14 +377,20 @@ export async function GET(request: NextRequest) {
               } else {
                 emit({
                   type: 'error',
-                  message: getQuirkyMessage('nonsense'),
+                  message:
+                    language === 'en'
+                      ? getQuirkyMessage('nonsense')
+                      : `No ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
                   errorType: 'nonsense',
                 })
               }
             } else if (outcome.kind === 'negative_cached') {
               emit({
                 type: 'error',
-                message: getQuirkyMessage('nonsense'),
+                message:
+                  language === 'en'
+                    ? getQuirkyMessage('nonsense')
+                    : `No ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
                 errorType: 'nonsense',
               })
             } else if (outcome.kind === 'holder_failed') {
@@ -413,7 +443,7 @@ export async function GET(request: NextRequest) {
     // Non-streaming waiter: short poll, then ask the client to retry.
     if (acquisition.status === 'busy') {
       console.log(`[Etymology API] Waiting for in-flight result for "${normalizedWord}"`)
-      const result = await pollForResult(() => getCachedEtymology(normalizedWord))
+      const result = await pollForResult(() => getCachedEtymology(normalizedWord, language))
       if (result) {
         return respond.result(result, { cached: true })
       }
@@ -435,11 +465,18 @@ export async function GET(request: NextRequest) {
           unaryData: { suggestions: outcome.typoSuggestions },
         })
       }
-      return respond.error(getQuirkyMessage('nonsense'), {
-        status: 404,
-        errorType: 'nonsense',
-        unaryData: { suggestion: outcome.fallbackSuggestion ?? getRandomWord() },
-      })
+      return respond.error(
+        language === 'en'
+          ? getQuirkyMessage('nonsense')
+          : `No ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
+        {
+          status: 404,
+          errorType: 'nonsense',
+          ...(language === 'en'
+            ? { unaryData: { suggestion: outcome.fallbackSuggestion ?? getRandomWord() } }
+            : {}),
+        }
+      )
     }
 
     return respond.result(outcome.result, {

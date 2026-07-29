@@ -2,6 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react'
 import { HistoryEntry } from '@/lib/types'
+import type { LanguageCode } from '@/lib/languages'
 
 const HISTORY_STORAGE_KEY = 'etymology-history'
 const MAX_HISTORY_SIZE = 50
@@ -104,11 +105,13 @@ function getSnapshot(): HistoryEntry[] {
 export function useHistory() {
   const history = useSyncExternalStore(subscribe, getSnapshot, () => EMPTY_HISTORY)
 
-  const addToHistory = useCallback((word: string) => {
+  const addToHistory = useCallback((word: string, language: LanguageCode = 'en') => {
     const normalizedWord = word.toLowerCase()
     const nextHistory = [
-      { word: normalizedWord, timestamp: Date.now() },
-      ...ensureHistorySnapshot().filter((entry) => entry.word !== normalizedWord),
+      { word: normalizedWord, language, timestamp: Date.now() },
+      ...ensureHistorySnapshot().filter(
+        (entry) => entry.word !== normalizedWord || (entry.language ?? 'en') !== language
+      ),
     ].slice(0, MAX_HISTORY_SIZE)
 
     writeHistory(nextHistory)
@@ -118,9 +121,11 @@ export function useHistory() {
     writeHistory(EMPTY_HISTORY)
   }, [])
 
-  const removeFromHistory = useCallback((word: string) => {
+  const removeFromHistory = useCallback((word: string, language: LanguageCode = 'en') => {
     const normalizedWord = word.toLowerCase()
-    const nextHistory = ensureHistorySnapshot().filter((entry) => entry.word !== normalizedWord)
+    const nextHistory = ensureHistorySnapshot().filter(
+      (entry) => entry.word !== normalizedWord || (entry.language ?? 'en') !== language
+    )
 
     writeHistory(nextHistory)
   }, [])
