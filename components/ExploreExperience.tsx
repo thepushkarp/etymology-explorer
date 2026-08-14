@@ -107,7 +107,7 @@ export function ExploreExperience() {
   const [suggestionsVisible, setSuggestionsVisible] = useState(false)
   const curatedWords = CURATED_WORDS[language]
   const visibleLanguages = SUPPORTED_LANGUAGE_CODES.filter(
-    (code) => code !== 'ja' || process.env.NEXT_PUBLIC_JAPANESE_BETA_ENABLED === 'true'
+    (code) => code !== 'ja' || process.env.NEXT_PUBLIC_JAPANESE_BETA_ENABLED !== 'false'
   )
 
   return (

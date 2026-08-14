@@ -82,7 +82,7 @@ export const CONFIG = {
     pronunciationEnabled: process.env.PRONUNCIATION_ENABLED !== 'false',
     forceCacheOnly: process.env.FORCE_CACHE_ONLY === 'true',
     rateLimitEnabled: process.env.RATE_LIMIT_ENABLED !== 'false',
-    japaneseBetaEnabled: process.env.NEXT_PUBLIC_JAPANESE_BETA_ENABLED === 'true',
+    japaneseBetaEnabled: process.env.NEXT_PUBLIC_JAPANESE_BETA_ENABLED !== 'false',
   },
 
   // Cache hardening
