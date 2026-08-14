@@ -6,9 +6,9 @@ import { BETA_SYMBOL, type LanguageCode } from '@/lib/languages'
 
 interface HistorySidebarProps {
   history: HistoryEntry[]
-  onWordClick: (word: string, language: LanguageCode) => void
+  onWordClick: (word: string, language: LanguageCode, entryId?: string) => void
   onClearHistory: () => void
-  onRemoveEntry: (word: string, language?: LanguageCode) => void
+  onRemoveEntry: (word: string, language?: LanguageCode, entryId?: string) => void
 }
 
 // Format relative time - pure function
@@ -43,9 +43,9 @@ export function HistorySidebar({
     return () => clearInterval(interval)
   }, [])
 
-  const handleWordClick = (word: string, language: LanguageCode) => {
+  const handleWordClick = (word: string, language: LanguageCode, entryId?: string) => {
     setIsOpen(false)
-    onWordClick(word, language)
+    onWordClick(word, language, entryId)
   }
 
   return (
@@ -211,7 +211,7 @@ export function HistorySidebar({
             <ul className="space-y-1">
               {history.map((entry, index) => (
                 <li
-                  key={`${entry.language ?? 'en'}:${entry.word}`}
+                  key={`${entry.language ?? 'en'}:${entry.entryId ?? entry.word}`}
                   className="animate-fadeIn"
                   style={{ animationDelay: `${index * 30}ms` }}
                 >
@@ -226,7 +226,9 @@ export function HistorySidebar({
                   "
                   >
                     <button
-                      onClick={() => handleWordClick(entry.word, entry.language ?? 'en')}
+                      onClick={() =>
+                        handleWordClick(entry.word, entry.language ?? 'en', entry.entryId)
+                      }
                       className="
                         flex-1
                         flex items-center justify-between
@@ -264,7 +266,7 @@ export function HistorySidebar({
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        onRemoveEntry(entry.word, entry.language ?? 'en')
+                        onRemoveEntry(entry.word, entry.language ?? 'en', entry.entryId)
                       }}
                       className="
                         px-2 py-2

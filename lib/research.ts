@@ -32,7 +32,7 @@ import {
   extractOutputText,
   extractUsage,
 } from './openrouterResponses'
-import { isBetaLanguage, type LanguageCode } from './languages'
+import { isBetaLanguage, type BetaLanguageCode, type LanguageCode } from './languages'
 import {
   fetchDicionarioAberto,
   fetchEnglishWiktionaryLanguage,
@@ -68,7 +68,7 @@ export function hasCredibleMainSource(context: ResearchContext): boolean {
 
 async function conductBetaResearch(
   word: string,
-  language: Exclude<LanguageCode, 'en'>,
+  language: BetaLanguageCode,
   signal: AbortSignal | undefined,
   onProgress: ((event: StreamEvent) => void) | undefined
 ): Promise<ResearchContext> {

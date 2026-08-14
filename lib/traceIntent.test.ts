@@ -72,6 +72,14 @@ describe('consumeTraceIntent', () => {
     expect(consumeTraceIntent('nice')).toBe(true)
   })
 
+  test('an entry-qualified Japanese selection survives canonicalization and a unique redirect', () => {
+    markTraceIntent('学校', 'ja', '1206730')
+    expect(consumeTraceIntent('学校', 'ja', '1206730', 'がっこう')).toBe(true)
+
+    markTraceIntent('gakkou', 'ja')
+    expect(consumeTraceIntent('学校', 'ja', '1206730', 'gakkou')).toBe(true)
+  })
+
   test('flag for a different word: no auto-trace, and the stale flag is cleared', () => {
     markTraceIntent('alpha')
 

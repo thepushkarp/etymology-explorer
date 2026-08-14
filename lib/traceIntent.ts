@@ -21,6 +21,7 @@ interface TraceIntent {
   word: string
   language: LanguageCode
   at: number
+  entryId?: string
 }
 
 function normalizeWord(word: string): string {
@@ -43,11 +44,15 @@ export function wordPagePath(word: string, language: LanguageCode = 'en'): strin
 }
 
 /** Record that the next word-page visit is an in-app navigation for `word` */
-export function markTraceIntent(word: string, language: LanguageCode = 'en'): void {
+export function markTraceIntent(
+  word: string,
+  language: LanguageCode = 'en',
+  entryId?: string
+): void {
   const storage = getStorage()
   if (!storage) return
   try {
-    const intent: TraceIntent = { word: normalizeWord(word), language, at: Date.now() }
+    const intent: TraceIntent = { word: normalizeWord(word), language, entryId, at: Date.now() }
     storage.setItem(STORAGE_KEY, JSON.stringify(intent))
   } catch {
     // Quota/security errors just mean the visit behaves like a direct load
@@ -59,7 +64,12 @@ export function markTraceIntent(word: string, language: LanguageCode = 'en'): vo
  * removed on ANY word-page view (matching or not) so a stale intent can
  * never auto-trace a later direct load.
  */
-export function consumeTraceIntent(word: string, language: LanguageCode = 'en'): boolean {
+export function consumeTraceIntent(
+  word: string,
+  language: LanguageCode = 'en',
+  entryId?: string,
+  alternateWord?: string
+): boolean {
   const storage = getStorage()
   if (!storage) return false
   try {
@@ -71,10 +81,14 @@ export function consumeTraceIntent(word: string, language: LanguageCode = 'en'):
     if (typeof intent.word !== 'string' || typeof intent.at !== 'number') return false
 
     const intentLanguage = intent.language ?? 'en'
-    return (
-      lexemeKey(intentLanguage, intent.word) === lexemeKey(language, word) &&
-      Date.now() - intent.at < INTENT_TTL_MS
-    )
+    const requestedKeys = [word, alternateWord]
+      .filter((candidate): candidate is string => Boolean(candidate))
+      .map((candidate) => lexemeKey(language, candidate))
+    const wordMatches = requestedKeys.includes(lexemeKey(intentLanguage, intent.word))
+    const entryMatches =
+      entryId === undefined || intent.entryId === undefined || intent.entryId === entryId
+
+    return wordMatches && entryMatches && Date.now() - intent.at < INTENT_TTL_MS
   } catch {
     return false
   }

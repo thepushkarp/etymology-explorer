@@ -24,6 +24,7 @@ import { emitSecurityEvent } from '@/lib/telemetry'
 import { createResponseAdapter } from '@/lib/responseAdapter'
 import { classifyApiError } from '@/lib/apiError'
 import { LANGUAGES, lexemeKey, parseLanguageCode } from '@/lib/languages'
+import { handleJapaneseEtymology } from '@/lib/japanese/etymologyHandler'
 
 // Uncached searches run a multi-phase research + synthesis pipeline that can
 // take minutes; without this the function dies at the platform default.
@@ -102,6 +103,10 @@ export async function GET(request: NextRequest) {
 
     if (!isValidWord(normalizedWord)) {
       return respond.error(getQuirkyMessage('nonsense'), { status: 400, errorType: 'nonsense' })
+    }
+
+    if (language === 'ja') {
+      return handleJapaneseEtymology(request, respond, normalizedWord, shouldStream)
     }
 
     const costMode = await getCostMode()

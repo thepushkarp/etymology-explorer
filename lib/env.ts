@@ -16,6 +16,7 @@ const ServerEnvSchema = z.object({
   ETYMOLOGY_KV_REST_API_TOKEN: emptyToUndefined.pipe(z.string().min(1)).optional(),
   ELEVENLABS_API_KEY: emptyToUndefined.optional(),
   ELEVENLABS_VOICE_ID: emptyToUndefined.optional(),
+  ELEVENLABS_JAPANESE_VOICE_ID: emptyToUndefined.optional(),
 })
 
 type ServerEnv = z.infer<typeof ServerEnvSchema>

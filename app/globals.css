@@ -77,6 +77,10 @@
   --color-highlight: var(--highlight);
   --font-serif: var(--font-libre-baskerville);
   --font-sans: var(--font-body);
+  --font-japanese: 'Shippori Mincho', 'Yu Mincho', 'Hiragino Mincho ProN', serif;
+  --color-reading-indigo: #35546d;
+  --color-origin-persimmon: #a54d3d;
+  --color-uncertain-gold: #b8862b;
 }
 
 html {

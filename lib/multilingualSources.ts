@@ -1,7 +1,7 @@
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
 import { fetchWithTimeout } from './fetchUtils'
-import { LANGUAGES, type BetaLanguageCode } from './languages'
+import { LANGUAGES, type NonEnglishLanguageCode } from './languages'
 import { cacheSource, getCachedSource, type CacheableSource } from './sourceCache'
 import type { SourceData } from './types'
 import { extractWiktionaryEntryGroups, type WiktionaryTocSection } from './wiktionaryEntryGroups'
@@ -55,8 +55,8 @@ export function extractTocEtymology(
 
 async function fetchWiktionaryEdition(
   word: string,
-  language: BetaLanguageCode,
-  edition: 'en' | BetaLanguageCode,
+  language: NonEnglishLanguageCode,
+  edition: 'en' | NonEnglishLanguageCode,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
   const config = LANGUAGES[language]
@@ -71,6 +71,7 @@ async function fetchWiktionaryEdition(
   url.searchParams.set('format', 'json')
   url.searchParams.set('formatversion', '2')
   url.searchParams.set('origin', '*')
+  url.searchParams.set('redirects', '1')
 
   try {
     const response = await fetchWithTimeout(
@@ -100,12 +101,13 @@ async function fetchWiktionaryEdition(
       .slice(0, 6000)
     if (!text) return null
 
+    const actualTitle = data.parse?.title?.normalize('NFKC').trim() || word
     const result = {
       text,
-      url: `https://${edition}.wiktionary.org/wiki/${encodeURIComponent(word)}`,
+      url: `https://${edition}.wiktionary.org/wiki/${encodeURIComponent(actualTitle)}`,
       entryGroups,
     }
-    void cacheSource(source, word, result, undefined, language)
+    void cacheSource(source, actualTitle, result, undefined, language)
     return result
   } catch (error) {
     console.error(`[Research] ${edition}.wiktionary fetch failed:`, safeError(error))
@@ -115,7 +117,7 @@ async function fetchWiktionaryEdition(
 
 export function fetchEnglishWiktionaryLanguage(
   word: string,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguageCode,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
   return fetchWiktionaryEdition(word, language, 'en', signal)
@@ -123,7 +125,7 @@ export function fetchEnglishWiktionaryLanguage(
 
 export function fetchNativeWiktionary(
   word: string,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguageCode,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
   return fetchWiktionaryEdition(word, language, language, signal)
@@ -131,7 +133,7 @@ export function fetchNativeWiktionary(
 
 export async function fetchFreeDictionaryApi(
   word: string,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguageCode,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
   const cached = await getCachedSource('multilingualDictionary', word, undefined, language)
@@ -160,11 +162,12 @@ export async function fetchFreeDictionaryApi(
   }
 }
 
-const WIKIDATA_LANGUAGE_ENTITY: Record<BetaLanguageCode, string> = {
+const WIKIDATA_LANGUAGE_ENTITY: Record<NonEnglishLanguageCode, string> = {
   it: 'Q652',
   es: 'Q1321',
   fr: 'Q150',
   pt: 'Q5146',
+  ja: 'Q5287',
 }
 
 interface WikidataMonolingualText {
@@ -214,13 +217,13 @@ function compactWikidataLexeme(entity: WikidataLexemeEntity) {
   }
 }
 
-function normalizedLexicalValue(value: string, language: BetaLanguageCode): string {
+function normalizedLexicalValue(value: string, language: NonEnglishLanguageCode): string {
   return value.normalize('NFKC').trim().toLocaleLowerCase(language)
 }
 
 function isRequestedLanguageText(
   text: WikidataMonolingualText,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguageCode,
   normalizedWord: string
 ): boolean {
   if (typeof text?.language !== 'string' || typeof text.value !== 'string') return false
@@ -232,7 +235,7 @@ function isRequestedLanguageText(
 
 function isMatchingLexeme(
   entity: WikidataLexemeEntity,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguageCode,
   normalizedWord: string
 ): entity is WikidataLexemeEntity & { id: string } {
   if (
@@ -256,7 +259,7 @@ function isMatchingLexeme(
 
 export async function fetchWikidataLexeme(
   word: string,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguageCode,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
   const cached = await getCachedSource('wikidataLexeme', word, undefined, language)

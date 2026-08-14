@@ -15,7 +15,8 @@ export interface LexemeRef {
   language: string
 }
 
-export type SourceFamilyId = 'etymonline' | 'wiktionary' | 'wikidata' | 'dicionarioAberto' | 'other'
+export type SourceFamilyId =
+  'etymonline' | 'wiktionary' | 'wikidata' | 'dicionarioAberto' | 'wold' | 'jmdict' | 'other'
 
 export type LexicalRelation =
   | 'inherited_from'
@@ -114,11 +115,14 @@ export interface SourceReference {
     | 'wikidataLexeme'
     | 'multilingualDictionary'
     | 'dicionarioAberto'
+    | 'jmdict'
+    | 'wold'
     | 'synthesized'
   url?: string // URL of the actual page used (undefined for 'synthesized')
   word?: string // The specific word/root that was looked up (undefined for 'synthesized')
-  sourceFamily?: 'etymonline' | 'wiktionary' | 'wikidata' | 'dicionarioAberto' | 'other'
+  sourceFamily?: SourceFamilyId
   license?: string
+  licenseUrl?: string
 }
 
 /**
@@ -126,7 +130,12 @@ export interface SourceReference {
  */
 export interface StageEvidence {
   source:
-    'etymonline' | 'wiktionary' | 'wiktionaryEnglish' | 'wiktionaryNative' | 'dicionarioAberto'
+    | 'etymonline'
+    | 'wiktionary'
+    | 'wiktionaryEnglish'
+    | 'wiktionaryNative'
+    | 'dicionarioAberto'
+    | 'wold'
   snippet: string // raw text excerpt (~120 chars max)
   sourceFamily?: string
 }
@@ -296,7 +305,67 @@ export type BetaEtymologyResult = EtymologyResultBase<BetaLanguageCode, Bilingua
   primaryHistoryId: string
   histories: LexicalHistory<BilingualText>[]
 }
-export type EtymologyResult = EnglishEtymologyResult | BetaEtymologyResult
+export type JapaneseLexicalStratum =
+  'native' | 'sino-japanese' | 'loanword' | 'hybrid' | 'wasei' | 'uncertain'
+
+export type JapaneseFormationKind =
+  'compound' | 'derivation' | 'borrowing' | 'historical-development' | 'opaque'
+
+export interface JapaneseFormationPart {
+  form: string
+  reading?: string
+  meaning: string
+  role: 'component' | 'source' | 'adaptation' | 'suffix' | 'whole'
+}
+
+export interface JapaneseFormation {
+  kind: JapaneseFormationKind
+  parts: JapaneseFormationPart[]
+  result: string
+  note: string
+}
+
+export interface LexemeCandidate {
+  entryId: string
+  lemma: string
+  reading: string
+  romaji: string
+  partOfSpeech: string[]
+  gloss: string
+  common: boolean
+  matchType: 'exact' | 'reading' | 'romaji' | 'inflection'
+  matchExplanation: string
+  searchedForm?: string
+  alternateForms?: string[]
+}
+
+export type LookupResolution =
+  | { status: 'unique'; query: string; candidates: [LexemeCandidate] }
+  | { status: 'ambiguous'; query: string; candidates: LexemeCandidate[] }
+  | { status: 'not_found'; query: string; candidates: [] }
+
+export interface LookupContext {
+  query: string
+  entryId: string
+  canonicalLemma: string
+  canonicalReading: string
+  matchType: LexemeCandidate['matchType']
+  matchExplanation: string
+}
+
+export type LearnerEtymologyResult = EtymologyResultBase<'ja', string> & {
+  entryId: string
+  reading: string
+  romaji: string
+  alternateForms: string[]
+  lexicalStratum: JapaneseLexicalStratum
+  evidenceState: 'grounded' | 'lexical_only'
+  formation: JapaneseFormation
+  originSummary: string
+  lookupContext?: LookupContext
+}
+
+export type EtymologyResult = EnglishEtymologyResult | BetaEtymologyResult | LearnerEtymologyResult
 export type DisplayEtymologyResult = EtymologyResultBase<LanguageCode, string>
 
 /**
@@ -314,6 +383,11 @@ export interface ApiResponse<T> {
 export interface WordSuggestion {
   word: string
   distance: number // Levenshtein distance
+  entryId?: string
+  reading?: string
+  romaji?: string
+  gloss?: string
+  partOfSpeech?: string[]
 }
 
 /**
@@ -322,6 +396,7 @@ export interface WordSuggestion {
 export interface HistoryEntry {
   word: string
   language?: LanguageCode // absent in legacy localStorage entries means English
+  entryId?: string
   timestamp: number
 }
 
@@ -394,6 +469,8 @@ export interface ResearchContext {
     multilingualDictionary?: SourceData | null
     wikidataLexeme?: SourceData | null
     dicionarioAberto?: SourceData | null
+    jmdict?: SourceData | null
+    wold?: SourceData | null
   }
   identifiedRoots: string[]
   identifiedRootLexemes?: LexemeRef[]
@@ -403,6 +480,8 @@ export interface ResearchContext {
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
   entryContexts?: ResearchEntryContext[]
   lexicalGraph?: LexicalResearchGraph
+  lookupContext?: LookupContext
+  japaneseCandidate?: LexemeCandidate
   llmUsage?: LlmUsage // root-extraction LLM usage, counted toward the budget
   rawSources?: {
     wikipedia?: string

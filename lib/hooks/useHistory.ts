@@ -105,30 +105,42 @@ function getSnapshot(): HistoryEntry[] {
 export function useHistory() {
   const history = useSyncExternalStore(subscribe, getSnapshot, () => EMPTY_HISTORY)
 
-  const addToHistory = useCallback((word: string, language: LanguageCode = 'en') => {
-    const normalizedWord = word.toLowerCase()
-    const nextHistory = [
-      { word: normalizedWord, language, timestamp: Date.now() },
-      ...ensureHistorySnapshot().filter(
-        (entry) => entry.word !== normalizedWord || (entry.language ?? 'en') !== language
-      ),
-    ].slice(0, MAX_HISTORY_SIZE)
+  const addToHistory = useCallback(
+    (word: string, language: LanguageCode = 'en', entryId?: string) => {
+      const normalizedWord = word.toLowerCase()
+      const nextHistory = [
+        { word: normalizedWord, language, entryId, timestamp: Date.now() },
+        ...ensureHistorySnapshot().filter(
+          (entry) =>
+            entry.word !== normalizedWord ||
+            (entry.language ?? 'en') !== language ||
+            entry.entryId !== entryId
+        ),
+      ].slice(0, MAX_HISTORY_SIZE)
 
-    writeHistory(nextHistory)
-  }, [])
+      writeHistory(nextHistory)
+    },
+    []
+  )
 
   const clearHistory = useCallback(() => {
     writeHistory(EMPTY_HISTORY)
   }, [])
 
-  const removeFromHistory = useCallback((word: string, language: LanguageCode = 'en') => {
-    const normalizedWord = word.toLowerCase()
-    const nextHistory = ensureHistorySnapshot().filter(
-      (entry) => entry.word !== normalizedWord || (entry.language ?? 'en') !== language
-    )
+  const removeFromHistory = useCallback(
+    (word: string, language: LanguageCode = 'en', entryId?: string) => {
+      const normalizedWord = word.toLowerCase()
+      const nextHistory = ensureHistorySnapshot().filter(
+        (entry) =>
+          entry.word !== normalizedWord ||
+          (entry.language ?? 'en') !== language ||
+          entry.entryId !== entryId
+      )
 
-    writeHistory(nextHistory)
-  }, [])
+      writeHistory(nextHistory)
+    },
+    []
+  )
 
   return {
     history,

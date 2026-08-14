@@ -73,6 +73,17 @@ const CURATED_WORDS: Record<LanguageCode, CuratedWordSet> = {
       { word: 'saudade', teaser: 'an origin etymologists still debate' },
     ],
   },
+  ja: {
+    heading: 'Learn Japanese through origins.',
+    description:
+      'Begin with native words, Sino-Japanese compounds, and loans whose journeys remain visible.',
+    words: [
+      { word: '学校', teaser: 'two learned forms, joined by Japanese sound patterns' },
+      { word: 'コーヒー', teaser: 'a Dutch drink name adapted to Japanese morae' },
+      { word: 'ありがとう', teaser: 'an everyday thanks with an older sense of rarity' },
+      { word: 'パン', teaser: 'a small word with several histories' },
+    ],
+  },
 }
 
 const HistorySidebar = dynamic(
@@ -95,6 +106,9 @@ export function ExploreExperience() {
   const { navigateToWord, historyBack, historyForward } = useWordNavigation(null, language)
   const [suggestionsVisible, setSuggestionsVisible] = useState(false)
   const curatedWords = CURATED_WORDS[language]
+  const visibleLanguages = SUPPORTED_LANGUAGE_CODES.filter(
+    (code) => code !== 'ja' || process.env.NEXT_PUBLIC_JAPANESE_BETA_ENABLED === 'true'
+  )
 
   return (
     <div className="flex min-h-screen flex-col bg-cream text-charcoal">
@@ -102,7 +116,7 @@ export function ExploreExperience() {
 
       <HistorySidebar
         history={history}
-        onWordClick={(word, entryLanguage) => navigateToWord(word, entryLanguage)}
+        onWordClick={(word, entryLanguage, entryId) => navigateToWord(word, entryLanguage, entryId)}
         onClearHistory={clearHistory}
         onRemoveEntry={removeFromHistory}
       />
@@ -130,7 +144,7 @@ export function ExploreExperience() {
                     onChange={(event) => setLanguage(event.target.value as LanguageCode)}
                     className="min-w-0 border-0 bg-transparent py-1 pl-3 pr-1 text-right font-serif text-sm text-charcoal outline-none sm:text-base"
                   >
-                    {SUPPORTED_LANGUAGE_CODES.map((code) => (
+                    {visibleLanguages.map((code) => (
                       <option key={code} value={code}>
                         {LANGUAGES[code].nativeName}
                         {LANGUAGES[code].beta ? ` · ${BETA_SYMBOL}` : ''}
@@ -139,7 +153,7 @@ export function ExploreExperience() {
                   </select>
                 </div>
                 <SearchBar
-                  onSearch={(word) => navigateToWord(word, language)}
+                  onSearch={(word, entryId) => navigateToWord(word, language, entryId)}
                   language={language}
                   inputRef={searchInputRef}
                   onSuggestionsVisibilityChange={setSuggestionsVisible}

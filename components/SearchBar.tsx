@@ -7,7 +7,7 @@ import { SearchSuggestions, useSuggestionItems } from '@/components/SearchSugges
 import type { LanguageCode } from '@/lib/languages'
 
 interface SearchBarProps {
-  onSearch: (word: string) => void
+  onSearch: (word: string, entryId?: string) => void
   isLoading?: boolean
   initialValue?: string
   inputRef?: React.RefObject<HTMLInputElement | null>
@@ -38,7 +38,16 @@ export function SearchBar({
         .map((entry) => entry.word),
     [historyEntries, language]
   )
-  const suggestionItems = useSuggestionItems(inputValue, historyWords, language)
+  const historyEntryIds = useMemo(
+    () =>
+      new Map(
+        historyEntries
+          .filter((entry) => (entry.language ?? 'en') === language && entry.entryId !== undefined)
+          .map((entry) => [entry.word, entry.entryId!])
+      ),
+    [historyEntries, language]
+  )
+  const suggestionItems = useSuggestionItems(inputValue, historyWords, language, historyEntryIds)
   const shouldShowSuggestions =
     isFocused && showSuggestions && inputValue.trim().length >= 2 && suggestionItems.length > 0
 
@@ -68,14 +77,15 @@ export function SearchBar({
   )
 
   const handleSuggestionSelect = useCallback(
-    (word: string) => {
+    (word: string, entryId?: string) => {
       setValue(word)
       setInputValue(word)
       setShowSuggestions(false)
       setSelectedIndex(-1)
+      if (entryId) onSearch(word, entryId)
       inputRef?.current?.focus()
     },
-    [inputRef]
+    [inputRef, onSearch]
   )
 
   const handleSubmit = useCallback(
@@ -147,7 +157,8 @@ export function SearchBar({
         effectiveSelectedIndex < suggestionItems.length
       ) {
         event.preventDefault()
-        handleSuggestionSelect(suggestionItems[effectiveSelectedIndex].word)
+        const suggestion = suggestionItems[effectiveSelectedIndex]
+        handleSuggestionSelect(suggestion.word, suggestion.entryId)
         return
       }
 
@@ -193,13 +204,15 @@ export function SearchBar({
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
               onKeyDown={handleInputKeyDown}
-              placeholder="Enter a word..."
+              placeholder={language === 'ja' ? 'Kanji, kana, or romaji…' : 'Enter a word...'}
+              lang={language}
               disabled={isLoading}
-              className="
+              className={`
                 min-w-0 flex-1 rounded-[0.8rem] border border-transparent bg-transparent px-2 py-3 text-lg
-                font-serif tracking-[0.01em] text-charcoal outline-none placeholder:text-charcoal-light/68
+                tracking-[0.01em] text-charcoal outline-none placeholder:text-charcoal-light/68
                 placeholder:italic disabled:opacity-50 sm:text-[1.45rem]
-              "
+                ${language === 'ja' ? 'font-japanese' : 'font-serif'}
+              `}
               autoComplete="off"
               spellCheck="false"
             />

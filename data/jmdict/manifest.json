@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "source": "JMdict English via scriptin/jmdict-simplified",
+  "sourceRelease": "3.6.2+20260810124713",
+  "dictionaryVersion": "3.6.2",
+  "dictionaryDate": "2026-08-10",
+  "generatedAt": "2026-08-13T06:42:18.343Z",
+  "entryCount": 218382,
+  "indexedForms": 498111,
+  "shardCount": 64,
+  "license": "CC BY-SA 4.0",
+  "licenseUrl": "https://www.edrdg.org/edrdg/licence.html"
+}

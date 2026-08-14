@@ -380,6 +380,178 @@ export const BETA_ETYMOLOGY_LLM_SCHEMA = (() => {
   return schema
 })()
 
+const JAPANESE_STAGE_SCHEMA = {
+  type: 'object',
+  properties: {
+    stage: { type: 'string' },
+    form: { type: 'string' },
+    note: { type: 'string' },
+  },
+  required: ['stage', 'form', 'note'],
+  additionalProperties: false,
+} as const
+
+/** Learner-oriented Japanese output. Identity fields are re-projected from JMdict after generation. */
+export const JAPANESE_ETYMOLOGY_LLM_SCHEMA = {
+  type: 'object',
+  properties: {
+    language: { type: 'string', enum: ['ja'] },
+    word: { type: 'string' },
+    entryId: { type: 'string' },
+    reading: { type: 'string' },
+    romaji: { type: 'string' },
+    alternateForms: { type: 'array', items: { type: 'string' } },
+    pronunciation: { type: 'string' },
+    definition: { type: 'string' },
+    lexicalStratum: {
+      type: 'string',
+      enum: ['native', 'sino-japanese', 'loanword', 'hybrid', 'wasei', 'uncertain'],
+    },
+    evidenceState: { type: 'string', enum: ['grounded'] },
+    formation: {
+      type: 'object',
+      properties: {
+        kind: {
+          type: 'string',
+          enum: ['compound', 'derivation', 'borrowing', 'historical-development', 'opaque'],
+        },
+        parts: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              form: { type: 'string' },
+              reading: { type: ['string', 'null'] },
+              meaning: { type: 'string' },
+              role: {
+                type: 'string',
+                enum: ['component', 'source', 'adaptation', 'suffix', 'whole'],
+              },
+            },
+            required: ['form', 'reading', 'meaning', 'role'],
+            additionalProperties: false,
+          },
+        },
+        result: { type: 'string' },
+        note: { type: 'string' },
+      },
+      required: ['kind', 'parts', 'result', 'note'],
+      additionalProperties: false,
+    },
+    originSummary: { type: 'string' },
+    ancestryGraph: {
+      type: 'object',
+      properties: {
+        branches: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              root: { type: 'string' },
+              stages: { type: 'array', items: JAPANESE_STAGE_SCHEMA },
+            },
+            required: ['root', 'stages'],
+            additionalProperties: false,
+          },
+        },
+        convergencePoints: {
+          type: ['array', 'null'],
+          items: { type: 'object', properties: {}, required: [], additionalProperties: false },
+        },
+        mergePoint: {
+          type: ['object', 'null'],
+          properties: { form: { type: 'string' }, note: { type: 'string' } },
+          required: ['form', 'note'],
+          additionalProperties: false,
+        },
+        postMerge: { type: ['array', 'null'], items: JAPANESE_STAGE_SCHEMA },
+      },
+      required: ['branches', 'convergencePoints', 'mergePoint', 'postMerge'],
+      additionalProperties: false,
+    },
+    roots: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          root: { type: 'string' },
+          origin: { type: 'string' },
+          meaning: { type: 'string' },
+          relatedWords: { type: 'array', items: { type: 'string' } },
+          ancestorRoots: { type: ['array', 'null'], items: { type: 'string' } },
+          descendantWords: { type: ['array', 'null'], items: { type: 'string' } },
+        },
+        required: ['root', 'origin', 'meaning', 'relatedWords', 'ancestorRoots', 'descendantWords'],
+        additionalProperties: false,
+      },
+    },
+    lore: { type: 'string' },
+    partsOfSpeech: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          pos: {
+            type: 'string',
+            enum: [
+              'noun',
+              'verb',
+              'adjective',
+              'adverb',
+              'preposition',
+              'conjunction',
+              'pronoun',
+              'interjection',
+              'determiner',
+            ],
+          },
+          definition: { type: 'string' },
+          pronunciation: { type: ['string', 'null'] },
+        },
+        required: ['pos', 'definition', 'pronunciation'],
+        additionalProperties: false,
+      },
+    },
+    suggestions: {
+      type: 'object',
+      properties: {
+        synonyms: { type: 'array', items: { type: 'string' } },
+        antonyms: { type: 'array', items: { type: 'string' } },
+        homophones: { type: 'array', items: { type: 'string' } },
+        easilyConfusedWith: { type: 'array', items: { type: 'string' } },
+        seeAlso: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['synonyms', 'antonyms', 'homophones', 'easilyConfusedWith', 'seeAlso'],
+      additionalProperties: false,
+    },
+    sources: {
+      type: 'array',
+      items: { type: 'object', properties: {}, required: [], additionalProperties: false },
+    },
+  },
+  required: [
+    'language',
+    'word',
+    'entryId',
+    'reading',
+    'romaji',
+    'alternateForms',
+    'pronunciation',
+    'definition',
+    'lexicalStratum',
+    'evidenceState',
+    'formation',
+    'originSummary',
+    'ancestryGraph',
+    'roots',
+    'lore',
+    'partsOfSpeech',
+    'suggestions',
+    'sources',
+  ],
+  additionalProperties: false,
+} as const
+
 /**
  * Convert the strict-mode null-union encoding back to the app's canonical
  * shape: object properties whose value is null are removed (recursively),

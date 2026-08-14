@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ErrorState } from '@/components/ErrorState'
 import { EtymologyCard } from '@/components/EtymologyCard'
+import { JapaneseEntryCard } from '@/components/japanese/JapaneseEntryCard'
 import { KeyboardShortcuts } from '@/components/KeyboardShortcuts'
 import ResearchProgress from '@/components/ResearchProgress'
 import { ResultEditionSwitch } from '@/components/ResultEditionSwitch'
@@ -19,12 +20,22 @@ import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
 import { consumeTraceIntent } from '@/lib/traceIntent'
 import type { StreamState } from '@/lib/streamReducer'
-import { BETA_SYMBOL, type BetaLanguageCode, type LanguageCode } from '@/lib/languages'
+import {
+  BETA_SYMBOL,
+  isBetaLanguage,
+  type BetaLanguageCode,
+  type LanguageCode,
+} from '@/lib/languages'
 import { localizeHistoryChoices, localizeResult, type ResultLocale } from '@/lib/resultLocalization'
+import type { LexemeCandidate } from '@/lib/types'
 
 interface WordTraceExperienceProps {
   word: string
   language?: LanguageCode
+  entryId?: string
+  japaneseCandidate?: LexemeCandidate
+  searchedQuery?: string
+  matchExplanation?: string
 }
 
 function announcementFor(progress: StreamState, word: string): string {
@@ -50,20 +61,34 @@ function announcementFor(progress: StreamState, word: string): string {
  * JS-executing ones — see the server-rendered "Trace it live" gate and a
  * human click is required to spend LLM budget.
  */
-export function WordTraceExperience({ word, language = 'en' }: WordTraceExperienceProps) {
+export function WordTraceExperience({
+  word,
+  language = 'en',
+  entryId,
+  japaneseCandidate,
+  searchedQuery,
+  matchExplanation,
+}: WordTraceExperienceProps) {
   const { progress, search } = useStreamingEtymology(language)
   const [contentLocale, setContentLocale] = useState<ResultLocale>(
     language === 'en' ? 'en' : 'local'
   )
   const [activeHistoryId, setActiveHistoryId] = useState<string | undefined>()
   const startedRef = useRef(false)
-  const { navigateToWord, historyBack, historyForward } = useWordNavigation(word, language)
+  const { navigateToWord, historyBack, historyForward } = useWordNavigation(word, language, entryId)
   // Derived, not stored: the trace has started once the stream reducer left
   // idle. The ngram fetch keys off the same signal (word known at start).
   const hasStarted = progress.status !== 'idle'
-  const ngramState = useNgram(hasStarted ? word : null, language)
+  const ngramState = useNgram(hasStarted && language !== 'ja' ? word : null, language)
   const ngram = ngramState.status === 'ready' ? ngramState.data : null
-  const { play: playPronunciation } = usePronunciation(word, language)
+  const pronunciationWord = progress.result?.word ?? word
+  const pronunciationEntryId =
+    progress.result?.language === 'ja' ? progress.result.entryId : entryId
+  const { play: playPronunciation } = usePronunciation(
+    pronunciationWord,
+    language,
+    pronunciationEntryId
+  )
   const selectedHistoryId =
     activeHistoryId ??
     (progress.result && 'primaryHistoryId' in progress.result
@@ -73,14 +98,14 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
   const startTrace = useCallback(() => {
     if (startedRef.current) return
     startedRef.current = true
-    search(word)
-  }, [search, word])
+    search(word, entryId)
+  }, [search, word, entryId])
 
   useEffect(() => {
-    if (consumeTraceIntent(word, language)) {
+    if (consumeTraceIntent(word, language, entryId, searchedQuery)) {
       startTrace()
     }
-  }, [word, language, startTrace])
+  }, [word, language, entryId, searchedQuery, startTrace])
 
   const resultWithNgram = useMemo(() => {
     if (!progress.result) return null
@@ -99,7 +124,7 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
     () =>
       resultWithNgram ? (
         <div className="flex items-center gap-2">
-          {language !== 'en' && (
+          {isBetaLanguage(language) && (
             <ResultEditionSwitch
               language={language as BetaLanguageCode}
               locale={contentLocale}
@@ -139,7 +164,16 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
         </div>
 
         <div className="mt-6 sm:mt-8">
-          {!hasStarted && <TraceGate word={word} language={language} onStart={startTrace} />}
+          {!hasStarted && (
+            <TraceGate
+              word={word}
+              language={language}
+              candidate={japaneseCandidate}
+              searchedQuery={searchedQuery}
+              matchExplanation={matchExplanation}
+              onStart={startTrace}
+            />
+          )}
 
           {isLoading && (
             <article aria-busy="true" className="editorial-shell animate-fadeIn p-4 sm:p-7 lg:p-9">
@@ -181,18 +215,28 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
             />
           )}
 
-          {progress.status === 'success' && resultWithNgram && (
-            <EtymologyCard
-              result={resultWithNgram}
-              onWordClick={navigateToWord}
-              headerActions={headerActions}
-              contentLocale={contentLocale}
-              historyChoices={historyChoices}
-              activeHistoryId={selectedHistoryId}
-              onHistoryChange={setActiveHistoryId}
-              usageUnavailable={ngramState.status === 'unavailable'}
-            />
-          )}
+          {progress.status === 'success' &&
+            resultWithNgram &&
+            (progress.result?.language === 'ja' ? (
+              <JapaneseEntryCard
+                result={progress.result}
+                searchedQuery={searchedQuery}
+                matchExplanation={matchExplanation}
+                onPlayPronunciation={handlePlayPronunciation}
+                headerActions={<ShareMenu result={progress.result} />}
+              />
+            ) : (
+              <EtymologyCard
+                result={resultWithNgram}
+                onWordClick={navigateToWord}
+                headerActions={headerActions}
+                contentLocale={contentLocale}
+                historyChoices={historyChoices}
+                activeHistoryId={selectedHistoryId}
+                onHistoryChange={setActiveHistoryId}
+                usageUnavailable={ngramState.status === 'unavailable'}
+              />
+            ))}
         </div>
       </main>
 
@@ -210,10 +254,16 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
 function TraceGate({
   word,
   language,
+  candidate,
+  searchedQuery,
+  matchExplanation,
   onStart,
 }: {
   word: string
   language: LanguageCode
+  candidate?: LexemeCandidate
+  searchedQuery?: string
+  matchExplanation?: string
   onStart: () => void
 }) {
   return (
@@ -227,12 +277,30 @@ function TraceGate({
             </span>
           )}
         </p>
-        <h1 className="mt-3 break-words font-serif text-[clamp(2.8rem,13vw,4.8rem)] leading-[0.98] tracking-[-0.05em] text-charcoal">
-          {word}
+        <h1
+          className={`mt-3 break-words text-[clamp(2.8rem,13vw,4.8rem)] leading-[0.98] tracking-[-0.05em] text-charcoal ${language === 'ja' ? 'font-japanese' : 'font-serif'}`}
+        >
+          {candidate ? (
+            <ruby>
+              {candidate.lemma}
+              <rp>(</rp>
+              <rt>{candidate.reading}</rt>
+              <rp>)</rp>
+            </ruby>
+          ) : (
+            word
+          )}
         </h1>
+        {searchedQuery && searchedQuery !== word ? (
+          <p className="mt-3 text-xs text-charcoal-light">
+            You searched <span className="font-japanese text-charcoal">{searchedQuery}</span>
+            {matchExplanation ? ` · ${matchExplanation}` : ''}
+          </p>
+        ) : null}
         <p className="mt-5 max-w-2xl font-serif text-xl italic leading-relaxed text-charcoal-light sm:text-[1.7rem]">
-          This word has not been traced in the archive yet. Its older forms and borrowed meanings
-          are still waiting to be followed back.
+          {language === 'ja'
+            ? 'This dictionary entry has not been traced yet. Its reading is known; reliable origin claims will only appear when the sources support them.'
+            : 'This word has not been traced in the archive yet. Its older forms and borrowed meanings are still waiting to be followed back.'}
         </p>
         <div className="editorial-double-rule mt-8" />
       </header>
@@ -248,9 +316,13 @@ function TraceGate({
           <button
             type="button"
             onClick={onStart}
-            className="editorial-chip self-start font-serif italic sm:self-center"
+            className="editorial-chip self-start whitespace-nowrap px-5 py-3 font-serif italic sm:self-center"
           >
-            Trace &ldquo;{word}&rdquo; live &rarr;
+            {language === 'ja' ? (
+              <>Trace this entry live &rarr;</>
+            ) : (
+              <>Trace &ldquo;{word}&rdquo; live &rarr;</>
+            )}
           </button>
         </div>
       </section>
