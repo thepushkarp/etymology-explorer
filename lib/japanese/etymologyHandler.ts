@@ -72,10 +72,6 @@ export async function handleJapaneseEtymology(
   query: string,
   shouldStream: boolean
 ): Promise<Response> {
-  if (!CONFIG.features.japaneseBetaEnabled) {
-    return respond.error('Japanese beta is not enabled yet.', { status: 404 })
-  }
-
   let resolution = await getCachedJapaneseResolution(query)
   if (!resolution && (await getJapaneseNegativeResolution(query))) {
     return respond.error(`No Japanese dictionary entry was found for “${query}”.`, {

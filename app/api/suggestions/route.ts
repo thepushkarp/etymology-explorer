@@ -46,12 +46,6 @@ export async function GET(request: NextRequest) {
   if (language === 'en') {
     suggestions = getAutocompleteSuggestions(normalized)
   } else if (language === 'ja') {
-    if (!CONFIG.features.japaneseBetaEnabled) {
-      return NextResponse.json<ApiResponse<null>>(
-        { success: false, error: 'Japanese beta is disabled' },
-        { status: 404 }
-      )
-    }
     const resolution = await resolveJapaneseLexeme(normalized)
     suggestions = resolution.candidates
       .filter(

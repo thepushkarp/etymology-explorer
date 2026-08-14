@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { CONFIG } from '@/lib/config'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import {
   cacheJapaneseNegativeResolution,
@@ -13,12 +12,6 @@ import type { ApiResponse, LookupResolution } from '@/lib/types'
 export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
-  if (!CONFIG.features.japaneseBetaEnabled) {
-    return NextResponse.json(
-      { success: false, error: 'Japanese beta is disabled' },
-      { status: 404 }
-    )
-  }
   if (request.nextUrl.searchParams.get('language') !== 'ja') {
     return NextResponse.json({ success: false, error: 'Unsupported language' }, { status: 400 })
   }

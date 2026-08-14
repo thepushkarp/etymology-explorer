@@ -21,7 +21,6 @@ import { SITE_SHORT_NAME } from '@/lib/site'
 import type { EtymologyResult } from '@/lib/types'
 import type { LexemeCandidate } from '@/lib/types'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
-import { CONFIG } from '@/lib/config'
 import {
   getCachedJapaneseResult,
   japaneseEntryTag,
@@ -72,7 +71,6 @@ async function resolveRoute(params: WordPageProps['params']): Promise<ResolvedWo
   }
 
   if (segments.length === 3 && segments[0].toLowerCase() === 'ja') {
-    if (!CONFIG.features.japaneseBetaEnabled) notFound()
     const word = resolveWord(segments[1])
     const entryId = segments[2]
     if (!word || !/^\d+$/.test(entryId)) notFound()
@@ -88,7 +86,6 @@ async function resolveRoute(params: WordPageProps['params']): Promise<ResolvedWo
   if (!isLanguageCode(language) || !word) notFound()
   if (language === 'en') permanentRedirect(wordPagePath(word, 'en'))
   if (language === 'ja') {
-    if (!CONFIG.features.japaneseBetaEnabled) notFound()
     const resolution = await resolveJapaneseLexeme(word)
     if (resolution.status === 'not_found') notFound()
     if (resolution.status === 'unique') {

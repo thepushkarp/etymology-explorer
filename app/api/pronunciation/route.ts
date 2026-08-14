@@ -51,15 +51,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid word' }, { status: 400 })
   }
 
-  if (language === 'ja' && (!CONFIG.features.japaneseBetaEnabled || !entryId)) {
+  if (language === 'ja' && !entryId) {
     return NextResponse.json(
       {
         success: false,
-        error: !CONFIG.features.japaneseBetaEnabled
-          ? 'Japanese beta is disabled'
-          : 'Japanese pronunciation requires a selected dictionary entry',
+        error: 'Japanese pronunciation requires a selected dictionary entry',
       },
-      { status: !CONFIG.features.japaneseBetaEnabled ? 404 : 400 }
+      { status: 400 }
     )
   }
 

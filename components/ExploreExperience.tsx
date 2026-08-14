@@ -106,9 +106,6 @@ export function ExploreExperience() {
   const { navigateToWord, historyBack, historyForward } = useWordNavigation(null, language)
   const [suggestionsVisible, setSuggestionsVisible] = useState(false)
   const curatedWords = CURATED_WORDS[language]
-  const visibleLanguages = SUPPORTED_LANGUAGE_CODES.filter(
-    (code) => code !== 'ja' || process.env.NEXT_PUBLIC_JAPANESE_BETA_ENABLED !== 'false'
-  )
 
   return (
     <div className="flex min-h-screen flex-col bg-cream text-charcoal">
@@ -144,7 +141,7 @@ export function ExploreExperience() {
                     onChange={(event) => setLanguage(event.target.value as LanguageCode)}
                     className="min-w-0 border-0 bg-transparent py-1 pl-3 pr-1 text-right font-serif text-sm text-charcoal outline-none sm:text-base"
                   >
-                    {visibleLanguages.map((code) => (
+                    {SUPPORTED_LANGUAGE_CODES.map((code) => (
                       <option key={code} value={code}>
                         {LANGUAGES[code].nativeName}
                         {LANGUAGES[code].beta ? ` · ${BETA_SYMBOL}` : ''}
