@@ -23,10 +23,10 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
   const { addToHistory } = useHistory()
 
   const fallbackFetch = useCallback(
-    async (word: string, requestId: number) => {
+    async (word: string, requestId: number, entryId?: string) => {
       try {
         const response = await fetch(
-          `/api/etymology?word=${encodeURIComponent(word)}&language=${language}`
+          `/api/etymology?word=${encodeURIComponent(word)}&language=${language}${entryId ? `&entry=${encodeURIComponent(entryId)}` : ''}`
         )
         const payload = await response.json()
 
@@ -45,7 +45,7 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
         }
 
         dispatch({ type: 'fallback_success', result: payload.data })
-        addToHistory(word, language)
+        addToHistory(payload.data.word, language, payload.data.entryId)
       } catch {
         if (activeRequestRef.current !== requestId) return
         dispatch({
@@ -72,7 +72,7 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
   }, [])
 
   const search = useCallback(
-    (word: string) => {
+    (word: string, entryId?: string) => {
       const trimmed = word.trim().toLowerCase()
       if (!trimmed) return
 
@@ -89,7 +89,7 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
       const connect = (attempt: number) => {
         if (activeRequestRef.current !== requestId) return
 
-        const url = `/api/etymology?word=${encodeURIComponent(trimmed)}&language=${language}&stream=true`
+        const url = `/api/etymology?word=${encodeURIComponent(trimmed)}&language=${language}&stream=true${entryId ? `&entry=${encodeURIComponent(entryId)}` : ''}`
         const eventSource = new EventSource(url)
         eventSourceRef.current = eventSource
 
@@ -102,7 +102,11 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
             dispatch({ type: 'stream_event', event: streamEvent })
 
             if (streamEvent.type === 'result') {
-              addToHistory(trimmed, language)
+              addToHistory(
+                streamEvent.data.word,
+                language,
+                'entryId' in streamEvent.data ? streamEvent.data.entryId : undefined
+              )
               eventSource.close()
               eventSourceRef.current = null
             }
@@ -125,7 +129,7 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
 
             eventSource.close()
             eventSourceRef.current = null
-            void fallbackFetch(trimmed, requestId)
+            void fallbackFetch(trimmed, requestId, entryId)
           }
         })
 
@@ -143,14 +147,14 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
             return
           }
 
-          void fallbackFetch(trimmed, requestId)
+          void fallbackFetch(trimmed, requestId, entryId)
         })
       }
 
       try {
         connect(0)
       } catch {
-        void fallbackFetch(trimmed, requestId)
+        void fallbackFetch(trimmed, requestId, entryId)
       }
     },
     [addToHistory, fallbackFetch, language]

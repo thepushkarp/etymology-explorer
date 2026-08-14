@@ -31,6 +31,9 @@ export function localizeResult(
     const english = result as EnglishEtymologyResult
     return { ...english, language: 'en' }
   }
+  if (language === 'ja') {
+    return result as DisplayEtymologyResult
+  }
 
   const beta = result as BetaEtymologyResult
   // Progressive beta sections and legacy in-memory fixtures may not have

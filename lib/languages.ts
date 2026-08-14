@@ -1,7 +1,10 @@
-export const SUPPORTED_LANGUAGE_CODES = ['en', 'it', 'es', 'fr', 'pt'] as const
+export const SUPPORTED_LANGUAGE_CODES = ['en', 'it', 'es', 'fr', 'pt', 'ja'] as const
 
 export type LanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number]
-export type BetaLanguageCode = Exclude<LanguageCode, 'en'>
+/** Existing paired English/local beta editions. Japanese has a learner-specific result shape. */
+export type BetaLanguageCode = 'it' | 'es' | 'fr' | 'pt'
+export type JapaneseLanguageCode = 'ja'
+export type NonEnglishLanguageCode = Exclude<LanguageCode, 'en'>
 
 export const BETA_SYMBOL = 'β'
 
@@ -85,6 +88,19 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     formHeading: /^(?:Forma verbal|Forma nominal|Particípio|Conjugação)/i,
     ngramCorpus: null,
   },
+  ja: {
+    code: 'ja',
+    englishName: 'Japanese',
+    nativeName: '日本語',
+    nativeEtymologyLabel: '語源',
+    beta: true,
+    wiktionaryEdition: 'ja',
+    englishWiktionaryHeading: 'Japanese',
+    nativeWiktionaryHeading: '日本語',
+    etymologyHeading: /^(?:語源|由来)(?:\s*\d+)?$/i,
+    formHeading: /^(?:名詞|動詞|形容詞|副詞|助詞|助動詞|成句|連語)/,
+    ngramCorpus: null,
+  },
 }
 
 export function isLanguageCode(value: unknown): value is LanguageCode {
@@ -101,7 +117,11 @@ export function parseLanguageCode(value: string | null | undefined): LanguageCod
 }
 
 export function isBetaLanguage(language: LanguageCode): language is BetaLanguageCode {
-  return language !== 'en'
+  return language === 'it' || language === 'es' || language === 'fr' || language === 'pt'
+}
+
+export function isJapaneseLanguage(language: LanguageCode): language is JapaneseLanguageCode {
+  return language === 'ja'
 }
 
 export function languageDisplayName(language: LanguageCode): string {
@@ -112,6 +132,11 @@ export function wordPagePath(word: string, language: LanguageCode = 'en'): strin
   const normalizedWord = word.normalize('NFKC').trim().toLowerCase()
   const encodedWord = encodeURIComponent(normalizedWord)
   return language === 'en' ? `/word/${encodedWord}` : `/word/${language}/${encodedWord}`
+}
+
+export function japaneseEntryPath(lemma: string, entryId: string): string {
+  const normalizedLemma = lemma.normalize('NFKC').trim()
+  return `/word/ja/${encodeURIComponent(normalizedLemma)}/${encodeURIComponent(entryId)}`
 }
 
 export function lexemeKey(language: LanguageCode, word: string): string {

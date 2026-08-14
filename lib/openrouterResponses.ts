@@ -1,7 +1,11 @@
 import { CONFIG } from '@/lib/config'
 import { getEnv } from '@/lib/env'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
-import { BETA_ETYMOLOGY_LLM_SCHEMA, ETYMOLOGY_LLM_SCHEMA } from '@/lib/schemas/llm-schema'
+import {
+  BETA_ETYMOLOGY_LLM_SCHEMA,
+  ETYMOLOGY_LLM_SCHEMA,
+  JAPANESE_ETYMOLOGY_LLM_SCHEMA,
+} from '@/lib/schemas/llm-schema'
 import type { LlmUsage } from '@/lib/types'
 import type { LanguageCode } from '@/lib/languages'
 
@@ -166,7 +170,12 @@ export function buildSynthesisRequest(
       type: 'json_schema',
       name: 'etymology_result',
       strict: true,
-      schema: language === 'en' ? ETYMOLOGY_LLM_SCHEMA : BETA_ETYMOLOGY_LLM_SCHEMA,
+      schema:
+        language === 'en'
+          ? ETYMOLOGY_LLM_SCHEMA
+          : language === 'ja'
+            ? JAPANESE_ETYMOLOGY_LLM_SCHEMA
+            : BETA_ETYMOLOGY_LLM_SCHEMA,
     },
     synthesisReasoningForModel(resolvedModel),
     resolvedModel,

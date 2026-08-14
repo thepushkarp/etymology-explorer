@@ -6,9 +6,28 @@
 import { fetchWithTimeout } from './fetchUtils'
 import { CONFIG } from './config'
 import type { LanguageCode } from './languages'
+import { createHash } from 'node:crypto'
 
 const ELEVENLABS_API = 'https://api.elevenlabs.io/v1'
 const DEFAULT_OUTPUT_FORMAT = 'mp3_44100_128'
+const MODEL_ID = 'eleven_v3'
+
+export function getElevenLabsVoiceId(language: LanguageCode): string | undefined {
+  return language === 'ja'
+    ? process.env.ELEVENLABS_JAPANESE_VOICE_ID
+    : process.env.ELEVENLABS_VOICE_ID
+}
+
+export function getPronunciationCacheIdentity(
+  text: string,
+  language: LanguageCode
+): string | undefined {
+  if (language !== 'ja') return undefined
+  const voiceId = getElevenLabsVoiceId(language)
+  if (!voiceId) return undefined
+  const readingHash = createHash('sha256').update(text.normalize('NFKC')).digest('hex').slice(0, 24)
+  return `ja:${voiceId}:${MODEL_ID}:${readingHash}`
+}
 
 export class ElevenLabsApiError extends Error {
   status: number
@@ -45,8 +64,8 @@ async function readElevenLabsError(response: Response): Promise<string> {
 /**
  * Check if ElevenLabs is configured (API key + voice ID present)
  */
-export function isElevenLabsConfigured(): boolean {
-  return !!process.env.ELEVENLABS_API_KEY && !!process.env.ELEVENLABS_VOICE_ID
+export function isElevenLabsConfigured(language: LanguageCode = 'en'): boolean {
+  return !!process.env.ELEVENLABS_API_KEY && !!getElevenLabsVoiceId(language)
 }
 
 /**
@@ -59,9 +78,11 @@ export async function generatePronunciation(
   word: string,
   language: LanguageCode = 'en'
 ): Promise<ArrayBuffer> {
-  const voiceId = process.env.ELEVENLABS_VOICE_ID
+  const voiceId = getElevenLabsVoiceId(language)
   if (!voiceId) {
-    throw new Error('ELEVENLABS_VOICE_ID is required for pronunciation audio')
+    throw new Error(
+      `${language === 'ja' ? 'ELEVENLABS_JAPANESE_VOICE_ID' : 'ELEVENLABS_VOICE_ID'} is required for pronunciation audio`
+    )
   }
 
   const response = await fetchWithTimeout(
@@ -75,10 +96,11 @@ export async function generatePronunciation(
       },
       body: JSON.stringify({
         text: word,
-        model_id: 'eleven_v3',
+        model_id: MODEL_ID,
         // This selects language and text normalization. The configured voice
         // still determines accent; pt intentionally does not imply BR or PT.
         language_code: language,
+        ...(language === 'ja' ? { apply_language_text_normalization: true } : {}),
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.75,

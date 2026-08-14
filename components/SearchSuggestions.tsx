@@ -8,7 +8,7 @@ import type { LanguageCode } from '@/lib/languages'
 interface SearchSuggestionsProps {
   items: SuggestionItem[]
   isVisible: boolean
-  onSelect: (word: string) => void
+  onSelect: (word: string, entryId?: string) => void
   selectedIndex: number
 }
 
@@ -17,6 +17,7 @@ type SuggestionCategory = 'recent' | 'suggested'
 export interface SuggestionItem {
   word: string
   category: SuggestionCategory
+  entryId?: string
 }
 
 const RECENT_LIMIT = 3
@@ -27,6 +28,7 @@ export interface SuggestionFetchState {
   query: string
   language: LanguageCode | null
   words: string[]
+  entries?: WordSuggestion[]
 }
 
 export function visibleFetchedWords(
@@ -50,7 +52,8 @@ export function visibleFetchedWords(
 export function useSuggestionItems(
   query: string,
   history: string[],
-  language: LanguageCode = 'en'
+  language: LanguageCode = 'en',
+  historyEntryIds: ReadonlyMap<string, string> = new Map()
 ): SuggestionItem[] {
   const normalizedQuery = query.toLowerCase().trim()
   const [fetched, setFetched] = useState<SuggestionFetchState>({
@@ -79,6 +82,7 @@ export function useSuggestionItems(
             query: normalizedQuery,
             language,
             words: payload.data.suggestions.map((suggestion) => suggestion.word),
+            entries: payload.data.suggestions,
           })
         }
       })
@@ -103,6 +107,7 @@ export function useSuggestionItems(
     const recent = rankMatches(normalizedHistory, normalizedQuery, RECENT_LIMIT).map((word) => ({
       word,
       category: 'recent' as const,
+      entryId: historyEntryIds.get(word),
     }))
 
     // Results for the current query are shown as-is (they may be typo
@@ -114,10 +119,14 @@ export function useSuggestionItems(
     const suggested = sourceWords
       .filter((word) => !recentWords.has(word))
       .slice(0, SUGGESTED_LIMIT)
-      .map((word) => ({ word, category: 'suggested' as const }))
+      .map((word) => ({
+        word,
+        category: 'suggested' as const,
+        entryId: fetched.entries?.find((entry) => entry.word === word)?.entryId,
+      }))
 
     return [...recent, ...suggested]
-  }, [normalizedQuery, history, fetched, language])
+  }, [normalizedQuery, history, fetched, language, historyEntryIds])
 }
 
 export function SearchSuggestions({
@@ -151,7 +160,7 @@ export function SearchSuggestions({
                 <button
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => onSelect(item.word)}
+                  onClick={() => onSelect(item.word, item.entryId)}
                   className={`
                     flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5
                     text-left font-serif text-base text-charcoal
@@ -184,7 +193,7 @@ export function SearchSuggestions({
                   <button
                     type="button"
                     onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => onSelect(item.word)}
+                    onClick={() => onSelect(item.word, item.entryId)}
                     className={`
                       flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5
                       text-left font-serif text-base text-charcoal

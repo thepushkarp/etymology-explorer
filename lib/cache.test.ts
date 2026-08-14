@@ -161,6 +161,16 @@ describe('cacheEtymology word-page revalidation', () => {
     })
   })
 
+  test('uses the explicit v2 Japanese pronunciation identity without colliding with v1', async () => {
+    currentRedis = fakeRedis()
+    await cacheAudio('がっこう', 'audio-ja', 'ja', 'ja:voice-ja:eleven_v3:reading-hash')
+    expect(currentRedis.set).toHaveBeenCalledWith(
+      'audio:v2:ja:voice-ja:eleven_v3:reading-hash',
+      'audio-ja',
+      { ex: expect.any(Number) }
+    )
+  })
+
   test('decodes English and beta result keys from the shared sitemap scan', () => {
     expect(ETYMOLOGY_SCAN_PATTERN).toBe('etymology:*')
     expect(lexemeFromEtymologyCacheKey('etymology:v2.2:sale')).toEqual({

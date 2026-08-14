@@ -30,6 +30,7 @@ const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
 
 // Audio cache (longer TTL - pronunciations don't change)
 const AUDIO_PREFIX = `audio:v1:`
+const AUDIO_V2_PREFIX = `audio:v2:`
 const AUDIO_TTL = CONFIG.audioCacheTTL
 
 /**
@@ -175,12 +176,13 @@ export async function cacheEtymology(
  */
 export async function getCachedAudio(
   word: string,
-  language: LanguageCode = 'en'
+  language: LanguageCode = 'en',
+  cacheIdentity?: string
 ): Promise<string | null> {
   const redis = getRedis()
   if (!redis) return null
 
-  const key = audioKey(word, language)
+  const key = audioKey(word, language, cacheIdentity)
   try {
     return await redis.get<string>(key)
   } catch (error) {
@@ -195,12 +197,13 @@ export async function getCachedAudio(
 export async function cacheAudio(
   word: string,
   audioBase64: string,
-  language: LanguageCode = 'en'
+  language: LanguageCode = 'en',
+  cacheIdentity?: string
 ): Promise<void> {
   const redis = getRedis()
   if (!redis) return
 
-  const key = audioKey(word, language)
+  const key = audioKey(word, language, cacheIdentity)
   try {
     await redis.set(key, audioBase64, { ex: jitterTTL(AUDIO_TTL) })
     console.log(`[Cache] Stored audio for "${word}"`)
@@ -209,7 +212,8 @@ export async function cacheAudio(
   }
 }
 
-function audioKey(word: string, language: LanguageCode): string {
+function audioKey(word: string, language: LanguageCode, cacheIdentity?: string): string {
+  if (cacheIdentity) return `${AUDIO_V2_PREFIX}${cacheIdentity}`
   const normalized = word.normalize('NFKC').trim().toLowerCase()
   // Preserve the established English namespace; only beta languages need a
   // qualifier to prevent same-spelling pronunciations from colliding.

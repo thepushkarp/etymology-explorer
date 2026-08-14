@@ -1,23 +1,32 @@
 import type { Metadata } from 'next'
 import { unstable_cache } from 'next/cache'
 import Link from 'next/link'
-import { notFound, permanentRedirect } from 'next/navigation'
+import { notFound, permanentRedirect, redirect } from 'next/navigation'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { WordPageEntry } from '@/components/WordPageEntry'
 import { WordTraceExperience } from '@/components/WordTraceExperience'
+import { JapaneseResolutionExperience } from '@/components/japanese/JapaneseResolutionExperience'
 import { BETA_CACHE_VERSION, etymologyWordTag, getCachedEtymology } from '@/lib/cache'
 import {
   LANGUAGES,
   isBetaLanguage,
   isLanguageCode,
+  japaneseEntryPath,
   wordPagePath,
   type LanguageCode,
 } from '@/lib/languages'
 import { localizeResult, type ResultLocale } from '@/lib/resultLocalization'
 import { SITE_SHORT_NAME } from '@/lib/site'
 import type { EtymologyResult } from '@/lib/types'
+import type { LexemeCandidate } from '@/lib/types'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
+import {
+  getCachedJapaneseResult,
+  japaneseEntryTag,
+  JAPANESE_RESULT_VERSION,
+} from '@/lib/japanese/cache'
+import { resolveJapaneseEntry, resolveJapaneseLexeme } from '@/lib/japanese/resolver'
 
 // Shareable word pages are served strictly from Redis. One catch-all route is
 // required because Next.js cannot place /word/[word] beside
@@ -31,11 +40,15 @@ export function generateStaticParams(): Array<{ segments: string[] }> {
 
 interface WordPageProps {
   params: Promise<{ segments: string[] }>
+  searchParams?: Promise<{ from?: string; form?: string }>
 }
 
 interface ResolvedWordRoute {
   language: LanguageCode
   word: string
+  entryId?: string
+  candidate?: LexemeCandidate
+  resolutionCandidates?: LexemeCandidate[]
 }
 
 const DESCRIPTION_MAX_CHARS = 155
@@ -57,11 +70,31 @@ async function resolveRoute(params: WordPageProps['params']): Promise<ResolvedWo
     return { language: 'en', word }
   }
 
+  if (segments.length === 3 && segments[0].toLowerCase() === 'ja') {
+    const word = resolveWord(segments[1])
+    const entryId = segments[2]
+    if (!word || !/^\d+$/.test(entryId)) notFound()
+    const candidate = await resolveJapaneseEntry(word, entryId)
+    if (!candidate) notFound()
+    if (candidate.lemma !== word) permanentRedirect(japaneseEntryPath(candidate.lemma, entryId))
+    return { language: 'ja', word: candidate.lemma, entryId, candidate }
+  }
+
   if (segments.length !== 2) notFound()
   const language = segments[0].toLowerCase()
   const word = resolveWord(segments[1])
   if (!isLanguageCode(language) || !word) notFound()
   if (language === 'en') permanentRedirect(wordPagePath(word, 'en'))
+  if (language === 'ja') {
+    const resolution = await resolveJapaneseLexeme(word)
+    if (resolution.status === 'not_found') notFound()
+    if (resolution.status === 'unique') {
+      const candidate = resolution.candidates[0]
+      const context = new URLSearchParams({ from: word, form: candidate.matchExplanation })
+      redirect(`${japaneseEntryPath(candidate.lemma, candidate.entryId)}?${context}`)
+    }
+    return { language: 'ja', word, resolutionCandidates: resolution.candidates }
+  }
   if (!isBetaLanguage(language)) notFound()
   return { language, word }
 }
@@ -75,6 +108,14 @@ function loadCachedEtymology(word: string, language: LanguageCode) {
     revalidate: 3600,
     tags: [etymologyWordTag(word, language)],
   })()
+}
+
+function loadCachedJapaneseEntry(entryId: string) {
+  return unstable_cache(
+    () => getCachedJapaneseResult(entryId),
+    ['japanese-word-page-etymology', JAPANESE_RESULT_VERSION, entryId],
+    { revalidate: 3600, tags: [japaneseEntryTag(entryId)] }
+  )()
 }
 
 function truncateAtWordBoundary(text: string): string {
@@ -100,14 +141,26 @@ function resultMatchesLanguage(result: EtymologyResult | null, language: Languag
 }
 
 export async function generateMetadata({ params }: WordPageProps): Promise<Metadata> {
-  const { language, word } = await resolveRoute(params)
+  const route = await resolveRoute(params)
+  if (route.language === 'ja' && !route.entryId) {
+    return {
+      title: { absolute: `Choose the Japanese meaning of ${route.word} — ${SITE_SHORT_NAME}` },
+      description: `Choose the Japanese lexical entry for “${route.word}” before tracing its origin.`,
+      robots: { index: false, follow: true },
+    }
+  }
+  const { language, word, entryId } = route
   const isEnglish = language === 'en'
   const definition = LANGUAGES[language]
-  const canonicalPath = wordPagePath(word, language)
+  const canonicalPath =
+    language === 'ja' && entryId ? japaneseEntryPath(word, entryId) : wordPagePath(word, language)
   const title = isEnglish
     ? `Etymology of ${word} — ${SITE_SHORT_NAME}`
     : `${definition.englishName} etymology of ${word} — ${SITE_SHORT_NAME}`
-  const result = await loadCachedEtymology(word, language)
+  const result =
+    language === 'ja' && entryId
+      ? await loadCachedJapaneseEntry(entryId)
+      : await loadCachedEtymology(word, language)
 
   if (!resultMatchesLanguage(result, language)) {
     const description = isEnglish
@@ -121,8 +174,14 @@ export async function generateMetadata({ params }: WordPageProps): Promise<Metad
     }
   }
 
-  const description = buildDescription(result as EtymologyResult, isEnglish ? 'en' : 'local')
-  const languageQuery = isEnglish ? '' : `&language=${language}`
+  const description = buildDescription(
+    result as EtymologyResult,
+    isEnglish || language === 'ja' ? 'en' : 'local'
+  )
+  const japaneseReading = result?.language === 'ja' ? result.reading : undefined
+  const languageQuery = isEnglish
+    ? ''
+    : `&language=${language}${entryId ? `&entry=${encodeURIComponent(entryId)}` : ''}${japaneseReading ? `&reading=${encodeURIComponent(japaneseReading)}` : ''}`
   const ogImage = `/og?word=${encodeURIComponent(word)}${languageQuery}`
   const alt = isEnglish ? `Etymology of ${word}` : title
 
@@ -142,12 +201,38 @@ export async function generateMetadata({ params }: WordPageProps): Promise<Metad
   }
 }
 
-export default async function WordPage({ params }: WordPageProps) {
-  const { language, word } = await resolveRoute(params)
-  const result = await loadCachedEtymology(word, language)
+export default async function WordPage({ params, searchParams }: WordPageProps) {
+  const route = await resolveRoute(params)
+  const { language, word, entryId, candidate, resolutionCandidates } = route
+  const lookup = await searchParams
+  if (language === 'ja' && !entryId) {
+    return (
+      <div className="min-h-screen bg-cream text-charcoal">
+        <SiteHeader compact />
+        <main className="mx-auto max-w-[1040px] px-3 pb-14 pt-8 sm:px-6 sm:pt-10 lg:px-8 lg:pt-12">
+          <JapaneseResolutionExperience query={word} candidates={resolutionCandidates ?? []} />
+        </main>
+        <SiteFooter />
+      </div>
+    )
+  }
+  const result =
+    language === 'ja' && entryId
+      ? await loadCachedJapaneseEntry(entryId)
+      : await loadCachedEtymology(word, language)
 
   if (!resultMatchesLanguage(result, language)) {
-    return <WordTraceExperience key={`${language}:${word}`} word={word} language={language} />
+    return (
+      <WordTraceExperience
+        key={`${language}:${entryId ?? word}`}
+        word={word}
+        language={language}
+        entryId={entryId}
+        japaneseCandidate={candidate}
+        searchedQuery={lookup?.from}
+        matchExplanation={lookup?.form ?? candidate?.matchExplanation}
+      />
+    )
   }
 
   return (
@@ -163,7 +248,11 @@ export default async function WordPage({ params }: WordPageProps) {
         </Link>
 
         <div className="mt-6 sm:mt-8">
-          <WordPageEntry result={result as EtymologyResult} />
+          <WordPageEntry
+            result={result as EtymologyResult}
+            searchedQuery={lookup?.from}
+            matchExplanation={lookup?.form}
+          />
         </div>
       </main>
       <SiteFooter />

@@ -73,6 +73,17 @@ const CURATED_WORDS: Record<LanguageCode, CuratedWordSet> = {
       { word: 'saudade', teaser: 'an origin etymologists still debate' },
     ],
   },
+  ja: {
+    heading: 'Learn Japanese through origins.',
+    description:
+      'Begin with native words, Sino-Japanese compounds, and loans whose journeys remain visible.',
+    words: [
+      { word: '学校', teaser: 'two learned forms, joined by Japanese sound patterns' },
+      { word: 'コーヒー', teaser: 'a Dutch drink name adapted to Japanese morae' },
+      { word: 'ありがとう', teaser: 'an everyday thanks with an older sense of rarity' },
+      { word: 'パン', teaser: 'a small word with several histories' },
+    ],
+  },
 }
 
 const HistorySidebar = dynamic(
@@ -102,7 +113,7 @@ export function ExploreExperience() {
 
       <HistorySidebar
         history={history}
-        onWordClick={(word, entryLanguage) => navigateToWord(word, entryLanguage)}
+        onWordClick={(word, entryLanguage, entryId) => navigateToWord(word, entryLanguage, entryId)}
         onClearHistory={clearHistory}
         onRemoveEntry={removeFromHistory}
       />
@@ -139,7 +150,7 @@ export function ExploreExperience() {
                   </select>
                 </div>
                 <SearchBar
-                  onSearch={(word) => navigateToWord(word, language)}
+                  onSearch={(word, entryId) => navigateToWord(word, language, entryId)}
                   language={language}
                   inputRef={searchInputRef}
                   onSuggestionsVisibilityChange={setSuggestionsVisible}

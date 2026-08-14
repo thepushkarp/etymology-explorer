@@ -14,6 +14,7 @@ export type CounterName = (typeof COUNTER_NAMES)[number]
 const LANGUAGE_METRICS = [
   'request',
   'cache_hit',
+  'cache_miss',
   'no_source',
   'schema_failure',
   'pronunciation_failure',

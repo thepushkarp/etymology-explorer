@@ -5,7 +5,8 @@ import { safeError } from '@/lib/errorUtils'
 import { getRedis } from '@/lib/redis'
 import { SITE_ORIGIN } from '@/lib/site'
 import { isValidWord } from '@/lib/validation'
-import { wordPagePath, type LanguageCode } from '@/lib/languages'
+import { japaneseEntryPath, wordPagePath, type LanguageCode } from '@/lib/languages'
+import { getCachedJapaneseResult, JAPANESE_RESULT_PREFIX } from '@/lib/japanese/cache'
 
 export const revalidate = 86400
 
@@ -21,6 +22,7 @@ const SCAN_BATCH_SIZE = 200
 interface CachedLexeme {
   language: LanguageCode
   word: string
+  entryId?: string
 }
 
 async function scanCachedWords(): Promise<CachedLexeme[]> {
@@ -37,6 +39,14 @@ async function scanCachedWords(): Promise<CachedLexeme[]> {
       })
       cursor = String(nextCursor)
       for (const key of keys) {
+        if (key.startsWith(JAPANESE_RESULT_PREFIX)) {
+          const entryId = key.slice(JAPANESE_RESULT_PREFIX.length)
+          const result = await getCachedJapaneseResult(entryId)
+          if (result && isValidWord(result.word)) {
+            words.set(`ja:${entryId}`, { language: 'ja', word: result.word, entryId })
+          }
+          continue
+        }
         const lexeme = lexemeFromEtymologyCacheKey(key)
         if (lexeme && isValidWord(lexeme.word)) {
           words.set(`${lexeme.language}:${lexeme.word}`, lexeme)
@@ -84,8 +94,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Copy before sorting: unstable_cache may hand back a shared in-memory array
   const wordEntries: MetadataRoute.Sitemap = [...words]
     .sort((a, b) => `${a.language}:${a.word}`.localeCompare(`${b.language}:${b.word}`))
-    .map(({ language, word }) => ({
-      url: `${SITE_ORIGIN}${wordPagePath(word, language)}`,
+    .map(({ language, word, entryId }) => ({
+      url: `${SITE_ORIGIN}${entryId ? japaneseEntryPath(word, entryId) : wordPagePath(word, language)}`,
       lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.6,

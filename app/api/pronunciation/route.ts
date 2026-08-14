@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ElevenLabsApiError, generatePronunciation, isElevenLabsConfigured } from '@/lib/elevenlabs'
+import {
+  ElevenLabsApiError,
+  generatePronunciation,
+  getPronunciationCacheIdentity,
+  isElevenLabsConfigured,
+} from '@/lib/elevenlabs'
 import { getCachedAudio, cacheAudio } from '@/lib/cache'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { getCostMode } from '@/lib/costGuard'
@@ -8,6 +13,7 @@ import { safeError } from '@/lib/errorUtils'
 import { CONFIG } from '@/lib/config'
 import { lexemeKey, parseLanguageCode } from '@/lib/languages'
 import { incrLanguageCounter } from '@/lib/counters'
+import { resolveJapaneseEntry } from '@/lib/japanese/resolver'
 
 // TTS generation has an 8s timeout, plus cache round-trips and waiter polling.
 export const maxDuration = 60
@@ -28,6 +34,7 @@ export async function GET(request: NextRequest) {
   }
 
   const word = request.nextUrl.searchParams.get('word')
+  const entryId = request.nextUrl.searchParams.get('entry')
   const language = parseLanguageCode(request.nextUrl.searchParams.get('language'))
 
   if (!language) {
@@ -44,13 +51,38 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Invalid word' }, { status: 400 })
   }
 
-  if (!isElevenLabsConfigured()) {
+  if (language === 'ja' && !entryId) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Japanese pronunciation requires a selected dictionary entry',
+      },
+      { status: 400 }
+    )
+  }
+
+  const japaneseCandidate =
+    language === 'ja' && entryId ? await resolveJapaneseEntry(normalized, entryId) : null
+  if (language === 'ja' && !japaneseCandidate) {
+    return NextResponse.json(
+      { success: false, error: 'Japanese entry does not match this word' },
+      { status: 404 }
+    )
+  }
+
+  // Never pronounce ambiguous kanji or user-entered romaji. JMdict's
+  // entry-qualified canonical kana reading is the sole Japanese TTS input.
+  const pronunciationText = japaneseCandidate?.reading ?? normalized
+  const cacheIdentity = getPronunciationCacheIdentity(pronunciationText, language)
+
+  if (!isElevenLabsConfigured(language)) {
     return NextResponse.json(
       {
         success: false,
         error:
           'Pronunciation service not configured. Set ELEVENLABS_API_KEY and ' +
-          'ELEVENLABS_VOICE_ID to a voice available in your My Voices list. ' +
+          `${language === 'ja' ? 'ELEVENLABS_JAPANESE_VOICE_ID' : 'ELEVENLABS_VOICE_ID'} ` +
+          'to a voice available in your My Voices list. ' +
           'Free-tier accounts cannot use Voice Library voices via the API.',
       },
       { status: 503 }
@@ -59,7 +91,7 @@ export async function GET(request: NextRequest) {
 
   // Check cache first (cache hits are free — no budget cost)
   try {
-    const cached = await getCachedAudio(normalized, language)
+    const cached = await getCachedAudio(pronunciationText, language, cacheIdentity)
     if (cached) {
       const buffer = Buffer.from(cached, 'base64')
       return new NextResponse(buffer, {
@@ -75,13 +107,15 @@ export async function GET(request: NextRequest) {
   }
 
   // Singleflight: prevent duplicate TTS calls for the same word
-  const lockKey = `lock:audio:${lexemeKey(language, normalized)}`
+  const lockKey = `lock:audio:${cacheIdentity ?? lexemeKey(language, pronunciationText)}`
   const acquisition = await tryAcquireLock(lockKey)
 
   if (acquisition.status === 'busy') {
     // Another request is generating this audio — poll for it
     console.log(`[Pronunciation] Waiting for in-flight audio for "${normalized}"`)
-    const result = await pollForResult(() => getCachedAudio(normalized, language))
+    const result = await pollForResult(() =>
+      getCachedAudio(pronunciationText, language, cacheIdentity)
+    )
     if (result) {
       const buffer = Buffer.from(result, 'base64')
       return new NextResponse(buffer, {
@@ -113,12 +147,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const audioBuffer = await generatePronunciation(normalized, language)
+    const audioBuffer = await generatePronunciation(pronunciationText, language)
     const base64 = Buffer.from(audioBuffer).toString('base64')
 
     // Cache BEFORE the lock is released in `finally` so waiters polling
     // the audio cache find the result instead of hitting 429.
-    await cacheAudio(normalized, base64, language)
+    await cacheAudio(pronunciationText, base64, language, cacheIdentity)
 
     return new NextResponse(Buffer.from(audioBuffer), {
       headers: {

@@ -36,6 +36,9 @@ const POST_PROCESSING_ONLY_PATHS = new Set([
   'ancestryGraph.postMerge[].evidence',
   'sources[].url',
   'sources[].word',
+  'sources[].sourceFamily',
+  'sources[].license',
+  'sources[].licenseUrl',
 ])
 
 interface JsonSchemaNode {

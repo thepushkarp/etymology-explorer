@@ -2,6 +2,12 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   trailingSlash: false,
+  outputFileTracingIncludes: {
+    '/api/lexeme/resolve': ['./data/jmdict/**/*', './data/wold-ja.json'],
+    '/api/etymology': ['./data/jmdict/**/*', './data/wold-ja.json'],
+    '/api/pronunciation': ['./data/jmdict/**/*', './data/wold-ja.json'],
+    '/word/**': ['./data/jmdict/**/*', './data/wold-ja.json'],
+  },
   async headers() {
     return [
       {

@@ -5,6 +5,7 @@ import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { LANGUAGES, parseLanguageCode } from '@/lib/languages'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
 import { CONFIG } from '@/lib/config'
+import { resolveJapaneseLexeme } from '@/lib/japanese/resolver'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -44,6 +45,22 @@ export async function GET(request: NextRequest) {
   let suggestions: WordSuggestion[]
   if (language === 'en') {
     suggestions = getAutocompleteSuggestions(normalized)
+  } else if (language === 'ja') {
+    const resolution = await resolveJapaneseLexeme(normalized)
+    suggestions = resolution.candidates
+      .filter(
+        (candidate, index, candidates) =>
+          candidates.findIndex((item) => item.lemma === candidate.lemma) === index
+      )
+      .map((candidate) => ({
+        word: candidate.lemma,
+        distance: 0,
+        entryId: candidate.entryId,
+        reading: candidate.reading,
+        romaji: candidate.romaji,
+        gloss: candidate.gloss,
+        partOfSpeech: candidate.partOfSpeech,
+      }))
   } else {
     const url = new URL(`https://${LANGUAGES[language].wiktionaryEdition}.wiktionary.org/w/api.php`)
     url.searchParams.set('action', 'opensearch')

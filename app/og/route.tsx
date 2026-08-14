@@ -118,7 +118,15 @@ function BrandCard() {
   )
 }
 
-function WordCard({ word, language }: { word: string; language: LanguageCode }) {
+function WordCard({
+  word,
+  language,
+  reading,
+}: {
+  word: string
+  language: LanguageCode
+  reading?: string
+}) {
   const [initial, rest] = splitLeadingGrapheme(word)
   const languageDefinition = LANGUAGES[language]
   const betaLabel = `${languageDefinition.nativeName.toLocaleUpperCase(language)} · ${languageDefinition.nativeEtymologyLabel.toLocaleUpperCase(language)} · ${BETA_SYMBOL}`
@@ -163,6 +171,19 @@ function WordCard({ word, language }: { word: string; language: LanguageCode }) 
         <span style={{ color: '#7E2A1F' }}>{initial}</span>
         <span>{rest}</span>
       </div>
+      {language === 'ja' && reading ? (
+        <div
+          style={{
+            display: 'flex',
+            fontSize: 34,
+            color: '#475778',
+            letterSpacing: '0.12em',
+            marginTop: 22,
+          }}
+        >
+          {reading}
+        </div>
+      ) : null}
       <div
         style={{
           display: 'flex',
@@ -210,12 +231,14 @@ export async function GET(request: Request) {
     },
   ]
 
-  const rawWord = new URL(request.url).searchParams.get('word')
-  const language = parseLanguageCode(new URL(request.url).searchParams.get('language')) ?? 'en'
+  const params = new URL(request.url).searchParams
+  const rawWord = params.get('word')
+  const language = parseLanguageCode(params.get('language')) ?? 'en'
+  const reading = params.get('reading') ?? undefined
   const word = rawWord ? canonicalizeWord(rawWord) : ''
 
   if (word && isValidWord(word)) {
-    return new ImageResponse(<WordCard word={word} language={language} />, {
+    return new ImageResponse(<WordCard word={word} language={language} reading={reading} />, {
       ...IMAGE_OPTIONS,
       fonts,
     })

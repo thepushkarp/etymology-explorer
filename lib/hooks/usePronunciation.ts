@@ -9,17 +9,17 @@ import type { LanguageCode } from '@/lib/languages'
  * changes. Concurrent play() calls are ignored while audio is loading or
  * playing, and a response that arrives after the word changed is dropped.
  */
-export function usePronunciation(word: string, language: LanguageCode = 'en') {
+export function usePronunciation(word: string, language: LanguageCode = 'en', entryId?: string) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const objectUrlRef = useRef<string | null>(null)
   const loadedWordRef = useRef<string | null>(null)
-  const activeWordRef = useRef(`${language}:${word}`)
+  const activeWordRef = useRef(`${language}:${entryId ?? word}`)
   const busyRef = useRef(false)
 
-  const lexeme = `${language}:${word}`
+  const lexeme = `${language}:${entryId ?? word}`
   activeWordRef.current = lexeme
 
   useEffect(
@@ -65,7 +65,7 @@ export function usePronunciation(word: string, language: LanguageCode = 'en') {
     setIsLoading(true)
     try {
       const response = await fetch(
-        `/api/pronunciation?word=${encodeURIComponent(word)}&language=${language}`
+        `/api/pronunciation?word=${encodeURIComponent(word)}&language=${language}${entryId ? `&entry=${encodeURIComponent(entryId)}` : ''}`
       )
 
       if (!response.ok) {
@@ -108,7 +108,7 @@ export function usePronunciation(word: string, language: LanguageCode = 'en') {
     } finally {
       setIsLoading(false)
     }
-  }, [word, language, lexeme])
+  }, [word, language, entryId, lexeme])
 
   return { play, isPlaying, isLoading, error }
 }

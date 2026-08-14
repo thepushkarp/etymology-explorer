@@ -80,6 +80,7 @@ function createResultSchema<Text extends z.ZodTypeAny>(text: Text, extendedSourc
           ...sourceBase,
           sourceFamily: z.string().optional(),
           license: z.string().optional(),
+          licenseUrl: z.string().optional(),
         }
       : sourceBase
   )
@@ -156,12 +157,41 @@ export const BetaEtymologyResultSchema = createResultSchema(BilingualTextSchema,
     }
   })
 
+const JapaneseFormationPartSchema = z
+  .object({
+    form: z.string().min(1),
+    reading: z.string().min(1).optional(),
+    meaning: z.string().min(1),
+    role: z.enum(['component', 'source', 'adaptation', 'suffix', 'whole']),
+  })
+  .strict()
+
+export const LearnerEtymologyResultSchema = createResultSchema(z.string(), true).extend({
+  language: z.literal('ja'),
+  entryId: z.string().regex(/^\d+$/),
+  reading: z.string().min(1),
+  romaji: z.string().min(1),
+  alternateForms: z.array(z.string()),
+  lexicalStratum: z.enum(['native', 'sino-japanese', 'loanword', 'hybrid', 'wasei', 'uncertain']),
+  evidenceState: z.enum(['grounded', 'lexical_only']),
+  formation: z
+    .object({
+      kind: z.enum(['compound', 'derivation', 'borrowing', 'historical-development', 'opaque']),
+      parts: z.array(JapaneseFormationPartSchema),
+      result: z.string().min(1),
+      note: z.string().min(1),
+    })
+    .strict(),
+  originSummary: z.string().min(1),
+})
+
 /**
  * Main EtymologyResult schema for cache validation.
  * Uses .passthrough() to allow additional fields for forward compatibility.
  */
 export const EtymologyResultSchema = EnglishResultSchema
 export const CachedEtymologyResultSchema = z.union([
+  LearnerEtymologyResultSchema,
   BetaEtymologyResultSchema,
   EtymologyResultSchema,
 ])
