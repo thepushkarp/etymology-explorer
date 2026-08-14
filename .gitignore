@@ -15,6 +15,9 @@
 # production
 /build
 
+# Generated server-only JMdict shards are required at runtime and in clean CI checkouts.
+!/data/jmdict/*.json.gz
+
 # misc
 .DS_Store
 *.pem
