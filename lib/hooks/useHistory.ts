@@ -1,5 +1,7 @@
 'use client'
 
+import { canonicalizeWord } from '@/lib/orthography'
+
 import { useCallback, useSyncExternalStore } from 'react'
 import { HistoryEntry } from '@/lib/types'
 import type { LanguageCode } from '@/lib/languages'
@@ -106,11 +108,12 @@ export function useHistory() {
   const history = useSyncExternalStore(subscribe, getSnapshot, () => EMPTY_HISTORY)
 
   const addToHistory = useCallback((word: string, language: LanguageCode = 'en') => {
-    const normalizedWord = word.toLowerCase()
+    const normalizedWord = canonicalizeWord(word)
     const nextHistory = [
       { word: normalizedWord, language, timestamp: Date.now() },
       ...ensureHistorySnapshot().filter(
-        (entry) => entry.word !== normalizedWord || (entry.language ?? 'en') !== language
+        (entry) =>
+          canonicalizeWord(entry.word) !== normalizedWord || (entry.language ?? 'en') !== language
       ),
     ].slice(0, MAX_HISTORY_SIZE)
 
@@ -122,9 +125,10 @@ export function useHistory() {
   }, [])
 
   const removeFromHistory = useCallback((word: string, language: LanguageCode = 'en') => {
-    const normalizedWord = word.toLowerCase()
+    const normalizedWord = canonicalizeWord(word)
     const nextHistory = ensureHistorySnapshot().filter(
-      (entry) => entry.word !== normalizedWord || (entry.language ?? 'en') !== language
+      (entry) =>
+        canonicalizeWord(entry.word) !== normalizedWord || (entry.language ?? 'en') !== language
     )
 
     writeHistory(nextHistory)

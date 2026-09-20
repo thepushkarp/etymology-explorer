@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 import { WordSuggestion } from './types'
 import { rankMatches } from './suggestionRanking'
 import greWordsData from '@/data/gre-words.json'
@@ -47,7 +48,7 @@ export function getSuggestions(
   maxSuggestions: number = 3,
   maxDistance: number = 3
 ): WordSuggestion[] {
-  const normalizedInput = input.toLowerCase().trim()
+  const normalizedInput = canonicalizeWord(input)
 
   const suggestions: WordSuggestion[] = greWords
     .map((word) => ({
@@ -66,7 +67,7 @@ export function getSuggestions(
  * substring matches, then near-miss (typo) corrections to fill up to the limit.
  */
 export function getAutocompleteSuggestions(input: string, limit: number = 5): WordSuggestion[] {
-  const normalizedInput = input.toLowerCase().trim()
+  const normalizedInput = canonicalizeWord(input)
 
   const matches = rankMatches(greWords, normalizedInput, limit)
   const suggestions: WordSuggestion[] = matches.map((word) => ({
@@ -93,7 +94,7 @@ export function getAutocompleteSuggestions(input: string, limit: number = 5): Wo
  * Check if a word exists in the GRE word list
  */
 export function isKnownWord(word: string): boolean {
-  return greWords.includes(word.toLowerCase().trim())
+  return greWords.includes(canonicalizeWord(word))
 }
 
 /**

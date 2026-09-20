@@ -31,12 +31,19 @@ const DATA: SourceData = {
 }
 
 describe('source cache', () => {
+  test('shares equivalent Unicode encodings without sharing accent variants', async () => {
+    const store = createStore()
+    await cacheSource('wiktionary', 'café', DATA, store)
+    expect(await getCachedSource('wiktionary', 'cafe\u0301', store)).toEqual(DATA)
+    expect(await getCachedSource('wiktionary', 'cafe', store)).toBeNull()
+  })
+
   test('round-trips source data with a source-and-word-scoped key', async () => {
     const store = createStore()
 
     await cacheSource('etymonline', 'Telephone', DATA, store)
 
-    expect(store.keys()).toEqual(['src:v1:etymonline:telephone'])
+    expect(store.keys()).toEqual(['src:v2:etymonline:telephone'])
     expect(await getCachedSource('etymonline', 'telephone', store)).toEqual(DATA)
   })
 
@@ -54,8 +61,8 @@ describe('source cache', () => {
     await cacheSource('wiktionaryNative', 'sale', DATA, store, 'fr')
 
     expect(store.keys().sort()).toEqual([
-      'src:v4:wiktionaryNative:fr:sale',
-      'src:v4:wiktionaryNative:it:sale',
+      'src:v5:wiktionaryNative:fr:sale',
+      'src:v5:wiktionaryNative:it:sale',
     ])
   })
 
@@ -73,7 +80,7 @@ describe('source cache', () => {
 
   test('treats malformed cache entries as misses', async () => {
     const store = createStore()
-    await store.set('src:v1:etymonline:telephone', {
+    await store.set('src:v2:etymonline:telephone', {
       text: 42,
       url: 'https://example.com',
     } as unknown as SourceData)

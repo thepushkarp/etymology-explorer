@@ -44,7 +44,7 @@ describe('extractRootsCpu', () => {
   test('classical: parses surface-analysis formula with U+200E marks (telephone)', () => {
     const wiktionary = `From French téléphone. By surface analysis, tele- +${LTR_MARK} -phone.`
 
-    expect(extractRootsCpu('telephone', null, wiktionary, [])).toEqual(['tele', 'phone'])
+    expect(extractRootsCpu('telephone', null, wiktionary, [])).toEqual(['tele-', '-phone'])
   })
 
   test('classical: parses formulas with parenthetical glosses between morphemes (telephone)', () => {
@@ -53,15 +53,15 @@ describe('extractRootsCpu', () => {
       `+${LTR_MARK} -phone (suffix denoting a device which makes a sound), ` +
       'modelled after German Telephon.'
 
-    expect(extractRootsCpu('telephone', null, wiktionary, [])).toEqual(['tele', 'phone'])
+    expect(extractRootsCpu('telephone', null, wiktionary, [])).toEqual(['tele-', '-phone'])
   })
 
-  test('classical: parses quoted glosses and folds diacritics (telephone, etymonline style)', () => {
+  test('classical: parses quoted glosses and preserves diacritics (telephone, etymonline style)', () => {
     const etymonline =
       '1835, from French téléphone (c. 1830), from télé- "far" (see tele- ) ' +
       '+ phōnē "sound, voice"'
 
-    expect(extractRootsCpu('telephone', etymonline, null, [])).toEqual(['tele', 'phone'])
+    expect(extractRootsCpu('telephone', etymonline, null, [])).toEqual(['télé-', 'phōnē'])
   })
 
   test('classical: parses multi-part equivalent-to formula (autobiography)', () => {
@@ -70,10 +70,10 @@ describe('extractRootsCpu', () => {
       `equivalent to auto- +${LTR_MARK} bio- +${LTR_MARK} -graphy.`
 
     expect(extractRootsCpu('autobiography', null, wiktionary, [])).toEqual([
-      'auto',
+      'auto-',
       'biography',
-      'bio',
-      'graphy',
+      'bio-',
+      '-graphy',
     ])
   })
 
@@ -82,7 +82,7 @@ describe('extractRootsCpu', () => {
       'From Middle English understanden, from Old English understandan ' +
       `("to understand"), equivalent to under- +${LTR_MARK} stand.`
 
-    expect(extractRootsCpu('understand', null, wiktionary, [])).toEqual(['under', 'stand'])
+    expect(extractRootsCpu('understand', null, wiktionary, [])).toEqual(['under-', 'stand'])
   })
 
   test('neologism: drops inflectional suffixes from formulas (doomscrolling, selfie)', () => {
@@ -541,7 +541,7 @@ describe('conductAgenticResearch phase ordering', () => {
     )
 
     // Roots were derived on-CPU from the Wiktionary formula — no LLM call
-    expect(context.identifiedRoots).toEqual(['tele', 'phone'])
+    expect(context.identifiedRoots).toEqual(['télé-', 'phone', 'tele-', '-phone'])
     expect(context.llmUsage).toBeUndefined()
     expect(requestedUrls.some((url) => url.includes('openrouter.ai'))).toBe(false)
 

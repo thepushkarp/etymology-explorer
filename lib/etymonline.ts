@@ -1,3 +1,5 @@
+import { canonicalizeWord, sameSpelling } from './orthography'
+import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
 /**
  * Scrapes etymology data from Etymonline.
  * Note: This is fragile as HTML structure may change.
@@ -29,7 +31,7 @@ export async function fetchEtymonline(
   word: string,
   signal?: AbortSignal
 ): Promise<EtymonlineResult | null> {
-  const normalizedWord = word.toLowerCase().trim().replace(/\s+/g, '-')
+  const normalizedWord = canonicalizeWord(word).replace(/\s+/g, '-')
   const url = `https://www.etymonline.com/word/${encodeURIComponent(normalizedWord)}`
 
   const cached = await getCachedSource('etymonline', normalizedWord)
@@ -56,6 +58,13 @@ export async function fetchEtymonline(
     }
 
     const html = await response.text()
+    const heading = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]
+    const headword = heading?.match(/<em\b[^>]*>([\s\S]*?)<\/em>/i)?.[1] ?? heading
+    if (
+      headword &&
+      !sameSpelling(stripHtml(headword).replace(/\s*\([^)]*\)\s*$/, ''), normalizedWord)
+    )
+      return null
 
     // Check if this is a 404 page (Etymonline returns 200 with fallback content)
     if (html.includes('NEXT_HTTP_ERROR_FALLBACK;404')) {
@@ -147,7 +156,7 @@ export function extractEtymonlineRelatedEntries(html: string, excludeWord: strin
  * Remove HTML tags and clean up text
  */
 function stripHtml(html: string): string {
-  return html
+  return decodeHtmlEntities(preserveLinguisticNotation(html))
     .replace(/<[^>]*>/g, ' ') // Remove HTML tags
     .replace(/&nbsp;/g, ' ') // Replace nbsp
     .replace(/&amp;/g, '&') // Replace amp

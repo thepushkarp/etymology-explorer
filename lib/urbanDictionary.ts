@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 import { SourceData } from './types'
 import { fetchWithTimeout } from './fetchUtils'
 import { CONFIG } from './config'
@@ -37,10 +38,6 @@ const LOW_SIGNAL_PATTERNS = [
 
 function normalizeWhitespace(text: string): string {
   return text.replace(/\[|\]/g, '').replace(/\s+/g, ' ').trim()
-}
-
-function normalizeWord(text: string): string {
-  return text.toLowerCase().trim()
 }
 
 function scoreQuality(entry: UrbanDictionaryEntry): number {
@@ -90,10 +87,10 @@ export async function fetchUrbanDictionary(
 
     const data = await response.json()
 
-    const normalizedWord = normalizeWord(word)
+    const normalizedWord = canonicalizeWord(word)
     const entries = (data.list || []) as UrbanDictionaryEntry[]
     const filtered = entries
-      .filter((entry) => normalizeWord(entry.word) === normalizedWord)
+      .filter((entry) => canonicalizeWord(entry.word) === normalizedWord)
       .map((entry) => ({
         entry,
         definition: normalizeWhitespace(entry.definition),

@@ -1,10 +1,15 @@
+import { canonicalizeWord } from './orthography'
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
 import { fetchWithTimeout } from './fetchUtils'
 import { LANGUAGES, type BetaLanguageCode } from './languages'
 import { cacheSource, getCachedSource, type CacheableSource } from './sourceCache'
 import type { SourceData } from './types'
-import { extractWiktionaryEntryGroups, type WiktionaryTocSection } from './wiktionaryEntryGroups'
+import {
+  cleanWiktionaryHtml,
+  extractWiktionaryEntryGroups,
+  type WiktionaryTocSection,
+} from './wiktionaryEntryGroups'
 
 type TocSection = WiktionaryTocSection
 
@@ -15,22 +20,6 @@ interface ParseResponse {
     tocdata?: { sections?: TocSection[] }
   }
   error?: { info?: string }
-}
-
-function stripHtml(value: string): string {
-  return value
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<sup[^>]*>[\s\S]*?<\/sup>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim()
 }
 
 /** Extracts only the selected language's etymology blocks using MediaWiki tocdata. */
@@ -84,6 +73,8 @@ async function fetchWiktionaryEdition(
     const html = data.parse?.text
     const sections = data.parse?.tocdata?.sections
     if (!html || !sections) return null
+    if (data.parse?.title && canonicalizeWord(data.parse.title) !== canonicalizeWord(word))
+      return null
 
     const languageHeading =
       edition === 'en' ? config.englishWiktionaryHeading : config.nativeWiktionaryHeading
@@ -141,15 +132,23 @@ export async function fetchFreeDictionaryApi(
     const response = await fetchWithTimeout(url, {}, CONFIG.timeouts.source, signal)
     if (!response.ok) return null
     const data = (await response.json()) as {
+      word?: string
       entries?: unknown[]
       source?: { url?: string; license?: { name?: string; url?: string } }
     }
+    if (data.word && canonicalizeWord(data.word) !== canonicalizeWord(word)) return null
     if (!Array.isArray(data.entries) || data.entries.length === 0) return null
+    const entries = data.entries.filter((entry) => {
+      if (!entry || typeof entry !== 'object') return false
+      const headword = (entry as { word?: unknown }).word
+      return (
+        headword === undefined ||
+        (typeof headword === 'string' && canonicalizeWord(headword) === canonicalizeWord(word))
+      )
+    })
+    if (entries.length === 0) return null
     const result = {
-      text: JSON.stringify({ entries: data.entries.slice(0, 3), source: data.source }).slice(
-        0,
-        5000
-      ),
+      text: JSON.stringify({ entries: entries.slice(0, 3), source: data.source }).slice(0, 5000),
       url: data.source?.url || url,
     }
     void cacheSource('multilingualDictionary', word, result, undefined, language)
@@ -214,10 +213,6 @@ function compactWikidataLexeme(entity: WikidataLexemeEntity) {
   }
 }
 
-function normalizedLexicalValue(value: string, language: BetaLanguageCode): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase(language)
-}
-
 function isRequestedLanguageText(
   text: WikidataMonolingualText,
   language: BetaLanguageCode,
@@ -225,9 +220,7 @@ function isRequestedLanguageText(
 ): boolean {
   if (typeof text?.language !== 'string' || typeof text.value !== 'string') return false
   const primaryLanguage = text.language.toLocaleLowerCase().split('-')[0]
-  return (
-    primaryLanguage === language && normalizedLexicalValue(text.value, language) === normalizedWord
-  )
+  return primaryLanguage === language && canonicalizeWord(text.value) === normalizedWord
 }
 
 function isMatchingLexeme(
@@ -293,7 +286,7 @@ export async function fetchWikidataLexeme(
     const entityData = (await entitiesResponse.json()) as {
       entities?: Record<string, WikidataLexemeEntity>
     }
-    const normalizedWord = normalizedLexicalValue(word, language)
+    const normalizedWord = canonicalizeWord(word)
     const matches = Object.values(entityData.entities ?? {}).filter((entity) =>
       isMatchingLexeme(entity, language, normalizedWord)
     )
@@ -323,14 +316,15 @@ export async function fetchDicionarioAberto(
   try {
     const response = await fetchWithTimeout(url, {}, CONFIG.timeouts.source, signal)
     if (!response.ok) return null
-    const entries = (await response.json()) as Array<{ xml?: string }>
+    const entries = (await response.json()) as Array<{ word?: string; xml?: string }>
     const xml = entries
+      .filter((entry) => !entry.word || canonicalizeWord(entry.word) === canonicalizeWord(word))
       .map((entry) => entry.xml)
       .filter(Boolean)
       .join('\n')
     if (!xml) return null
     const result = {
-      text: `Historical dictionary (older source): ${stripHtml(xml)}`.slice(0, 5000),
+      text: `Historical dictionary (older source): ${cleanWiktionaryHtml(xml)}`.slice(0, 5000),
       url,
     }
     void cacheSource('dicionarioAberto', word, result, undefined, 'pt')

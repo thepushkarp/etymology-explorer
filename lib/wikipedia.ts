@@ -1,3 +1,4 @@
+import { sameSpelling } from './orthography'
 import { SourceData } from './types'
 import { fetchWithTimeout } from './fetchUtils'
 import { CONFIG } from './config'
@@ -22,7 +23,11 @@ export async function fetchWikipedia(
 
     const data = await response.json()
 
-    if (data.type === 'disambiguation' || !data.extract) {
+    if (
+      data.type === 'disambiguation' ||
+      !data.extract ||
+      (data.title && !sameSpelling(data.title, word))
+    ) {
       return null
     }
 

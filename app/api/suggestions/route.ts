@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAutocompleteSuggestions } from '@/lib/spellcheck'
+import { getWordSuggestions } from '@/lib/wordSuggestions'
 import { ApiResponse, WordSuggestion } from '@/lib/types'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
-import { LANGUAGES, parseLanguageCode } from '@/lib/languages'
-import { fetchWithTimeout } from '@/lib/fetchUtils'
-import { CONFIG } from '@/lib/config'
+import { parseLanguageCode } from '@/lib/languages'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -41,26 +39,7 @@ export async function GET(request: NextRequest) {
     'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
   }
 
-  let suggestions: WordSuggestion[]
-  if (language === 'en') {
-    suggestions = getAutocompleteSuggestions(normalized)
-  } else {
-    const url = new URL(`https://${LANGUAGES[language].wiktionaryEdition}.wiktionary.org/w/api.php`)
-    url.searchParams.set('action', 'opensearch')
-    url.searchParams.set('search', normalized)
-    url.searchParams.set('limit', '8')
-    url.searchParams.set('namespace', '0')
-    url.searchParams.set('format', 'json')
-    url.searchParams.set('origin', '*')
-    try {
-      const response = await fetchWithTimeout(url, {}, CONFIG.timeouts.source)
-      const data = response.ok ? ((await response.json()) as unknown[]) : []
-      const words = Array.isArray(data[1]) ? (data[1] as string[]) : []
-      suggestions = words.map((word) => ({ word, distance: 0 }))
-    } catch {
-      suggestions = []
-    }
-  }
+  const suggestions = await getWordSuggestions(normalized, language, false, request.signal)
 
   return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>(
     {

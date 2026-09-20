@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { EtymologyResult, StreamEvent, StageConfidence, ResearchContext } from '@/lib/types'
 import { synthesizeFromResearch, getLlmUsageFromError, SynthesisResult } from '@/lib/llm'
 import { conductAgenticResearch, hasCredibleMainSource } from '@/lib/research'
-import { isLikelyTypo, getSuggestions } from '@/lib/spellcheck'
+import { getWordSuggestions } from '@/lib/wordSuggestions'
 import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
 import { getCachedEtymology, cacheEtymology, getNegativeCache, cacheNegative } from '@/lib/cache'
@@ -127,14 +127,15 @@ export async function GET(request: NextRequest) {
     const isNegCached = await getNegativeCache(normalizedWord, language)
     if (isNegCached) {
       console.log(`[Etymology API] Negative cache hit for "${normalizedWord}"`)
+      const suggestions = (
+        await getWordSuggestions(normalizedWord, language, true, request.signal)
+      ).map((s) => s.word)
       return respond.error(
-        language === 'en'
-          ? getQuirkyMessage('nonsense')
-          : `No ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
+        `No supported ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
         {
           status: 404,
-          errorType: 'nonsense',
-          ...(language === 'en' ? { unaryData: { suggestion: getRandomWord() } } : {}),
+          errorType: suggestions.length ? 'typo' : 'nonsense',
+          suggestions,
         }
       )
     }
@@ -187,20 +188,10 @@ export async function GET(request: NextRequest) {
         await cacheNegative(normalizedWord, 'no_sources', language)
         await incrLanguageCounter(language, 'no_source')
 
-        if (language !== 'en') {
-          return { kind: 'no_sources' }
-        }
-
-        if (isLikelyTypo(normalizedWord)) {
-          return {
-            kind: 'no_sources',
-            typoSuggestions: getSuggestions(normalizedWord).map((s) => s.word),
-          }
-        }
-
+        const suggestions = await getWordSuggestions(normalizedWord, language, true, request.signal)
         return {
           kind: 'no_sources',
-          fallbackSuggestion: getRandomWord(),
+          typoSuggestions: suggestions.map((s) => s.word),
         }
       }
 
@@ -385,13 +376,14 @@ export async function GET(request: NextRequest) {
                 })
               }
             } else if (outcome.kind === 'negative_cached') {
+              const suggestions = (
+                await getWordSuggestions(normalizedWord, language, true, request.signal)
+              ).map((s) => s.word)
               emit({
                 type: 'error',
-                message:
-                  language === 'en'
-                    ? getQuirkyMessage('nonsense')
-                    : `No ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
-                errorType: 'nonsense',
+                message: `No supported ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
+                errorType: suggestions.length ? 'typo' : 'nonsense',
+                suggestions,
               })
             } else if (outcome.kind === 'holder_failed') {
               emit({
@@ -462,7 +454,7 @@ export async function GET(request: NextRequest) {
         return respond.error(`Hmm, we couldn't find "${word}". Did you mean:`, {
           status: 404,
           errorType: 'typo',
-          unaryData: { suggestions: outcome.typoSuggestions },
+          suggestions: outcome.typoSuggestions,
         })
       }
       return respond.error(

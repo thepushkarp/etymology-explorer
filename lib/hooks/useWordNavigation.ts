@@ -1,5 +1,7 @@
 'use client'
 
+import { canonicalizeWord } from '@/lib/orthography'
+
 import { useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useHistory } from '@/lib/hooks/useHistory'
@@ -38,7 +40,9 @@ export function useWordNavigation(
     }
 
     const currentIndex = history.findIndex(
-      (entry) => entry.word === currentWord && (entry.language ?? 'en') === currentLanguage
+      (entry) =>
+        canonicalizeWord(entry.word) === canonicalizeWord(currentWord) &&
+        (entry.language ?? 'en') === currentLanguage
     )
     if (currentIndex === -1) {
       navigateToWord(history[0].word, history[0].language ?? 'en')
@@ -54,7 +58,9 @@ export function useWordNavigation(
     if (!currentWord || history.length === 0) return
 
     const currentIndex = history.findIndex(
-      (entry) => entry.word === currentWord && (entry.language ?? 'en') === currentLanguage
+      (entry) =>
+        canonicalizeWord(entry.word) === canonicalizeWord(currentWord) &&
+        (entry.language ?? 'en') === currentLanguage
     )
     if (currentIndex <= 0) return
 

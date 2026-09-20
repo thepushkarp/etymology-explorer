@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 /**
  * Fetches supplementary slang/community context from incels.wiki.
  * Uses MediaWiki Action API extracts endpoint.
@@ -39,7 +40,7 @@ export async function fetchIncelsWiki(
   word: string,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
-  const normalizedWord = word.toLowerCase().trim()
+  const normalizedWord = canonicalizeWord(word)
 
   const url = new URL(INCELS_WIKI_API)
   url.searchParams.set('action', 'query')
@@ -71,7 +72,12 @@ export async function fetchIncelsWiki(
     const pageId = Object.keys(pages)[0]
     const page = pages[pageId]
 
-    if (page?.missing || !page?.extract) return null
+    if (
+      page?.missing ||
+      !page?.extract ||
+      (page.title && canonicalizeWord(page.title) !== normalizedWord)
+    )
+      return null
 
     const text = normalizeExtract(page.extract)
     if (text.length < MIN_EXTRACT_CHARS) return null

@@ -1,3 +1,5 @@
+import { canonicalizeWord, HISTORICAL_FORM } from './orthography'
+
 /**
  * Pre-parses etymology text from Etymonline and Wiktionary into structured chains.
  * Extracts "from X, from Y" chains before the LLM call so the LLM validates
@@ -14,6 +16,7 @@
 export interface ParsedEtymLink {
   language: string // "Latin", "Old French", "Proto-Indo-European"
   form: string // "perfidia", "*bheid-"
+  variants?: string[] // explicitly named alternate spellings in this source
   meaning?: string // "faithlessness"
   isReconstructed: boolean // true for PIE *-prefixed forms
   rawSnippet: string // exact substring from source that yielded this
@@ -90,6 +93,7 @@ const KNOWN_LANGUAGES = [
   'Proto-indo-europeu',
   'Proto-indo-européen',
   'Latino',
+  'Latim',
   'Latín',
   'Grego',
   'Greco',
@@ -106,10 +110,10 @@ const KNOWN_LANGUAGES = [
 
 /**
  * Build a regex that matches any known language name at the start of a string.
- * Case-insensitive, requires word boundary after the name.
+ * Whitespace avoids ASCII word-boundary errors after accented language names.
  */
 const LANGUAGE_PATTERN = new RegExp(
-  `^(${KNOWN_LANGUAGES.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+  `^(${KNOWN_LANGUAGES.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=\\s|$)`,
   'i'
 )
 
@@ -154,7 +158,7 @@ function extractForm(text: string): string | undefined {
 
   // Match a word form: could start with * (reconstructed), may include hyphens and diacritics
   // Stop at comma, quote, parenthesis, semicolon, or "meaning"
-  const formMatch = trimmed.match(/^(\*?[\w\u00C0-\u024F*-]+(?:\s*\([^)]*\))?)/)
+  const formMatch = trimmed.match(new RegExp(`^(${HISTORICAL_FORM})(?=$|[\\s,.;:"“”()])`, 'u'))
   if (formMatch) {
     return formMatch[1].trim()
   }
@@ -166,7 +170,7 @@ function extractForm(text: string): string | undefined {
  * Returns null if the segment doesn't contain a recognizable language.
  */
 function parseSegment(segment: string): ParsedEtymLink | null {
-  const trimmed = segment.trim()
+  const trimmed = segment.normalize('NFC').trim()
 
   // Try to match a known language at the start
   const langMatch = trimmed.match(LANGUAGE_PATTERN)
@@ -186,6 +190,11 @@ function parseSegment(segment: string): ParsedEtymLink | null {
   const form = extractForm(afterLang)
   if (!form) return null
 
+  // Only source-explicit alternatives are admitted, never an accent-folded guess.
+  const variant = afterLang
+    .slice(form.length)
+    .match(new RegExp(`^\\s*\\(also\\s+(${HISTORICAL_FORM})\\)`, 'iu'))
+
   // Extract meaning from the remainder
   const meaning = extractMeaning(afterLang)
 
@@ -202,6 +211,7 @@ function parseSegment(segment: string): ParsedEtymLink | null {
   return {
     language,
     form,
+    ...(variant ? { variants: [variant[1]] } : {}),
     meaning,
     isReconstructed,
     rawSnippet,
@@ -211,14 +221,15 @@ function parseSegment(segment: string): ParsedEtymLink | null {
 /**
  * Normalize language name variations to canonical form.
  */
-function normalizeLanguageName(name: string): string {
-  const lower = name.toLowerCase()
+export function normalizeLanguageName(name: string): string {
+  const lower = canonicalizeWord(name)
   if (lower === 'pie') return 'Proto-Indo-European'
   const localized: Record<string, string> = {
     protoindoeuropeo: 'Proto-Indo-European',
     'proto-indo-europeu': 'Proto-Indo-European',
     'proto-indo-européen': 'Proto-Indo-European',
     latino: 'Latin',
+    latim: 'Latin',
     latín: 'Latin',
     greco: 'Greek',
     grego: 'Greek',
@@ -374,6 +385,9 @@ export function formatParsedChainsForPrompt(chains: ParsedEtymChain[]): string {
 
     for (const link of chain.links) {
       let line = `  ${escapeXml(link.language)}: ${escapeXml(link.form)}`
+      if (link.variants?.length) {
+        line += ` [source-explicit variants: ${link.variants.map(escapeXml).join(', ')}]`
+      }
       if (link.meaning) {
         line += ` "${escapeXml(link.meaning)}"`
       }

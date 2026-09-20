@@ -68,6 +68,13 @@ beforeEach(() => {
 })
 
 describe('cacheEtymology word-page revalidation', () => {
+  test('uses NFC keys and refuses an otherwise valid result for another spelling', async () => {
+    currentRedis = fakeRedis({ get: mock(async () => ({ ...RESULT, word: 'café' })) })
+    expect((await getCachedEtymology('cafe\u0301'))?.word).toBe('café')
+    expect(currentRedis.get).toHaveBeenCalledWith('etymology:v2.3:café')
+    expect(await getCachedEtymology('cafe')).toBeNull()
+  })
+
   test('revalidates the normalized per-word tag after a successful write', async () => {
     currentRedis = fakeRedis()
 
@@ -142,7 +149,7 @@ describe('cacheEtymology word-page revalidation', () => {
     await cacheAudio('sale', 'audio-fr', 'fr')
 
     expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
-      'etymology:beta:v5:it:sale',
+      'etymology:beta:v6:it:sale',
       'audio:v1:it:sale',
       'audio:v1:fr:sale',
     ])
@@ -163,15 +170,15 @@ describe('cacheEtymology word-page revalidation', () => {
 
   test('decodes English and beta result keys from the shared sitemap scan', () => {
     expect(ETYMOLOGY_SCAN_PATTERN).toBe('etymology:*')
-    expect(lexemeFromEtymologyCacheKey('etymology:v2.2:sale')).toEqual({
+    expect(lexemeFromEtymologyCacheKey('etymology:v2.3:sale')).toEqual({
       language: 'en',
       word: 'sale',
     })
-    expect(lexemeFromEtymologyCacheKey('etymology:beta:v5:it:sale')).toEqual({
+    expect(lexemeFromEtymologyCacheKey('etymology:beta:v6:it:sale')).toEqual({
       language: 'it',
       word: 'sale',
     })
-    expect(lexemeFromEtymologyCacheKey('etymology:beta:v5:en:sale')).toBeNull()
+    expect(lexemeFromEtymologyCacheKey('etymology:beta:v6:en:sale')).toBeNull()
   })
 
   test('never returns an English object from a beta cache key', async () => {

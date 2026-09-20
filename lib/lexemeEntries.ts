@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 import { LANGUAGES, type BetaLanguageCode } from './languages'
 import type { ResearchEntryContext, SourceData } from './types'
 
@@ -16,17 +17,9 @@ interface WikidataPayload {
   entities?: Record<string, WikidataEntity>
 }
 
-function normalize(value: string): string {
-  return value
-    .normalize('NFKD')
-    .replace(/\p{Diacritic}/gu, '')
-    .trim()
-    .toLocaleLowerCase()
-}
-
 function stableToken(value: string): string {
   let hash = 0x811c9dc5
-  for (const character of value.normalize('NFKC')) {
+  for (const character of canonicalizeWord(value)) {
     hash ^= character.codePointAt(0) ?? 0
     hash = Math.imul(hash, 0x01000193)
   }
@@ -56,17 +49,18 @@ function wikidataIdentities(
   if (!source) return { queryIsLemma: false, formTargets: [] }
   try {
     const payload = JSON.parse(source.text) as WikidataPayload
-    const normalizedWord = normalize(word)
+    const normalizedWord = canonicalizeWord(word)
     let queryIsLemma = false
     const formTargets = new Set<string>()
     for (const entity of Object.values(payload.entities ?? {})) {
       const lemma = selectedValue(entity.lemmas, language)
       if (!lemma) continue
-      if (normalize(lemma) === normalizedWord) queryIsLemma = true
+      if (canonicalizeWord(lemma) === normalizedWord) queryIsLemma = true
       const queryIsForm = (entity.forms ?? []).some(
-        (form) => normalize(selectedValue(form.representations, language) ?? '') === normalizedWord
+        (form) =>
+          canonicalizeWord(selectedValue(form.representations, language) ?? '') === normalizedWord
       )
-      if (queryIsForm && normalize(lemma) !== normalizedWord) formTargets.add(lemma)
+      if (queryIsForm && canonicalizeWord(lemma) !== normalizedWord) formTargets.add(lemma)
     }
     return { queryIsLemma, formTargets: [...formTargets] }
   } catch {
@@ -75,18 +69,18 @@ function wikidataIdentities(
 }
 
 function containsWholeLexeme(text: string, lexeme: string): boolean {
-  const target = normalize(lexeme)
-  return normalize(text)
-    .split(/[^\p{L}\p{N}_-]+/u)
+  const target = canonicalizeWord(lexeme)
+  return canonicalizeWord(text)
+    .split(/[^\p{L}\p{M}\p{N}'’ʼ‐‑-]+/u)
     .includes(target)
 }
 
 function matchingEtymologyLine(preamble: string, heading: string): string | null {
-  const marker = `(${normalize(heading)})`
+  const marker = `(${canonicalizeWord(heading)})`
   return (
     preamble
       .split('\n')
-      .find((line) => normalize(line).startsWith(marker))
+      .find((line) => canonicalizeWord(line).startsWith(marker))
       ?.trim() ?? null
   )
 }

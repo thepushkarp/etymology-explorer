@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 /**
  * Redis cache for raw etymonline/wiktionary page data.
  * Repeated cache-misses for the final result (and root/related lookups that
@@ -30,11 +31,11 @@ export type CacheableSource =
   | 'multilingualDictionary'
   | 'dicionarioAberto'
 
-const SOURCE_CACHE_PREFIX = 'src:v1:'
-const BETA_SOURCE_CACHE_PREFIX = 'src:v4:'
+const SOURCE_CACHE_PREFIX = 'src:v2:'
+const BETA_SOURCE_CACHE_PREFIX = 'src:v5:'
 
 function sourceKey(source: CacheableSource, word: string, language: LanguageCode): string {
-  const normalized = word.toLowerCase().trim()
+  const normalized = canonicalizeWord(word)
   const prefix = language === 'en' ? SOURCE_CACHE_PREFIX : BETA_SOURCE_CACHE_PREFIX
   return language === 'en'
     ? `${prefix}${source}:${normalized}`

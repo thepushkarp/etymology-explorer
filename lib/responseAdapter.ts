@@ -32,6 +32,7 @@ export interface AdapterErrorOptions {
   unaryHeaders?: Record<string, string>
   /** Extra payload for the unary JSON body only (e.g. typo suggestions). */
   unaryData?: unknown
+  suggestions?: string[]
 }
 
 export interface AdapterResultOptions {
@@ -47,15 +48,22 @@ export interface ResponseAdapter {
 
 export function createResponseAdapter(stream: boolean): ResponseAdapter {
   return {
-    error(message, { status, errorType = 'unknown', headers, unaryHeaders, unaryData }) {
+    error(
+      message,
+      { status, errorType = 'unknown', headers, unaryHeaders, unaryData, suggestions }
+    ) {
       if (stream) {
-        return streamErrorResponse(message, errorType, headers)
+        return streamErrorResponse(message, errorType, headers, suggestions)
       }
       return NextResponse.json<ApiResponse<unknown>>(
         {
           success: false,
           error: message,
-          ...(unaryData !== undefined ? { data: unaryData } : {}),
+          ...(suggestions
+            ? { data: { suggestions } }
+            : unaryData !== undefined
+              ? { data: unaryData }
+              : {}),
         },
         { status, headers: { ...headers, ...unaryHeaders } }
       )
