@@ -21,6 +21,46 @@ function normalize(s: string): string {
   return canonicalizeWord(s.replace(/\s+\([^)]*\)$/, ''))
 }
 
+const LANGUAGE_FAMILIES: Record<string, string> = {
+  latin: 'latin',
+  'classical latin': 'latin',
+  'medieval latin': 'latin',
+  'late latin': 'latin',
+  'vulgar latin': 'latin',
+  'new latin': 'latin',
+  'church latin': 'latin',
+  greek: 'greek',
+  'ancient greek': 'greek',
+  'koine greek': 'greek',
+  english: 'english',
+  'old english': 'english',
+  'middle english': 'english',
+  'modern english': 'english',
+  french: 'french',
+  'old french': 'french',
+  'middle french': 'french',
+  'modern french': 'french',
+  'anglo-french': 'french',
+  german: 'german',
+  'old high german': 'german',
+  dutch: 'dutch',
+  'middle dutch': 'dutch',
+}
+
+function compatibleLanguage(left: string, right: string): boolean {
+  const normalizedLeft = canonicalizeWord(normalizeLanguageName(left))
+  const normalizedRight = canonicalizeWord(normalizeLanguageName(right))
+  if (normalizedLeft === normalizedRight) return true
+
+  const leftFamily = LANGUAGE_FAMILIES[normalizedLeft]
+  const rightFamily = LANGUAGE_FAMILIES[normalizedRight]
+  return (
+    leftFamily !== undefined &&
+    leftFamily === rightFamily &&
+    (normalizedLeft === leftFamily || normalizedRight === rightFamily)
+  )
+}
+
 interface MatchResult {
   link: ParsedEtymLink
   source: 'etymonline' | 'wiktionary'
@@ -35,8 +75,7 @@ function findMatches(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]
       if (
         typeof stage.form === 'string' &&
         typeof stage.stage === 'string' &&
-        canonicalizeWord(normalizeLanguageName(stage.stage)) ===
-          canonicalizeWord(normalizeLanguageName(link.language)) &&
+        compatibleLanguage(stage.stage, link.language) &&
         isReconstructedStage(stage) === link.isReconstructed &&
         [link.form, ...(link.variants ?? [])].some(
           (form) => normalize(stage.form) === normalize(form)

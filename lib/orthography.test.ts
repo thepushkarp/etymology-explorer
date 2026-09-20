@@ -90,7 +90,7 @@ describe('historical forms and confidence', () => {
     expect(result.branches[0].stages[0]).toMatchObject({ confidence: 'low', evidence: [] })
   })
 
-  test('accepts canonical equivalence but requires the same language', () => {
+  test('accepts canonical equivalence and broad language labels', () => {
     const chains = [parseWiktionaryText('from French côte', 'example')]
     const exact = graph('co\u0302te')
     enrichAncestryGraph(exact, chains)
@@ -98,6 +98,21 @@ describe('historical forms and confidence', () => {
     const foreign = graph('côte', 'Latin')
     enrichAncestryGraph(foreign, chains)
     expect(foreign.branches[0].stages[0].confidence).toBe('low')
+
+    for (const [broad, specific] of [
+      ['Latin', 'Late Latin'],
+      ['Greek', 'Ancient Greek'],
+    ]) {
+      const periodChains = [parseWiktionaryText(`from ${specific} forma`, 'example')]
+      const compatible = graph('forma', broad)
+      enrichAncestryGraph(compatible, periodChains)
+      expect(compatible.branches[0].stages[0].confidence).toBe('medium')
+    }
+
+    const lateLatin = [parseWiktionaryText('from Late Latin forma', 'example')]
+    const differentPeriod = graph('forma', 'Medieval Latin')
+    enrichAncestryGraph(differentPeriod, lateLatin)
+    expect(differentPeriod.branches[0].stages[0].confidence).toBe('low')
   })
 
   test('an explicit source variant retains its supporting snippet', () => {
