@@ -62,6 +62,25 @@ const wikidata: SourceData = {
 }
 
 describe('deriveEntryContexts', () => {
+  test('keeps accented lemma and unaccented inflection identity separate', () => {
+    const source = structuredClone(wiktionary)
+    source.entryGroups![0].sections[1].text = 'Forma flessa plurale di víté.'
+    const identity: SourceData = {
+      url: 'https://www.wikidata.org/wiki/L1',
+      text: JSON.stringify({
+        entities: {
+          L1: {
+            lemmas: { it: { language: 'it', value: 'víté' } },
+            forms: [{ representations: { it: { language: 'it', value: 'vite' } } }],
+          },
+        },
+      }),
+    }
+    const contexts = deriveEntryContexts('vite', 'it', 'wiktionaryNative', source, identity)
+    expect(contexts.some((entry) => entry.entryKind === 'lemma')).toBe(false)
+    expect(contexts.find((entry) => entry.entryKind === 'form')?.formOf?.word).toBe('víté')
+  })
+
   test('uses structured lemma/form identity to split a same-spelling form history', () => {
     const contexts = deriveEntryContexts('vite', 'it', 'wiktionaryNative', wiktionary, wikidata)
 

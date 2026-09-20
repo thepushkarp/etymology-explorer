@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 /**
  * Agentic research module for deep etymology exploration.
  * Conducts multi-source lookups to gather rich context about word origins
@@ -130,7 +131,7 @@ async function conductBetaResearch(
   const lexicalGraph = buildLexicalResearchGraph(word, language, entryContexts, parsedChains)
   const identifiedRootLexemes = parsedChains
     .flatMap((chain) => chain.links)
-    .filter((link) => link.form.toLocaleLowerCase() !== word.toLocaleLowerCase())
+    .filter((link) => canonicalizeWord(link.form) !== canonicalizeWord(word))
     .slice(0, CONFIG.maxRootsToExplore)
     .map((link) => ({ word: link.form, language: link.language }))
 
@@ -191,6 +192,7 @@ export async function extractRootsQuick(
   const prompt = `Analyze this etymology data and extract the ETYMOLOGICAL root morphemes of the word "${word}".
 
 Rules:
+- Preserve all accents, vowel-length marks, modifier letters and affix hyphens exactly as supplied by the source. Never replace a historical form with a similarly spelled modern word.
 - Extract roots that carry independent meaning and have their own etymology worth researching.
 - Include prefixes only when they are productive and meaningfully change the word (for example, "contra-" in "contradict").
 - Exclude inflectional or low-signal suffixes such as -ed, -ing, -ly, -tion, -ible, and -ous unless the source data makes them etymologically central.
@@ -249,7 +251,7 @@ function parseRootsArray(text: string): string[] {
     if (!Array.isArray(parsed)) return []
     return parsed
       .filter((item): item is string => typeof item === 'string')
-      .map((s) => s.toLowerCase().trim())
+      .map(canonicalizeWord)
       .slice(0, CONFIG.maxRootsToExplore)
   }
 
@@ -267,7 +269,7 @@ function parseRootsArray(text: string): string[] {
   }
 }
 
-const TERM_PATTERN = /[\p{L}*][\p{L}*'’.-]*/gu
+const TERM_PATTERN = /[\p{L}*][\p{L}\p{M}\p{N}*'’ʼ‐‑.-]*/gu
 const LOW_SIGNAL_TERMS = new Set([
   'the',
   'and',
@@ -336,7 +338,7 @@ const LOW_SIGNAL_AFFIXES = new Set([
 const FORMULA_ANNOTATION = /\([^)]*\)|"[^"]*"|“[^”]*”/
 const DERIVATION_FORMULA_PATTERN = new RegExp(
   String.raw`\b(?:from|equivalent to|modelled after|modeled after|surface analysis[,:]?|compound of)` +
-    String.raw`\s+((?:[\p{L}*'’.-]+(?:\s*(?:${FORMULA_ANNOTATION.source}))*\s*\+\s*)+[\p{L}*'’.-]+)`,
+    String.raw`\s+((?:[\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+(?:\s*(?:${FORMULA_ANNOTATION.source}))*\s*\+\s*)+[\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)`,
   'giu'
 )
 
@@ -346,7 +348,7 @@ const DERIVATION_FORMULA_PATTERN = new RegExp(
  * normalize/filter them.
  */
 function extractDerivationParts(text: string): string[] {
-  const cleaned = text.replace(/[\u200E\u200F]/g, '')
+  const cleaned = text.normalize('NFC').replace(/[\u200E\u200F]/g, '')
   const annotations = new RegExp(FORMULA_ANNOTATION.source, 'gu')
   const parts: string[] = []
   for (const match of cleaned.matchAll(DERIVATION_FORMULA_PATTERN)) {
@@ -359,26 +361,22 @@ function extractDerivationParts(text: string): string[] {
 }
 
 /**
- * Normalize a raw CPU root candidate: trim affix hyphens and punctuation,
- * fold diacritics (télé/phōnē → tele/phone, matching source page titles),
- * lowercase, and reject reconstructed forms, the word itself, and
- * inflectional suffixes. Returns null when the candidate is not researchable.
+ * Normalize a raw CPU root candidate without changing lexical marks or
+ * affix boundaries. Source page titles must not determine root spelling.
+ * Reject reconstructed forms, the word itself, and inflectional suffixes.
  */
 function normalizeRootCandidate(term: string, word: string): string | null {
-  const normalized = term
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+  const normalized = canonicalizeWord(term)
     .replace(/[\u200E\u200F]/g, '')
-    .replace(/^[-.,;:'’]+/, '')
-    .replace(/[-.,;:'’]+$/, '')
+    .replace(/^[.,;:]+/, '')
+    .replace(/[.,;:]+$/, '')
     .trim()
 
   if (!normalized || normalized.includes('*')) return null
   if (/\s/.test(normalized)) return null
   if (normalized.length < 2) return null
   if (normalized === word) return null
-  if (LOW_SIGNAL_AFFIXES.has(normalized)) return null
+  if (LOW_SIGNAL_AFFIXES.has(normalized.replace(/^[-‐‑]+|[-‐‑]+$/g, ''))) return null
   return normalized
 }
 
@@ -394,7 +392,7 @@ export function extractRootsCpu(
   wiktionaryText: string | null,
   parsedChains: ParsedEtymChain[]
 ): string[] {
-  const normalizedWord = word.toLowerCase().trim()
+  const normalizedWord = canonicalizeWord(word)
   const combinedText = [etymonlineText, wiktionaryText].filter(Boolean).join('\n')
   const candidates = extractDerivationParts(combinedText)
 
@@ -403,7 +401,7 @@ export function extractRootsCpu(
       if (link.isReconstructed) continue
       const form = link.form.replace(/[\u200E\u200F]/g, '')
       // Affix notation ("tele-", "-phone") marks a morpheme worth researching
-      if (/^-\p{L}/u.test(form) || /\p{L}-$/u.test(form)) {
+      if (/^[-‐‑]\p{L}/u.test(form) || /[\p{L}\p{M}][-‐‑]$/u.test(form)) {
         candidates.push(form)
       }
     }
@@ -421,10 +419,7 @@ export function extractRootsCpu(
 }
 
 function normalizeCandidateTerm(term: string): string | null {
-  const normalized = term
-    .toLowerCase()
-    .trim()
-    .replace(/[.,;:()]+$/g, '')
+  const normalized = canonicalizeWord(term).replace(/[.,;:()]+$/g, '')
   if (!normalized) return null
   if (LOW_SIGNAL_TERMS.has(normalized)) return null
   if (normalized.length < 3 && !normalized.startsWith('*')) return null
@@ -440,20 +435,20 @@ export function extractRelatedTerms(
   seedTerms: string[] = []
 ): string[] {
   const patterns = [
-    /related to ([\p{L}*'’.-]+)/giu,
-    /cognate with ([\p{L}*'’.-]+)/giu,
-    /see also ([\p{L}*'’.-]+)/giu,
-    /compare ([\p{L}*'’.-]+)/giu,
-    /akin to ([\p{L}*'’.-]+)/giu,
-    /ultimately (?:derived )?from [^.\n;:]*?([\p{L}*'’.-]+)/giu,
-    /borrowed from [^.\n;:]*?([\p{L}*'’.-]+)/giu,
-    /derived from [^.\n;:]*?([\p{L}*'’.-]+)/giu,
-    /inherited from [^.\n;:]*?([\p{L}*'’.-]+)/giu,
-    /from (\w+) ["']([\p{L}*'’.-]+)["']/giu,
+    /related to ([\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)/giu,
+    /cognate with ([\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)/giu,
+    /see also ([\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)/giu,
+    /compare ([\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)/giu,
+    /akin to ([\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)/giu,
+    /ultimately (?:derived )?from [^.\n;:]*?([\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)/giu,
+    /borrowed from [^.\n;:]*?([\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)/giu,
+    /derived from [^.\n;:]*?([\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)/giu,
+    /inherited from [^.\n;:]*?([\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)/giu,
+    /from (\w+) ["']([\p{L}\p{M}\p{N}*'’ʼ‐‑.-]+)["']/giu,
   ]
 
   const scores = new Map<string, number>()
-  const excludeLower = new Set(excludeWords.map((word) => word.toLowerCase()))
+  const excludeLower = new Set(excludeWords.map(canonicalizeWord))
 
   const addCandidate = (term: string, score: number) => {
     const normalized = normalizeCandidateTerm(term)
@@ -478,8 +473,8 @@ export function extractRelatedTerms(
 
   // Derivation formulas ("From X + Y", "equivalent to X + Y") are high-signal
   for (const part of extractDerivationParts(text)) {
-    const trimmed = part.replace(/^-+|-+$/g, '')
-    if (LOW_SIGNAL_AFFIXES.has(trimmed.toLowerCase())) continue
+    const trimmed = canonicalizeWord(part)
+    if (LOW_SIGNAL_AFFIXES.has(trimmed.replace(/^[-‐‑]+|[-‐‑]+$/g, ''))) continue
     addCandidate(trimmed, 4)
   }
 
@@ -564,7 +559,7 @@ export async function conductAgenticResearch(
   onProgress?: (event: StreamEvent) => void
 ): Promise<ResearchContext> {
   let totalFetches = 0
-  const normalizedWord = word.toLowerCase().trim()
+  const normalizedWord = canonicalizeWord(word)
   const language = options?.language ?? 'en'
   if (isBetaLanguage(language)) {
     return conductBetaResearch(normalizedWord, language, options?.signal, onProgress)

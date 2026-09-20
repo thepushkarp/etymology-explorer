@@ -1,3 +1,4 @@
+import { sameSpelling } from './orthography'
 import {
   AncestryGraph,
   BetaEtymologyResult,
@@ -206,7 +207,7 @@ function sanitizeSuggestionWord(raw: string): string {
   text = text.replace(/[.,;:!?]+$/, '').trim()
 
   if (text.length > 40) {
-    const match = text.match(/^[\w\u00C0-\u024F]+(?:[\s-][\w\u00C0-\u024F]+)?/)
+    const match = text.match(/^[\p{L}\p{M}'’ʼ‐‑-]+(?:\s[\p{L}\p{M}'’ʼ‐‑-]+)?/u)
     if (match) text = match[0]
   }
 
@@ -607,10 +608,8 @@ function finalizeBetaHistories(
         Boolean(chain.evidenceScopeId) &&
         history.evidenceScopeIds.includes(chain.evidenceScopeId as string)
     )
-    if (scopedChains.length > 0) {
-      enrichAncestryGraph(history.ancestryGraph, scopedChains)
-      pruneUngroundedStages(history.ancestryGraph)
-    }
+    enrichAncestryGraph(history.ancestryGraph, scopedChains)
+    pruneUngroundedStages(history.ancestryGraph)
   }
 
   const primary = result.histories.find((history) => history.id === result.primaryHistoryId)
@@ -630,13 +629,22 @@ function finalizeResult(
   researchContext: ResearchContext,
   phase: 'standard' | 'streaming'
 ): EtymologyResult {
+  const requestedWord = researchContext.mainWord.word
+  if (typeof result.word !== 'string' || !sameSpelling(result.word, requestedWord)) {
+    throw new Error(
+      `Schema validation failed: synthesis changed requested spelling "${requestedWord}" to "${result.word}"`
+    )
+  }
+  if ((result.language ?? 'en') !== (researchContext.language ?? 'en')) {
+    throw new Error('Schema validation failed: synthesis changed requested language')
+  }
   sanitizeModernUsage(result, researchContext)
 
   if (researchContext.language && researchContext.language !== 'en') {
     finalizeBetaHistories(result as BetaEtymologyResult, researchContext)
-  } else if (researchContext.parsedChains && researchContext.parsedChains.length > 0) {
+  } else {
     const graph = result.ancestryGraph as AncestryGraph<ResultText>
-    enrichAncestryGraph(graph, researchContext.parsedChains)
+    enrichAncestryGraph(graph, researchContext.parsedChains ?? [])
     const pruned = pruneUngroundedStages(graph)
     if (pruned > 0) {
       console.warn(
@@ -690,11 +698,44 @@ export async function synthesizeFromResearch(
 
   for (let attempt = 0; attempt < maxValidationAttempts; attempt += 1) {
     try {
-      // A recovery is deliberately unary and gets one model call. Invalid
-      // beta sections may already have crossed the first stream boundary;
-      // a second stream would duplicate and contradict them in the client.
+      // Evidence-bearing sections wait for source matching. On identity failure,
+      // keep reading without publishing so completed provider usage is billed.
+      const heldSections = ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources']
+      const pendingSections = new Map<string, unknown>()
+      let wordVerified = false
+      let languageVerified = language === 'en'
+      let identityError: Error | undefined
+      const onSection = options?.onSection
+        ? (section: string, data: unknown) => {
+            if (section === 'word') {
+              wordVerified =
+                typeof data === 'string' && sameSpelling(data, researchContext.mainWord.word)
+              if (!wordVerified)
+                identityError = new Error(
+                  'Schema validation failed: streamed spelling differs from requested word'
+                )
+            }
+            if (section === 'language') {
+              languageVerified = data === language
+              if (!languageVerified)
+                identityError = new Error(
+                  'Schema validation failed: streamed language differs from requested language'
+                )
+            }
+            if (identityError) return
+            pendingSections.set(section, data)
+            if (
+              wordVerified &&
+              languageVerified &&
+              !heldSections.some((name) => pendingSections.has(name))
+            ) {
+              for (const [name, value] of pendingSections) options.onSection?.(name, value)
+              pendingSections.clear()
+            }
+          }
+        : undefined
       const attemptOptions =
-        attempt === 0 ? { ...options, language } : { signal: options?.signal, language }
+        attempt === 0 ? { ...options, language, onSection } : { signal: options?.signal, language }
       const generated = await generateEtymologyResponse(
         userPrompt,
         attemptOptions,
@@ -702,18 +743,19 @@ export async function synthesizeFromResearch(
       )
       addUsage(totalUsage, generated.usage)
 
-      if (language !== 'en' && generated.result.language !== language) {
-        throw new Error(`Schema validation failed: expected language ${language}`)
+      if (identityError) throw identityError
+      const result = finalizeResult(
+        generated.result,
+        researchContext,
+        attempt === 0 && options?.onSection ? 'streaming' : 'standard'
+      )
+      if (options?.onSection) {
+        for (const section of pendingSections.keys()) {
+          const value = (result as unknown as Record<string, unknown>)[section]
+          if (value !== undefined) options.onSection(section, value)
+        }
       }
-
-      return {
-        result: finalizeResult(
-          generated.result,
-          researchContext,
-          attempt === 0 && options?.onSection ? 'streaming' : 'standard'
-        ),
-        usage: totalUsage,
-      }
+      return { result, usage: totalUsage }
     } catch (error) {
       const errorUsage = getLlmUsageFromError(error)
       if (errorUsage) {

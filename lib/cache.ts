@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 /**
  * Upstash Redis caching for etymology results.
  * Reduces API costs by caching LLM synthesis results.
@@ -21,9 +22,9 @@ function jitterTTL(ttl: number): number {
 }
 
 // Bump version when EtymologyResult schema or sourcing behavior changes
-export const CACHE_VERSION = '2.2'
+export const CACHE_VERSION = '2.3'
 export const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
-export const BETA_CACHE_VERSION = '5'
+export const BETA_CACHE_VERSION = '6'
 export const BETA_ETYMOLOGY_PREFIX = `etymology:beta:v${BETA_CACHE_VERSION}:`
 export const ETYMOLOGY_SCAN_PATTERN = 'etymology:*'
 const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
@@ -45,7 +46,7 @@ export function isCacheConfigured(): boolean {
  * Uses Zod validation to detect schema mismatches from old cache entries
  */
 function etymologyKey(word: string, language: LanguageCode): string {
-  const normalized = word.toLowerCase().trim()
+  const normalized = canonicalizeWord(word)
   return language === 'en'
     ? `${ETYMOLOGY_PREFIX}${normalized}`
     : `${BETA_ETYMOLOGY_PREFIX}${language}:${normalized}`
@@ -72,7 +73,7 @@ export function lexemeFromEtymologyCacheKey(
 }
 
 export function etymologyWordTag(word: string, language: LanguageCode = 'en'): string {
-  const normalized = word.toLowerCase().trim()
+  const normalized = canonicalizeWord(word)
   return language === 'en'
     ? `etymology-word:${normalized}`
     : `etymology-word:${lexemeKey(language, normalized)}`
@@ -107,7 +108,7 @@ export async function getCachedEtymology(
 
     const result = parsed.data as EtymologyResult
     const resultLanguage = result.language ?? 'en'
-    if (resultLanguage !== language) {
+    if (resultLanguage !== language || canonicalizeWord(result.word) !== canonicalizeWord(word)) {
       console.warn(
         `[Cache] Language mismatch for "${word}": requested ${language}, cached ${resultLanguage}`
       )
@@ -134,7 +135,7 @@ export async function cacheEtymology(
   const redis = getRedis()
   if (!redis) return
 
-  const normalized = word.toLowerCase().trim()
+  const normalized = canonicalizeWord(word)
   const key = etymologyKey(normalized, language)
   try {
     await redis.set(key, result, { ex: jitterTTL(ETYMOLOGY_TTL) })
@@ -210,7 +211,7 @@ export async function cacheAudio(
 }
 
 function audioKey(word: string, language: LanguageCode): string {
-  const normalized = word.normalize('NFKC').trim().toLowerCase()
+  const normalized = canonicalizeWord(word)
   // Preserve the established English namespace; only beta languages need a
   // qualifier to prevent same-spelling pronunciations from colliding.
   return language === 'en'
@@ -229,9 +230,9 @@ export async function getNegativeCache(
   const redis = getRedis()
   if (!redis) return false
 
-  const normalized = word.toLowerCase().trim()
+  const normalized = canonicalizeWord(word)
   const key =
-    language === 'en' ? `neg:v2:${normalized}` : `neg:v2:${lexemeKey(language, normalized)}`
+    language === 'en' ? `neg:v3:${normalized}` : `neg:v3:${lexemeKey(language, normalized)}`
   try {
     const exists = await redis.exists(key)
     return exists === 1
@@ -258,9 +259,9 @@ export async function cacheNegative(
     return
   }
 
-  const normalized = word.toLowerCase().trim()
+  const normalized = canonicalizeWord(word)
   const key =
-    language === 'en' ? `neg:v2:${normalized}` : `neg:v2:${lexemeKey(language, normalized)}`
+    language === 'en' ? `neg:v3:${normalized}` : `neg:v3:${lexemeKey(language, normalized)}`
   try {
     await redis.set(key, '1', { ex: jitterTTL(CONFIG.negativeCacheTTL) })
   } catch (error) {

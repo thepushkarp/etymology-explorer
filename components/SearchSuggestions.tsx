@@ -1,5 +1,7 @@
 'use client'
 
+import { canonicalizeWord } from '@/lib/orthography'
+
 import { useEffect, useMemo, useState } from 'react'
 import { rankMatches } from '@/lib/suggestionRanking'
 import type { ApiResponse, WordSuggestion } from '@/lib/types'
@@ -52,7 +54,7 @@ export function useSuggestionItems(
   history: string[],
   language: LanguageCode = 'en'
 ): SuggestionItem[] {
-  const normalizedQuery = query.toLowerCase().trim()
+  const normalizedQuery = canonicalizeWord(query)
   const [fetched, setFetched] = useState<SuggestionFetchState>({
     query: '',
     language: null,
@@ -97,7 +99,7 @@ export function useSuggestionItems(
     }
 
     const normalizedHistory = history
-      .map((word) => word.toLowerCase().trim())
+      .map(canonicalizeWord)
       .filter((word, index, allWords) => word.length > 0 && allWords.indexOf(word) === index)
 
     const recent = rankMatches(normalizedHistory, normalizedQuery, RECENT_LIMIT).map((word) => ({

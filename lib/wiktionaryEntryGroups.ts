@@ -1,3 +1,4 @@
+import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
 /** A section returned by MediaWiki's `prop=tocdata` parser response. */
 export interface WiktionaryTocSection {
   index: string
@@ -41,34 +42,6 @@ function headingLevel(section: WiktionaryTocSection): number {
   return Number.isFinite(level) ? level : 0
 }
 
-function decodeHtmlEntities(value: string): string {
-  const named: Record<string, string> = {
-    amp: '&',
-    apos: "'",
-    gt: '>',
-    lt: '<',
-    nbsp: ' ',
-    quot: '"',
-  }
-
-  return value.replace(/&(#(?:x[\da-f]+|\d+)|[a-z]+);/gi, (entity, name: string) => {
-    if (name.startsWith('#')) {
-      const hexadecimal = name[1]?.toLowerCase() === 'x'
-      const codePoint = Number.parseInt(name.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10)
-      if (Number.isFinite(codePoint)) {
-        try {
-          return String.fromCodePoint(codePoint)
-        } catch {
-          return entity
-        }
-      }
-      return entity
-    }
-
-    return named[name.toLowerCase()] ?? entity
-  })
-}
-
 function cleanHeading(value: string): string {
   return decodeHtmlEntities(value.replace(/<[^>]+>/g, ' '))
     .replace(/\s+/g, ' ')
@@ -84,9 +57,8 @@ function comparableHeading(value: string): string {
 
 /** Converts a MediaWiki HTML fragment into compact, readable source text. */
 export function cleanWiktionaryHtml(value: string): string {
-  const withBoundaries = value
+  const withBoundaries = preserveLinguisticNotation(value)
     .replace(/<(?:style|script|noscript)[^>]*>[\s\S]*?<\/(?:style|script|noscript)>/gi, ' ')
-    .replace(/<sup[^>]*>[\s\S]*?<\/sup>/gi, ' ')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<li[^>]*>/gi, '\n- ')
     .replace(/<\/(?:dd|div|dl|dt|h[1-6]|li|ol|p|table|tr|ul)>/gi, '\n')
@@ -96,7 +68,7 @@ export function cleanWiktionaryHtml(value: string): string {
     .split(/\n+/)
     .map((line) =>
       line
-        .replace(/[\t ]+/g, ' ')
+        .replace(/[^\S\r\n]+/g, ' ')
         .replace(/\s+([,.;:!?])/g, '$1')
         .trim()
     )

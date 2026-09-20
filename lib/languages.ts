@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 export const SUPPORTED_LANGUAGE_CODES = ['en', 'it', 'es', 'fr', 'pt'] as const
 
 export type LanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number]
@@ -109,11 +110,11 @@ export function languageDisplayName(language: LanguageCode): string {
 }
 
 export function wordPagePath(word: string, language: LanguageCode = 'en'): string {
-  const normalizedWord = word.normalize('NFKC').trim().toLowerCase()
+  const normalizedWord = canonicalizeWord(word)
   const encodedWord = encodeURIComponent(normalizedWord)
   return language === 'en' ? `/word/${encodedWord}` : `/word/${language}/${encodedWord}`
 }
 
 export function lexemeKey(language: LanguageCode, word: string): string {
-  return `${language}:${word.normalize('NFKC').trim().toLowerCase()}`
+  return `${language}:${canonicalizeWord(word)}`
 }

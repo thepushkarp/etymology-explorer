@@ -55,6 +55,13 @@ describe('wordPagePath', () => {
 })
 
 describe('consumeTraceIntent', () => {
+  test('combining encodings share intent but different accents do not', () => {
+    markTraceIntent('cafe\u0301', 'fr')
+    expect(consumeTraceIntent('café', 'fr')).toBe(true)
+    markTraceIntent('café', 'fr')
+    expect(consumeTraceIntent('cafe', 'fr')).toBe(false)
+  })
+
   test('flag absent (direct load / crawler): no auto-trace', () => {
     expect(consumeTraceIntent('nice')).toBe(false)
   })
@@ -67,7 +74,7 @@ describe('consumeTraceIntent', () => {
     expect(consumeTraceIntent('nice')).toBe(false)
   })
 
-  test('matching is canonicalized (case, whitespace, NFKC)', () => {
+  test('matching is canonicalized (case, whitespace, NFC)', () => {
     markTraceIntent('  NiCe ')
     expect(consumeTraceIntent('nice')).toBe(true)
   })

@@ -1,3 +1,4 @@
+import { canonicalizeWord, sameSpelling } from './orthography'
 import { CONFIG } from './config'
 import { fetchWithTimeout } from './fetchUtils'
 import { safeError } from './errorUtils'
@@ -26,7 +27,7 @@ export async function fetchFreeDictionary(
 ): Promise<FreeDictionaryEntry | null> {
   try {
     const response = await fetchWithTimeout(
-      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`,
+      `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(canonicalizeWord(word))}`,
       { next: { revalidate: 86400 } },
       timeoutMs,
       signal
@@ -38,8 +39,11 @@ export async function fetchFreeDictionary(
     }
 
     const data = await response.json()
-    const entry = (Array.isArray(data) ? data[0] : data) as FreeDictionaryEntry
-    if (!entry || typeof entry !== 'object') return null
+    const entry = (Array.isArray(data) ? data : [data]).find(
+      (candidate: FreeDictionaryEntry) =>
+        typeof candidate?.word === 'string' && sameSpelling(candidate.word, word)
+    ) as FreeDictionaryEntry | undefined
+    if (!entry) return null
     return entry
   } catch (error) {
     console.error('Free Dictionary fetch failed:', safeError(error))

@@ -6,7 +6,12 @@ import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { WordPageEntry } from '@/components/WordPageEntry'
 import { WordTraceExperience } from '@/components/WordTraceExperience'
-import { BETA_CACHE_VERSION, etymologyWordTag, getCachedEtymology } from '@/lib/cache'
+import {
+  CACHE_VERSION,
+  BETA_CACHE_VERSION,
+  etymologyWordTag,
+  getCachedEtymology,
+} from '@/lib/cache'
 import {
   LANGUAGES,
   isBetaLanguage,
@@ -69,7 +74,7 @@ async function resolveRoute(params: WordPageProps['params']): Promise<ResolvedWo
 function loadCachedEtymology(word: string, language: LanguageCode) {
   const cacheKey =
     language === 'en'
-      ? ['word-page-etymology', word]
+      ? ['word-page-etymology', CACHE_VERSION, word]
       : ['multilingual-word-page-etymology', BETA_CACHE_VERSION, language, word]
   return unstable_cache(() => getCachedEtymology(word, language), cacheKey, {
     revalidate: 3600,

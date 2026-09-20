@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 import type { ParsedEtymChain, ParsedEtymLink } from './etymologyParser'
 import type {
   LexicalEdge,
@@ -6,12 +7,8 @@ import type {
   ResearchEntryContext,
 } from './types'
 
-function normalizeLexeme(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase()
-}
-
 function idPart(value: string): string {
-  return encodeURIComponent(normalizeLexeme(value)).replace(/%/g, '_')
+  return encodeURIComponent(canonicalizeWord(value)).replace(/%/g, '_')
 }
 
 function relationFromEvidence(link: ParsedEtymLink): LexicalRelation {
@@ -72,7 +69,7 @@ export function buildLexicalResearchGraph(
     graph.nodes[queryNodeId] = {
       id: queryNodeId,
       kind: context.entryKind === 'form' ? 'form' : 'lexeme',
-      lexeme: { language, lemma: word, normalizedLemma: normalizeLexeme(word) },
+      lexeme: { language, lemma: word, normalizedLemma: canonicalizeWord(word) },
       displayForm: word,
       senseIds: [],
     }
@@ -90,7 +87,7 @@ export function buildLexicalResearchGraph(
         lexeme: {
           language: context.formOf.language,
           lemma: context.formOf.word,
-          normalizedLemma: normalizeLexeme(context.formOf.word),
+          normalizedLemma: canonicalizeWord(context.formOf.word),
         },
         displayForm: context.formOf.word,
         senseIds: [],
@@ -120,7 +117,7 @@ export function buildLexicalResearchGraph(
             lexeme: {
               language: link.language,
               lemma: link.form,
-              normalizedLemma: normalizeLexeme(link.form),
+              normalizedLemma: canonicalizeWord(link.form),
             },
             displayForm: link.form,
             isReconstructed: link.isReconstructed,

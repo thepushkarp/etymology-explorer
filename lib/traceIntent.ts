@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 /**
  * In-app navigation signal for /word/{word} pages.
  *
@@ -23,10 +24,6 @@ interface TraceIntent {
   at: number
 }
 
-function normalizeWord(word: string): string {
-  return word.normalize('NFKC').trim().toLowerCase()
-}
-
 function getStorage(): Storage | null {
   try {
     if (typeof window === 'undefined') return null
@@ -47,7 +44,7 @@ export function markTraceIntent(word: string, language: LanguageCode = 'en'): vo
   const storage = getStorage()
   if (!storage) return
   try {
-    const intent: TraceIntent = { word: normalizeWord(word), language, at: Date.now() }
+    const intent: TraceIntent = { word: canonicalizeWord(word), language, at: Date.now() }
     storage.setItem(STORAGE_KEY, JSON.stringify(intent))
   } catch {
     // Quota/security errors just mean the visit behaves like a direct load

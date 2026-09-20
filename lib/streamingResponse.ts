@@ -37,10 +37,14 @@ export function streamResultResponse(result: EtymologyResult, headers?: HeadersI
 export function streamErrorResponse(
   message: string,
   errorType: StreamErrorEvent['errorType'] = 'unknown',
-  headers?: HeadersInit
+  headers?: HeadersInit,
+  suggestions?: string[]
 ): Response {
-  return new Response(serializeEvent({ type: 'error', message, errorType }), {
-    status: 200,
-    headers: buildHeaders(headers),
-  })
+  return new Response(
+    serializeEvent({ type: 'error', message, errorType, ...(suggestions ? { suggestions } : {}) }),
+    {
+      status: 200,
+      headers: buildHeaders(headers),
+    }
+  )
 }

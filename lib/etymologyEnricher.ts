@@ -13,46 +13,47 @@ import type {
   StageConfidence,
   StageEvidence,
 } from './types'
-import type { ParsedEtymChain, ParsedEtymLink } from './etymologyParser'
+import {
+  isReconstructedForm,
+  normalizeLanguageName,
+  type ParsedEtymChain,
+  type ParsedEtymLink,
+} from './etymologyParser'
+import { canonicalizeWord } from './orthography'
 
-/**
- * Normalize a string for fuzzy matching:
- * - lowercase
- * - strip diacritics/macrons
- * - strip parenthetical annotations like "(τῆλε)"
- * - strip leading * (reconstructed marker)
- * - collapse whitespace
- */
+/** Parenthetical glosses are annotations; every character in the form is significant. */
 function normalize(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // strip combining diacritics
-    .replace(/\([^)]*\)/g, '') // strip parentheticals
-    .replace(/^\*+/, '') // strip leading asterisks
-    .replace(/[-_]/g, '') // strip hyphens/underscores
-    .replace(/\s+/g, ' ')
-    .trim()
+  return canonicalizeWord(s.replace(/\s+\([^)]*\)$/, ''))
 }
 
-/**
- * Check if two normalized strings are a fuzzy match.
- * Uses substring containment in both directions.
- */
-function isFuzzyMatch(a: string, b: string): boolean {
-  if (!a || !b) return false
-  const na = normalize(a)
-  const nb = normalize(b)
-  if (!na || !nb) return false
+const BROAD_LANGUAGE: Record<string, string> = {
+  'classical latin': 'latin',
+  'medieval latin': 'latin',
+  'late latin': 'latin',
+  'vulgar latin': 'latin',
+  'new latin': 'latin',
+  'church latin': 'latin',
+  'ancient greek': 'greek',
+  'koine greek': 'greek',
+  'old english': 'english',
+  'middle english': 'english',
+  'modern english': 'english',
+  'old french': 'french',
+  'middle french': 'french',
+  'modern french': 'french',
+  'anglo-french': 'french',
+  'old high german': 'german',
+  'middle dutch': 'dutch',
+}
 
-  // Exact match
-  if (na === nb) return true
-
-  // Substring containment (either direction)
-  if (na.length >= 3 && nb.includes(na)) return true
-  if (nb.length >= 3 && na.includes(nb)) return true
-
-  return false
+function compatibleLanguage(left: string, right: string): boolean {
+  const normalizedLeft = canonicalizeWord(normalizeLanguageName(left))
+  const normalizedRight = canonicalizeWord(normalizeLanguageName(right))
+  return (
+    normalizedLeft === normalizedRight ||
+    BROAD_LANGUAGE[normalizedLeft] === normalizedRight ||
+    BROAD_LANGUAGE[normalizedRight] === normalizedLeft
+  )
 }
 
 interface MatchResult {
@@ -60,19 +61,21 @@ interface MatchResult {
   source: 'etymonline' | 'wiktionary'
 }
 
-/**
- * Find all parsed links that match a given ancestry stage.
- * Primary matching is by form (fuzzy). Language is used as a tiebreaker
- * to boost confidence when both match, but form-only matches are accepted
- * because the LLM and sources often use different language labels
- * (e.g., "Latin" vs "Late Latin").
- */
+/** Match within the caller's history scope and an explicitly identified language. */
 function findMatches(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]): MatchResult[] {
   const matches: MatchResult[] = []
 
   for (const chain of chains) {
     for (const link of chain.links) {
-      if (isFuzzyMatch(stage.form, link.form)) {
+      if (
+        typeof stage.form === 'string' &&
+        typeof stage.stage === 'string' &&
+        compatibleLanguage(stage.stage, link.language) &&
+        stage.isReconstructed === link.isReconstructed &&
+        [link.form, ...(link.variants ?? [])].some(
+          (form) => normalize(stage.form) === normalize(form)
+        )
+      ) {
         matches.push({ link, source: chain.source })
       }
     }
@@ -112,26 +115,12 @@ function buildEvidence(matches: MatchResult[]): StageEvidence[] {
 }
 
 /**
- * Check if a stage represents a reconstructed form (PIE, Proto-*).
- * The stage comes straight from LLM output and is only Zod-validated
- * AFTER enrichment, so missing fields must not crash here.
- */
-function isReconstructedStage(stage: AncestryStage<ResultText>): boolean {
-  if (typeof stage.form === 'string' && stage.form.startsWith('*')) return true
-  if (typeof stage.stage !== 'string') return false
-  const lower = stage.stage.toLowerCase()
-  if (lower.includes('proto-indo-european') || lower === 'pie') return true
-  if (lower.startsWith('proto-')) return true
-  return false
-}
-
-/**
  * Enrich a single AncestryStage with confidence and evidence.
  * Mutates the stage in-place for efficiency.
  */
 function enrichStage(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]): void {
   // Set reconstructed flag
-  stage.isReconstructed = isReconstructedStage(stage)
+  stage.isReconstructed = isReconstructedForm(stage.form, stage.stage)
 
   // Find matching parsed links
   const matches = findMatches(stage, chains)
@@ -139,10 +128,8 @@ function enrichStage(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]
   // Assign confidence
   stage.confidence = determineConfidence(matches)
 
-  // Attach evidence
-  if (matches.length > 0) {
-    stage.evidence = buildEvidence(matches)
-  }
+  // Model-supplied evidence must never survive an unsuccessful source match.
+  stage.evidence = buildEvidence(matches)
 }
 
 /**
@@ -155,7 +142,7 @@ export function enrichAncestryGraph<Text extends ResultText>(
   graph: AncestryGraph<Text>,
   parsedChains: ParsedEtymChain[]
 ): void {
-  if (!graph || !parsedChains.length) return
+  if (!graph?.branches) return
 
   // Enrich each branch's stages
   for (const branch of graph.branches) {

@@ -40,7 +40,7 @@ export function ErrorState({ type, message, suggestions, onSuggestionClick }: Er
           {type === 'typo' && suggestions && suggestions.length > 0 && (
             <div className="mx-auto mt-8 max-w-2xl border-t border-border-soft pt-6">
               <p className="text-[11px] uppercase tracking-[0.22em] text-charcoal-light/62">
-                Perhaps you meant
+                Explore a different spelling
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-2">
                 {suggestions.map((suggestion) => (

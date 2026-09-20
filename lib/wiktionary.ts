@@ -1,3 +1,4 @@
+import { canonicalizeWord, sameSpelling } from './orthography'
 /**
  * Fetches etymology section from Wiktionary for a given word.
  * Uses the MediaWiki API to get page content.
@@ -12,6 +13,7 @@ interface WiktionaryResponse {
   query?: {
     pages?: {
       [key: string]: {
+        title?: string
         extract?: string
         missing?: boolean
       }
@@ -31,7 +33,7 @@ export interface WiktionaryResult {
  * Wiktionary pages cover every language that spells the word this way; the
  * broad fallback regex happily returns a Danish or Latin etymology when the
  * English one is what the pipeline needs. Returns null when no English
- * Etymology section is found so the caller can fall back.
+ * Etymology section is found; other languages must not admit synthesis.
  */
 export function extractEnglishEtymology(extract: string): string | null {
   const englishHeading = extract.match(/^==\s*English\s*==\s*$/m)
@@ -70,7 +72,7 @@ export async function fetchWiktionary(
   word: string,
   signal?: AbortSignal
 ): Promise<WiktionaryResult | null> {
-  const normalizedWord = word.toLowerCase().trim()
+  const normalizedWord = canonicalizeWord(word)
   const pageUrl = `https://en.wiktionary.org/wiki/${encodeURIComponent(normalizedWord)}`
 
   const cached = await getCachedSource('wiktionary', normalizedWord)
@@ -82,6 +84,7 @@ export async function fetchWiktionary(
   url.searchParams.set('titles', normalizedWord)
   url.searchParams.set('prop', 'extracts')
   url.searchParams.set('explaintext', 'true')
+  url.searchParams.set('exsectionformat', 'wiki')
   url.searchParams.set('format', 'json')
   url.searchParams.set('origin', '*') // CORS
 
@@ -111,16 +114,17 @@ export async function fetchWiktionary(
     const pageId = Object.keys(pages)[0]
     const page = pages[pageId]
 
-    if (page.missing || !page.extract) {
+    if (
+      page.missing ||
+      !page.extract ||
+      (page.title && !sameSpelling(page.title, normalizedWord))
+    ) {
       return null
     }
 
-    // Prefer the English Etymology section; fall back to the old broad match
-    const extract = page.extract
-    const englishEtymology = extractEnglishEtymology(extract)
-    const etymologyMatch = extract.match(/Etymology[\s\S]*?(?=\n\n[A-Z]|\n\nPronunciation|$)/i)
-    const text =
-      englishEtymology ?? (etymologyMatch ? etymologyMatch[0].trim() : extract.slice(0, 1000))
+    // A same-spelling foreign entry cannot establish an English etymology.
+    const text = extractEnglishEtymology(page.extract)
+    if (!text) return null
 
     const result = { text, url: pageUrl }
     void cacheSource('wiktionary', normalizedWord, result)
