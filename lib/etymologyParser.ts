@@ -191,12 +191,11 @@ function parseSegment(segment: string): ParsedEtymLink | null {
   if (!form) return null
 
   // Only source-explicit alternatives are admitted, never an accent-folded guess.
-  const variant = afterLang
-    .slice(form.length)
-    .match(new RegExp(`^\\s*\\(also\\s+(${HISTORICAL_FORM})\\)`, 'iu'))
+  const afterForm = afterLang.slice(form.length)
+  const variant = afterForm.match(new RegExp(`^\\s*\\(also\\s+(${HISTORICAL_FORM})\\)`, 'iu'))
 
   // Extract meaning from the remainder
-  const meaning = extractMeaning(afterLang)
+  const meaning = extractMeaning(variant ? afterForm.slice(variant[0].length) : afterForm)
 
   // Detect reconstructed forms: starts with * or is PIE
   const isReconstructed = form.startsWith('*') || isPIERoot

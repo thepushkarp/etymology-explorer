@@ -101,9 +101,12 @@ describe('historical forms and confidence', () => {
   })
 
   test('an explicit source variant retains its supporting snippet', () => {
-    const chains = [parseWiktionaryText('from Latin mālum (also malum) "apple"', 'example')]
+    const variantOnly = parseWiktionaryText('from Latin mālum (also malum)', 'example')
+    const chains = [parseWiktionaryText('from Latin mālum (also malum) (apple)', 'example')]
     const result = graph('malum', 'Latin')
     enrichAncestryGraph(result, chains)
+    expect(variantOnly.links[0].meaning).toBeUndefined()
+    expect(chains[0].links[0].meaning).toBe('apple')
     expect(result.branches[0].stages[0].confidence).toBe('medium')
     expect(result.branches[0].stages[0].evidence?.[0].snippet).toContain('mālum (also malum)')
   })
