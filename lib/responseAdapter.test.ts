@@ -44,7 +44,9 @@ describe('createResponseAdapter — error parity', () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe('text/event-stream')
+    expect(response.headers.get('connection')).toBe('keep-alive')
     expect(response.headers.get('x-protection-mode')).toBe('normal')
+    expect(response.headers.get('cache-control')).toBe('no-cache')
     // Unary-only headers must not leak into the SSE response.
     expect(response.headers.get('retry-after')).toBeNull()
     expect(await readSseEvent(response)).toEqual({
@@ -110,6 +112,7 @@ describe('createResponseAdapter — result parity', () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe('text/event-stream')
+    expect(response.headers.get('connection')).toBe('keep-alive')
     expect(response.headers.get('cache-control')).toBe('no-cache')
     expect(response.headers.get('x-protection-mode')).toBe('normal')
     expect(await readSseEvent(response)).toEqual({

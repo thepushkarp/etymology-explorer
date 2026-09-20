@@ -169,9 +169,3 @@ export function buildLexicalResearchGraph(
 
   return graph
 }
-
-export function hasAncestryCycle(graph: LexicalResearchGraph): boolean {
-  return Object.values(graph.edges).some(
-    (edge) => edge.role === 'ancestry' && createsAncestryCycle(graph.edges, edge.from, edge.to)
-  )
-}

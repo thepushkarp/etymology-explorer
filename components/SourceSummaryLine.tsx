@@ -1,6 +1,6 @@
 'use client'
 
-import { formatSourceSummary, summarizeSources } from '@/lib/sourceSummary'
+import { formatSourceSummary } from '@/lib/sourceSummary'
 import type { SourceProgress } from '@/lib/streamReducer'
 
 interface SourceSummaryLineProps {
@@ -14,7 +14,7 @@ interface SourceSummaryLineProps {
  * until at least one source has settled.
  */
 export function SourceSummaryLine({ sources }: SourceSummaryLineProps) {
-  const line = formatSourceSummary(summarizeSources(sources))
+  const line = formatSourceSummary(sources)
   if (!line) return null
 
   return (

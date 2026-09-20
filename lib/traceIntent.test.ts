@@ -33,7 +33,7 @@ const globalRef = globalThis as { window?: unknown }
 const originalWindow = globalRef.window
 globalRef.window = { sessionStorage }
 
-const { consumeTraceIntent, markTraceIntent, wordPagePath } = await import('./traceIntent')
+const { consumeTraceIntent, markTraceIntent } = await import('./traceIntent')
 
 afterAll(() => {
   if (originalWindow === undefined) {
@@ -45,13 +45,6 @@ afterAll(() => {
 
 beforeEach(() => {
   sessionStorage.clear()
-})
-
-describe('wordPagePath', () => {
-  test('canonicalizes and encodes the word', () => {
-    expect(wordPagePath('  Nice ')).toBe('/word/nice')
-    expect(wordPagePath('Café')).toBe(`/word/${encodeURIComponent('café')}`)
-  })
 })
 
 describe('consumeTraceIntent', () => {

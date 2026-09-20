@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import CostModeIndicator from '@/components/CostModeIndicator'
 import ThemeToggle from '@/components/ThemeToggle'
 
 interface SiteHeaderProps {
@@ -31,7 +30,6 @@ export function SiteHeader({ compact = false }: SiteHeaderProps) {
           </Link>
 
           <div className="flex items-center gap-3">
-            <CostModeIndicator />
             <ThemeToggle />
           </div>
         </div>

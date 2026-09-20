@@ -34,13 +34,6 @@ const AUDIO_PREFIX = `audio:v1:`
 const AUDIO_TTL = CONFIG.audioCacheTTL
 
 /**
- * Check if Redis caching is configured
- */
-export function isCacheConfigured(): boolean {
-  return getRedis() !== null
-}
-
-/**
  * Get cached etymology result
  * Returns null if not cached, invalid schema, or on error (fail open)
  * Uses Zod validation to detect schema mismatches from old cache entries

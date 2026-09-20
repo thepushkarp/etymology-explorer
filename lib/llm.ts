@@ -776,9 +776,7 @@ export async function synthesizeFromResearch(
       // Validation and malformed-output failures occur after a billable
       // request. Expose the accumulated usage so the route records every
       // attempt, including the failed recovery.
-      if (error instanceof Error && !('usage' in error)) {
-        ;(error as Error & { usage?: LlmUsage }).usage = totalUsage
-      } else if (error instanceof Error) {
+      if (error instanceof Error) {
         ;(error as Error & { usage: LlmUsage }).usage = totalUsage
       }
       throw error

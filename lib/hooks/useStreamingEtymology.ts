@@ -156,18 +156,8 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
     [addToHistory, fallbackFetch, language]
   )
 
-  const reset = useCallback(() => {
-    activeRequestRef.current += 1
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
-    }
-    dispatch({ type: 'reset' })
-  }, [])
-
   return {
     progress,
     search,
-    reset,
   }
 }

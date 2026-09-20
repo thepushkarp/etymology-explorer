@@ -105,10 +105,6 @@ export function isBetaLanguage(language: LanguageCode): language is BetaLanguage
   return language !== 'en'
 }
 
-export function languageDisplayName(language: LanguageCode): string {
-  return LANGUAGES[language].nativeName
-}
-
 export function wordPagePath(word: string, language: LanguageCode = 'en'): string {
   const normalizedWord = canonicalizeWord(word)
   const encodedWord = encodeURIComponent(normalizedWord)

@@ -1,17 +1,6 @@
 import { CONFIG } from '@/lib/config'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
-
-export interface NgramDataPoint {
-  year: number
-  count: number
-  matchCount: number
-}
-
-export interface NgramResult {
-  word: string
-  data: NgramDataPoint[]
-  corpus: string
-}
+import type { NgramResult } from '@/lib/types'
 
 interface NgramApiEntry {
   ngram?: string

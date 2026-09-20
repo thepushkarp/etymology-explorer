@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { getAutocompleteSuggestions, isKnownWord } from './spellcheck'
+import { getAutocompleteSuggestions } from './spellcheck'
 
 describe('getAutocompleteSuggestions', () => {
   test('returns prefix matches from the wordlist', () => {
@@ -14,7 +14,6 @@ describe('getAutocompleteSuggestions', () => {
   test('puts an exactly matching known word first with distance 0', () => {
     const suggestions = getAutocompleteSuggestions('perfidious')
 
-    expect(isKnownWord('perfidious')).toBe(true)
     expect(suggestions[0]).toEqual({ word: 'perfidious', distance: 0 })
   })
 

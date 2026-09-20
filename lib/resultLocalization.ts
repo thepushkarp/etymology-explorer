@@ -5,7 +5,7 @@ import type {
   EtymologyResult,
   EnglishEtymologyResult,
 } from './types'
-import { LANGUAGES, type BetaLanguageCode } from './languages'
+import type { BetaLanguageCode } from './languages'
 
 export type ResultLocale = 'en' | 'local'
 
@@ -191,8 +191,4 @@ const ENGLISH_LABELS: SectionLabels = {
 
 export function resultLabels(language: BetaLanguageCode, locale: ResultLocale): SectionLabels {
   return locale === 'en' ? ENGLISH_LABELS : LOCAL_LABELS[language]
-}
-
-export function selectedLanguageName(language: BetaLanguageCode): string {
-  return LANGUAGES[language].nativeName
 }

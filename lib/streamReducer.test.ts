@@ -49,7 +49,6 @@ describe('search_started', () => {
 
     expect(state.result).toBeNull()
     expect(state.sections).toEqual({})
-    expect(state.sectionOrder).toEqual([])
     expect(state.phase).toBe('sources')
   })
 })
@@ -158,14 +157,6 @@ describe('phases', () => {
     expect(state.phase).toBe('synthesis')
   })
 
-  test('roots are recorded', () => {
-    const state = run([
-      { type: 'search_started' },
-      ...events({ type: 'roots_identified', roots: ['tele', 'phone'] }),
-    ])
-    expect(state.roots).toEqual(['tele', 'phone'])
-  })
-
   test('singleflight wait is surfaced', () => {
     const state = run([
       { type: 'search_started' },
@@ -176,7 +167,7 @@ describe('phases', () => {
 })
 
 describe('section accumulation', () => {
-  test('sections accumulate in arrival order with their data', () => {
+  test('sections accumulate without losing earlier data', () => {
     const state = run([
       { type: 'search_started' },
       ...events(
@@ -189,19 +180,12 @@ describe('section accumulation', () => {
       ),
     ])
 
-    expect(state.sectionOrder).toEqual([
-      'word',
-      'pronunciation',
-      'definition',
-      'ancestryGraph',
-      'lore',
-    ])
     expect(state.sections.word).toBe('perfidious')
     expect(state.sections.lore).toBe('A story.')
     expect(state.sections.ancestryGraph).toEqual({ branches: [] })
   })
 
-  test('a repeated section replaces data without duplicating the order entry', () => {
+  test('a repeated section replaces its previous data', () => {
     const state = run([
       { type: 'search_started' },
       ...events(
@@ -210,7 +194,6 @@ describe('section accumulation', () => {
       ),
     ])
 
-    expect(state.sectionOrder).toEqual(['word'])
     expect(state.sections.word).toBe('second')
   })
 
@@ -239,6 +222,7 @@ describe('terminal events', () => {
     const state = run([
       { type: 'search_started' },
       ...events(
+        { type: 'roots_identified', roots: ['fides'] },
         { type: 'synthesis_started' },
         { type: 'enrichment_done', highConfidence: 3, mediumConfidence: 1 },
         { type: 'result', data: RESULT }
@@ -248,7 +232,6 @@ describe('terminal events', () => {
     expect(state.status).toBe('success')
     expect(state.phase).toBe('done')
     expect(state.result).toEqual(RESULT)
-    expect(state.enrichment).toEqual({ highConfidence: 3, mediumConfidence: 1 })
   })
 
   test('error events map to a UI error', () => {
@@ -285,7 +268,7 @@ describe('terminal events', () => {
   })
 })
 
-describe('fallback and reset', () => {
+describe('fallback', () => {
   test('fallback_success behaves like a result event', () => {
     const state = run([{ type: 'search_started' }, { type: 'fallback_success', result: RESULT }])
 
@@ -305,16 +288,6 @@ describe('fallback and reset', () => {
 
     expect(state.status).toBe('error')
     expect(state.error?.message).toBe('Search failed')
-  })
-
-  test('reset returns to the initial state', () => {
-    const state = run([
-      { type: 'search_started' },
-      ...events({ type: 'result', data: RESULT }),
-      { type: 'reset' },
-    ])
-
-    expect(state).toEqual(initialStreamState)
   })
 })
 

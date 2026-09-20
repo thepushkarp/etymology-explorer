@@ -225,7 +225,6 @@ and the output is guaranteed-shape JSON.
 - `lib/hooks/useWordNavigation.ts` - All in-app word navigation (marks trace intent, pushes
   `/word/{word}`, keyboard history back/forward)
 - `lib/hooks/useNgram.ts` - Usage-chart data, fetched as soon as the word is known
-- `lib/hooks/useLocalStorage.ts` - Persistent client state
 - `lib/hooks/useHistory.ts` - Search history management
 
 ## Code Style
