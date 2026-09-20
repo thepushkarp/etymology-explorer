@@ -68,7 +68,7 @@ export function cleanWiktionaryHtml(value: string): string {
     .split(/\n+/)
     .map((line) =>
       line
-        .replace(/[\t ]+/g, ' ')
+        .replace(/[^\S\r\n]+/g, ' ')
         .replace(/\s+([,.;:!?])/g, '$1')
         .trim()
     )

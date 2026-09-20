@@ -152,12 +152,14 @@ describe('historical forms and confidence', () => {
 
   test('HTML retains linguistic scripts and accents while dropping citations', () => {
     const text = cleanWiktionaryHtml(
-      '<p>from Greek <i>p</i><sup>h</sup>ōnē, from PIE *h<sub>2</sub>é<sup class="reference">[1]</sup>; &eacute;</p>'
+      '<p>from Greek <i>p</i><sup>h</sup>ōnē, from PIE *h<sub>2</sub>é<sup class="reference">[1]</sup>; &eacute;; from Latin: m&amacr;lum; from Greek, &phi;&omacr;n&emacr;</p>'
     )
-    expect(text).toBe('from Greek pʰōnē, from PIE *h₂é; é')
+    expect(text).toBe('from Greek pʰōnē, from PIE *h₂é; é; from Latin: mālum; from Greek, φōnē')
     expect(parseWiktionaryText(text, 'example').links.map((link) => link.form)).toEqual([
       'pʰōnē',
       '*h₂é',
+      'mālum',
+      'φōnē',
     ])
   })
 })

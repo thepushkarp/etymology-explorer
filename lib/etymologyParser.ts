@@ -110,10 +110,10 @@ const KNOWN_LANGUAGES = [
 
 /**
  * Build a regex that matches any known language name at the start of a string.
- * Whitespace avoids ASCII word-boundary errors after accented language names.
+ * Explicit separators avoid ASCII word-boundary errors after accented language names.
  */
 const LANGUAGE_PATTERN = new RegExp(
-  `^(${KNOWN_LANGUAGES.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=\\s|$)`,
+  `^(${KNOWN_LANGUAGES.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=[\\s,:]|$)[\\s,:]*`,
   'i'
 )
 

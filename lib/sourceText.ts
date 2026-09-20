@@ -1,58 +1,6 @@
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: '&',
-  apos: "'",
-  gt: '>',
-  lt: '<',
-  nbsp: ' ',
-  quot: '"',
-  aacute: 'á',
-  agrave: 'à',
-  acirc: 'â',
-  atilde: 'ã',
-  auml: 'ä',
-  aring: 'å',
-  eacute: 'é',
-  egrave: 'è',
-  ecirc: 'ê',
-  euml: 'ë',
-  iacute: 'í',
-  igrave: 'ì',
-  icirc: 'î',
-  iuml: 'ï',
-  oacute: 'ó',
-  ograve: 'ò',
-  ocirc: 'ô',
-  otilde: 'õ',
-  ouml: 'ö',
-  oslash: 'ø',
-  uacute: 'ú',
-  ugrave: 'ù',
-  ucirc: 'û',
-  uuml: 'ü',
-  ccedil: 'ç',
-  ntilde: 'ñ',
-  yacute: 'ý',
-  yuml: 'ÿ',
-  aelig: 'æ',
-  oelig: 'œ',
-  szlig: 'ß',
-  eth: 'ð',
-  thorn: 'þ',
-}
+import { decodeHTML as decodeHtmlEntities } from 'entities'
 
-export function decodeHtmlEntities(value: string): string {
-  return value.replace(/&(#(?:x[\da-f]+|\d+)|[a-z]+);/gi, (entity, name: string) => {
-    if (name.startsWith('#')) {
-      const hex = name[1]?.toLowerCase() === 'x'
-      const point = Number.parseInt(name.slice(hex ? 2 : 1), hex ? 16 : 10)
-      return point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff)
-        ? String.fromCodePoint(point)
-        : entity
-    }
-    const decoded = NAMED_ENTITIES[name.toLowerCase()]
-    return decoded && /^[A-Z]/.test(name) ? decoded.toUpperCase() : (decoded ?? entity)
-  })
-}
+export { decodeHtmlEntities }
 
 const SUPER: Record<string, string> = Object.fromEntries(
   Array.from('0123456789abcdefghijklmnoprstuvwxyz').map((letter, i) => [
