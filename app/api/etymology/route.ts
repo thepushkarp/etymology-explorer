@@ -3,6 +3,7 @@ import { EtymologyResult, StreamEvent, StageConfidence, ResearchContext } from '
 import { synthesizeFromResearch, getLlmUsageFromError, SynthesisResult } from '@/lib/llm'
 import { conductAgenticResearch, hasCredibleMainSource } from '@/lib/research'
 import { getWordSuggestions } from '@/lib/wordSuggestions'
+import { getSuggestions } from '@/lib/spellcheck'
 import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
 import { getCachedEtymology, cacheEtymology, getNegativeCache, cacheNegative } from '@/lib/cache'
@@ -127,9 +128,7 @@ export async function GET(request: NextRequest) {
     const isNegCached = await getNegativeCache(normalizedWord, language)
     if (isNegCached) {
       console.log(`[Etymology API] Negative cache hit for "${normalizedWord}"`)
-      const suggestions = (
-        await getWordSuggestions(normalizedWord, language, true, request.signal)
-      ).map((s) => s.word)
+      const suggestions = language === 'en' ? getSuggestions(normalizedWord).map((s) => s.word) : []
       return respond.error(
         `No supported ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
         {
@@ -376,9 +375,8 @@ export async function GET(request: NextRequest) {
                 })
               }
             } else if (outcome.kind === 'negative_cached') {
-              const suggestions = (
-                await getWordSuggestions(normalizedWord, language, true, request.signal)
-              ).map((s) => s.word)
+              const suggestions =
+                language === 'en' ? getSuggestions(normalizedWord).map((s) => s.word) : []
               emit({
                 type: 'error',
                 message: `No supported ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
