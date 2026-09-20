@@ -5,8 +5,8 @@ import { canonicalizeWord } from '@/lib/orthography'
 import { useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useHistory } from '@/lib/hooks/useHistory'
-import { markTraceIntent, wordPagePath } from '@/lib/traceIntent'
-import type { LanguageCode } from '@/lib/languages'
+import { markTraceIntent } from '@/lib/traceIntent'
+import { wordPagePath, type LanguageCode } from '@/lib/languages'
 
 /**
  * All in-app word navigation funnels through here: mark the trace-intent

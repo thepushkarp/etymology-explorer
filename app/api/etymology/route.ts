@@ -52,11 +52,10 @@ function sleep(ms: number): Promise<void> {
 
 type ResearchOutcome =
   | { kind: 'ok'; researchContext: ResearchContext }
-  | { kind: 'no_sources'; typoSuggestions?: string[]; fallbackSuggestion?: string }
+  | { kind: 'no_sources'; typoSuggestions?: string[] }
 
 type PipelineOutcome =
-  | { kind: 'result'; result: EtymologyResult }
-  | { kind: 'no_sources'; typoSuggestions?: string[]; fallbackSuggestion?: string }
+  { kind: 'result'; result: EtymologyResult } | { kind: 'no_sources'; typoSuggestions?: string[] }
 
 type WaiterOutcome =
   | PipelineOutcome
@@ -462,9 +461,7 @@ export async function GET(request: NextRequest) {
         {
           status: 404,
           errorType: 'nonsense',
-          ...(language === 'en'
-            ? { unaryData: { suggestion: outcome.fallbackSuggestion ?? getRandomWord() } }
-            : {}),
+          ...(language === 'en' ? { unaryData: { suggestion: getRandomWord() } } : {}),
         }
       )
     }

@@ -32,32 +32,3 @@ export function getRandomWord(language: LanguageCode = 'en'): string {
   const index = array[0] % words.length
   return words[index]
 }
-
-/**
- * Get multiple random words (for batch suggestions)
- */
-export function getRandomWords(count: number, language: LanguageCode = 'en'): string[] {
-  const words = getRandomWordPool(language)
-  const selected = new Set<string>()
-
-  while (selected.size < count && selected.size < words.length) {
-    selected.add(getRandomWord(language))
-  }
-
-  return Array.from(selected)
-}
-
-/**
- * Get total word count
- */
-export function getWordCount(language: LanguageCode = 'en'): number {
-  return getRandomWordPool(language).length
-}
-
-/**
- * Search words that start with a prefix
- */
-export function searchByPrefix(prefix: string, limit: number = 10): string[] {
-  const normalized = prefix.toLowerCase().trim()
-  return greWords.filter((word) => word.startsWith(normalized)).slice(0, limit)
-}

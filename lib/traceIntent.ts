@@ -10,7 +10,7 @@ import { canonicalizeWord } from './orthography'
  * else gets the explicit "Trace it live" button.
  */
 
-import { lexemeKey, wordPagePath as buildWordPagePath, type LanguageCode } from './languages'
+import { lexemeKey, type LanguageCode } from './languages'
 
 const STORAGE_KEY = 'etymex:trace-intent'
 
@@ -32,11 +32,6 @@ function getStorage(): Storage | null {
     // Storage access can throw (privacy modes, sandboxed iframes)
     return null
   }
-}
-
-/** Canonical in-app path for a word page */
-export function wordPagePath(word: string, language: LanguageCode = 'en'): string {
-  return buildWordPagePath(word, language)
 }
 
 /** Record that the next word-page visit is an in-app navigation for `word` */

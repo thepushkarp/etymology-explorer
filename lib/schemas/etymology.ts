@@ -165,5 +165,3 @@ export const CachedEtymologyResultSchema = z.union([
   BetaEtymologyResultSchema,
   EtymologyResultSchema,
 ])
-
-export type ValidatedEtymologyResult = z.infer<typeof EtymologyResultSchema>

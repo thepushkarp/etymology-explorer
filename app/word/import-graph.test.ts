@@ -62,30 +62,21 @@ function collectModuleGraph(entry: string): Set<string> {
   return visited
 }
 
-describe('/word/[word] module graph (LLM spend invariant)', () => {
+describe('/word/[...segments] module graph (LLM spend invariant)', () => {
   const graph = collectModuleGraph(ENTRY)
 
-  test('walker traverses the page graph (sanity)', () => {
+  test('cached word pages never import the research or LLM pipeline', () => {
     expect(graph.has(ENTRY)).toBe(true)
     expect(graph.has(join(REPO_ROOT, 'lib', 'cache.ts'))).toBe(true)
     expect(graph.has(join(REPO_ROOT, 'components', 'EtymologyCard.tsx'))).toBe(true)
     expect(graph.size).toBeGreaterThan(10)
-  })
 
-  test('never imports the research or LLM pipeline', () => {
     const forbidden = ['lib/research.ts', 'lib/llm.ts', 'lib/openrouterResponses.ts']
     for (const relativePath of forbidden) {
       const absolutePath = join(REPO_ROOT, relativePath)
       // Guard: if the module was renamed, this test must be updated, not skipped
       expect(existsSync(absolutePath)).toBe(true)
       expect(graph.has(absolutePath)).toBe(false)
-    }
-  })
-
-  test('the shared multilingual route preserves the cache-only server graph', () => {
-    expect(graph.has(join(REPO_ROOT, 'lib', 'cache.ts'))).toBe(true)
-    for (const relativePath of ['lib/research.ts', 'lib/llm.ts', 'lib/openrouterResponses.ts']) {
-      expect(graph.has(join(REPO_ROOT, relativePath))).toBe(false)
     }
   })
 })

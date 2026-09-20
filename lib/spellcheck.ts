@@ -89,18 +89,3 @@ export function getAutocompleteSuggestions(input: string, limit: number = 5): Wo
 
   return suggestions
 }
-
-/**
- * Check if a word exists in the GRE word list
- */
-export function isKnownWord(word: string): boolean {
-  return greWords.includes(canonicalizeWord(word))
-}
-
-/**
- * Check if input looks like a typo (has close matches) vs nonsense
- */
-export function isLikelyTypo(input: string): boolean {
-  const suggestions = getSuggestions(input, 1, 2)
-  return suggestions.length > 0
-}

@@ -52,9 +52,7 @@ export type PartialEtymology = Partial<Pick<EnglishEtymologyResult, SectionKey>>
 
 /**
  * Fill the streamed sections into a full-shaped EtymologyResult, defaulting
- * every not-yet-arrived field to an empty value. Shared by the persistent
- * TraceHeader and the StreamingEtymologyCard body so their partial-render
- * views never drift.
+ * every not-yet-arrived field to an empty value for the persistent TraceHeader.
  */
 export function toPartialResult(
   word: string,
@@ -82,11 +80,7 @@ export interface StreamState {
   phase: StreamPhase
   sources: SourceProgress[]
   parsingComplete: boolean
-  roots: string[]
-  /** Section names in arrival order (schema order under strict outputs) */
-  sectionOrder: SectionKey[]
   sections: PartialEtymology
-  enrichment: { highConfidence: number; mediumConfidence: number } | null
   /** Non-null while this request is waiting on another in-flight lookup */
   sharedWaitMs: number | null
   result: EtymologyResult | null
@@ -98,7 +92,6 @@ export type StreamAction =
   | { type: 'stream_event'; event: StreamEvent }
   | { type: 'fallback_success'; result: EtymologyResult }
   | { type: 'fallback_error'; error: StreamingUiError }
-  | { type: 'reset' }
 
 const SOURCE_LABELS: Record<string, string> = {
   etymonline: 'Etymonline',
@@ -147,10 +140,7 @@ export const initialStreamState: StreamState = {
   phase: 'idle',
   sources: [],
   parsingComplete: false,
-  roots: [],
-  sectionOrder: [],
   sections: {},
-  enrichment: null,
   sharedWaitMs: null,
   result: null,
   error: null,
@@ -177,8 +167,7 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
       return { ...state, parsingComplete: true }
 
     case 'roots_identified':
-      return { ...state, roots: event.roots }
-
+    case 'enrichment_done':
     case 'root_research':
       // Progress detail the UI doesn't surface — skip the re-render entirely.
       return state
@@ -188,28 +177,17 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
 
     case 'synthesis_section': {
       if (!isSectionKey(event.section)) return state
-      const alreadySeen = state.sectionOrder.includes(event.section)
       return {
         ...state,
         // Sections only stream while synthesis runs; tolerate a missing
         // synthesis_started rather than rendering them as source progress.
         phase: state.phase === 'done' || state.phase === 'error' ? state.phase : 'synthesis',
         sections: { ...state.sections, [event.section]: event.data },
-        sectionOrder: alreadySeen ? state.sectionOrder : [...state.sectionOrder, event.section],
       }
     }
 
     case 'singleflight_wait':
       return { ...state, sharedWaitMs: event.waitedMs }
-
-    case 'enrichment_done':
-      return {
-        ...state,
-        enrichment: {
-          highConfidence: event.highConfidence,
-          mediumConfidence: event.mediumConfidence,
-        },
-      }
 
     case 'result':
       return { ...state, status: 'success', phase: 'done', result: event.data, error: null }
@@ -236,8 +214,5 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
 
     case 'fallback_error':
       return { ...state, status: 'error', phase: 'error', error: action.error }
-
-    case 'reset':
-      return initialStreamState
   }
 }

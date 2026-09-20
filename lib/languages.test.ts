@@ -21,7 +21,8 @@ describe('explicit language identity', () => {
       ).size
     ).toBe(4)
     expect(wordPagePath('Casa', 'it')).toBe('/word/it/casa')
-    expect(wordPagePath('Casa', 'en')).toBe('/word/casa')
+    expect(wordPagePath('  Casa ', 'en')).toBe('/word/casa')
+    expect(wordPagePath('Café')).toBe(`/word/${encodeURIComponent('café')}`)
   })
 
   test('keeps native etymology labels in the language registry', () => {

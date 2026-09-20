@@ -387,13 +387,6 @@ describe('buildResearchPrompt token diet', () => {
     expect(prompt).not.toContain('"partOfSpeech"')
   })
 
-  test('freeDictionary compact block matches snapshot', () => {
-    const prompt = buildResearchPrompt(buildContext())
-    const block = prompt.match(/<source_data name="free_dictionary">\n([\s\S]*?)\n<\/source_data>/)
-
-    expect(block?.[1]).toMatchSnapshot()
-  })
-
   test('every source block honors its tiered character budget', () => {
     const prompt = buildResearchPrompt(buildContext())
     const blocks = sourceBlocks(prompt)

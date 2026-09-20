@@ -22,26 +22,6 @@ interface ParseResponse {
   error?: { info?: string }
 }
 
-/** Extracts only the selected language's etymology blocks using MediaWiki tocdata. */
-export function extractTocEtymology(
-  html: string,
-  sections: TocSection[],
-  languageHeading: string,
-  etymologyHeading: RegExp
-): string | null {
-  const groups = extractWiktionaryEntryGroups(
-    html,
-    sections,
-    languageHeading,
-    etymologyHeading
-  ).slice(0, 4)
-  const text = groups
-    .map((group) => group.text)
-    .filter(Boolean)
-    .join('\n\n')
-  return text.length > 0 ? text.slice(0, 6000) : null
-}
-
 async function fetchWiktionaryEdition(
   word: string,
   language: BetaLanguageCode,

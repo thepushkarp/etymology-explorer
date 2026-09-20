@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildLexicalResearchGraph, hasAncestryCycle } from './lexemeGraph'
+import { buildLexicalResearchGraph } from './lexemeGraph'
 import type { ParsedEtymChain } from './etymologyParser'
 import type { ResearchEntryContext } from './types'
 
@@ -56,6 +56,15 @@ describe('buildLexicalResearchGraph', () => {
     expect(form?.edgeIds).toContain(formEdge?.id as string)
     expect(formEdge?.role).toBe('morphology')
     expect(Object.values(graph.evidence)[0].evidenceScopeId).toBe('native:vite:lemma')
-    expect(hasAncestryCycle(graph)).toBe(false)
+    expect(
+      Object.values(graph.edges).map((edge) => [
+        graph.nodes[edge.from].displayForm,
+        edge.relation,
+        graph.nodes[edge.to].displayForm,
+      ])
+    ).toEqual([
+      ['vite', 'derived_from', 'vītis'],
+      ['vite', 'form_of', 'vita'],
+    ])
   })
 })
