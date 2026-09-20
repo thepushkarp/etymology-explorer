@@ -156,14 +156,7 @@ export function extractEtymonlineRelatedEntries(html: string, excludeWord: strin
  * Remove HTML tags and clean up text
  */
 function stripHtml(html: string): string {
-  return decodeHtmlEntities(preserveLinguisticNotation(html))
-    .replace(/<[^>]*>/g, ' ') // Remove HTML tags
-    .replace(/&nbsp;/g, ' ') // Replace nbsp
-    .replace(/&amp;/g, '&') // Replace amp
-    .replace(/&lt;/g, '<') // Replace lt
-    .replace(/&gt;/g, '>') // Replace gt
-    .replace(/&quot;/g, '"') // Replace quot
-    .replace(/&#39;/g, "'") // Replace apostrophe
+  return decodeHtmlEntities(preserveLinguisticNotation(html).replace(/<[^>]*>/g, ' '))
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
 }

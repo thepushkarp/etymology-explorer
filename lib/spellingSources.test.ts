@@ -66,10 +66,10 @@ describe('source spelling boundaries', () => {
   test('checks the headword inside the current Etymonline heading', async () => {
     globalThis.fetch = (async () =>
       new Response(
-        '<h1>Origin and history of <em> <!-- -->cote<!-- --> </em></h1><section class="prose-lg">From Latin costa, 1600.</section>'
+        '<h1>Origin and history of <em> <!-- -->cote<!-- --> </em></h1><section class="prose-lg">From Latin costa, 1600. &lt;form&gt; &amp;lt;</section>'
       )) as unknown as typeof fetch
     expect(await fetchEtymonline('côte')).toBeNull()
-    expect((await fetchEtymonline('cote'))?.text).toContain('From Latin costa')
+    expect((await fetchEtymonline('cote'))?.text).toBe('From Latin costa, 1600. <form> &lt;')
   })
 
   test('dictionary arrays select the exact entry instead of their first result', async () => {

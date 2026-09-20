@@ -13,7 +13,12 @@ import type {
   StageConfidence,
   StageEvidence,
 } from './types'
-import { normalizeLanguageName, type ParsedEtymChain, type ParsedEtymLink } from './etymologyParser'
+import {
+  isReconstructedForm,
+  normalizeLanguageName,
+  type ParsedEtymChain,
+  type ParsedEtymLink,
+} from './etymologyParser'
 import { canonicalizeWord } from './orthography'
 
 /** Parenthetical glosses are annotations; every character in the form is significant. */
@@ -21,43 +26,33 @@ function normalize(s: string): string {
   return canonicalizeWord(s.replace(/\s+\([^)]*\)$/, ''))
 }
 
-const LANGUAGE_FAMILIES: Record<string, string> = {
-  latin: 'latin',
+const BROAD_LANGUAGE: Record<string, string> = {
   'classical latin': 'latin',
   'medieval latin': 'latin',
   'late latin': 'latin',
   'vulgar latin': 'latin',
   'new latin': 'latin',
   'church latin': 'latin',
-  greek: 'greek',
   'ancient greek': 'greek',
   'koine greek': 'greek',
-  english: 'english',
   'old english': 'english',
   'middle english': 'english',
   'modern english': 'english',
-  french: 'french',
   'old french': 'french',
   'middle french': 'french',
   'modern french': 'french',
   'anglo-french': 'french',
-  german: 'german',
   'old high german': 'german',
-  dutch: 'dutch',
   'middle dutch': 'dutch',
 }
 
 function compatibleLanguage(left: string, right: string): boolean {
   const normalizedLeft = canonicalizeWord(normalizeLanguageName(left))
   const normalizedRight = canonicalizeWord(normalizeLanguageName(right))
-  if (normalizedLeft === normalizedRight) return true
-
-  const leftFamily = LANGUAGE_FAMILIES[normalizedLeft]
-  const rightFamily = LANGUAGE_FAMILIES[normalizedRight]
   return (
-    leftFamily !== undefined &&
-    leftFamily === rightFamily &&
-    (normalizedLeft === leftFamily || normalizedRight === rightFamily)
+    normalizedLeft === normalizedRight ||
+    BROAD_LANGUAGE[normalizedLeft] === normalizedRight ||
+    BROAD_LANGUAGE[normalizedRight] === normalizedLeft
   )
 }
 
@@ -76,7 +71,7 @@ function findMatches(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]
         typeof stage.form === 'string' &&
         typeof stage.stage === 'string' &&
         compatibleLanguage(stage.stage, link.language) &&
-        isReconstructedStage(stage) === link.isReconstructed &&
+        stage.isReconstructed === link.isReconstructed &&
         [link.form, ...(link.variants ?? [])].some(
           (form) => normalize(stage.form) === normalize(form)
         )
@@ -120,26 +115,12 @@ function buildEvidence(matches: MatchResult[]): StageEvidence[] {
 }
 
 /**
- * Check if a stage represents a reconstructed form (PIE, Proto-*).
- * The stage comes straight from LLM output and is only Zod-validated
- * AFTER enrichment, so missing fields must not crash here.
- */
-function isReconstructedStage(stage: AncestryStage<ResultText>): boolean {
-  if (typeof stage.form === 'string' && stage.form.startsWith('*')) return true
-  if (typeof stage.stage !== 'string') return false
-  const lower = stage.stage.toLowerCase()
-  if (lower.includes('proto-indo-european') || lower === 'pie') return true
-  if (lower.startsWith('proto-')) return true
-  return false
-}
-
-/**
  * Enrich a single AncestryStage with confidence and evidence.
  * Mutates the stage in-place for efficiency.
  */
 function enrichStage(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]): void {
   // Set reconstructed flag
-  stage.isReconstructed = isReconstructedStage(stage)
+  stage.isReconstructed = isReconstructedForm(stage.form, stage.stage)
 
   // Find matching parsed links
   const matches = findMatches(stage, chains)

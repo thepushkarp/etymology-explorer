@@ -3,7 +3,7 @@ import { canonicalizeWord, sameSpelling } from './orthography'
 import { isValidWord } from './validation'
 import { lexemeKey, wordPagePath } from './languages'
 import { parseWiktionaryText } from './etymologyParser'
-import { enrichAncestryGraph } from './etymologyEnricher'
+import { enrichAncestryGraph, pruneUngroundedStages } from './etymologyEnricher'
 import { extractRootsCpu } from './research'
 import { cleanWiktionaryHtml } from './wiktionaryEntryGroups'
 import type { AncestryGraph } from './types'
@@ -113,6 +113,24 @@ describe('historical forms and confidence', () => {
     const differentPeriod = graph('forma', 'Medieval Latin')
     enrichAncestryGraph(differentPeriod, lateLatin)
     expect(differentPeriod.branches[0].stages[0].confidence).toBe('low')
+  })
+
+  test.each([
+    ['Proto-Germanic', 'Proto-Germanic', 'bergaz'],
+    ['Proto-Italic', 'Proto-Italic', 'forma'],
+    ['protoindoeuropeo', 'PIE', 'bher-'],
+    ['Latin', 'Latin', '*forma'],
+  ])('retains attested reconstructed forms from %s', (sourceLanguage, stage, form) => {
+    const result = graph(form, stage)
+    const chain = parseWiktionaryText(`from ${sourceLanguage} ${form}`, 'example')
+    expect(chain.links[0].isReconstructed).toBe(true)
+    enrichAncestryGraph(result, [chain])
+    pruneUngroundedStages(result)
+    expect(result.branches[0]?.stages[0]).toMatchObject({
+      isReconstructed: true,
+      confidence: 'medium',
+      evidence: [{ source: 'wiktionary', snippet: `from ${sourceLanguage} ${form}` }],
+    })
   })
 
   test('an explicit source variant retains its supporting snippet', () => {

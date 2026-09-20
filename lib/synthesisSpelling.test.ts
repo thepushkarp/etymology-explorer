@@ -116,7 +116,7 @@ describe('synthesis spelling and publication', () => {
     const emitted: Array<[string, unknown]> = []
     const result = await synthesizeFromResearch(context(), {
       onSection: (name, data) => {
-        if (name === 'ancestryGraph') expect(completed).toBe(true)
+        expect(completed).toBe(!['word', 'pronunciation', 'definition'].includes(name))
         emitted.push([name, data])
       },
     })
@@ -147,6 +147,8 @@ describe('synthesis spelling and publication', () => {
       synthesizeFromResearch(context(), { onSection: (name) => sections.push(name) })
     ).rejects.toThrow('Schema validation failed')
     expect(sections).not.toContain('ancestryGraph')
+    expect(sections).not.toContain('roots')
+    expect(sections).not.toContain('lore')
     expect(sections).not.toContain('sources')
   })
 })

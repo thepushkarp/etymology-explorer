@@ -10,7 +10,7 @@ import { canonicalizeWord, HISTORICAL_FORM } from './orthography'
  * 2. Match each segment against KNOWN_LANGUAGES
  * 3. Extract form (up to first comma/quote)
  * 4. Extract meaning from quotes
- * 5. Detect *-prefix for reconstructed (PIE) forms
+ * 5. Detect reconstructed forms from a *-prefix or Proto-* language
  */
 
 export interface ParsedEtymLink {
@@ -18,7 +18,7 @@ export interface ParsedEtymLink {
   form: string // "perfidia", "*bheid-"
   variants?: string[] // explicitly named alternate spellings in this source
   meaning?: string // "faithlessness"
-  isReconstructed: boolean // true for PIE *-prefixed forms
+  isReconstructed: boolean
   rawSnippet: string // exact substring from source that yielded this
 }
 
@@ -179,9 +179,6 @@ function parseSegment(segment: string): ParsedEtymLink | null {
   const language = normalizeLanguageName(langMatch[1])
   let afterLang = trimmed.slice(langMatch[0].length).trim()
 
-  // Check for PIE root marker
-  const isPIERoot = /PIE root\b/i.test(segment) || language === 'Proto-Indo-European'
-
   // Skip the literal "root" token when it precedes a *-prefixed form
   // e.g., "PIE root *bheid-" → afterLang was "root *bheid-", skip "root" to get "*bheid-"
   afterLang = afterLang.replace(/^root\s+(?=\*)/, '')
@@ -197,9 +194,6 @@ function parseSegment(segment: string): ParsedEtymLink | null {
   // Extract meaning from the remainder
   const meaning = extractMeaning(variant ? afterForm.slice(variant[0].length) : afterForm)
 
-  // Detect reconstructed forms: starts with * or is PIE
-  const isReconstructed = form.startsWith('*') || isPIERoot
-
   // Build a raw snippet (cap at 120 chars, trim to word boundary)
   let rawSnippet = `from ${trimmed}`.slice(0, 120)
   if (rawSnippet.length === 120) {
@@ -212,7 +206,7 @@ function parseSegment(segment: string): ParsedEtymLink | null {
     form,
     ...(variant ? { variants: [variant[1]] } : {}),
     meaning,
-    isReconstructed,
+    isReconstructed: isReconstructedForm(form, language),
     rawSnippet,
   }
 }
@@ -245,6 +239,14 @@ export function normalizeLanguageName(name: string): string {
   if (localized[lower]) return localized[lower]
   // Capitalize first letter of each word
   return name.replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+export function isReconstructedForm(form: unknown, language: unknown): boolean {
+  return (
+    (typeof form === 'string' && form.startsWith('*')) ||
+    (typeof language === 'string' &&
+      canonicalizeWord(normalizeLanguageName(language)).startsWith('proto-'))
+  )
 }
 
 /**
