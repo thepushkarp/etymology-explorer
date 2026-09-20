@@ -702,6 +702,8 @@ export async function synthesizeFromResearch(
       // keep reading without publishing so completed provider usage is billed.
       const heldSections = new Set(['ancestryGraph', 'histories', 'primaryHistoryId', 'sources'])
       const pendingSections = new Map<string, unknown>()
+      const deferredSections: string[] = []
+      let deferring = false
       let wordVerified = false
       let languageVerified = language === 'en'
       let identityError: Error | undefined
@@ -722,7 +724,12 @@ export async function synthesizeFromResearch(
                   'Schema validation failed: streamed language differs from requested language'
                 )
             }
-            if (heldSections.has(section) || identityError) return
+            if (identityError) return
+            if (deferring || heldSections.has(section)) {
+              deferring = true
+              deferredSections.push(section)
+              return
+            }
             pendingSections.set(section, data)
             if (wordVerified && languageVerified) {
               for (const [name, value] of pendingSections) options.onSection?.(name, value)
@@ -746,7 +753,7 @@ export async function synthesizeFromResearch(
         attempt === 0 && options?.onSection ? 'streaming' : 'standard'
       )
       if (options?.onSection) {
-        for (const section of heldSections) {
+        for (const section of deferredSections) {
           const value = (result as unknown as Record<string, unknown>)[section]
           if (value !== undefined) options.onSection(section, value)
         }

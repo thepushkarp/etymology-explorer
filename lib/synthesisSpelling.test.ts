@@ -127,7 +127,15 @@ describe('synthesis spelling and publication', () => {
       confidence: 'low',
       evidence: [],
     })
-    expect(emitted.some(([name]) => name === 'word')).toBe(true)
+    expect(emitted.map(([name]) => name)).toEqual([
+      'word',
+      'pronunciation',
+      'definition',
+      'ancestryGraph',
+      'roots',
+      'lore',
+      'sources',
+    ])
   })
 
   test('does not publish held sections when final validation fails', async () => {
