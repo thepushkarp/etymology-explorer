@@ -100,9 +100,9 @@ type OpenRouterStreamEvent = {
 const OPENROUTER_RESPONSES_URL = 'https://openrouter.ai/api/v1/responses'
 
 const SYNTHESIS_REASONING_BY_MODEL: Record<string, ReasoningConfig | undefined> = {
-  // Luna always reasons at low effort. Exclusion suppresses the reasoning
+  // GPT-6 Luna reasons at low effort. Exclusion suppresses the reasoning
   // trace from API responses without disabling the reasoning itself.
-  'openai/gpt-5.6-luna': { effort: 'low', exclude: true },
+  'openai/gpt-6-luna': { effort: 'low', exclude: true },
   // Gemini 3.5 Flash requires reasoning and supports low effort. Matching the
   // production request shape lets it participate in OpenRouter failover.
   'google/gemini-3.5-flash': { effort: 'low', exclude: true },

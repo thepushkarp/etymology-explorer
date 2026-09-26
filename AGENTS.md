@@ -12,7 +12,7 @@ Users search for a word, and the app:
 2. Pre-parses etymological chains from source text (CPU-only)
 3. Uses OpenRouter to extract root morphemes from the first-pass source bundle
 4. Expands breadth with a bounded second pass over root pages and high-signal related pages from Etymonline and Wiktionary
-5. Sends the enriched research bundle to OpenRouter's Responses API using `openai/gpt-5.6-luna` for structured synthesis
+5. Sends the enriched research bundle to OpenRouter's Responses API using `openai/gpt-6-luna` for structured synthesis
 6. Post-processes LLM output to match ancestry stages to parsed evidence and assign programmatic confidence scores
 
 **Live**: https://etymex.com
@@ -81,7 +81,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/config.ts`** - Centralized configuration:
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
-  - USD monthly limit: $10/month (`openai/gpt-5.6-luna` pricing in `costTracking` as fallback; OpenRouter-reported cost preferred)
+  - USD monthly limit: $10/month (conservative fallback-chain pricing in `costTracking` when OpenRouter omits provider-reported cost)
   - Timeouts: source fetches 5s, synthesis LLM 90s, root-extraction LLM 15s, TTS 15s
   - Tiered prompt character budgets (`promptBudget`: main 1500 / supplemental 800 / root 700 / related 450)
   - Rate limits, singleflight settings, feature flags
@@ -294,7 +294,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 **Core Pipeline:**
 
 - `lib/research.ts` - Agentic research orchestrator (6-source parallel fetch)
-- `lib/llm.ts` - LLM client (OpenRouter Responses API for `openai/gpt-5.6-luna`; unified streaming/unary synthesis)
+- `lib/llm.ts` - LLM client (OpenRouter Responses API for `openai/gpt-6-luna`; unified streaming/unary synthesis)
 - `lib/sectionScanner.ts` - Incremental scanner emitting each top-level JSON field as it closes (powers synthesis_section SSE events)
 - `lib/responseAdapter.ts` - SSE/JSON response adapter for the etymology route's early returns
 - `lib/prompts.ts` - System prompt for LLM synthesis (content/grounding rules; shape enforced by schema)

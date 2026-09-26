@@ -1,6 +1,6 @@
 # Synthesis Model Bakeoff - July 7, 2026
 
-> **July 18 follow-up:** Production now uses `openai/gpt-5.6-luna` for both
+> **July 18 follow-up:** Production used `openai/gpt-5.6-luna` for both
 > synthesis and the root-extraction fallback. A fresh paired 15-word run showed
 > materially lower synthesis latency at a modest cost increase. The July 7
 > results and decision below are retained as the historical baseline.
