@@ -11,7 +11,7 @@ describe('openrouterResponses', () => {
   test('buildSynthesisRequest uses strict json_schema mode with low reasoning', () => {
     const request = buildSynthesisRequest('Analyze this word')
 
-    expect(request.model).toBe('openai/gpt-5.6-luna')
+    expect(request.model).toBe('openai/gpt-6-luna')
     expect(request.reasoning).toEqual({ effort: 'low', exclude: true })
     expect(request.models).toEqual(['openai/gpt-5.4-mini', 'google/gemini-3.5-flash'])
     expect(request.max_output_tokens).toBe(9000)
@@ -38,7 +38,7 @@ describe('openrouterResponses', () => {
   })
 
   test('buildSynthesisRequest adapts reasoning to model capabilities', () => {
-    expect(buildSynthesisRequest('Analyze', 'openai/gpt-5.6-luna').reasoning).toEqual({
+    expect(buildSynthesisRequest('Analyze', 'openai/gpt-6-luna').reasoning).toEqual({
       effort: 'low',
       exclude: true,
     })
@@ -74,7 +74,7 @@ describe('openrouterResponses', () => {
   test('buildRootExtractionRequest keeps Luna reasoning low and private', () => {
     const request = buildRootExtractionRequest('Analyze roots')
 
-    expect(request.model).toBe('openai/gpt-5.6-luna')
+    expect(request.model).toBe('openai/gpt-6-luna')
     expect(request.reasoning).toEqual({ effort: 'low', exclude: true })
     expect(request.models).toEqual(['openai/gpt-5.4-mini', 'google/gemini-3.5-flash'])
     // require_parameters is synthesis-only: adding it here slow-routed the
@@ -101,9 +101,9 @@ describe('openrouterResponses', () => {
   })
 
   test('an explicit model override does not inherit production fallbacks', () => {
-    const request = buildSynthesisRequest('Analyze', 'openai/gpt-5.6-luna')
+    const request = buildSynthesisRequest('Analyze', 'openai/gpt-6-luna')
 
-    expect(request.model).toBe('openai/gpt-5.6-luna')
+    expect(request.model).toBe('openai/gpt-6-luna')
     expect('models' in request).toBe(false)
     expect(request.reasoning).toEqual({ effort: 'low', exclude: true })
   })

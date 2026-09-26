@@ -59,7 +59,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ### Configuration
 
 The app runs in **public mode** using a server-side OpenRouter API key and the
-`openai/gpt-5.6-luna` model on OpenRouter's Responses API. All searches are
+`openai/gpt-6-luna` model on OpenRouter's Responses API. All searches are
 rate-limited and cost-budgeted with a monthly spend cap. Set the
 `OPENROUTER_API_KEY` environment variable to enable it.
 
@@ -102,7 +102,7 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
 - **Framework**: [Next.js 16.1](https://nextjs.org/) with App Router
 - **UI**: [React 19.2](https://react.dev/) + [Tailwind CSS v4](https://tailwindcss.com/)
 - **LLM**: [OpenRouter Responses API](https://openrouter.ai/docs/api/api-reference/responses/create-responses)
-  using `openai/gpt-5.6-luna` with structured outputs
+  using `openai/gpt-6-luna` with structured outputs
 - **Validation**: [Zod 4.x](https://zod.dev/) for schema validation
 - **Caching/Rate Limiting**: [@upstash/redis](https://upstash.com/) + [@upstash/ratelimit](https://github.com/upstash/ratelimit)
 - **Analytics**: [@vercel/analytics](https://vercel.com/analytics)
@@ -222,7 +222,7 @@ etymology-explorer/
 
 ### LLM routing and fallbacks
 
-Production synthesis and LLM root extraction use `openai/gpt-5.6-luna` through
+Production synthesis and LLM root extraction use `openai/gpt-6-luna` through
 OpenRouter's Responses API. Both paths explicitly set low reasoning and exclude
 the reasoning trace from the response. Reasoning remains enabled internally but
 is never returned to the browser.
@@ -315,5 +315,5 @@ MIT
 - Modern slang definitions from [Urban Dictionary](https://www.urbandictionary.com/)
 - Supplemental community slang context from [Incel Wiki](https://incels.wiki/)
 - Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)
-- Powered by [OpenRouter](https://openrouter.ai/) `openai/gpt-5.6-luna`
+- Powered by [OpenRouter](https://openrouter.ai/) `openai/gpt-6-luna`
 - Rate limiting and caching by [Upstash](https://upstash.com/)
