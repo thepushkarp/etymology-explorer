@@ -11,30 +11,19 @@ interface AncestryTreeProps {
   language?: LanguageCode
 }
 
-type Marker = 'attested' | 'inferred' | 'reconstructed'
+/** Anything the details panel can describe: a stage, or the combined form. */
+type NodeInfo = Pick<AncestryStage, 'stage' | 'form' | 'note'> & Partial<AncestryStage>
 
-const MARKER_CLASS: Record<Marker, string> = {
-  attested: 'bg-muted border-muted',
-  inferred: 'bg-paper border-muted',
-  reconstructed: 'bg-paper border-muted border-dashed',
+/** Reconstructed and model-inferred forms are not directly attested in the sources. */
+function isAttested(node: NodeInfo): boolean {
+  return !node.isReconstructed && node.confidence !== 'low'
 }
 
-const MARKER_LABEL: Record<Marker, string> = {
-  attested: 'found in sources',
-  inferred: 'inferred',
-  reconstructed: 'reconstructed',
-}
-
-function markerFor(stage: AncestryStage): Marker {
-  if (stage.isReconstructed) return 'reconstructed'
-  return stage.confidence === 'low' ? 'inferred' : 'attested'
-}
-
-function provenance(stage: AncestryStage): string {
-  if (stage.isReconstructed) {
-    return 'Reconstructed: not written down anywhere, inferred by comparing its descendants.'
+function provenance(node: NodeInfo): string | null {
+  if (node.isReconstructed) {
+    return 'Reconstructed: never written down, inferred by comparing its descendants.'
   }
-  switch (stage.confidence) {
+  switch (node.confidence) {
     case 'high':
       return 'Found in two or more of the sources consulted.'
     case 'medium':
@@ -42,131 +31,100 @@ function provenance(stage: AncestryStage): string {
     case 'low':
       return 'Not found in the sources consulted; inferred by the model.'
     default:
-      return 'Source support was not assessed for this stage.'
+      return null
   }
 }
 
 const STEP_MS = 60
-const NODE_WIDTH = 'w-full max-w-60'
+const LABEL = 'label block text-[0.625rem] tracking-[0.08em] sm:text-xs sm:tracking-[0.14em]'
+const BOX = 'w-full max-w-60 border px-2 py-2 text-center sm:px-4 sm:py-3'
 
-function Connector({ grow = false, className = '' }: { grow?: boolean; className?: string }) {
+function Connector({ grow = false }: { grow?: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={`block w-px bg-faint/60 ${grow ? 'min-h-6 flex-1' : 'h-6'} ${className}`}
+      className={`block w-px bg-faint/60 ${grow ? 'min-h-4 flex-1' : 'h-4 sm:h-6'}`}
     />
   )
 }
 
-/** A clickable stage: the node shows language, form, and gloss; opening it shows provenance. */
-function StageNode({
+function Node({
   id,
-  stage,
+  node,
   open,
   onToggle,
   delay,
 }: {
   id: string
-  stage: AncestryStage
+  node: NodeInfo
   open: boolean
   onToggle: (id: string) => void
   delay: number
 }) {
-  const marker = markerFor(stage)
-  const detailsId = `${id}-details`
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(id)}
+      aria-expanded={open}
+      aria-controls={`${id}-details`}
+      style={{ animationDelay: `${delay}ms` }}
+      className={`animate-rise ${BOX} transition-[border-color,background-color,transform] duration-200 ${
+        isAttested(node) ? '' : 'border-dashed'
+      } ${open ? 'border-ink bg-wash' : 'border-faint/70 hover:-translate-y-px hover:border-muted'}`}
+    >
+      <span className={LABEL}>{node.stage}</span>
+      <span className="mt-0.5 block break-words font-serif text-base italic text-ink sm:mt-1 sm:text-lg">
+        {node.form}
+      </span>
+    </button>
+  )
+}
+
+function Details({ id, node }: { id: string; node: NodeInfo }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const line = provenance(node)
+
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [id])
 
   return (
     <div
-      className={`animate-rise flex flex-col items-center ${NODE_WIDTH}`}
-      style={{ animationDelay: `${delay}ms` }}
+      ref={ref}
+      id={`${id}-details`}
+      role="region"
+      aria-label={`${node.stage} ${node.form}`}
+      className="animate-rise mx-auto mt-6 max-w-lg border-t border-ink pt-4 text-sm"
+      style={{ animationDuration: '200ms' }}
     >
-      <button
-        type="button"
-        data-node
-        onClick={() => onToggle(id)}
-        aria-expanded={open}
-        aria-controls={detailsId}
-        className={`relative w-full border px-4 py-3 text-center transition-[border-color,background-color,transform] duration-200 ${
-          marker === 'reconstructed' ? 'border-dashed' : ''
-        } ${
-          open
-            ? 'border-ink bg-wash'
-            : 'border-rule bg-paper hover:-translate-y-px hover:border-muted'
-        }`}
-      >
-        <span
-          aria-hidden="true"
-          className={`absolute right-2 top-2 size-2 rounded-full border ${MARKER_CLASS[marker]}`}
-        />
-        <span className="sr-only">{MARKER_LABEL[marker]}: </span>
-        <span className="label block">{stage.stage}</span>
-        <span className="mt-1 block font-serif text-lg italic text-ink">{stage.form}</span>
-        {stage.note && (
-          <span className="mt-0.5 block text-sm leading-snug text-muted">{stage.note}</span>
-        )}
-      </button>
-
-      {open && (
-        <div
-          id={detailsId}
-          className="animate-rise w-full border border-t-0 border-ink px-4 py-3 text-left text-sm"
-          style={{ animationDuration: '200ms' }}
-        >
-          <p className="text-muted">{provenance(stage)}</p>
-          {stage.evidence && stage.evidence.length > 0 && (
-            <ul className="mt-3 space-y-2">
-              {stage.evidence.map((item, index) => (
-                <li key={`${item.source}-${index}`} className="leading-snug">
-                  <span className="label mr-2">{sourceLabel(item.source)}</span>
-                  <q className="font-serif italic text-ink">{item.snippet}</q>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      <p className="label">{node.stage}</p>
+      <p className="mt-1 font-serif text-lg">
+        <em>{node.form}</em>
+        {node.note && <span className="text-muted"> — {node.note}</span>}
+      </p>
+      {line && <p className="mt-2 text-muted">{line}</p>}
+      {node.evidence && node.evidence.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {node.evidence.map((item, index) => (
+            <li key={`${item.source}-${index}`} className="leading-snug">
+              <span className="label mr-2">{sourceLabel(item.source)}</span>
+              <q className="font-serif italic">{item.snippet}</q>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   )
 }
 
-/** A non-interactive node for the combined form and the modern word. */
-function StaticNode({
-  label,
-  form,
-  note,
-  final = false,
-  delay,
-}: {
-  label: string
-  form: string
-  note?: string
-  final?: boolean
-  delay: number
-}) {
-  return (
-    <div
-      className={`animate-rise border px-4 py-3 text-center ${NODE_WIDTH} ${
-        final ? 'border-accent' : 'border-rule'
-      }`}
-      style={{ animationDelay: `${delay}ms` }}
-    >
-      <span className="label block">{label}</span>
-      <span className={`mt-1 block font-serif text-ink ${final ? 'text-xl' : 'text-lg italic'}`}>
-        {form}
-      </span>
-      {note && <span className="mt-0.5 block text-sm leading-snug text-muted">{note}</span>}
-    </div>
-  )
-}
-
-/** Curves joining the bottom of each branch column into the node below (wide screens). */
+/** Curves joining the bottom of each branch column into the node below. */
 function MergeCurves({ count }: { count: number }) {
   return (
     <svg
       aria-hidden="true"
       viewBox="0 0 100 24"
       preserveAspectRatio="none"
-      className="hidden h-8 w-full text-faint sm:block"
+      className="h-6 w-full text-faint sm:h-8"
       fill="none"
     >
       {Array.from({ length: count }, (_, index) => {
@@ -190,14 +148,11 @@ export function AncestryTree({ graph, word, language = 'en' }: AncestryTreeProps
   const treeId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
 
-  // Close the open node on Escape or on a click anywhere outside a node.
+  // Close the details on Escape or on a click outside the tree.
   useEffect(() => {
     if (!openId) return
     const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Element | null
-      if (!rootRef.current?.contains(target) || !target?.closest('[data-node], [id$="-details"]')) {
-        setOpenId(null)
-      }
+      if (!rootRef.current?.contains(event.target as Node)) setOpenId(null)
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpenId(null)
@@ -212,31 +167,58 @@ export function AncestryTree({ graph, word, language = 'en' }: AncestryTreeProps
 
   if (branches.length === 0) return null
 
-  const toggle = (id: string) => setOpenId((current) => (current === id ? null : id))
   const split = branches.length > 1
-  // Nodes reveal top to bottom; the joined tail starts after the longest branch.
-  const tailStart = Math.max(...branches.map((branch) => branch.stages.length))
-  const tailDelay = (index: number) => (tailStart + index) * STEP_MS
-  const mergeNodes = split && mergePoint ? 1 : 0
   const columns = branches.length === 3 ? 3 : 2
+  const combined: NodeInfo | null =
+    split && mergePoint ? { stage: 'Combined', form: mergePoint.form, note: mergePoint.note } : null
 
-  const stageNode = (stage: AncestryStage, key: string, delay: number) => {
+  // Every selectable node by id, so the shared details panel can look one up.
+  const nodes = new Map<string, NodeInfo>()
+  const node = (key: string, info: NodeInfo, delay: number) => {
     const id = `${treeId}-${key}`
+    nodes.set(id, info)
     return (
-      <StageNode
+      <Node
         key={key}
         id={id}
-        stage={stage}
+        node={info}
         open={openId === id}
-        onToggle={toggle}
+        onToggle={(clicked) => setOpenId((current) => (current === clicked ? null : clicked))}
         delay={delay}
       />
     )
   }
 
-  const markersUsed = new Set(
-    [...branches.flatMap((branch) => branch.stages), ...postMerge].map(markerFor)
+  // Nodes reveal top to bottom; the joined tail starts after the longest branch.
+  const tailStart = Math.max(...branches.map((branch) => branch.stages.length))
+  const tailDelay = (index: number) => (tailStart + index) * STEP_MS
+  const mergeOffset = combined ? 1 : 0
+  const hasUnattested = [...branches.flatMap((branch) => branch.stages), ...postMerge].some(
+    (stage) => !isAttested(stage)
   )
+
+  const branchColumns = branches.map((branch, branchIndex) => (
+    <div
+      key={`${branch.root}-${branchIndex}`}
+      className="flex w-full min-w-0 flex-col items-center"
+    >
+      {split && (
+        <p className="mb-2 max-w-full truncate font-serif text-sm italic text-ink sm:mb-3">
+          {branch.root}
+        </p>
+      )}
+      {branch.stages.map((stage, index) => (
+        <div key={index} className="flex w-full flex-col items-center">
+          {index > 0 && <Connector />}
+          {node(`${branchIndex}-${index}`, stage, index * STEP_MS)}
+        </div>
+      ))}
+      {/* Stretch to the column bottom so every branch meets the merge curves. */}
+      {split && <Connector grow />}
+    </div>
+  ))
+
+  const openNode = openId ? nodes.get(openId) : undefined
 
   return (
     <div ref={rootRef}>
@@ -249,71 +231,60 @@ export function AncestryTree({ graph, word, language = 'en' }: AncestryTreeProps
       ))}
 
       <div className="flex flex-col items-center">
-        <div
-          className={`grid w-full gap-x-6 gap-y-8 ${
-            !split ? '' : columns === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
-          }`}
-        >
-          {branches.map((branch, branchIndex) => (
-            <div key={`${branch.root}-${branchIndex}`} className="flex flex-col items-center">
-              {split && (
-                <p className="mb-3 font-serif text-sm text-muted">
-                  from <em className="text-ink">{branch.root}</em>
-                </p>
-              )}
-              {branch.stages.map((stage, index) => (
-                <div key={index} className="flex w-full flex-col items-center">
-                  {index > 0 && <Connector />}
-                  {stageNode(stage, `${branchIndex}-${index}`, index * STEP_MS)}
-                </div>
-              ))}
-              {/* Wide screens: stretch to the column bottom so every branch meets the curves. */}
-              {split && <Connector grow className="hidden sm:block" />}
-            </div>
-          ))}
-        </div>
-
-        {split && <MergeCurves count={columns} />}
-        {split && <Connector className="mt-8 sm:hidden" />}
-        {!split && <Connector />}
-
-        {split && mergePoint && (
+        {split ? (
           <>
-            <StaticNode
-              label="Combined"
-              form={mergePoint.form}
-              note={mergePoint.note}
-              delay={tailDelay(0)}
-            />
+            <div
+              className={`grid w-full gap-x-2 gap-y-6 sm:gap-x-6 ${
+                columns === 3 ? 'grid-cols-3' : 'grid-cols-2'
+              }`}
+            >
+              {branchColumns}
+            </div>
+            <MergeCurves count={columns} />
+          </>
+        ) : (
+          <>
+            {branchColumns}
             <Connector />
           </>
         )}
 
+        {combined && (
+          <>
+            {node('merge', combined, tailDelay(0))}
+            <Connector />
+          </>
+        )}
         {postMerge.map((stage, index) => (
           <div key={index} className="flex w-full flex-col items-center">
-            {stageNode(stage, `post-${index}`, tailDelay(mergeNodes + index))}
+            {node(`post-${index}`, stage, tailDelay(mergeOffset + index))}
             <Connector />
           </div>
         ))}
-
-        <StaticNode
-          label={`Modern ${LANGUAGES[language].englishName}`}
-          form={word}
-          final
-          delay={tailDelay(mergeNodes + postMerge.length)}
-        />
+        <div
+          className={`animate-rise ${BOX} border-accent`}
+          style={{ animationDelay: `${tailDelay(mergeOffset + postMerge.length)}ms` }}
+        >
+          <span className={LABEL}>Modern {LANGUAGES[language].englishName}</span>
+          <span className="mt-0.5 block font-serif text-lg text-ink sm:mt-1 sm:text-xl">
+            {word}
+          </span>
+        </div>
       </div>
 
-      <p className="mt-8 flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-muted">
-        {(['attested', 'inferred', 'reconstructed'] as const)
-          .filter((marker) => markersUsed.has(marker))
-          .map((marker) => (
-            <span key={marker} className="inline-flex items-center gap-1.5" aria-hidden="true">
-              <span className={`size-2 rounded-full border ${MARKER_CLASS[marker]}`} />
-              {MARKER_LABEL[marker]}
-            </span>
-          ))}
-        <span>Select a stage to see its sources.</span>
+      {openId && openNode && <Details id={openId} node={openNode} />}
+
+      <p className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted">
+        {hasUnattested && (
+          <span className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="inline-block h-2.5 w-4 border border-dashed border-muted"
+            />
+            not directly attested
+          </span>
+        )}
+        {!openId && <span>Select a stage for details</span>}
       </p>
     </div>
   )
