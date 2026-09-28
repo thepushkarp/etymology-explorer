@@ -30,7 +30,7 @@ export const ETYMOLOGY_SCAN_PATTERN = 'etymology:*'
 const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
 
 // Audio cache (longer TTL - pronunciations don't change)
-const AUDIO_PREFIX = `audio:v1:`
+const AUDIO_PREFIX = `audio:v2:`
 const AUDIO_TTL = CONFIG.audioCacheTTL
 
 /**

@@ -150,8 +150,8 @@ describe('cacheEtymology word-page revalidation', () => {
 
     expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
       'etymology:beta:v6:it:sale',
-      'audio:v1:it:sale',
-      'audio:v1:fr:sale',
+      'audio:v2:it:sale',
+      'audio:v2:fr:sale',
     ])
     expect(revalidateTagMock).toHaveBeenCalledWith('etymology-word:it:sale', { expire: 0 })
   })
@@ -162,8 +162,8 @@ describe('cacheEtymology word-page revalidation', () => {
     expect(await getCachedAudio('  NiCe ', 'en')).toBe('audio-en')
     await cacheAudio('  NiCe ', 'audio-en', 'en')
 
-    expect(currentRedis.get).toHaveBeenCalledWith('audio:v1:nice')
-    expect(currentRedis.set).toHaveBeenCalledWith('audio:v1:nice', 'audio-en', {
+    expect(currentRedis.get).toHaveBeenCalledWith('audio:v2:nice')
+    expect(currentRedis.set).toHaveBeenCalledWith('audio:v2:nice', 'audio-en', {
       ex: expect.any(Number),
     })
   })

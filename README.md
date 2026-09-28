@@ -89,7 +89,7 @@ RATE_LIMIT_ENABLED=true
 
 `ELEVENLABS_VOICE_ID` must be a voice available to your account in `My Voices`.
 Free-tier accounts cannot use Voice Library/community voices through the API.
-Pronunciation requests pass the selected ISO 639-1 `language_code` to `eleven_v3` for
+Pronunciation requests pass the selected ISO 639-1 `language_code` to `eleven_v4` for
 language selection and text normalization. Accent still depends on the configured voice;
 `pt` does not select a Brazilian or European accent.
 
