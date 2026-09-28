@@ -20,6 +20,11 @@ function loadNgram(word: string, language: LanguageCode): Promise<NgramState> {
 
   const request = fetch(`/api/ngram?word=${encodeURIComponent(word)}&language=${language}`)
     .then(async (response): Promise<NgramState> => {
+      // 404 (no data) and 400 (bad input) are permanent; anything else, like a 429
+      // or 5xx, is transient and must not stick for the rest of the session.
+      if (!response.ok && response.status !== 404 && response.status !== 400) {
+        requests.delete(key)
+      }
       const payload = (await response.json()) as ApiResponse<NgramResult>
       return response.ok && payload.success && payload.data
         ? { status: 'ready', data: payload.data }
