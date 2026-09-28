@@ -100,11 +100,6 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
             large ? 'text-2xl sm:text-3xl' : 'text-base'
           }`}
         />
-        {!large && (
-          <kbd className="hidden rounded border border-rule px-1.5 text-xs text-muted sm:block">
-            /
-          </kbd>
-        )}
       </div>
 
       {showList && (

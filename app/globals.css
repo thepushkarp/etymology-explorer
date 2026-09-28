@@ -11,6 +11,14 @@
   --rule: #e3dccc;
   --wash: #efe8d9;
   --accent: #8c2f1f;
+  /* Language families in the lineage tree */
+  --lang-pie: #8f7c4a;
+  --lang-greek: #3d6a8e;
+  --lang-latin: #a04a36;
+  --lang-romance: #b07a22;
+  --lang-germanic: #4d7c5a;
+  --lang-semitic: #7b5a8e;
+  --lang-other: #7d776c;
 }
 
 .dark {
@@ -21,6 +29,13 @@
   --rule: #2b2824;
   --wash: #25221e;
   --accent: #e39070;
+  --lang-pie: #c6b37e;
+  --lang-greek: #86add1;
+  --lang-latin: #dd8d75;
+  --lang-romance: #deb064;
+  --lang-germanic: #8fc39c;
+  --lang-semitic: #bb9bd3;
+  --lang-other: #a29b8c;
 }
 
 @theme inline {
@@ -31,6 +46,13 @@
   --color-rule: var(--rule);
   --color-wash: var(--wash);
   --color-accent: var(--accent);
+  --color-lang-pie: var(--lang-pie);
+  --color-lang-greek: var(--lang-greek);
+  --color-lang-latin: var(--lang-latin);
+  --color-lang-romance: var(--lang-romance);
+  --color-lang-germanic: var(--lang-germanic);
+  --color-lang-semitic: var(--lang-semitic);
+  --color-lang-other: var(--lang-other);
   --font-serif: var(--font-libre-baskerville), Georgia, serif;
   --font-sans: var(--font-alegreya-sans), Georgia, serif;
 }

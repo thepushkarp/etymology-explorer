@@ -233,7 +233,7 @@ and the output is guaranteed-shape JSON.
 - **TypeScript strict mode** - All types defined in `lib/types.ts`
 - **Prettier**: 100 char width, single quotes, no semicolons, ES5 trailing commas
 - **ESLint**: Next.js core Web Vitals + Prettier integration
-- **Tailwind CSS v4**: Seven color tokens (`paper`, `ink`, `muted`, `faint`, `rule`, `wash`, `accent`) in `globals.css`, redefined under `.dark`
+- **Tailwind CSS v4**: Seven color tokens (`paper`, `ink`, `muted`, `faint`, `rule`, `wash`, `accent`) plus lineage-only language-family tokens (`lang-pie`, `lang-greek`, `lang-latin`, `lang-romance`, `lang-germanic`, `lang-semitic`, `lang-other`) in `globals.css`, redefined under `.dark`
 
 ## Design Philosophy
 
@@ -243,7 +243,7 @@ The UI is a quiet, typeset dictionary page: the words carry it, the chrome gets 
 
 - **Typography-first**: Libre Baskerville (regular + italic) for words and prose, Alegreya Sans (regular) for small UI text. Hierarchy comes from size, italics, and the small-caps `label` utility — no bold weights (they are not loaded).
 - **One reading column**: `max-w-3xl`, generous vertical rhythm, hairline `rule` borders. No cards, gradients, shadows, or pills.
-- **Restrained color**: paper, ink, and a single oxblood `accent` used for emphasis and the live marker. Use tokens, never raw hex or Tailwind palette colors.
+- **Restrained color**: paper, ink, and a single oxblood `accent` used for emphasis and the live marker. The one exception is the lineage tree, which marks each node's language family with a `lang-*` token (top edge + legend). Use tokens, never raw hex or Tailwind palette colors.
 - **Purposeful motion**: one CSS `animate-rise` reveal (staggered via `animation-delay`), color transitions on hover, skeleton pulses while streaming. Honor reduced motion.
 - **Real links**: words link to word pages with `<WordLink>`; native `<details>` for disclosure.
 
@@ -321,6 +321,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `components/EntryView.tsx` - Client shell for a finished entry (cached page or completed trace)
 - `components/WordTraceExperience.tsx` - Live streaming trace UI for uncached word pages
 - `components/EtymologyCard.tsx` - Entry layout; `pending` renders skeletons until each synthesis_section lands
+- `components/AncestryTree.tsx` - Lineage tree: CSS-laid-out nodes, edges measured from the DOM into an SVG overlay, draggable nodes (mouse drag; touch press-and-hold), one shared details panel
 - `lib/streamReducer.ts` - Pure reducer folding SSE events into structured progress state
 - `lib/traceIntent.ts` - sessionStorage in-app-navigation flag gating auto-trace (crawler cost invariant)
 

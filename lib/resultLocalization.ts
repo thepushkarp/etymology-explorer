@@ -178,7 +178,7 @@ const ENGLISH_LABELS: SectionLabels = {
   usageUnavailable: 'Usage history is not available for this word yet.',
   modernUsage: 'Modern usage',
   related: 'Related words',
-  kin: 'Kin',
+  kin: 'Words from the same roots',
   sources: 'Sources',
   references: 'Further scholarly references',
 }

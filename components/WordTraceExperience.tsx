@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { EntryView } from '@/components/EntryView'
 import { ErrorState } from '@/components/ErrorState'
 import { EtymologyCard } from '@/components/EtymologyCard'
@@ -112,7 +112,22 @@ function TraceGate({ onStart }: { onStart: () => void }) {
   )
 }
 
+/** Wall-clock milliseconds since this component mounted, ticking every 100ms while `running`. */
+function useElapsed(running: boolean): number {
+  const [start] = useState(() => Date.now())
+  const [now, setNow] = useState(start)
+  useEffect(() => {
+    if (!running) return
+    const timer = setInterval(() => setNow(Date.now()), 100)
+    return () => clearInterval(timer)
+  }, [running])
+  return now - start
+}
+
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`
+
 function TraceStatus({ progress }: { progress: StreamState }) {
+  const elapsed = useElapsed(progress.status === 'loading')
   const message =
     progress.phase === 'synthesis'
       ? 'Writing the entry…'
@@ -122,23 +137,30 @@ function TraceStatus({ progress }: { progress: StreamState }) {
 
   return (
     <div className="mt-8 text-sm">
-      <p className="font-serif italic text-muted">{message}</p>
-      <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+      <p className="font-serif italic text-muted">
+        {message} <span className="not-italic tabular-nums text-faint">{seconds(elapsed)}</span>
+      </p>
+      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
         {progress.sources.map((source) => (
-          <span
+          <li
             key={source.key}
             className={`transition-colors duration-500 ${
-              source.status === 'complete'
-                ? 'text-ink'
-                : source.status === 'failed'
-                  ? 'text-faint line-through'
-                  : 'animate-pulse text-faint'
+              source.status === 'complete' ? 'text-ink' : 'text-faint'
             }`}
           >
-            {source.label}
-          </span>
+            <span className={source.status === 'failed' ? 'line-through' : ''}>{source.label}</span>{' '}
+            <span className="tabular-nums text-muted">
+              {source.status === 'pending'
+                ? seconds(elapsed)
+                : source.status === 'failed'
+                  ? 'failed'
+                  : source.timing !== undefined
+                    ? seconds(source.timing)
+                    : 'done'}
+            </span>
+          </li>
         ))}
-      </p>
+      </ul>
     </div>
   )
 }

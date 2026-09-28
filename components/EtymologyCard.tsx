@@ -46,6 +46,7 @@ export function EtymologyCard({
               graph={result.ancestryGraph}
               word={result.word}
               language={result.language}
+              definition={result.definition}
             />
           ) : (
             <Skeleton widths={['w-24', 'w-40', 'w-20', 'w-48', 'w-28']} />
