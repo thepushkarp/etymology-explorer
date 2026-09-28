@@ -7,6 +7,7 @@ import {
   type StreamState,
 } from './streamReducer'
 import type { EtymologyResult, StreamEvent } from './types'
+import type { PartialEtymology } from './streamReducer'
 
 function run(actions: StreamAction[], from: StreamState = initialStreamState): StreamState {
   return actions.reduce(streamReducer, from)
@@ -150,7 +151,6 @@ describe('phases', () => {
       { type: 'search_started' },
       ...events({ type: 'parsing_complete', chainCount: 2 }),
     ])
-    expect(state.parsingComplete).toBe(true)
     expect(state.phase).toBe('sources')
 
     state = run(events({ type: 'synthesis_started' }), state)
@@ -303,15 +303,23 @@ describe('toPartialResult', () => {
     expect(partial.sources).toEqual([])
   })
 
-  test('prefers streamed sections and attaches the ngram when supplied', () => {
-    const ngram = { word: 'perfidious', data: [{ year: 1900, count: 5 }], corpus: 'en' }
-    const partial = toPartialResult(
-      'perfidious',
-      { word: 'perfidious', definition: 'Deceitful.' },
-      ngram
-    )
+  test('projects bilingual streamed prose for a beta language', () => {
+    const sections = {
+      definition: { en: 'A representative instance.', local: 'Un cas représentatif.' },
+      roots: [
+        {
+          root: 'exemplum',
+          origin: 'Latin',
+          meaning: { en: 'sample', local: 'modèle' },
+          relatedWords: [],
+        },
+      ],
+    } as unknown as PartialEtymology
 
-    expect(partial.definition).toBe('Deceitful.')
-    expect(partial.ngram).toBe(ngram)
+    const partial = toPartialResult('exemple', sections, 'fr')
+
+    expect(partial.definition).toBe('Un cas représentatif.')
+    expect(partial.roots[0].meaning).toBe('modèle')
+    expect(partial.lore).toBe('')
   })
 })

@@ -32,40 +32,29 @@ function counterKey(name: CounterName): string {
   return `counters:v1:${currentMonth()}:${name}`
 }
 
-export async function incrCounter(name: CounterName): Promise<void> {
-  const redis = getRedis()
-  if (!redis) return
-
-  try {
-    const key = counterKey(name)
-    const pipeline = redis.pipeline()
-    pipeline.incr(key)
-    pipeline.expire(key, COUNTER_TTL_SECONDS, 'nx')
-    await pipeline.exec()
-  } catch (error) {
-    console.error('[Counters] incrCounter failed:', safeError(error))
-  }
-}
-
 function languageCounterKey(language: LanguageCode, metric: LanguageMetric): string {
   return `counters:v2:${currentMonth()}:${language}:${metric}`
 }
 
-export async function incrLanguageCounter(
-  language: LanguageCode,
-  metric: LanguageMetric
-): Promise<void> {
+async function increment(key: string): Promise<void> {
   const redis = getRedis()
   if (!redis) return
   try {
-    const key = languageCounterKey(language, metric)
     const pipeline = redis.pipeline()
     pipeline.incr(key)
     pipeline.expire(key, COUNTER_TTL_SECONDS, 'nx')
     await pipeline.exec()
   } catch (error) {
-    console.error('[Counters] incrLanguageCounter failed:', safeError(error))
+    console.error(`[Counters] increment ${key} failed:`, safeError(error))
   }
+}
+
+export function incrCounter(name: CounterName): Promise<void> {
+  return increment(counterKey(name))
+}
+
+export function incrLanguageCounter(language: LanguageCode, metric: LanguageMetric): Promise<void> {
+  return increment(languageCounterKey(language, metric))
 }
 
 export async function getLanguageCounters(): Promise<Record<

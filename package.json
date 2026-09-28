@@ -25,7 +25,6 @@
     ]
   },
   "dependencies": {
-    "@heroicons/react": "^2.2.0",
     "@upstash/ratelimit": "^2.1.0",
     "@upstash/redis": "^1.38.4",
     "@vercel/analytics": "^2.0.1",

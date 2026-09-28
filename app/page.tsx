@@ -1,30 +1,11 @@
 import type { Metadata } from 'next'
-import { permanentRedirect } from 'next/navigation'
-import { ExploreExperience } from '@/components/ExploreExperience'
-import { canonicalizeWord, isValidWord } from '@/lib/validation'
-
-interface HomePageProps {
-  searchParams: Promise<{ q?: string | string[] }>
-}
+import { Landing } from '@/components/Landing'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
 }
 
-/**
- * Bare / is the landing/search page. Legacy deep links (/?q=word) redirect
- * permanently to the canonical /word/{word} page, which hosts the full
- * search experience; old shared links keep working.
- */
-export default async function Home({ searchParams }: HomePageProps) {
-  const { q } = await searchParams
-  const raw = Array.isArray(q) ? q[0] : q
-  if (raw) {
-    const word = canonicalizeWord(raw)
-    if (isValidWord(word)) {
-      permanentRedirect(`/word/${encodeURIComponent(word)}`)
-    }
-  }
-
-  return <ExploreExperience />
+// Static: legacy /?q=word deep links are redirected in proxy.ts.
+export default function Home() {
+  return <Landing />
 }

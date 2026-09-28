@@ -9,47 +9,27 @@ interface ResultEditionSwitchProps {
   onChange: (locale: ResultLocale) => void
 }
 
+/** Read a beta entry in English or in the word's own language. */
 export function ResultEditionSwitch({ language, locale, onChange }: ResultEditionSwitchProps) {
+  const options: Array<[ResultLocale, string]> = [
+    ['en', 'English'],
+    ['local', LANGUAGES[language].nativeName],
+  ]
   return (
-    <div className="inline-flex items-center gap-2" aria-label="Reading edition">
-      <span className="hidden text-[9px] uppercase tracking-[0.2em] text-charcoal-light/58 sm:inline">
-        edition
-      </span>
-      <div
-        className="inline-flex rounded-full border border-border-soft bg-surface p-1"
-        role="group"
-        aria-label="Result language"
-      >
-        <EditionButton active={locale === 'en'} onClick={() => onChange('en')}>
-          English
-        </EditionButton>
-        <EditionButton active={locale === 'local'} onClick={() => onChange('local')}>
-          {LANGUAGES[language].nativeName}
-        </EditionButton>
-      </div>
+    <div className="flex gap-3 text-sm" role="group" aria-label="Reading edition">
+      {options.map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => onChange(value)}
+          aria-pressed={locale === value}
+          className={`transition-colors ${
+            locale === value ? 'text-ink underline underline-offset-4' : 'text-muted hover:text-ink'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
     </div>
-  )
-}
-
-function EditionButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-full px-2.5 py-1.5 text-[11px] transition-colors sm:px-3 sm:text-xs ${
-        active ? 'bg-charcoal text-cream' : 'text-charcoal-light hover:text-charcoal'
-      }`}
-    >
-      {children}
-    </button>
   )
 }

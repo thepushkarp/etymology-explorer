@@ -1,23 +1,6 @@
-'use client'
-
-import { memo, useState, useCallback, useRef, useEffect } from 'react'
-import {
-  AncestryGraph,
-  AncestryStage,
-  AncestryBranch,
-  ConvergencePoint,
-  StageConfidence,
-} from '@/lib/types'
+import type { AncestryGraph, AncestryStage } from '@/lib/types'
 import { LANGUAGES, type LanguageCode } from '@/lib/languages'
-import {
-  branchColors,
-  confidenceConfig,
-  confidenceBadgeStyles,
-  mergeLineColor,
-  mergeArrowColor,
-  sourcePillColors,
-  defaultSourcePillColors,
-} from '@/lib/themeColors'
+import { sourceLabel } from '@/lib/sourceLabels'
 
 interface AncestryTreeProps {
   graph: AncestryGraph
@@ -25,463 +8,195 @@ interface AncestryTreeProps {
   language?: LanguageCode
 }
 
-/**
- * Evidence panel shown when a stage is clicked.
- * On desktop: popover tooltip. On mobile: inline accordion.
- */
-function EvidencePanel({ stage }: { stage: AncestryStage }) {
-  if (!stage.evidence || stage.evidence.length === 0) return null
+type Marker = 'attested' | 'inferred' | 'reconstructed' | 'final'
 
-  return (
-    <div
-      className="
-        mt-3 w-full rounded-[1rem] border border-border-soft bg-cream-dark/30 px-3 py-3
-      "
-    >
-      {stage.evidence.map((ev, i) => (
-        <div key={`${ev.source}-${i}`} className="mb-1 last:mb-0">
-          <span
-            className={`
-              inline-block text-[9px] font-semibold uppercase tracking-wider
-              px-1.5 py-0.5 rounded border mb-1
-              ${sourcePillColors[ev.source] || defaultSourcePillColors}
-            `}
-          >
-            {ev.source}
-          </span>
-          <p className="font-serif text-[11px] italic text-charcoal/70 leading-snug">
-            {ev.snippet}
-          </p>
-        </div>
-      ))}
-    </div>
-  )
+const MARKER_CLASS: Record<Marker, string> = {
+  attested: 'bg-muted border-muted',
+  inferred: 'bg-paper border-muted',
+  reconstructed: 'bg-paper border-muted border-dashed',
+  final: 'bg-accent border-accent',
 }
 
-/**
- * Confidence dot indicator for a stage
- */
-function ConfidenceBadge({ confidence }: { confidence?: StageConfidence }) {
-  if (!confidence) return null
-
-  const config = confidenceConfig[confidence]
-  return (
-    <span
-      className={`
-        inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full
-        text-[8px] font-semibold uppercase tracking-wider leading-none
-        border ${confidenceBadgeStyles[confidence]}
-      `}
-      title={config.label}
-      aria-label={config.label}
-    >
-      <span className={`inline-block w-1.5 h-1.5 rounded-full ${config.color}`} />
-      {config.label}
-    </span>
-  )
+const MARKER_LABEL: Record<Exclude<Marker, 'final'>, string> = {
+  attested: 'found in sources',
+  inferred: 'inferred',
+  reconstructed: 'reconstructed',
 }
 
-function StageNode({
-  stage,
-  isLast,
-  animationDelay,
+function markerFor(stage: AncestryStage): Marker {
+  if (stage.isReconstructed) return 'reconstructed'
+  return stage.confidence === 'low' ? 'inferred' : 'attested'
+}
+
+/** One stop on the timeline: a dot on the rail, then language, form, and gloss. */
+function Stop({
+  marker,
+  label,
+  form,
+  note,
+  delay,
+  children,
 }: {
-  stage: AncestryStage
-  isLast?: boolean
-  animationDelay?: number
+  marker: Marker
+  label: string
+  form: string
+  note?: string
+  delay: number
+  children?: React.ReactNode
 }) {
-  const [showEvidence, setShowEvidence] = useState(false)
-  const nodeRef = useRef<HTMLDivElement>(null)
-  const isReconstructed = stage.isReconstructed
-  const hasEvidence = stage.evidence && stage.evidence.length > 0
+  return (
+    <li
+      className="animate-rise relative pb-7 pl-7 last:pb-0"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <span
+        aria-hidden="true"
+        className="absolute bottom-0 left-[4.5px] top-3 w-px bg-faint/60 [li:last-child>&]:hidden"
+      />
+      <span
+        aria-hidden="true"
+        className={`absolute left-0 top-[0.4rem] size-2.5 rounded-full border ${MARKER_CLASS[marker]}`}
+      />
+      {marker !== 'final' && <span className="sr-only">{MARKER_LABEL[marker]}: </span>}
+      <p className="label">{label}</p>
+      <p
+        className={`mt-1 font-serif text-lg ${marker === 'final' ? 'text-ink' : 'italic text-ink'}`}
+      >
+        {form}
+      </p>
+      {note && <p className="mt-0.5 max-w-md text-sm leading-relaxed text-muted">{note}</p>}
+      {children}
+    </li>
+  )
+}
 
-  // Close evidence panel on outside click
-  useEffect(() => {
-    if (!showEvidence) return
-    function handleClick(e: MouseEvent) {
-      if (nodeRef.current && !nodeRef.current.contains(e.target as Node)) {
-        setShowEvidence(false)
-      }
-    }
-    document.addEventListener('click', handleClick)
-    return () => document.removeEventListener('click', handleClick)
-  }, [showEvidence])
+function Evidence({ stage }: { stage: AncestryStage }) {
+  if (!stage.evidence?.length) return null
+  return (
+    <details className="group mt-1.5">
+      <summary className="inline cursor-pointer list-none text-xs text-muted underline decoration-faint underline-offset-4 transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+        <span className="group-open:hidden">evidence ({stage.evidence.length})</span>
+        <span className="hidden group-open:inline">hide evidence</span>
+      </summary>
+      <ul className="animate-rise mt-2 max-w-md space-y-2 border-l border-rule pl-3">
+        {stage.evidence.map((item, index) => (
+          <li key={`${item.source}-${index}`} className="text-sm leading-snug">
+            <span className="label mr-2">{sourceLabel(item.source)}</span>
+            <q className="font-serif italic text-muted">{item.snippet}</q>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
+}
 
-  const handleToggle = useCallback(() => {
-    if (hasEvidence) setShowEvidence((prev) => !prev)
-  }, [hasEvidence])
+const STEP_MS = 60
+
+export function AncestryTree({ graph, word, language = 'en' }: AncestryTreeProps) {
+  const { branches, mergePoint, postMerge = [], convergencePoints = [] } = graph
+  if (branches.length === 0) return null
+
+  const split = branches.length > 1
+  // Stops reveal top to bottom; the joined tail starts after the longest branch.
+  const tailStart = Math.max(...branches.map((branch) => branch.stages.length))
+  const tailDelay = (index: number) => (tailStart + index) * STEP_MS
+
+  const markersUsed = new Set(
+    [...branches.flatMap((branch) => branch.stages), ...postMerge].map(markerFor)
+  )
+
+  const stageStop = (stage: AncestryStage, key: string, stopDelay: number) => (
+    <Stop
+      key={key}
+      marker={markerFor(stage)}
+      label={stage.stage}
+      form={stage.form}
+      note={stage.note}
+      delay={stopDelay}
+    >
+      <Evidence stage={stage} />
+    </Stop>
+  )
+
+  // A single branch flows straight into the modern word; several branches
+  // sit side by side and join below.
+  const mergeStops = split && mergePoint ? 1 : 0
+  const tail = [
+    ...(split && mergePoint
+      ? [
+          <Stop
+            key="merge"
+            marker="attested"
+            label="Combined"
+            form={mergePoint.form}
+            note={mergePoint.note}
+            delay={tailDelay(0)}
+          />,
+        ]
+      : []),
+    ...postMerge.map((stage, index) =>
+      stageStop(stage, `post-${index}`, tailDelay(mergeStops + index))
+    ),
+    <Stop
+      key="final"
+      marker="final"
+      label={`Modern ${LANGUAGES[language].englishName}`}
+      form={word}
+      delay={tailDelay(mergeStops + postMerge.length)}
+    />,
+  ]
 
   return (
-    <div
-      ref={nodeRef}
-      className="flex flex-col items-center w-full animate-stage-reveal"
-      style={
-        animationDelay !== undefined
-          ? { animationDelay: `${animationDelay}ms`, animationFillMode: 'backwards' }
-          : undefined
-      }
-    >
-      <div
-        onClick={handleToggle}
-        className={`
-          w-full rounded-[0.9rem] px-3 py-3.5 sm:px-4 sm:py-4
-          ${isReconstructed ? 'border-2 border-dashed' : 'border-2'}
-          ${
-            isReconstructed
-              ? 'border-stone-300 bg-stone-50/60 dark:border-stone-700 dark:bg-stone-900/40'
-              : `border-border-soft bg-surface/92`
-          }
-          text-center shadow-[0_14px_28px_-22px_var(--shadow-color)] transition-[transform,box-shadow] duration-300
-          ${hasEvidence ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md' : ''}
-        `}
-      >
-        {/* Header stack: language label above confidence badge */}
-        <div className="mb-1 flex flex-col items-center gap-1">
+    <div>
+      {convergencePoints.map((point, index) => (
+        <p key={`${point.pieRoot}-${index}`} className="mb-6 font-serif text-sm italic text-muted">
+          {point.branchIndices.map((i) => branches[i]?.root ?? '?').join(' and ')} share
+          Proto-Indo-European <span className="text-ink">*{point.pieRoot.replace(/^\*/, '')}</span>{' '}
+          &lsquo;{point.meaning}&rsquo;.
+        </p>
+      ))}
+
+      {split ? (
+        <>
           <div
-            className={`text-[10px] font-semibold uppercase tracking-wider ${
-              isReconstructed ? 'text-stone-500 dark:text-stone-400' : 'text-charcoal-light'
-            }`}
+            className={`grid gap-x-8 gap-y-8 ${branches.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}
           >
-            {stage.stage}
-          </div>
-          <ConfidenceBadge confidence={stage.confidence} />
-        </div>
-
-        {/* Form */}
-        <div
-          className={`
-            font-serif text-[15px] sm:text-base
-            ${isReconstructed ? 'italic text-stone-600 dark:text-stone-400' : ''}
-            ${isLast ? 'font-semibold text-charcoal' : 'text-charcoal/90'}
-          `}
-        >
-          {stage.form}
-        </div>
-
-        {/* Reconstructed label */}
-        {isReconstructed && (
-          <div className="text-[8px] uppercase tracking-widest text-stone-400 dark:text-stone-500 mt-0.5">
-            reconstructed
-          </div>
-        )}
-
-        {/* Note */}
-        <div className="mt-1 text-[10px] leading-tight text-charcoal-light">{stage.note}</div>
-
-        {/* Inline evidence preview */}
-        {hasEvidence && (
-          <div className="mt-1.5 pt-1.5 border-t border-stone-200/60 dark:border-stone-700/60">
-            <p className="font-serif text-[9px] italic text-charcoal/50 leading-snug line-clamp-2">
-              {stage.evidence![0].snippet}
-            </p>
-            {stage.evidence!.length > 1 && (
-              <span className="text-[8px] text-charcoal/40 mt-0.5 block">
-                +{stage.evidence!.length - 1} more source{stage.evidence!.length > 2 ? 's' : ''}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Full evidence panel (expanded on click) */}
-      {showEvidence && <EvidencePanel stage={stage} />}
-    </div>
-  )
-}
-
-function VerticalConnector({ color = 'bg-charcoal/20' }: { color?: string }) {
-  return (
-    <div className="flex flex-col items-center py-0.5">
-      <div className={`w-0.5 h-3 ${color}`} />
-      <svg className="w-2 h-2 text-charcoal/30 -mt-0.5" fill="currentColor" viewBox="0 0 12 12">
-        <path d="M6 9L2 5h8L6 9z" />
-      </svg>
-    </div>
-  )
-}
-
-/**
- * Scholarly callout showing shared PIE ancestry between branches
- * Styled as dictionary marginalia / cross-reference note
- */
-function ConvergenceCallout({
-  points,
-  branches,
-}: {
-  points: ConvergencePoint[]
-  branches: AncestryBranch[]
-}) {
-  return (
-    <aside
-      className="
-        mb-6 w-full max-w-xl rounded-[1.4rem] border border-border-soft bg-cream-dark/28 p-4
-      "
-      role="note"
-      aria-label="Shared etymology"
-    >
-      <h3
-        className="
-          text-[10px] font-semibold uppercase tracking-widest
-          text-stone-600 dark:text-stone-400 mb-2
-          flex items-center gap-2
-        "
-      >
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101"
-          />
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M10.172 13.828a4 4 0 015.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-          />
-        </svg>
-        Shared Ancestry
-      </h3>
-      {points.map((cp, i) => {
-        const branchNames = cp.branchIndices.map((idx) => branches[idx]?.root || '?')
-        return (
-          <p
-            key={`convergence-${cp.pieRoot}-${i}`}
-            className="font-serif text-sm text-charcoal/80 leading-relaxed"
-          >
-            <span className="font-semibold">{branchNames.join(' and ')}</span> share
-            Proto-Indo-European{' '}
-            <em className="text-stone-700 dark:text-stone-300">*{cp.pieRoot}</em>{' '}
-            <span className="text-stone-500 dark:text-stone-400">&ldquo;{cp.meaning}&rdquo;</span>
-          </p>
-        )
-      })}
-    </aside>
-  )
-}
-
-/**
- * Extract grid column class to avoid recreating inline strings
- */
-function gridColsClass(count: number): string {
-  if (count === 1) return 'grid-cols-1 max-w-sm mx-auto'
-  if (count === 2) return 'grid-cols-1 sm:grid-cols-2 sm:max-w-lg sm:mx-auto'
-  return 'grid-cols-1 sm:grid-cols-3 sm:max-w-2xl sm:mx-auto'
-}
-
-function BranchColumn({
-  branch,
-  branchIndex,
-  convergencePoints,
-  baseDelay,
-}: {
-  branch: AncestryBranch
-  branchIndex: number
-  convergencePoints?: ConvergencePoint[]
-  baseDelay: number
-}) {
-  const branchColor = branchColors[branchIndex % branchColors.length]
-
-  // Find convergences this branch participates in
-  const convergences =
-    convergencePoints?.filter((cp) => cp.branchIndices.includes(branchIndex)) || []
-
-  return (
-    <div className="flex flex-col items-center">
-      {/* Root label with convergence badge */}
-      <div
-        className={`
-          mb-2 flex items-center gap-1.5 rounded-full px-3 py-1.5
-          text-[10px] font-bold uppercase tracking-[0.16em]
-          border border-border-soft
-          bg-surface/92 text-charcoal/88
-          shadow-sm
-          animate-stage-reveal
-        `}
-        style={{ animationDelay: `${baseDelay}ms`, animationFillMode: 'backwards' }}
-      >
-        {branch.root}
-        {convergences.length > 0 && (
-          <span
-            className="
-              w-2 h-2 rounded-full
-              bg-[var(--accent-oxblood)]
-              ring-1 ring-stone-300 dark:ring-stone-600
-            "
-            title={convergences.map((c) => `Shares PIE *${c.pieRoot} "${c.meaning}"`).join('; ')}
-            aria-label={`Shared ancestry with PIE roots: ${convergences.map((c) => c.pieRoot).join(', ')}`}
-          />
-        )}
-      </div>
-
-      {/* Stages */}
-      {branch.stages.map((stage, idx) => (
-        <div key={`${stage.stage}-${idx}`} className="flex flex-col items-center w-full">
-          {idx > 0 && <VerticalConnector color={branchColor.line} />}
-          <StageNode
-            stage={stage}
-            isLast={idx === branch.stages.length - 1}
-            animationDelay={baseDelay + (idx + 1) * 100}
-          />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-export const AncestryTree = memo(function AncestryTree({
-  graph,
-  word,
-  language = 'en',
-}: AncestryTreeProps) {
-  if (!graph || !graph.branches || graph.branches.length === 0) return null
-
-  const hasMerge = graph.mergePoint && graph.branches.length > 1
-  const hasPostMerge = graph.postMerge && graph.postMerge.length > 0
-  const hasConvergence = graph.convergencePoints && graph.convergencePoints.length > 0
-
-  // Calculate the max stages across all branches for delay calculation
-  const maxStages = Math.max(...graph.branches.map((b) => b.stages.length), 0)
-
-  return (
-    <section>
-      <div className="flex flex-col items-center w-full transition-all duration-300 ease-out">
-        {/* Convergence callout - shared PIE ancestry */}
-        {hasConvergence && (
-          <ConvergenceCallout points={graph.convergencePoints!} branches={graph.branches} />
-        )}
-
-        {/* Narrow screens stack branches so evidence remains readable. */}
-        <div className={`grid w-full items-end gap-4 ${gridColsClass(graph.branches.length)}`}>
-          {graph.branches.map((branch, idx) => (
-            <BranchColumn
-              key={branch.root}
-              branch={branch}
-              branchIndex={idx}
-              convergencePoints={graph.convergencePoints}
-              baseDelay={idx * 50}
-            />
-          ))}
-        </div>
-
-        {/* Merge point (if multiple branches) */}
-        {hasMerge && (
-          <>
-            {/* Merge lines converging — smooth bezier curves */}
-            <div className="relative w-full max-w-lg h-8 mt-2">
-              <svg
-                className="w-full h-full"
-                viewBox="0 0 100 20"
-                preserveAspectRatio="none"
-                fill="none"
-              >
-                {graph.branches.length === 2 && (
-                  <>
-                    <path
-                      d="M25 0 C25 12, 50 12, 50 18"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-charcoal/20"
-                    />
-                    <path
-                      d="M75 0 C75 12, 50 12, 50 18"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-charcoal/20"
-                    />
-                  </>
-                )}
-                {graph.branches.length === 3 && (
-                  <>
-                    <path
-                      d="M17 0 C17 12, 50 12, 50 18"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-charcoal/20"
-                    />
-                    <path
-                      d="M50 0 L50 18"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-charcoal/20"
-                    />
-                    <path
-                      d="M83 0 C83 12, 50 12, 50 18"
-                      stroke="currentColor"
-                      strokeWidth="1"
-                      className="text-charcoal/20"
-                    />
-                  </>
-                )}
-              </svg>
-            </div>
-
-            {/* Merge node */}
-            <div
-              className={`
-                max-w-sm rounded-[1rem] border border-border-soft bg-surface/92
-                px-4 py-3 text-center shadow-sm animate-stage-reveal
-              `}
-              style={{
-                animationDelay: `${(maxStages + 1) * 100}ms`,
-                animationFillMode: 'backwards',
-              }}
-            >
-              <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-charcoal-light">
-                Combined
-              </div>
-              <div className="font-serif text-base font-semibold text-charcoal">
-                {graph.mergePoint!.form}
-              </div>
-              <div className="mt-0.5 text-[10px] text-charcoal-light">{graph.mergePoint!.note}</div>
-            </div>
-          </>
-        )}
-
-        {/* Post-merge evolution */}
-        {hasPostMerge && (
-          <div className="flex flex-col items-center">
-            {graph.postMerge!.map((stage, idx) => (
-              <div key={`post-${idx}`} className="flex flex-col items-center w-full max-w-xs">
-                <VerticalConnector color={mergeLineColor} />
-                <StageNode
-                  stage={stage}
-                  isLast={idx === graph.postMerge!.length - 1}
-                  animationDelay={(maxStages + 2 + idx) * 100}
-                />
+            {branches.map((branch, branchIndex) => (
+              <div key={`${branch.root}-${branchIndex}`}>
+                <p className="mb-4 font-serif text-sm text-muted">
+                  from <em className="text-ink">{branch.root}</em>
+                </p>
+                <ol>
+                  {branch.stages.map((stage, index) =>
+                    stageStop(stage, `${branchIndex}-${index}`, index * STEP_MS)
+                  )}
+                </ol>
               </div>
             ))}
           </div>
-        )}
+          <ol className="mt-8 border-t border-rule pt-8">{tail}</ol>
+        </>
+      ) : (
+        <ol>
+          {branches[0].stages.map((stage, index) =>
+            stageStop(stage, `0-${index}`, index * STEP_MS)
+          )}
+          {tail}
+        </ol>
+      )}
 
-        {/* Final word */}
-        <div className="flex flex-col items-center mt-1">
-          <div className={`w-0.5 h-4 ${mergeLineColor}`} />
-          <svg
-            className={`w-3 h-3 ${mergeArrowColor} -mt-0.5`}
-            fill="currentColor"
-            viewBox="0 0 12 12"
-          >
-            <path d="M6 9L1 4h10L6 9z" />
-          </svg>
-        </div>
-
-        <div
-          className={`
-            rounded-[1rem] border border-border-soft bg-surface px-6 py-3
-            shadow-sm dark:shadow-black/30 animate-stage-reveal
-          `}
-          style={{
-            animationDelay: `${(maxStages + 3 + (graph.postMerge?.length || 0)) * 100}ms`,
-            animationFillMode: 'backwards',
-          }}
-        >
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-charcoal-light">
-            Modern {LANGUAGES[language].englishName}
-          </div>
-          <div className="font-serif text-xl font-bold text-charcoal">{word}</div>
-        </div>
-      </div>
-    </section>
+      {markersUsed.size > 1 && (
+        <p className="mt-8 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted" aria-hidden="true">
+          {(['attested', 'inferred', 'reconstructed'] as const)
+            .filter((marker) => markersUsed.has(marker))
+            .map((marker) => (
+              <span key={marker} className="inline-flex items-center gap-1.5">
+                <span className={`size-2 rounded-full border ${MARKER_CLASS[marker]}`} />
+                {MARKER_LABEL[marker]}
+              </span>
+            ))}
+        </p>
+      )}
+    </div>
   )
-})
+}

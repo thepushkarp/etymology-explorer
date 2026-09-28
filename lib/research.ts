@@ -604,7 +604,6 @@ export async function conductAgenticResearch(
     `[Research] Phase 1: Fetching main word "${normalizedWord}"${skipOptional ? ' (skip optional sources)' : ''}`
   )
 
-  // Emit source_started events
   emitProgress(onProgress, { type: 'source_started', source: 'etymonline' })
   emitProgress(onProgress, { type: 'source_started', source: 'wiktionary' })
   emitProgress(onProgress, { type: 'source_started', source: 'freeDictionary' })

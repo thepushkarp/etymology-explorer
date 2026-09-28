@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server'
+import { after, NextRequest } from 'next/server'
 import { EtymologyResult, StreamEvent, StageConfidence, ResearchContext } from '@/lib/types'
 import { synthesizeFromResearch, getLlmUsageFromError, SynthesisResult } from '@/lib/llm'
 import { conductAgenticResearch, hasCredibleMainSource } from '@/lib/research'
@@ -70,14 +70,12 @@ export async function GET(request: NextRequest) {
     shouldStream = request.nextUrl.searchParams.get('stream') === 'true'
     const respond = createResponseAdapter(shouldStream)
 
-    // Validate environment (lazy, cached after first call)
     try {
       getEnv()
     } catch {
       return respond.error('Service configuration error', { status: 503 })
     }
 
-    // Feature flags
     if (!CONFIG.features.publicSearchEnabled || CONFIG.features.forceCacheOnly) {
       return respond.error('Service temporarily unavailable', { status: 503 })
     }
@@ -88,7 +86,8 @@ export async function GET(request: NextRequest) {
     if (!language) {
       return respond.error('Unsupported language', { status: 400 })
     }
-    await incrLanguageCounter(language, 'request')
+    // Best-effort counters never delay the response.
+    after(() => incrLanguageCounter(language, 'request'))
 
     if (!word || typeof word !== 'string') {
       return respond.error('Word is required', { status: 400 })
@@ -104,9 +103,8 @@ export async function GET(request: NextRequest) {
       return respond.error(getQuirkyMessage('nonsense'), { status: 400, errorType: 'nonsense' })
     }
 
-    const costMode = await getCostMode()
-
     // Honor stream=true even for cached results so EventSource never receives JSON.
+    // The hit path is a single Redis read; everything else waits for a miss.
     const cached = await getCachedEtymology(normalizedWord, language)
     if (cached) {
       console.log(`[Etymology API] Cache hit for "${normalizedWord}"`)
@@ -115,16 +113,17 @@ export async function GET(request: NextRequest) {
         timestamp: Date.now(),
         detail: { word: normalizedWord, language },
       })
-      await incrCounter('cache_hit')
-      await incrLanguageCounter(language, 'cache_hit')
-      return respond.result(cached, {
-        cached: true,
-        headers: { 'X-Protection-Mode': costMode },
-      })
+      after(() =>
+        Promise.all([incrCounter('cache_hit'), incrLanguageCounter(language, 'cache_hit')])
+      )
+      return respond.result(cached, { cached: true })
     }
 
-    // Negative cache — skip source fetches for known gibberish
-    const isNegCached = await getNegativeCache(normalizedWord, language)
+    // Negative cache (skip source fetches for known gibberish) and budget, fetched in parallel
+    const [isNegCached, costMode] = await Promise.all([
+      getNegativeCache(normalizedWord, language),
+      getCostMode(),
+    ])
     if (isNegCached) {
       console.log(`[Etymology API] Negative cache hit for "${normalizedWord}"`)
       const suggestions = language === 'en' ? getSuggestions(normalizedWord).map((s) => s.word) : []

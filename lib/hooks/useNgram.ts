@@ -7,62 +7,51 @@ import type { LanguageCode } from '@/lib/languages'
 export type NgramState =
   | { status: 'idle' | 'loading' }
   | { status: 'ready'; data: NgramResult }
-  | { status: 'unavailable'; message: string }
+  | { status: 'unavailable' }
 
-type KeyedNgramState = NgramState & { key: string | null }
+// One request per word per page session, shared by every consumer: the live
+// trace starts it early and the finished entry reuses the same promise.
+const requests = new Map<string, Promise<NgramState>>()
 
-const DEFAULT_UNAVAILABLE_MESSAGE = 'Usage history is unavailable right now.'
+function loadNgram(word: string, language: LanguageCode): Promise<NgramState> {
+  const key = `${language}:${word}`
+  const existing = requests.get(key)
+  if (existing) return existing
 
-/**
- * Fetches Google Books ngram usage data for a word. Fired as soon as the
- * word is known (search start / page load) so the usage chart is ready by
- * the time the etymology card finishes rendering instead of popping in
- * afterwards. Pass null to skip fetching.
- */
+  const request = fetch(`/api/ngram?word=${encodeURIComponent(word)}&language=${language}`)
+    .then(async (response): Promise<NgramState> => {
+      const payload = (await response.json()) as ApiResponse<NgramResult>
+      return response.ok && payload.success && payload.data
+        ? { status: 'ready', data: payload.data }
+        : { status: 'unavailable' }
+    })
+    .catch((): NgramState => {
+      requests.delete(key) // network failure: allow a later retry
+      return { status: 'unavailable' }
+    })
+  requests.set(key, request)
+  return request
+}
+
+/** Google Books usage data for a word; pass null to skip fetching. */
 export function useNgram(word: string | null, language: LanguageCode = 'en'): NgramState {
-  const trimmed = word?.trim() || null
-  const requestKey = trimmed ? `${language}:${trimmed}` : null
-  const [state, setState] = useState<KeyedNgramState>({ status: 'idle', key: null })
+  const key = word ? `${language}:${word}` : null
+  const [state, setState] = useState<{ key: string | null; value: NgramState }>({
+    key: null,
+    value: { status: 'idle' },
+  })
 
   useEffect(() => {
-    if (!trimmed) return
-
-    const controller = new AbortController()
-    const key = `${language}:${trimmed}`
-
-    fetch(`/api/ngram?word=${encodeURIComponent(trimmed)}&language=${language}`, {
-      signal: controller.signal,
+    if (!word) return
+    let active = true
+    loadNgram(word, language).then((value) => {
+      if (active) setState({ key: `${language}:${word}`, value })
     })
-      .then(async (response) => {
-        const payload = (await response.json()) as ApiResponse<NgramResult>
-        if (response.ok && payload.success && payload.data) {
-          setState({ status: 'ready', data: payload.data, key })
-          return
-        }
+    return () => {
+      active = false
+    }
+  }, [word, language])
 
-        setState({
-          status: 'unavailable',
-          message: payload.error ?? DEFAULT_UNAVAILABLE_MESSAGE,
-          key,
-        })
-      })
-      .catch((error) => {
-        if ((error as Error).name !== 'AbortError') {
-          console.error('Failed to fetch ngram data:', error)
-          setState({ status: 'unavailable', message: DEFAULT_UNAVAILABLE_MESSAGE, key })
-        }
-      })
-
-    return () => controller.abort()
-  }, [trimmed, language])
-
-  // The requested identity, not merely the spelling, guards against stale
-  // same-form data crossing language boundaries while a new fetch begins.
-  if (!requestKey) return { status: 'idle' }
-  if (state.key !== requestKey) return { status: 'loading' }
-  if (state.status === 'ready') return { status: 'ready', data: state.data }
-  if (state.status === 'unavailable') {
-    return { status: 'unavailable', message: state.message }
-  }
-  return { status: state.status }
+  if (!key) return { status: 'idle' }
+  return state.key === key ? state.value : { status: 'loading' }
 }

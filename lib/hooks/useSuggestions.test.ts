@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { visibleFetchedWords, type SuggestionFetchState } from './SearchSuggestions'
+import { visibleFetchedWords, type SuggestionFetchState } from './useSuggestions'
 
 const fetched: SuggestionFetchState = {
   query: 'ca',

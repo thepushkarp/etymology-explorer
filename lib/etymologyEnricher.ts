@@ -119,7 +119,6 @@ function buildEvidence(matches: MatchResult[]): StageEvidence[] {
  * Mutates the stage in-place for efficiency.
  */
 function enrichStage(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]): void {
-  // Set reconstructed flag
   stage.isReconstructed = isReconstructedForm(stage.form, stage.stage)
 
   // Find matching parsed links

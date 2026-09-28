@@ -8,44 +8,17 @@ import './globals.css'
 
 const libreBaskerville = localFont({
   variable: '--font-libre-baskerville',
+  display: 'swap',
   src: [
-    {
-      path: '../public/fonts/LibreBaskerville-Regular.woff2',
-      weight: '400',
-      style: 'normal',
-    },
-    {
-      path: '../public/fonts/LibreBaskerville-Bold.woff2',
-      weight: '700',
-      style: 'normal',
-    },
-    {
-      path: '../public/fonts/LibreBaskerville-Italic.woff2',
-      weight: '400',
-      style: 'italic',
-    },
+    { path: '../public/fonts/LibreBaskerville-Regular.woff2', weight: '400', style: 'normal' },
+    { path: '../public/fonts/LibreBaskerville-Italic.woff2', weight: '400', style: 'italic' },
   ],
 })
 
 const alegreyaSans = localFont({
   variable: '--font-alegreya-sans',
-  src: [
-    {
-      path: '../public/fonts/AlegreyaSans-Regular.woff2',
-      weight: '400',
-      style: 'normal',
-    },
-    {
-      path: '../public/fonts/AlegreyaSans-Bold.woff2',
-      weight: '700',
-      style: 'normal',
-    },
-    {
-      path: '../public/fonts/AlegreyaSans-Italic.woff2',
-      weight: '400',
-      style: 'italic',
-    },
-  ],
+  display: 'swap',
+  src: [{ path: '../public/fonts/AlegreyaSans-Regular.woff2', weight: '400', style: 'normal' }],
 })
 
 export const metadata: Metadata = {
@@ -124,7 +97,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen" suppressHydrationWarning>
+      <body className="flex min-h-screen flex-col" suppressHydrationWarning>
         <JsonLd />
         {children}
         <Analytics />

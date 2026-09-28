@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { StreamEvent } from '@/lib/types'
-import { useHistory } from '@/lib/hooks/useHistory'
 import { initialStreamState, streamReducer } from '@/lib/streamReducer'
 import type { LanguageCode } from '@/lib/languages'
 
@@ -20,7 +19,6 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
 
   const eventSourceRef = useRef<EventSource | null>(null)
   const activeRequestRef = useRef(0)
-  const { addToHistory } = useHistory()
 
   const fallbackFetch = useCallback(
     async (word: string, requestId: number) => {
@@ -45,7 +43,6 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
         }
 
         dispatch({ type: 'fallback_success', result: payload.data })
-        addToHistory(word, language)
       } catch {
         if (activeRequestRef.current !== requestId) return
         dispatch({
@@ -58,10 +55,9 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
         })
       }
     },
-    [addToHistory, language]
+    [language]
   )
 
-  // Cleanup EventSource on unmount
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) {
@@ -81,7 +77,6 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
 
       dispatch({ type: 'search_started' })
 
-      // Close any existing connection
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
       }
@@ -101,13 +96,7 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
 
             dispatch({ type: 'stream_event', event: streamEvent })
 
-            if (streamEvent.type === 'result') {
-              addToHistory(trimmed, language)
-              eventSource.close()
-              eventSourceRef.current = null
-            }
-
-            if (streamEvent.type === 'error') {
+            if (streamEvent.type === 'result' || streamEvent.type === 'error') {
               eventSource.close()
               eventSourceRef.current = null
             }
@@ -153,7 +142,7 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
         void fallbackFetch(trimmed, requestId)
       }
     },
-    [addToHistory, fallbackFetch, language]
+    [fallbackFetch, language]
   )
 
   return {

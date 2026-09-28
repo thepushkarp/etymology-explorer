@@ -1,4 +1,4 @@
-import { EditorialPageFrame } from '@/components/EditorialPageFrame'
+import { PageFrame } from '@/components/PageFrame'
 
 const ENDPOINTS = [
   {
@@ -19,7 +19,7 @@ const ENDPOINTS = [
   {
     method: 'GET',
     path: '/api/pronunciation?word=<word>[&language=it]',
-    description: 'Returns pronunciation audio metadata for a word.',
+    description: 'Pronunciation audio for a word.',
   },
   {
     method: 'GET',
@@ -39,35 +39,31 @@ export const metadata = {
 
 export default function ApiDocsPage() {
   return (
-    <EditorialPageFrame
-      eyebrow="developer reference"
-      title="EtymEx API"
-      subtitle="Machine-friendly documentation for the core endpoints behind the explorer."
+    <PageFrame
+      title="API"
+      subtitle="The endpoints behind the explorer. Every response is { success, data?, error? }."
     >
-      <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
-        <aside className="editorial-panel h-fit p-6">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-charcoal-light/62">notes</p>
-          <p className="mt-4 text-sm leading-relaxed text-charcoal-light">
-            You can also inspect the OpenAPI-compatible descriptor at{' '}
-            <code className="rounded bg-cream-dark/70 px-1.5 py-0.5 text-charcoal">
-              /openapi.json
-            </code>
-            .
-          </p>
-        </aside>
-
-        <ul className="space-y-4">
-          {ENDPOINTS.map((endpoint) => (
-            <li key={endpoint.path} className="editorial-panel p-5">
-              <p className="text-xs uppercase tracking-widest text-charcoal-light">
-                {endpoint.method}
-              </p>
-              <p className="mt-2 font-mono text-sm">{endpoint.path}</p>
-              <p className="mt-2 text-sm text-charcoal-light">{endpoint.description}</p>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </EditorialPageFrame>
+      <dl className="space-y-8">
+        {ENDPOINTS.map((endpoint) => (
+          <div key={endpoint.path}>
+            <dt className="break-all font-mono text-sm text-ink">
+              <span className="mr-3 text-muted">{endpoint.method}</span>
+              {endpoint.path}
+            </dt>
+            <dd className="mt-1 font-serif text-muted">{endpoint.description}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-12 text-sm text-muted">
+        Machine-readable:{' '}
+        <a href="/openapi.json" className="link">
+          OpenAPI
+        </a>
+        {' · '}
+        <a href="/.well-known/api-catalog" className="link">
+          API catalog
+        </a>
+      </p>
+    </PageFrame>
   )
 }

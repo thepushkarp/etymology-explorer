@@ -78,6 +78,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Pronunciation: 20 req/min per IP
   - General: 60 req/min per IP
   - CSP headers for pages and API responses (pages use `script-src 'self' 'unsafe-inline'` because statically prerendered HTML carries per-build Next.js inline flight scripts that can't be hashed or nonce'd)
+  - Legacy `/?q=word` deep links 308 to `/word/{word}` here, keeping `/` statically prerendered
 
 - **`lib/config.ts`** - Centralized configuration:
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
@@ -137,10 +138,10 @@ New optional fields on `AncestryStage`: `isReconstructed`, `confidence`, `eviden
 `/word/{word}` is the canonical, crawlable page for every word AND the primary in-app search
 URL. Crawler traffic must never cost LLM money:
 
-- **`app/word/[word]/page.tsx`** - SSR strictly from `getCachedEtymology` (`lib/cache.ts`).
+- **`app/word/[...segments]/page.tsx`** - SSR strictly from `getCachedEtymology` (`lib/cache.ts`).
   The module graph must never include `lib/research.ts`, `lib/llm.ts`, or
   `lib/openrouterResponses.ts` — enforced by `app/word/import-graph.test.ts`. ISR via
-  `revalidate = 86400`. Cache hit renders `WordPageEntry`; cache miss renders a noindex page
+  `revalidate = 86400`. Cache hit renders `EntryView`; cache miss renders a noindex page
   hosting `WordTraceExperience` (client), which streams the live trace via `/api/etymology`.
 - **Auto-trace gating** (`lib/traceIntent.ts`): an uncached word page auto-starts its trace
   ONLY when a short-lived sessionStorage flag written by the in-app navigation handler
@@ -157,9 +158,10 @@ URL. Crawler traffic must never cost LLM money:
 - **`app/og/route.tsx`** - `/og?word={word}` renders a per-word OG card; without a valid
   `word` it falls back to the brand card.
 - **Canonicals & redirects**: legacy `/?q=word` deep links permanently redirect (308) to
-  `/word/{word}` (`app/page.tsx`); bare `/` is the landing/search page with canonical `/`.
-  `ShareMenu` copies `window.location.href` (already canonical). All in-app navigation —
-  search submits, history, suggestions, related words, random word — routes to `/word/{word}`.
+  `/word/{word}` in `proxy.ts`, so `/` stays a static page with canonical `/`.
+  `ShareButton` shares `window.location.href` (already canonical). All in-app navigation —
+  search submits, suggestions, related words, random word — routes to `/word/{word}`;
+  rendered word links use `components/WordLink.tsx` (real `<a href>`, prefetch off).
 
 ### Research Pipeline Limits
 
@@ -213,8 +215,7 @@ and the output is guaranteed-shape JSON.
 
 **Client-side** (localStorage):
 
-- Search history (max 50 entries)
-- Theme preferences
+- Theme preference (`theme-preference`; applied pre-paint by the inline script in `app/layout.tsx`)
 - (No API keys in public mode - server-side OPENROUTER_API_KEY used)
 
 **Key hooks**:
@@ -222,37 +223,35 @@ and the output is guaranteed-shape JSON.
 - `lib/hooks/useStreamingEtymology.ts` - SSE transport for streaming search; all progress
   state folds through the pure reducer in `lib/streamReducer.ts` (per-source states with
   timing, phase, accumulated `synthesis_section` events, final result)
-- `lib/hooks/useWordNavigation.ts` - All in-app word navigation (marks trace intent, pushes
-  `/word/{word}`, keyboard history back/forward)
-- `lib/hooks/useNgram.ts` - Usage-chart data, fetched as soon as the word is known
-- `lib/hooks/useHistory.ts` - Search history management
+- `lib/hooks/useWordNavigation.ts` - Programmatic word navigation (marks trace intent, pushes
+  `/word/{word}`)
+- `lib/hooks/useNgram.ts` - Usage-chart data; one shared request per word, started with the trace
+- `lib/hooks/useHotkey.ts` - Single-key shortcuts (`/` focuses search, `p` plays pronunciation)
 
 ## Code Style
 
 - **TypeScript strict mode** - All types defined in `lib/types.ts`
 - **Prettier**: 100 char width, single quotes, no semicolons, ES5 trailing commas
 - **ESLint**: Next.js core Web Vitals + Prettier integration
-- **Tailwind CSS v4**: Custom cream/charcoal theme in `globals.css`
+- **Tailwind CSS v4**: Seven color tokens (`paper`, `ink`, `muted`, `faint`, `rule`, `wash`, `accent`) in `globals.css`, redefined under `.dark`
 
 ## Design Philosophy
 
-This project follows a **distinctive, production-grade frontend aesthetic** that avoids generic AI-generated patterns. Every design choice should be intentional and memorable.
+The UI is a quiet, typeset dictionary page: the words carry it, the chrome gets out of the way.
 
 ### Core Principles
 
-- **Typography-first**: Etymology is about words—typography should be the hero. Use distinctive, characterful fonts (not Inter, Roboto, Arial). Pair a refined display font with a legible body font. The current theme uses a scholarly, editorial aesthetic.
-- **Cream/Charcoal palette**: Warm, paper-like backgrounds with high-contrast text. Avoid purple gradients, neon accents, or cookie-cutter color schemes.
-- **Spatial intention**: Generous whitespace for readability. Asymmetry and overlap where it serves the content. Grid-breaking elements for visual interest.
-- **Purposeful motion**: Staggered reveals on load, smooth transitions. CSS-first animations. High-impact moments over scattered micro-interactions.
-- **Atmospheric depth**: Subtle textures, layered shadows, and visual details that evoke old dictionaries and etymology books.
+- **Typography-first**: Libre Baskerville (regular + italic) for words and prose, Alegreya Sans (regular) for small UI text. Hierarchy comes from size, italics, and the small-caps `label` utility — no bold weights (they are not loaded).
+- **One reading column**: `max-w-3xl`, generous vertical rhythm, hairline `rule` borders. No cards, gradients, shadows, or pills.
+- **Restrained color**: paper, ink, and a single oxblood `accent` used for emphasis and the live marker. Use tokens, never raw hex or Tailwind palette colors.
+- **Purposeful motion**: one CSS `animate-rise` reveal (staggered via `animation-delay`), color transitions on hover, skeleton pulses while streaming. Honor reduced motion.
+- **Real links**: words link to word pages with `<WordLink>`; native `<details>` for disclosure.
 
 ### Anti-patterns to Avoid
 
-- Generic font stacks (system-ui, sans-serif defaults)
-- Overused component patterns (rounded cards with drop shadows everywhere)
-- Predictable layouts without personality
-- Timid, evenly-distributed color palettes
-- Effects that don't serve the scholarly/linguistic context
+- Rounded cards with drop shadows, gradient backgrounds, colored chip rainbows
+- Section nav chips, modals, and sidebars for secondary features
+- Faux-bold text (`font-semibold`/`font-bold`) — only 400 weights are loaded
 
 ### Guiding Question
 
@@ -317,11 +316,11 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 **Word Pages (primary search URL):**
 
-- `app/word/[word]/page.tsx` - Cache-only SSR word pages (import graph must exclude research/LLM)
+- `app/word/[...segments]/page.tsx` - Cache-only SSR word pages (import graph must exclude research/LLM)
 - `app/word/import-graph.test.ts` - Enforces the no-LLM-in-module-graph budget invariant
-- `components/WordPageEntry.tsx` - Client shell for cached word pages (EtymologyCard + ngram + shortcuts)
+- `components/EntryView.tsx` - Client shell for a finished entry (cached page or completed trace)
 - `components/WordTraceExperience.tsx` - Live streaming trace UI for uncached word pages
-- `components/StreamingEtymologyCard.tsx` - Progressive card: skeletons hydrate per synthesis_section
+- `components/EtymologyCard.tsx` - Entry layout; `pending` renders skeletons until each synthesis_section lands
 - `lib/streamReducer.ts` - Pure reducer folding SSE events into structured progress state
 - `lib/traceIntent.ts` - sessionStorage in-app-navigation flag gating auto-trace (crawler cost invariant)
 

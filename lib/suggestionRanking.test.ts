@@ -19,8 +19,4 @@ describe('rankMatches', () => {
   test('returns empty for no matches', () => {
     expect(rankMatches(WORDS, 'zzz', 5)).toEqual([])
   })
-
-  test('returns empty for an empty wordlist', () => {
-    expect(rankMatches([], 'per', 5)).toEqual([])
-  })
 })

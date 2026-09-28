@@ -1,65 +1,35 @@
-'use client'
-
-import { ModernUsage } from '@/lib/types'
-import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './MobileSection'
-
-interface ModernUsageSectionProps {
-  modernUsage: ModernUsage
-  title?: string
-}
+import type { ModernUsage } from '@/lib/types'
+import { Section } from './Section'
 
 export function ModernUsageSection({
   modernUsage,
-  title = 'Modern Usage',
-}: ModernUsageSectionProps) {
+  title,
+}: {
+  modernUsage: ModernUsage
+  title: string
+}) {
+  const { slangDefinition, popularizedBy, contexts, notableReferences } = modernUsage
   return (
-    <MobileSection
-      title={title}
-      titleTextClassName={SECTION_TITLE_CLASS}
-      dividerClassName={SECTION_DIVIDER_CLASS}
-    >
-      <div className="relative rounded-[1rem] border border-border-soft bg-surface/62 p-5">
-        {modernUsage.slangDefinition && (
-          <p className="mb-3 font-serif text-lg leading-relaxed text-charcoal/82">
-            {modernUsage.slangDefinition}
-          </p>
+    <Section title={title}>
+      {slangDefinition && (
+        <p className="max-w-2xl font-serif text-lg leading-relaxed text-ink">{slangDefinition}</p>
+      )}
+      <dl className="mt-4 space-y-2 text-sm text-muted">
+        {popularizedBy && <Row term="Popularized by">{popularizedBy}</Row>}
+        {contexts && contexts.length > 0 && <Row term="Heard in">{contexts.join(' · ')}</Row>}
+        {notableReferences && notableReferences.length > 0 && (
+          <Row term="See">{notableReferences.slice(0, 3).join('; ')}</Row>
         )}
-        {modernUsage.popularizedBy && (
-          <p className="mb-2 text-sm text-charcoal/60">
-            <span className="font-medium">Popularized by:</span> {modernUsage.popularizedBy}
-          </p>
-        )}
-        {modernUsage.contexts && modernUsage.contexts.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3">
-            {modernUsage.contexts.map((ctx) => (
-              <span
-                key={ctx}
-                className="rounded-full border border-[#9c88a2] bg-[#eae2ec] px-2 py-0.5 text-xs text-[#564060] dark:border-[#6a5672] dark:bg-[#262028] dark:text-[#c8b2cc]"
-              >
-                {ctx}
-              </span>
-            ))}
-          </div>
-        )}
+      </dl>
+    </Section>
+  )
+}
 
-        {modernUsage.notableReferences && modernUsage.notableReferences.length > 0 && (
-          <div className="mt-5 border-t border-border-soft pt-5">
-            <p className="mb-2 text-xs uppercase tracking-[0.16em] text-charcoal/50">
-              Notable References
-            </p>
-            <ul className="space-y-1">
-              {modernUsage.notableReferences.slice(0, 3).map((reference, idx) => (
-                <li
-                  key={`${reference}-${idx}`}
-                  className="text-sm leading-relaxed text-charcoal/70"
-                >
-                  {reference}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    </MobileSection>
+function Row({ term, children }: { term: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-3">
+      <dt className="w-28 shrink-0">{term}</dt>
+      <dd className="text-ink">{children}</dd>
+    </div>
   )
 }

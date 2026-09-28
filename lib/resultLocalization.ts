@@ -5,7 +5,7 @@ import type {
   EtymologyResult,
   EnglishEtymologyResult,
 } from './types'
-import type { BetaLanguageCode } from './languages'
+import type { BetaLanguageCode, LanguageCode } from './languages'
 
 export type ResultLocale = 'en' | 'local'
 
@@ -115,7 +115,6 @@ type SectionLabels = {
   ancestry: string
   story: string
   usage: string
-  usageNote: string
   usageUnavailable: string
   modernUsage: string
   related: string
@@ -129,7 +128,6 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
     ancestry: 'Ascendenza della parola',
     story: 'La storia',
     usage: 'Uso nel tempo',
-    usageNote: 'Nota sul corpus',
     usageUnavailable: 'I dati storici sull’uso non sono ancora disponibili per questo corpus.',
     modernUsage: 'Uso moderno',
     related: 'Parole correlate',
@@ -141,7 +139,6 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
     ancestry: 'Ascendencia de la palabra',
     story: 'La historia',
     usage: 'Uso a través del tiempo',
-    usageNote: 'Nota del corpus',
     usageUnavailable: 'Los datos históricos de uso aún no están disponibles para este corpus.',
     modernUsage: 'Uso moderno',
     related: 'Palabras relacionadas',
@@ -153,7 +150,6 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
     ancestry: 'Ascendance du mot',
     story: "L'histoire",
     usage: 'Usage au fil du temps',
-    usageNote: 'Note sur le corpus',
     usageUnavailable:
       "Les données historiques d'usage ne sont pas encore disponibles pour ce corpus.",
     modernUsage: 'Usage moderne',
@@ -166,7 +162,6 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
     ancestry: 'Ascendência da palavra',
     story: 'A história',
     usage: 'Uso ao longo do tempo',
-    usageNote: 'Nota do corpus',
     usageUnavailable: 'Os dados históricos de uso ainda não estão disponíveis para este corpus.',
     modernUsage: 'Uso moderno',
     related: 'Palavras relacionadas',
@@ -177,18 +172,17 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
 }
 
 const ENGLISH_LABELS: SectionLabels = {
-  ancestry: 'Word Ancestry',
-  story: 'The Story',
+  ancestry: 'Lineage',
+  story: 'The story',
   usage: 'Usage over time',
-  usageNote: 'Corpus note',
-  usageUnavailable: 'Usage history is not available for this corpus yet.',
-  modernUsage: 'Modern Usage',
-  related: 'Related Words',
-  kin: 'Kin & Kindred',
+  usageUnavailable: 'Usage history is not available for this word yet.',
+  modernUsage: 'Modern usage',
+  related: 'Related words',
+  kin: 'Kin',
   sources: 'Sources',
   references: 'Further scholarly references',
 }
 
-export function resultLabels(language: BetaLanguageCode, locale: ResultLocale): SectionLabels {
-  return locale === 'en' ? ENGLISH_LABELS : LOCAL_LABELS[language]
+export function resultLabels(language: LanguageCode, locale: ResultLocale): SectionLabels {
+  return language === 'en' || locale === 'en' ? ENGLISH_LABELS : LOCAL_LABELS[language]
 }
