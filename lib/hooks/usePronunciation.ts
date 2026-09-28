@@ -35,7 +35,13 @@ export function usePronunciation(word: string, language: LanguageCode = 'en') {
     if (audio && !audio.paused) return
     if (!audio) {
       audio = new Audio(src)
+      const element = audio
       audio.onended = () => setState('idle')
+      // Network or decode failures mid-playback never fire onended; allow a retry.
+      audio.onerror = () => {
+        if (audioRef.current === element) audioRef.current = null
+        setState('error')
+      }
       audioRef.current = audio
     }
     setState('loading')
