@@ -75,7 +75,7 @@ export async function generatePronunciation(
       },
       body: JSON.stringify({
         text: word,
-        model_id: 'eleven_v3',
+        model_id: 'eleven_v4',
         // This selects language and text normalization. The configured voice
         // still determines accent; pt intentionally does not imply BR or PT.
         language_code: language,

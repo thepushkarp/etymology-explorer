@@ -17,7 +17,7 @@ afterEach(() => {
 })
 
 describe('ElevenLabs language selection', () => {
-  test('passes the explicit ISO 639-1 language to eleven_v3', async () => {
+  test('passes the explicit ISO 639-1 language to eleven_v4', async () => {
     const requestBodies: Array<Record<string, unknown>> = []
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
@@ -25,7 +25,7 @@ describe('ElevenLabs language selection', () => {
     }) as unknown as typeof fetch
 
     await generatePronunciation('casa', 'it')
-    expect(requestBodies[0]?.model_id).toBe('eleven_v3')
+    expect(requestBodies[0]?.model_id).toBe('eleven_v4')
     expect(requestBodies[0]?.language_code).toBe('it')
   })
 
