@@ -1,9 +1,9 @@
 import Link from 'next/link'
 
 const LINKS = [
+  { href: '/words', label: 'Index' },
   { href: '/learn/what-is-etymology', label: 'Learn' },
   { href: '/faq', label: 'FAQ' },
-  { href: '/docs/api', label: 'API' },
 ]
 
 export function SiteFooter() {

@@ -153,8 +153,12 @@ URL. Crawler traffic must never cost LLM money:
   and `{ expire: 0 }` hard-expires the tag (the `'max'` profile would only mark it
   stale-while-revalidate). A freshly traced word's page serves content on the next load
   instead of the ISR miss page.
-- **`app/sitemap.ts`** - SCANs cached etymology keys (cursor-paginated, capped at 1000) using
-  the exported `CACHE_VERSION`/`ETYMOLOGY_PREFIX` constants from `lib/cache.ts`.
+- **`lib/tracedWords.ts`** - SCANs cached etymology keys (cursor-paginated, capped at 1000,
+  daily `unstable_cache`). Shared by `app/sitemap.ts` and the `/words` A–Z index
+  (`app/words/page.tsx`), which is the crawlable internal-link path to every cached word page;
+  its import graph is held to the same no-LLM invariant by `app/word/import-graph.test.ts`.
+- **`app/robots.txt/route.ts`** - Opts into search and AI answer engines (`ai-input=yes`), out
+  of training (`ai-train=no`); always advertises the canonical `SITE_ORIGIN` sitemap.
 - **`app/og/route.tsx`** - `/og?word={word}` renders a per-word OG card; without a valid
   `word` it falls back to the brand card.
 - **Canonicals & redirects**: legacy `/?q=word` deep links permanently redirect (308) to

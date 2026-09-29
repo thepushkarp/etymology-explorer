@@ -91,10 +91,23 @@ function truncateAtWordBoundary(text: string): string {
   return `${trimmed}…`
 }
 
+// Definitions are stored as lowercase fragments ("pleasant, kind, …"); without
+// this the snippet runs the definition straight into the lore's first sentence.
+function asSentence(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed) return trimmed
+  const capitalized = trimmed[0].toUpperCase() + trimmed.slice(1)
+  return /[.!?…]$/.test(capitalized) ? capitalized : `${capitalized}.`
+}
+
 function buildDescription(result: EtymologyResult, locale: ResultLocale): string {
   const display = localizeResult(result, locale)
   return truncateAtWordBoundary(
-    [display.definition, display.lore].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+    [asSentence(display.definition), display.lore]
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim()
   )
 }
 
