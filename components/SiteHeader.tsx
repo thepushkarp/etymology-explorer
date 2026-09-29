@@ -1,39 +1,26 @@
-'use client'
-
 import Link from 'next/link'
-import ThemeToggle from '@/components/ThemeToggle'
+import { SearchBox } from '@/components/SearchBox'
+import { ThemeToggle } from '@/components/ThemeToggle'
+import type { LanguageCode } from '@/lib/languages'
 
 interface SiteHeaderProps {
-  compact?: boolean
+  /** Show the compact search field; the landing page has its own. */
+  searchLanguage?: LanguageCode
 }
 
-export function SiteHeader({ compact = false }: SiteHeaderProps) {
+export function SiteHeader({ searchLanguage }: SiteHeaderProps) {
   return (
-    <header className="border-b border-border-soft/80 bg-surface/76 backdrop-blur-sm">
-      <div className="mx-auto max-w-[1180px] px-4 sm:px-6 lg:px-8">
-        <div
-          className={`flex items-center justify-between gap-3 sm:gap-6 ${
-            compact ? 'py-3.5' : 'py-3.5 sm:py-4.5'
-          }`}
-        >
-          <Link
-            href="/"
-            aria-label="Etymology Explorer home"
-            className="flex shrink-0 flex-col font-serif font-semibold italic leading-[0.88] tracking-[-0.06em] text-charcoal transition-opacity hover:opacity-85"
-          >
-            <span aria-hidden="true" className="block text-[clamp(1.5rem,6.6vw,1.95rem)]">
-              <span className="text-accent-oxblood">Etym</span>ology
-            </span>
-            <span aria-hidden="true" className="block text-[clamp(1.5rem,6.6vw,1.95rem)]">
-              <span className="text-accent-oxblood">Ex</span>plorer
-            </span>
-          </Link>
-
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-          </div>
-        </div>
+    <header className="mx-auto flex w-full max-w-3xl items-center gap-6 px-4 pt-5 sm:px-6 sm:pt-7">
+      <Link
+        href="/"
+        className="shrink-0 font-serif text-xl italic tracking-tight text-ink transition-colors hover:text-accent"
+      >
+        EtymEx
+      </Link>
+      <div className="ml-auto flex min-w-0 max-w-64 flex-1 justify-end">
+        {searchLanguage && <SearchBox language={searchLanguage} />}
       </div>
+      <ThemeToggle />
     </header>
   )
 }

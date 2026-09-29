@@ -1,189 +1,101 @@
-'use client'
-
-import { memo } from 'react'
-import { DisplayEtymologyResult } from '@/lib/types'
+import type { ReactNode } from 'react'
+import type { DisplayEtymologyResult } from '@/lib/types'
 import type { BetaLanguageCode } from '@/lib/languages'
-import {
-  resultLabels,
-  type DisplayHistoryChoice,
-  type ResultLocale,
-} from '@/lib/resultLocalization'
-import HistoricalContext, { wikipediaSourceUrl } from './HistoricalContext'
-import { AncestrySection } from './etymology-card/AncestrySection'
+import { resultLabels, type ResultLocale } from '@/lib/resultLocalization'
+import { AncestryTree } from './AncestryTree'
+import { ContextSection } from './etymology-card/ContextSection'
 import { EntryHeader } from './etymology-card/EntryHeader'
 import { KinSection } from './etymology-card/KinSection'
 import { ModernUsageSection } from './etymology-card/ModernUsageSection'
 import { RelatedWordsSection } from './etymology-card/RelatedWordsSection'
-import { SourcesSection } from './etymology-card/SourcesSection'
-import { StorySection } from './etymology-card/StorySection'
-import { UsageSection, UsageUnavailable } from './etymology-card/UsageSection'
-import { EntrySelector } from './etymology-card/EntrySelector'
+import { Section, Skeleton } from './etymology-card/Section'
+import { ScholarlyReferences, SourcesSection } from './etymology-card/SourcesSection'
+import { UsageSection } from './etymology-card/UsageSection'
 
 interface EtymologyCardProps {
   result: DisplayEtymologyResult
-  onWordClick: (word: string) => void
-  headerActions?: React.ReactNode
+  /** Streaming: sections that have not arrived yet render as placeholders. */
+  pending?: boolean
   contentLocale?: ResultLocale
-  historyChoices?: DisplayHistoryChoice[]
-  activeHistoryId?: string
-  onHistoryChange?: (historyId: string) => void
   usageUnavailable?: boolean
+  actions?: ReactNode
+  subheader?: ReactNode
 }
 
-export const EtymologyCard = memo(function EtymologyCard({
+export function EtymologyCard({
   result,
-  onWordClick,
-  headerActions,
+  pending = false,
   contentLocale = 'en',
-  historyChoices = [],
-  activeHistoryId,
-  onHistoryChange,
   usageUnavailable = false,
+  actions,
+  subheader,
 }: EtymologyCardProps) {
-  const hasAncestry = Boolean(result.ancestryGraph?.branches?.length)
-  const labels =
-    result.language === 'en'
-      ? undefined
-      : resultLabels(result.language as BetaLanguageCode, contentLocale)
+  const isEnglish = result.language === 'en'
+  const labels = resultLabels(result.language, contentLocale)
+  const hasAncestry = result.ancestryGraph.branches.length > 0
+  const wikipedia = result.rawSources?.wikipedia
+
   return (
-    <article className="editorial-shell animate-fadeIn p-4 sm:p-7 lg:p-9">
-      <div className="relative">
-        <EntryHeader
-          result={result}
-          headerActions={headerActions}
-          historySelector={
-            activeHistoryId && onHistoryChange ? (
-              <EntrySelector
-                word={result.word}
-                entries={historyChoices}
-                activeEntryId={activeHistoryId}
-                onChange={onHistoryChange}
-              />
-            ) : undefined
-          }
-          usageUnavailable={usageUnavailable}
+    <article aria-busy={pending}>
+      <EntryHeader result={result} actions={actions} subheader={subheader} pending={pending} />
+
+      {(hasAncestry || pending) && (
+        <Section id="entry-ancestry" title={labels.ancestry}>
+          {hasAncestry ? (
+            <AncestryTree
+              graph={result.ancestryGraph}
+              word={result.word}
+              language={result.language}
+              definition={result.definition}
+            />
+          ) : (
+            <Skeleton widths={['w-24', 'w-40', 'w-20', 'w-48', 'w-28']} />
+          )}
+        </Section>
+      )}
+
+      {(result.lore || pending) && (
+        <Section id="entry-story" title={labels.story}>
+          {result.lore ? (
+            <p className="max-w-2xl font-serif text-lg leading-[1.8] text-ink">{result.lore}</p>
+          ) : (
+            <Skeleton widths={['w-full', 'w-11/12', 'w-full', 'w-3/5']} />
+          )}
+        </Section>
+      )}
+
+      <UsageSection
+        ngram={result.ngram}
+        unavailable={usageUnavailable}
+        title={labels.usage}
+        unavailableMessage={labels.usageUnavailable}
+      />
+
+      {result.modernUsage?.hasSlangMeaning && (
+        <ModernUsageSection modernUsage={result.modernUsage} title={labels.modernUsage} />
+      )}
+
+      {result.suggestions && (
+        <RelatedWordsSection suggestions={result.suggestions} title={labels.related} />
+      )}
+
+      <KinSection roots={result.roots} linkable={isEnglish} title={labels.kin} />
+
+      {wikipedia && (
+        <ContextSection
+          extract={wikipedia}
+          url={result.sources.find((source) => source.name === 'wikipedia')?.url}
         />
+      )}
 
-        {hasAncestry && (
-          <AncestrySection
-            graph={result.ancestryGraph}
-            word={result.word}
-            language={result.language}
-            title={labels?.ancestry}
-          />
-        )}
+      <SourcesSection sources={result.sources} title={labels.sources} />
 
-        <StorySection lore={result.lore} title={labels?.story} first={!hasAncestry} />
-
-        {result.ngram && result.ngram.data.length > 0 && (
-          <UsageSection ngram={result.ngram} title={labels?.usage} />
-        )}
-
-        {!result.ngram && usageUnavailable && (
-          <UsageUnavailable
-            title={labels?.usage}
-            noteLabel={labels?.usageNote}
-            message={labels?.usageUnavailable}
-          />
-        )}
-
-        {result.modernUsage && result.modernUsage.hasSlangMeaning && (
-          <ModernUsageSection modernUsage={result.modernUsage} title={labels?.modernUsage} />
-        )}
-
-        {result.suggestions && (
-          <RelatedWordsSection
-            suggestions={result.suggestions}
-            onWordClick={onWordClick}
-            title={labels?.related}
-          />
-        )}
-
-        {result.rawSources?.wikipedia && (
-          <HistoricalContext
-            wikipediaExtract={result.rawSources.wikipedia}
-            sourceUrl={wikipediaSourceUrl(result.sources)}
-          />
-        )}
-
-        {result.roots.length > 0 && (
-          <KinSection
-            roots={result.roots}
-            // Related terms in beta results are not language-tagged yet. Keep
-            // them readable without guessing a route or spending on the wrong lexeme.
-            onWordClick={result.language === 'en' ? onWordClick : undefined}
-            title={labels?.kin}
-          />
-        )}
-
-        <SourcesSection sources={result.sources} title={labels?.sources} />
-
-        {result.language !== 'en' && (
-          <ScholarlyReferences
-            language={result.language as BetaLanguageCode}
-            title={labels?.references ?? 'Further scholarly references'}
-          />
-        )}
-
-        <div
-          className="
-            mt-6 flex items-center justify-center gap-2 pt-2 text-charcoal/25
-          "
-        >
-          <span className="w-8 h-px bg-current" />
-          <span className="text-xs font-serif italic select-none">§</span>
-          <span className="w-8 h-px bg-current" />
-        </div>
-      </div>
+      {!isEnglish && !pending && (
+        <ScholarlyReferences
+          language={result.language as BetaLanguageCode}
+          title={labels.references}
+        />
+      )}
     </article>
-  )
-})
-
-const SCHOLARLY_REFERENCES: Record<BetaLanguageCode, Array<{ label: string; url: string }>> = {
-  it: [
-    { label: 'TLIO', url: 'https://tlio.ovi.cnr.it/TLIO/' },
-    { label: 'GDLI / ArchiDATA', url: 'https://www.gdli.it/' },
-    { label: 'Treccani', url: 'https://www.treccani.it/vocabolario/' },
-  ],
-  es: [
-    { label: 'RAE DLE', url: 'https://dle.rae.es/' },
-    { label: 'RAE DHLE', url: 'https://www.rae.es/dhle/' },
-  ],
-  fr: [
-    { label: 'TLFi', url: 'https://www.cnrtl.fr/definition/' },
-    { label: 'TLF-Étym', url: 'https://www.atilf.fr/ressources/tlf-etym/' },
-    { label: 'DMF', url: 'http://www.atilf.fr/dmf/' },
-    { label: 'DÉRom', url: 'http://www.atilf.fr/DERom/' },
-  ],
-  pt: [
-    { label: 'DELPo', url: 'https://delpo.prp.usp.br/' },
-    { label: 'Priberam', url: 'https://dicionario.priberam.org/' },
-    { label: 'Academia das Ciências de Lisboa', url: 'https://dicionario.acad-ciencias.pt/' },
-  ],
-}
-
-function ScholarlyReferences({ language, title }: { language: BetaLanguageCode; title: string }) {
-  return (
-    <section className="mt-10 border-t border-border-soft pt-8">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-charcoal-light/66">
-        {title}
-      </p>
-      <p className="mt-3 font-serif text-sm italic text-charcoal-light">
-        Reference links only; these restricted dictionaries were not read by the synthesis.
-      </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {SCHOLARLY_REFERENCES[language].map((reference) => (
-          <a
-            key={reference.label}
-            href={reference.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="editorial-chip"
-          >
-            {reference.label}
-          </a>
-        ))}
-      </div>
-    </section>
   )
 }

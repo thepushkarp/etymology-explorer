@@ -1,6 +1,6 @@
 'use client'
 
-import { useId, useRef, type KeyboardEvent } from 'react'
+import { useRef, type KeyboardEvent } from 'react'
 import type { DisplayHistoryChoice } from '@/lib/resultLocalization'
 
 interface EntrySelectorProps {
@@ -18,38 +18,30 @@ function metadata(entry: DisplayHistoryChoice): string {
   return entry.entryKind === 'unresolved' ? 'distinct history' : entry.entryKind
 }
 
+/** Tabs for words with several unrelated etymologies (homographs). */
 export function EntrySelector({ word, entries, activeEntryId, onChange }: EntrySelectorProps) {
-  const id = useId()
   const buttons = useRef<Array<HTMLButtonElement | null>>([])
   if (entries.length < 2) return null
 
-  function activate(index: number) {
-    const entry = entries[index]
-    if (!entry) return
-    onChange(entry.id)
-    buttons.current[index]?.focus()
-  }
-
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-    let next: number | null = null
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      next = (index + 1) % entries.length
-    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      next = (index - 1 + entries.length) % entries.length
-    } else if (event.key === 'Home') {
-      next = 0
-    } else if (event.key === 'End') {
-      next = entries.length - 1
+    const moves: Record<string, number> = {
+      ArrowRight: index + 1,
+      ArrowDown: index + 1,
+      ArrowLeft: index - 1,
+      ArrowUp: index - 1,
+      Home: 0,
+      End: entries.length - 1,
     }
-    if (next === null) return
+    if (!(event.key in moves)) return
     event.preventDefault()
-    event.stopPropagation()
-    activate(next)
+    const next = (moves[event.key] + entries.length) % entries.length
+    onChange(entries[next].id)
+    buttons.current[next]?.focus()
   }
 
   return (
     <div
-      className="mt-6 grid border-t border-border-soft sm:grid-cols-2"
+      className="mt-8 flex flex-wrap gap-x-8 gap-y-3 border-b border-rule"
       role="tablist"
       aria-label={`Choose an etymology for ${word}`}
     >
@@ -62,34 +54,21 @@ export function EntrySelector({ word, entries, activeEntryId, onChange }: EntryS
             ref={(element) => {
               buttons.current[index] = element
             }}
-            id={`${id}-tab-${index}`}
             type="button"
             role="tab"
             aria-selected={selected}
-            aria-controls={`${id}-panel`}
             aria-label={`History ${index + 1} of ${entries.length}, ${details}, ${entry.label}`}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(entry.id)}
             onKeyDown={(event) => handleKeyDown(event, index)}
-            className={`relative min-h-12 border-b border-border-soft px-4 py-3 text-left transition-colors focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent-amber sm:px-5 sm:py-4 sm:odd:border-r ${
-              selected ? 'bg-surface-muted' : 'hover:bg-surface/70'
+            className={`-mb-px max-w-60 border-b pb-3 text-left transition-colors ${
+              selected ? 'border-ink text-ink' : 'border-transparent text-muted hover:text-ink'
             }`}
           >
-            {selected && (
-              <span
-                aria-hidden="true"
-                className="absolute inset-y-0 left-0 w-[3px] bg-accent-amber"
-              />
-            )}
-            <span className="block text-[10px] uppercase tracking-[0.2em] text-charcoal-light/70">
-              <span aria-hidden="true" className="font-serif text-xs tracking-normal">
-                {ROMAN_NUMERALS[index] ?? index + 1}
-              </span>{' '}
-              · {details}
+            <span className="label block">
+              {ROMAN_NUMERALS[index] ?? index + 1} · {details}
             </span>
-            <span className="mt-1 block line-clamp-2 font-serif text-base leading-snug text-charcoal sm:text-lg">
-              {entry.label}
-            </span>
+            <span className="mt-1 line-clamp-1 block font-serif">{entry.label}</span>
           </button>
         )
       })}

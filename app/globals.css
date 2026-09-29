@@ -1,133 +1,127 @@
 @import 'tailwindcss';
 
-/* Wire Tailwind's dark: variant to the .dark class on <html> (set by useTheme hook + inline script).
-   Without this, dark: uses @media prefers-color-scheme which doesn't match the manual toggle. */
+/* Tailwind's dark: variant follows the .dark class set by the inline theme script. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --cream: #f6f1e6;
-  --cream-dark: #ede5d3;
-  --charcoal: #1b1a17;
-  --charcoal-light: #6f6a5d;
-  --surface: #fbf7ec;
-  --surface-muted: #f3ecdb;
-  --surface-strong: #e7dcc8;
-  --paper-deep: #ede4d1;
-  --paper-frame: #f8f2e5;
-  --border: #d9d0bb;
-  --border-strong: #c5b99e;
-  --accent-soft: #b35a4a;
-  --accent-olive: #4a6b5c;
-  --accent-rose: #9d5c49;
-  --accent-plum: #786b74;
-  --accent-sky: #7e95aa;
-  --accent-amber: #b8862b;
-  --accent-oxblood: #7e2a1f;
-  --highlight: #f4e6b8;
-  --shadow-color: rgba(37, 25, 15, 0.12);
-  --shadow-heavy: rgba(37, 25, 15, 0.28);
-  --grain: rgba(40, 30, 15, 0.03);
-  --font-body: var(--font-alegreya-sans), ui-sans-serif, system-ui, sans-serif;
+  --paper: #f7f3ea;
+  --ink: #1f1c17;
+  --muted: #6b6457;
+  --faint: #b3ab9b;
+  --rule: #e3dccc;
+  --wash: #efe8d9;
+  --accent: #8c2f1f;
+  /* Language families in the lineage tree */
+  --lang-pie: #8f7c4a;
+  --lang-greek: #3d6a8e;
+  --lang-latin: #a04a36;
+  --lang-romance: #b07a22;
+  --lang-germanic: #4d7c5a;
+  --lang-semitic: #7b5a8e;
+  --lang-other: #7d776c;
 }
 
 .dark {
-  --cream: #13141a;
-  --cream-dark: #0d0e13;
-  --charcoal: #ebe3cf;
-  --charcoal-light: #aaa18d;
-  --surface: #1b1d25;
-  --surface-muted: #232631;
-  --surface-strong: #2c303b;
-  --paper-deep: #171920;
-  --paper-frame: #161820;
-  --border: #393c48;
-  --border-strong: #505462;
-  --accent-soft: #c47352;
-  --accent-olive: #8db09f;
-  --accent-rose: #c97c62;
-  --accent-plum: #988695;
-  --accent-sky: #91a9c3;
-  --accent-amber: #d4a574;
-  --accent-oxblood: #e08a5a;
-  --highlight: #5a4218;
-  --shadow-color: rgba(0, 0, 0, 0.32);
-  --shadow-heavy: rgba(0, 0, 0, 0.72);
-  --grain: rgba(255, 248, 220, 0.025);
+  --paper: #151412;
+  --ink: #ebe5d8;
+  --muted: #a29b8c;
+  --faint: #5d584f;
+  --rule: #2b2824;
+  --wash: #25221e;
+  --accent: #e39070;
+  --lang-pie: #c6b37e;
+  --lang-greek: #86add1;
+  --lang-latin: #dd8d75;
+  --lang-romance: #deb064;
+  --lang-germanic: #8fc39c;
+  --lang-semitic: #bb9bd3;
+  --lang-other: #a29b8c;
 }
 
 @theme inline {
-  --color-cream: var(--cream);
-  --color-cream-dark: var(--cream-dark);
-  --color-charcoal: var(--charcoal);
-  --color-charcoal-light: var(--charcoal-light);
-  --color-surface: var(--surface);
-  --color-surface-muted: var(--surface-muted);
-  --color-surface-strong: var(--surface-strong);
-  --color-paper-deep: var(--paper-deep);
-  --color-paper-frame: var(--paper-frame);
-  --color-border-soft: var(--border);
-  --color-border-strong: var(--border-strong);
-  --color-accent-soft: var(--accent-soft);
-  --color-accent-olive: var(--accent-olive);
-  --color-accent-rose: var(--accent-rose);
-  --color-accent-plum: var(--accent-plum);
-  --color-accent-sky: var(--accent-sky);
-  --color-accent-amber: var(--accent-amber);
-  --color-accent-oxblood: var(--accent-oxblood);
-  --color-highlight: var(--highlight);
-  --font-serif: var(--font-libre-baskerville);
-  --font-sans: var(--font-body);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-rule: var(--rule);
+  --color-wash: var(--wash);
+  --color-accent: var(--accent);
+  --color-lang-pie: var(--lang-pie);
+  --color-lang-greek: var(--lang-greek);
+  --color-lang-latin: var(--lang-latin);
+  --color-lang-romance: var(--lang-romance);
+  --color-lang-germanic: var(--lang-germanic);
+  --color-lang-semitic: var(--lang-semitic);
+  --color-lang-other: var(--lang-other);
+  --font-serif: var(--font-libre-baskerville), Georgia, serif;
+  --font-sans: var(--font-alegreya-sans), Georgia, serif;
 }
 
 html {
-  background: var(--cream);
-  color: var(--charcoal);
-  transition:
-    background-color 0.3s ease,
-    color 0.3s ease;
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background:
-    radial-gradient(1200px 600px at 80% -10%, var(--grain), transparent 60%),
-    radial-gradient(800px 400px at -10% 110%, var(--grain), transparent 60%),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--surface) 66%, transparent) 0%,
-      color-mix(in srgb, var(--surface) 22%, transparent) 18%,
-      transparent 45%,
-      color-mix(in srgb, var(--surface-muted) 32%, transparent) 100%
-    ),
-    linear-gradient(
-      90deg,
-      transparent 0%,
-      color-mix(in srgb, var(--charcoal) 1.2%, transparent) 50%,
-      transparent 100%
-    ),
-    var(--cream);
-  font-family: var(--font-body);
+  background: var(--paper);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent-soft) 32%, transparent);
-  color: var(--charcoal);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-/* Keyboard focus: restore a visible ring everywhere, including controls
-   whose default outline was removed with `outline-none`. This rule is
-   unlayered, so it wins over Tailwind's layered utilities. The ring must
-   appear instantly — transition-all on many controls would otherwise
-   animate outline-width from 0 and delay the focus indicator. */
 :focus-visible {
-  outline: 2px solid var(--accent-oxblood);
-  outline-offset: 2px;
-  transition-property: none;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
-/* Honor reduced-motion preferences: collapse animations and transitions to
-   effectively instant so progress states still resolve, without motion. */
+/* The search field shows focus through its underline instead. */
+input[type='search']:focus-visible {
+  outline: none;
+}
+
+/* Small-caps section label used across the site. */
+@utility label {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Quiet underline that warms to the accent on hover. */
+@utility link {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+  text-decoration-color: var(--faint);
+  transition:
+    color 150ms ease,
+    text-decoration-color 150ms ease;
+
+  &:hover {
+    color: var(--accent);
+    text-decoration-color: currentColor;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@utility animate-rise {
+  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -137,224 +131,4 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-/* Custom animations */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fadeIn {
-  animation: fadeIn 0.3s ease-out;
-}
-
-@keyframes stageReveal {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-stage-reveal {
-  animation: stageReveal 0.4s ease-out;
-}
-
-@keyframes heroLift {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-hero-lift {
-  animation: heroLift 0.55s ease-out both;
-}
-
-/* Custom max-width for content */
-.max-w-content {
-  max-width: 42rem;
-}
-
-.editorial-panel {
-  position: relative;
-  overflow: hidden;
-  border-radius: 1.15rem;
-  border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface) 96%, transparent) 0%,
-    color-mix(in srgb, var(--surface) 90%, transparent) 100%
-  );
-  box-shadow: 0 22px 60px -34px var(--shadow-heavy);
-}
-
-.editorial-panel::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-strong) 22%, transparent) 0%,
-    transparent 24%
-  );
-  opacity: 0.75;
-}
-
-.editorial-shell {
-  background:
-    radial-gradient(1200px 600px at 80% -10%, var(--grain), transparent 60%),
-    radial-gradient(800px 400px at -10% 110%, var(--grain), transparent 60%), var(--surface);
-  border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
-  border-radius: 1.3rem;
-  box-shadow: 0 22px 60px -34px var(--shadow-heavy);
-}
-
-.editorial-card {
-  position: relative;
-  overflow: hidden;
-  border-radius: 1.15rem;
-  border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface) 95%, transparent) 0%,
-    color-mix(in srgb, var(--surface) 88%, transparent) 100%
-  );
-  box-shadow: 0 22px 60px -34px var(--shadow-heavy);
-}
-
-.editorial-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--surface-strong) 18%, transparent) 0%,
-    transparent 26%
-  );
-  opacity: 0.72;
-}
-
-.editorial-inset {
-  position: relative;
-  overflow: hidden;
-  border-radius: 1rem;
-  border: 1px solid color-mix(in srgb, var(--border-strong) 92%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--paper-deep) 92%, transparent) 0%,
-    color-mix(in srgb, var(--paper-deep) 76%, transparent) 100%
-  );
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 22%, transparent);
-}
-
-.editorial-rule {
-  height: 4px;
-  border-top: 1px solid color-mix(in srgb, var(--border-strong) 82%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-}
-
-.editorial-kicker {
-  font-size: 11px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--charcoal-light) 82%, transparent);
-}
-
-.editorial-double-rule {
-  height: 4px;
-  border-top: 1px solid color-mix(in srgb, var(--border-strong) 82%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-}
-
-.editorial-dropcap::first-letter {
-  float: left;
-  padding: 6px 10px 0 0;
-  font-family: var(--font-serif);
-  font-size: 4.4em;
-  line-height: 0.82;
-  color: var(--accent-oxblood);
-}
-
-.editorial-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  height: 1.65rem;
-  padding: 0 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
-  font-size: 0.78rem;
-  color: color-mix(in srgb, var(--charcoal-light) 92%, transparent);
-  transition:
-    border-color 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease,
-    background-color 0.18s ease;
-}
-
-.editorial-chip:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--border-strong) 100%, transparent);
-  color: var(--charcoal);
-}
-
-.editorial-chip-dot {
-  width: 0.38rem;
-  height: 0.38rem;
-  border-radius: 999px;
-  background: var(--accent-oxblood);
-}
-
-.editorial-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px solid color-mix(in srgb, var(--border) 100%, transparent);
-  border-radius: 0.4rem;
-  padding: 0.15rem 0.45rem;
-  background: color-mix(in srgb, var(--cream) 45%, var(--surface));
-  font-size: 0.58rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--charcoal-light) 92%, transparent);
-}
-
-.editorial-link {
-  color: var(--charcoal);
-  text-decoration: none;
-  background-image: linear-gradient(var(--border-strong), var(--border-strong));
-  background-repeat: no-repeat;
-  background-size: 100% 1px;
-  background-position: 0 100%;
-  transition: background-image 0.2s ease;
-}
-
-.editorial-link:hover {
-  background-image: linear-gradient(var(--accent-oxblood), var(--accent-oxblood));
-}
-
-.editorial-grid {
-  background-image: radial-gradient(
-    color-mix(in srgb, var(--border) 90%, transparent) 1px,
-    transparent 1px
-  );
-  background-size: 12px 12px;
 }

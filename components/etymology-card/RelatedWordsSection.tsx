@@ -1,13 +1,6 @@
-'use client'
-
-import { WordSuggestions } from '@/lib/types'
-import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './MobileSection'
-
-interface RelatedWordsSectionProps {
-  suggestions: WordSuggestions
-  onWordClick: (word: string) => void
-  title?: string
-}
+import type { WordSuggestions } from '@/lib/types'
+import { WordLink } from '../WordLink'
+import { Section } from './Section'
 
 /**
  * Extract just the word from an LLM suggestion string.
@@ -62,109 +55,44 @@ function parseWordEntry(raw: string): { word: string; annotation?: string } {
   return { word: text || raw.trim() }
 }
 
-function SuggestionRow({
-  label,
-  words,
-  onWordClick,
-  color,
-}: {
-  label: string
-  words: string[]
-  onWordClick: (word: string) => void
-  color: 'olive' | 'rose' | 'amber' | 'sky' | 'plum'
-}) {
-  const colorClasses = {
-    olive:
-      'border-accent-olive/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-olive/70',
-    rose: 'border-accent-rose/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-rose/70',
-    amber:
-      'border-accent-amber/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-amber/70',
-    sky: 'border-accent-sky/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-sky/70',
-    plum: 'border-accent-plum/40 bg-surface text-charcoal-light hover:bg-surface-muted hover:border-accent-plum/70',
-  }
-
-  return (
-    <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-      <span className="w-full text-xs uppercase tracking-[0.16em] text-charcoal/42 sm:w-32 sm:shrink-0">
-        {label}
-      </span>
-      {words.map((raw) => {
-        const { word, annotation } = parseWordEntry(raw)
-        return (
-          <button
-            key={raw}
-            onClick={() => onWordClick(word)}
-            title={annotation}
-            className={`
-              cursor-pointer rounded-full border px-2.5 py-1 text-sm font-serif
-              transition-colors
-              ${colorClasses[color]}
-            `}
-          >
-            {word}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
+const ROWS: Array<{ key: keyof WordSuggestions; label: string }> = [
+  { key: 'synonyms', label: 'Synonyms' },
+  { key: 'antonyms', label: 'Antonyms' },
+  { key: 'homophones', label: 'Homophones' },
+  { key: 'easilyConfusedWith', label: 'Confused with' },
+  { key: 'seeAlso', label: 'See also' },
+]
 
 export function RelatedWordsSection({
   suggestions,
-  onWordClick,
-  title = 'Related Words',
-}: RelatedWordsSectionProps) {
+  title,
+}: {
+  suggestions: WordSuggestions
+  title: string
+}) {
+  const rows = ROWS.filter(({ key }) => suggestions[key]?.length)
+  if (rows.length === 0) return null
+
   return (
-    <MobileSection
-      id="entry-related"
-      title={title}
-      titleTextClassName={SECTION_TITLE_CLASS}
-      dividerClassName={SECTION_DIVIDER_CLASS}
-    >
-      <div className="editorial-card p-4 sm:p-5">
-        <div className="space-y-4">
-          {suggestions.synonyms && suggestions.synonyms.length > 0 && (
-            <SuggestionRow
-              label="Synonyms"
-              words={suggestions.synonyms}
-              onWordClick={onWordClick}
-              color="olive"
-            />
-          )}
-          {suggestions.antonyms && suggestions.antonyms.length > 0 && (
-            <SuggestionRow
-              label="Antonyms"
-              words={suggestions.antonyms}
-              onWordClick={onWordClick}
-              color="rose"
-            />
-          )}
-          {suggestions.homophones && suggestions.homophones.length > 0 && (
-            <SuggestionRow
-              label="Homophones"
-              words={suggestions.homophones}
-              onWordClick={onWordClick}
-              color="amber"
-            />
-          )}
-          {suggestions.easilyConfusedWith && suggestions.easilyConfusedWith.length > 0 && (
-            <SuggestionRow
-              label="Often Confused With"
-              words={suggestions.easilyConfusedWith}
-              onWordClick={onWordClick}
-              color="sky"
-            />
-          )}
-          {suggestions.seeAlso && suggestions.seeAlso.length > 0 && (
-            <SuggestionRow
-              label="See Also"
-              words={suggestions.seeAlso}
-              onWordClick={onWordClick}
-              color="plum"
-            />
-          )}
-        </div>
-      </div>
-    </MobileSection>
+    <Section id="entry-related" title={title}>
+      <dl className="space-y-3">
+        {rows.map(({ key, label }) => (
+          <div key={key} className="flex flex-col gap-1 sm:flex-row sm:gap-6">
+            <dt className="w-32 shrink-0 text-sm text-muted">{label}</dt>
+            <dd className="font-serif leading-relaxed text-ink">
+              {suggestions[key]!.map((raw, index) => {
+                const { word, annotation } = parseWordEntry(raw)
+                return (
+                  <span key={raw}>
+                    {index > 0 && ', '}
+                    <WordLink word={word} title={annotation} />
+                  </span>
+                )
+              })}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Section>
   )
 }

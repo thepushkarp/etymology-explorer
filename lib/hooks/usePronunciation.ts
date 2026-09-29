@@ -3,112 +3,61 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LanguageCode } from '@/lib/languages'
 
+type PlaybackState = 'idle' | 'loading' | 'playing' | 'error'
+
 /**
- * Fetches TTS audio for a word from /api/pronunciation and plays it.
- * The fetched audio is reused for repeat plays and discarded when the word
- * changes. Concurrent play() calls are ignored while audio is loading or
- * playing, and a response that arrives after the word changed is dropped.
+ * Plays TTS audio for a word straight from /api/pronunciation. The browser
+ * streams it (playback starts before the download finishes) and the response
+ * is HTTP-cached for a year, so repeat plays never refetch.
  */
 export function usePronunciation(word: string, language: LanguageCode = 'en') {
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const src = `/api/pronunciation?word=${encodeURIComponent(word)}&language=${language}`
+  // Keyed by src: a new word always starts idle, even if the old audio was
+  // paused mid-play (pausing never fires onended).
+  const [playback, setPlayback] = useState<{ src: string; state: PlaybackState }>({
+    src,
+    state: 'idle',
+  })
+  const state = playback.src === src ? playback.state : 'idle'
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const objectUrlRef = useRef<string | null>(null)
-  const loadedWordRef = useRef<string | null>(null)
-  const activeWordRef = useRef(`${language}:${word}`)
-  const busyRef = useRef(false)
-
-  const lexeme = `${language}:${word}`
-  activeWordRef.current = lexeme
 
   useEffect(
     () => () => {
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current)
-        objectUrlRef.current = null
-      }
+      audioRef.current?.pause()
+      audioRef.current = null
     },
-    []
+    [src]
   )
 
   const play = useCallback(async () => {
-    if (!word.trim() || busyRef.current) return
-
-    setError(null)
-
-    // Discard cached audio from a previous word
-    if (loadedWordRef.current !== lexeme && audioRef.current) {
-      audioRef.current = null
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current)
-        objectUrlRef.current = null
-      }
-    }
-
-    // Audio already loaded - just play
-    if (audioRef.current) {
-      busyRef.current = true
-      setIsPlaying(true)
-      try {
-        await audioRef.current.play()
-      } catch {
-        setError('Playback failed')
-        setIsPlaying(false)
-        busyRef.current = false
-      }
-      return
-    }
-
-    // Fetch and play
-    busyRef.current = true
-    setIsLoading(true)
-    try {
-      const response = await fetch(
-        `/api/pronunciation?word=${encodeURIComponent(word)}&language=${language}`
-      )
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(data.error || `HTTP ${response.status}`)
-      }
-
-      const blob = await response.blob()
-
-      // The searched word changed while fetching - drop the stale audio
-      if (activeWordRef.current !== lexeme) {
-        busyRef.current = false
-        return
-      }
-
-      const url = URL.createObjectURL(blob)
-      objectUrlRef.current = url
-
-      const audio = new Audio(url)
-      audio.onended = () => {
-        setIsPlaying(false)
-        busyRef.current = false
-      }
+    const setState = (next: PlaybackState) => setPlayback({ src, state: next })
+    let audio = audioRef.current
+    if (audio && !audio.paused) return
+    if (!audio) {
+      audio = new Audio(src)
+      const element = audio
+      audio.onended = () => setState('idle')
+      // Network or decode failures mid-playback never fire onended; allow a retry.
       audio.onerror = () => {
-        setError('Playback failed')
-        setIsPlaying(false)
-        busyRef.current = false
+        if (audioRef.current === element) audioRef.current = null
+        setState('error')
       }
-
       audioRef.current = audio
-      loadedWordRef.current = lexeme
-      setIsPlaying(true)
-      await audio.play()
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load'
-      setError(message)
-      setIsPlaying(false)
-      busyRef.current = false
-      console.error('[usePronunciation] Error:', err)
-    } finally {
-      setIsLoading(false)
     }
-  }, [word, language, lexeme])
+    setState('loading')
+    try {
+      await audio.play()
+      setState('playing')
+    } catch {
+      audioRef.current = null
+      setState('error')
+    }
+  }, [src])
 
-  return { play, isPlaying, isLoading, error }
+  return {
+    play,
+    isLoading: state === 'loading',
+    isPlaying: state === 'playing',
+    error: state === 'error' ? 'Pronunciation unavailable' : null,
+  }
 }

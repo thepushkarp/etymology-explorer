@@ -1,55 +1,109 @@
 'use client'
 
-import { NgramResult } from '@/lib/types'
-import UsageTimeline from '../UsageTimeline'
-import { MobileSection, SECTION_DIVIDER_CLASS, SECTION_TITLE_CLASS } from './MobileSection'
+import { useMemo, useState } from 'react'
+import type { NgramResult } from '@/lib/types'
+import { Section } from './Section'
 
-interface UsageSectionProps {
-  ngram: NgramResult
-  title?: string
+const WIDTH = 600
+const HEIGHT = 120
+const PAD = 4
+
+/** Google Ngram values are relative frequencies; tiny ones read best per million words. */
+export function formatFrequency(count: number): string {
+  if (!Number.isFinite(count) || count <= 0) return '0'
+  if (count < 0.01) {
+    const perMillion = count * 1_000_000
+    return `${perMillion.toLocaleString('en', { maximumFractionDigits: 2 })} per million words`
+  }
+  return `${(count * 100).toLocaleString('en', { maximumFractionDigits: 2 })}%`
 }
 
-export function UsageSection({ ngram, title = 'Usage over time' }: UsageSectionProps) {
+function UsageChart({ ngram }: { ngram: NgramResult }) {
+  const [hover, setHover] = useState<number | null>(null)
+  const { data } = ngram
+
+  const points = useMemo(() => {
+    const max = Math.max(...data.map((point) => point.count)) || 1
+    return data.map((point, index) => ({
+      x: PAD + (index / Math.max(data.length - 1, 1)) * (WIDTH - PAD * 2),
+      y: PAD + (1 - point.count / max) * (HEIGHT - PAD * 2),
+    }))
+  }, [data])
+
+  const peak = data.reduce(
+    (best, point, index) => (point.count > data[best].count ? index : best),
+    0
+  )
+  const shown = hover ?? peak
+  const line = `M${points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join('L')}`
+
+  const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const ratio = (event.clientX - bounds.left) / bounds.width
+    setHover(Math.min(data.length - 1, Math.max(0, Math.round(ratio * (data.length - 1)))))
+  }
+
   return (
-    <MobileSection
-      id="entry-usage"
-      title={title}
-      titleTextClassName={SECTION_TITLE_CLASS}
-      dividerClassName={SECTION_DIVIDER_CLASS}
-    >
-      <div className="editorial-card p-4 sm:p-5">
-        <UsageTimeline data={ngram.data} word={ngram.word} showYearLabels />
+    <figure>
+      <figcaption className="mb-3 text-sm text-muted" aria-live="polite">
+        <span className="font-serif text-ink">{data[shown].year}</span>
+        {hover === null ? ' — peak usage, ' : ' — '}
+        {formatFrequency(data[shown].count)}
+      </figcaption>
+      <svg
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        preserveAspectRatio="none"
+        className="h-28 w-full touch-none overflow-visible text-ink"
+        role="img"
+        aria-label={`Usage of ${ngram.word} in books, ${data[0].year}–${data[data.length - 1].year}`}
+        onPointerMove={onPointerMove}
+        onPointerLeave={() => setHover(null)}
+      >
+        <line x1={0} x2={WIDTH} y1={HEIGHT} y2={HEIGHT} stroke="var(--rule)" />
+        <path
+          d={line}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.5}
+          vectorEffect="non-scaling-stroke"
+        />
+        <line
+          x1={points[shown].x}
+          x2={points[shown].x}
+          y1={0}
+          y2={HEIGHT}
+          stroke="var(--faint)"
+          strokeDasharray="2 3"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <div className="mt-2 flex justify-between text-xs tabular-nums text-muted">
+        <span>{data[0].year}</span>
+        <span>{data[data.length - 1].year}</span>
       </div>
-    </MobileSection>
+    </figure>
   )
 }
 
-interface UsageUnavailableProps {
-  title?: string
-  noteLabel?: string
-  message?: string
+interface UsageSectionProps {
+  ngram?: NgramResult
+  unavailable?: boolean
+  title: string
+  unavailableMessage: string
 }
 
-export function UsageUnavailable({
-  title = 'Usage over time',
-  noteLabel = 'Corpus note',
-  message = 'Usage history is not available for this corpus yet.',
-}: UsageUnavailableProps) {
+export function UsageSection({ ngram, unavailable, title, unavailableMessage }: UsageSectionProps) {
+  if (ngram && ngram.data.length > 1) {
+    return (
+      <Section id="entry-usage" title={title}>
+        <UsageChart ngram={ngram} />
+      </Section>
+    )
+  }
+  if (!unavailable) return null
   return (
-    <MobileSection
-      id="entry-usage"
-      title={title}
-      titleTextClassName={SECTION_TITLE_CLASS}
-      dividerClassName={SECTION_DIVIDER_CLASS}
-    >
-      <div className="max-w-3xl border-l-2 border-accent-amber/45 py-1 pl-4 sm:pl-5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-charcoal-light/65">
-          {noteLabel}
-        </p>
-        <p className="mt-2 font-serif text-base italic leading-relaxed text-charcoal-light sm:text-lg">
-          {message}
-        </p>
-      </div>
-    </MobileSection>
+    <Section id="entry-usage" title={title}>
+      <p className="font-serif italic text-muted">{unavailableMessage}</p>
+    </Section>
   )
 }

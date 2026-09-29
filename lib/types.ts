@@ -317,15 +317,6 @@ export interface WordSuggestion {
 }
 
 /**
- * History entry stored in localStorage
- */
-export interface HistoryEntry {
-  word: string
-  language?: LanguageCode // absent in legacy localStorage entries means English
-  timestamp: number
-}
-
-/**
  * Raw data fetched from a single external source
  */
 export interface SourceData {

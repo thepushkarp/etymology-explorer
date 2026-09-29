@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { faqs } from '@/data/faq'
-import { EditorialPageFrame } from '@/components/EditorialPageFrame'
+import { PageFrame } from '@/components/PageFrame'
 import { FaqAccordion } from '@/components/FaqAccordion'
 import { FaqSchema } from '@/components/FaqSchema'
 
@@ -23,29 +22,9 @@ export default function FaqPage() {
   return (
     <>
       <FaqSchema faqs={faqs} />
-      <EditorialPageFrame
-        eyebrow="frequently asked"
-        title="Questions about words, and the people who used them."
-        subtitle="The short answers, set out plainly, for curious readers and repeat searchers alike."
-        showHeaderRule={false}
-      >
-        <section className="mx-auto max-w-3xl" aria-label="Frequently asked questions">
-          <div>
-            <FaqAccordion faqs={faqs} />
-          </div>
-          <div className="editorial-card mt-12 flex flex-col gap-6 p-8 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-serif text-xl italic text-charcoal-light">still curious?</p>
-              <p className="mt-2 font-serif text-3xl tracking-[-0.03em] text-charcoal">
-                Pick a word and start digging.
-              </p>
-            </div>
-            <Link href="/" className="editorial-chip self-start font-serif italic sm:self-center">
-              explore the archive →
-            </Link>
-          </div>
-        </section>
-      </EditorialPageFrame>
+      <PageFrame title="Questions" subtitle="Short answers about words and how EtymEx traces them.">
+        <FaqAccordion faqs={faqs} />
+      </PageFrame>
     </>
   )
 }

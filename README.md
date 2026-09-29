@@ -13,11 +13,10 @@ Try it out at [etymex.com](https://etymex.com)
 - **Part of Speech Tags**: See grammatical categories (noun/verb/adjective) with alternate pronunciations for words like "record"
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
 - **Related Words**: Discover words that share the same roots
-- **Word Suggestions**: Explore synonyms, antonyms, homophones, easily-confused words, and see-also links with color-coded clickable chips
+- **Word Suggestions**: Explore synonyms, antonyms, homophones, easily-confused words, and see-also links
 - **Modern Usage**: Slang context gated by source significance from Urban Dictionary and supplemental Incel Wiki extracts
 - **Pronunciation Audio**: Listen to word pronunciations powered by ElevenLabs
-- **Search History**: Track your vocabulary exploration with a persistent sidebar
-- **Surprise Me**: Discover random words to expand your vocabulary
+- **Random Word**: Open a random word to expand your vocabulary
 - **Structured Outputs**: Guaranteed valid JSON via OpenRouter `json_schema` strict mode
 - **Streaming UI**: Optional `?stream=true` server-sent events for source progress,
   per-section synthesis events, cached hits, and early error responses
@@ -139,21 +138,19 @@ etymology-explorer/
 │   ├── sitemap.ts          # Dynamic sitemap (static pages + cached /word/ entries)
 │   ├── robots.ts           # Robots.txt configuration
 │   ├── layout.tsx          # Root layout with fonts
-│   └── page.tsx            # Landing/search page (/?q= redirects to /word/{word})
-├── proxy.ts               # Rate limiting + CSP headers
+│   └── page.tsx            # Static landing/search page
+├── proxy.ts               # Rate limiting, CSP headers, legacy /?q= redirect
 ├── components/
-│   ├── AncestryTree.tsx    # Visual etymology graph
+│   ├── AncestryTree.tsx    # Lineage timeline
+│   ├── EntryView.tsx       # Finished entry shell (locale, histories, usage, share)
 │   ├── ErrorState.tsx      # Error display with retry
-│   ├── EtymologyCard.tsx   # Main result display
+│   ├── EtymologyCard.tsx   # Entry layout, final and streaming (pending) states
+│   ├── etymology-card/     # Entry sections
 │   ├── FaqAccordion.tsx    # Accessible FAQ accordion
-│   ├── FaqSchema.tsx       # FAQPage JSON-LD schema
-│   ├── HistorySidebar.tsx  # Search history panel
-│   ├── JsonLd.tsx          # WebApplication schema
-│   ├── PronunciationButton.tsx # Audio playback
-│   ├── RelatedWordsList.tsx # Related words chips
-│   ├── RootChip.tsx        # Expandable root morpheme
-│   ├── SearchBar.tsx       # Word input
-│   └── SurpriseButton.tsx  # Random word button
+│   ├── Landing.tsx         # Landing page
+│   ├── SearchBox.tsx       # Word search with suggestions
+│   ├── WordLink.tsx        # Link to a word page (marks trace intent)
+│   └── WordTraceExperience.tsx # Live trace for uncached words
 ├── lib/
 │   ├── research.ts         # Agentic multi-source research pipeline
 │   ├── llm.ts              # OpenRouter-backed LLM synthesis with structured outputs
@@ -179,7 +176,7 @@ etymology-explorer/
 │   ├── fetchUtils.ts       # Timeout wrapper
 │   ├── validation.ts       # Input validation
 │   ├── wordlist.ts         # GRE word utilities
-│   ├── hooks/              # React hooks (localStorage, history, search)
+│   ├── hooks/              # React hooks (search, navigation, ngram, audio)
 │   │   └── useStreamingEtymology.ts # SSE transport over the pure stream reducer
 │   └── schemas/
 │       ├── etymology.ts    # Zod schema for cache validation
@@ -242,7 +239,7 @@ disabled until it completes the same etymology-quality and latency bakeoff.
 ```
 ┌──────────────────────────────┐
 │         BROWSER UI           │
-│ SearchBar / History / Result  │
+│ SearchBox / Entry / Trace     │
 └──────────────┬───────────────┘
                │ GET /api/etymology?word=X[&stream=true]
                ▼

@@ -9,13 +9,17 @@
  */
 
 import type {
+  BetaEtymologyResult,
+  BilingualText,
   DisplayEtymologyResult,
   EnglishEtymologyResult,
   EtymologyResult,
-  NgramResult,
   StreamEvent,
 } from './types'
+import type { LanguageCode } from './languages'
+import { localizeResult } from './resultLocalization'
 import { StreamingUiError, toStreamingUiError } from './streamingError'
+import { sourceKey, sourceLabel } from './sourceLabels'
 
 export type StreamStatus = 'idle' | 'loading' | 'success' | 'error'
 
@@ -50,16 +54,19 @@ export type SectionKey = (typeof SECTION_KEYS)[number]
 /** Progressive slice of the final result, hydrated one section at a time */
 export type PartialEtymology = Partial<Pick<EnglishEtymologyResult, SectionKey>>
 
+const EMPTY_BILINGUAL_TEXT: BilingualText = { en: '', local: '' }
+
 /**
- * Fill the streamed sections into a full-shaped EtymologyResult, defaulting
- * every not-yet-arrived field to an empty value for the persistent TraceHeader.
+ * Project the streamed sections onto a full display result, defaulting every
+ * not-yet-arrived field to an empty value. Beta sections carry bilingual prose,
+ * so they get paired empty text and the same projection as completed results.
  */
 export function toPartialResult(
   word: string,
   sections: PartialEtymology,
-  ngram?: NgramResult | null
+  language: LanguageCode = 'en'
 ): DisplayEtymologyResult {
-  return {
+  const partial: DisplayEtymologyResult = {
     language: 'en',
     word: sections.word ?? word,
     pronunciation: sections.pronunciation ?? '',
@@ -71,15 +78,22 @@ export function toPartialResult(
     partsOfSpeech: sections.partsOfSpeech,
     suggestions: sections.suggestions,
     modernUsage: sections.modernUsage,
-    ngram: ngram ?? undefined,
   }
+  if (language === 'en') return partial
+
+  const betaPartial = {
+    ...partial,
+    language,
+    definition: sections.definition ?? EMPTY_BILINGUAL_TEXT,
+    lore: sections.lore ?? EMPTY_BILINGUAL_TEXT,
+  } as unknown as BetaEtymologyResult
+  return localizeResult(betaPartial, 'local')
 }
 
 export interface StreamState {
   status: StreamStatus
   phase: StreamPhase
   sources: SourceProgress[]
-  parsingComplete: boolean
   sections: PartialEtymology
   /** Non-null while this request is waiting on another in-flight lookup */
   sharedWaitMs: number | null
@@ -93,24 +107,6 @@ export type StreamAction =
   | { type: 'fallback_success'; result: EtymologyResult }
   | { type: 'fallback_error'; error: StreamingUiError }
 
-const SOURCE_LABELS: Record<string, string> = {
-  etymonline: 'Etymonline',
-  wiktionary: 'Wiktionary',
-  freedictionary: 'Free Dictionary',
-  wikipedia: 'Wikipedia',
-  urbandictionary: 'Urban Dictionary',
-  incelswiki: 'Incels Wiki',
-  wiktionaryenglish: 'English Wiktionary',
-  wiktionarynative: 'Native Wiktionary',
-  multilingualdictionary: 'FreeDictionaryAPI',
-  wikidatalexeme: 'Wikidata Lexemes',
-  dicionarioaberto: 'Dicionário Aberto',
-}
-
-function normalizeSourceKey(source: string): string {
-  return source.toLowerCase().replace(/\s+/g, '')
-}
-
 /**
  * Update one source's status, appending it if unknown so out-of-order
  * events (a completion before its start) still land.
@@ -120,13 +116,10 @@ function upsertSource(
   rawSource: string,
   patch: Partial<Pick<SourceProgress, 'status' | 'timing'>>
 ): SourceProgress[] {
-  const key = normalizeSourceKey(rawSource)
+  const key = sourceKey(rawSource)
   const existing = sources.find((source) => source.key === key)
   if (!existing) {
-    return [
-      ...sources,
-      { key, label: SOURCE_LABELS[key] ?? rawSource, status: 'pending', ...patch },
-    ]
+    return [...sources, { key, label: sourceLabel(rawSource), status: 'pending', ...patch }]
   }
   return sources.map((source) => (source.key === key ? { ...source, ...patch } : source))
 }
@@ -139,7 +132,6 @@ export const initialStreamState: StreamState = {
   status: 'idle',
   phase: 'idle',
   sources: [],
-  parsingComplete: false,
   sections: {},
   sharedWaitMs: null,
   result: null,
@@ -164,8 +156,6 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
       return { ...state, sources: upsertSource(state.sources, event.source, { status: 'failed' }) }
 
     case 'parsing_complete':
-      return { ...state, parsingComplete: true }
-
     case 'roots_identified':
     case 'enrichment_done':
     case 'root_research':

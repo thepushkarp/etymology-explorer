@@ -1,10 +1,9 @@
 import type { Metadata } from 'next'
 import { unstable_cache } from 'next/cache'
-import Link from 'next/link'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
-import { WordPageEntry } from '@/components/WordPageEntry'
+import { EntryView } from '@/components/EntryView'
 import { WordTraceExperience } from '@/components/WordTraceExperience'
 import {
   CACHE_VERSION,
@@ -156,22 +155,12 @@ export default async function WordPage({ params }: WordPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-cream text-charcoal">
-      <SiteHeader compact />
-      <main className="mx-auto max-w-[1040px] px-3 pb-14 pt-8 sm:px-6 sm:pt-10 lg:px-8 lg:pt-12">
-        <Link
-          href="/"
-          className="editorial-link inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-charcoal-light/72 transition-colors hover:text-charcoal"
-        >
-          <span aria-hidden="true">&larr;</span>
-          <span>Back to explorer</span>
-        </Link>
-
-        <div className="mt-6 sm:mt-8">
-          <WordPageEntry result={result as EtymologyResult} />
-        </div>
+    <>
+      <SiteHeader searchLanguage={language} />
+      <main className="mx-auto w-full max-w-3xl px-4 pt-14 sm:px-6 sm:pt-20">
+        <EntryView result={result as EtymologyResult} />
       </main>
       <SiteFooter />
-    </div>
+    </>
   )
 }

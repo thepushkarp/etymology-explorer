@@ -110,7 +110,6 @@ export async function fetchWiktionary(
 
     if (!pages) return null
 
-    // Get the first (and usually only) page
     const pageId = Object.keys(pages)[0]
     const page = pages[pageId]
 
