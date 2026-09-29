@@ -28,19 +28,7 @@ export const metadata: Metadata = {
     template: `%s | ${SITE_SHORT_NAME}`,
   },
   description:
-    'Explore the fascinating origins and history of English words. Visual etymology trees, linguistic connections, and historical context for thousands of words.',
-  keywords: [
-    'etymology',
-    'word origins',
-    'vocabulary',
-    'GRE',
-    'TOEFL',
-    'word roots',
-    'Latin',
-    'Greek',
-    'linguistics',
-    'language history',
-  ],
+    'Trace any word back to its roots. EtymEx follows each word through the languages it passed through, with a lineage tree and the sources behind every step.',
   authors: [{ name: 'Pushkar Patel', url: 'https://thepushkarp.com' }],
   creator: 'Pushkar Patel',
   icons: {
@@ -55,8 +43,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: `${SITE_SHORT_NAME} - Discover Word Origins`,
-    description:
-      'Visual etymology explorer with word history, linguistic roots, and historical connections.',
+    description: 'Trace any word back to its roots, one language at a time.',
     url: '/',
     siteName: SITE_SHORT_NAME,
     type: 'website',
@@ -73,8 +60,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: `${SITE_SHORT_NAME} - Discover Word Origins`,
-    description:
-      'Visual etymology explorer with word history, linguistic roots, and historical connections.',
+    description: 'Trace any word back to its roots, one language at a time.',
     images: ['/og'],
   },
 }

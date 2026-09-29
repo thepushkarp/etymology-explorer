@@ -5,13 +5,6 @@ import { getRedis } from '@/lib/redis'
 import { wordPagePath } from '@/lib/languages'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
 
-const AGENT_DISCOVERY_LINKS = [
-  '</.well-known/api-catalog>; rel="api-catalog"',
-  '</openapi.json>; rel="service-desc"; type="application/openapi+json"',
-  '</docs/api>; rel="service-doc"',
-  '</.well-known/agent-skills/index.json>; rel="describedby"; type="application/json"',
-].join(', ')
-
 type LimiterName = keyof typeof CONFIG.rateLimit
 type Window = `${number} ${'s' | 'm' | 'h' | 'd'}`
 
@@ -66,45 +59,8 @@ function getClientIp(request: NextRequest): string {
   )
 }
 
-function buildHomepageMarkdown(origin: string): string {
-  return [
-    '# Etymology Explorer',
-    '',
-    'Discover the roots and origins of words with grounded etymological evidence.',
-    '',
-    `- Home: ${origin}/`,
-    `- API docs: ${origin}/docs/api`,
-    `- API catalog: ${origin}/.well-known/api-catalog`,
-    `- Agent skills index: ${origin}/.well-known/agent-skills/index.json`,
-    '',
-    'Core endpoint:',
-    '',
-    '- `GET /api/etymology?word=<word>`',
-    '',
-    'Use `?stream=true` for streaming synthesis responses.',
-  ].join('\n')
-}
-
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
-
-  if (pathname === '/' && request.method === 'GET') {
-    const accept = request.headers.get('accept') ?? ''
-    if (accept.includes('text/markdown')) {
-      const markdown = buildHomepageMarkdown(request.nextUrl.origin)
-      const approxTokens = Math.max(1, Math.ceil(markdown.length / 4))
-
-      return new NextResponse(markdown, {
-        status: 200,
-        headers: {
-          'Content-Type': 'text/markdown; charset=utf-8',
-          Link: AGENT_DISCOVERY_LINKS,
-          Vary: 'Accept',
-          'x-markdown-tokens': String(approxTokens),
-        },
-      })
-    }
-  }
 
   const redirectPath = request.method === 'GET' ? legacySearchRedirect(request.nextUrl) : null
   if (redirectPath) {
@@ -162,11 +118,6 @@ export async function proxy(request: NextRequest) {
     "form-action 'self'",
   ]
   response.headers.set('Content-Security-Policy', cspDirectives.join('; '))
-
-  if (pathname === '/') {
-    response.headers.set('Link', AGENT_DISCOVERY_LINKS)
-    response.headers.append('Vary', 'Accept')
-  }
 
   return response
 }

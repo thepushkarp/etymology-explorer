@@ -1,41 +1,27 @@
 # EtymEx
 
-> A visual tool for exploring word origins, etymological trees, and linguistic connections across languages.
+> EtymEx traces where words come from. Each word page follows a word back through the languages it passed through (for example Latin → Old French → Middle English), with a lineage tree, a short narrative of how its meaning shifted, and the sources behind each step.
+
+## Word pages
+
+Every traced word has a page at `https://etymex.com/word/{word}`. Italian, Spanish, French and Portuguese words (beta) live at `https://etymex.com/word/{language}/{word}`, where `{language}` is `it`, `es`, `fr` or `pt`.
+
+- [nice](https://etymex.com/word/nice): from Latin nescius, "not knowing"; once meant foolish
+- [villain](https://etymex.com/word/villain): from Late Latin villanus, a farm worker
+- [muscle](https://etymex.com/word/muscle): from Latin musculus, "little mouse"
+- [window](https://etymex.com/word/window): from Old Norse vindauga, "wind-eye"
+
+Every traced word is listed A to Z on the [index](https://etymex.com/words) and in the [sitemap](https://etymex.com/sitemap.xml).
+
+## How entries are built
+
+Each entry is synthesized from Etymonline, Wiktionary and dictionary sources. Every step in a lineage is marked with how well the sources support it, and reconstructed forms (such as Proto-Indo-European roots) are labelled as reconstructed rather than attested.
+
+## Guides
+
+- [What is etymology?](https://etymex.com/learn/what-is-etymology): an introduction to word origins
+- [FAQ](https://etymex.com/faq): common questions about etymology and how to use EtymEx
 
 ## About
 
-EtymEx helps you understand where words come from. Enter any word to see its historical roots, language family connections, and semantic evolution over time.
-
-## Key Features
-
-- **Word Search**: Search etymology for any English word at https://etymex.com/?q={word}
-- **Etymology Trees**: Visual representation of word derivations showing parent languages and cognates
-- **Language Families**: Explore Proto-Indo-European, Latin, Greek, and Germanic roots
-- **Historical Context**: See how word meanings evolved across centuries
-
-## How It Works
-
-The tool aggregates data from multiple etymological databases and presents word origins in an interactive visual format. Each word shows:
-
-- Language of origin (Latin, Greek, Old English, etc.)
-- Cognates in related languages
-- Historical evolution and semantic shifts
-- Related words sharing the same root
-
-## Example Searches
-
-- Search "algorithm" at https://etymex.com/?q=algorithm -> Shows Persian/Arabic origins from al-Khwarizmi
-- Search "nice" at https://etymex.com/?q=nice -> Shows semantic shift from Latin 'nescius' (ignorant)
-- Search "mother" at https://etymex.com/?q=mother -> Explore Proto-Indo-European roots
-
-## Technical Details
-
-- Free to use, no registration required
-- Works in any modern web browser
-- Data sourced from etymological databases and linguistic research
-
-## Contact
-
-- Creator: Pushkar Patel
-- Website: https://thepushkarp.com
-- GitHub: https://github.com/thepushkarp/etymology-explorer
+Made by [Pushkar Patel](https://thepushkarp.com).

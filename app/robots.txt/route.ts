@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
-import { getRequestOrigin } from '@/lib/origin'
+import { SITE_ORIGIN } from '@/lib/site'
 
-export async function GET() {
-  const origin = await getRequestOrigin()
-
+// Content-Signal: search engines and AI answer engines may index and cite the
+// pages (search, ai-input); training on them is opted out (ai-train). The
+// sitemap uses the canonical origin, never the request host, so a request via
+// www or a legacy domain can't advertise a non-canonical sitemap.
+export function GET() {
   const body = [
     'User-agent: *',
     'Allow: /',
-    'Allow: /api/health',
     'Disallow: /api/',
-    'Content-Signal: ai-train=no, search=yes, ai-input=no',
-    `Sitemap: ${origin}/sitemap.xml`,
+    'Content-Signal: ai-train=no, search=yes, ai-input=yes',
+    `Sitemap: ${SITE_ORIGIN}/sitemap.xml`,
   ].join('\n')
 
   return new NextResponse(body, {

@@ -80,3 +80,15 @@ describe('/word/[...segments] module graph (LLM spend invariant)', () => {
     }
   })
 })
+
+describe('/words index module graph (LLM spend invariant)', () => {
+  const entry = join(REPO_ROOT, 'app', 'words', 'page.tsx')
+  const graph = collectModuleGraph(entry)
+
+  test('the crawlable word index never imports the research or LLM pipeline', () => {
+    expect(graph.has(join(REPO_ROOT, 'lib', 'tracedWords.ts'))).toBe(true)
+    for (const relativePath of ['lib/research.ts', 'lib/llm.ts', 'lib/openrouterResponses.ts']) {
+      expect(graph.has(join(REPO_ROOT, relativePath))).toBe(false)
+    }
+  })
+})

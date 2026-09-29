@@ -60,7 +60,9 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
   return (
     <form
       role="search"
-      className="relative w-full"
+      // min-w-0: as a flex item the form would otherwise refuse to shrink
+      // below the input's intrinsic width and push siblings off-screen.
+      className="relative w-full min-w-0"
       onSubmit={(event) => {
         event.preventDefault()
         go(activeIndex >= 0 ? suggestions[activeIndex] : value)
