@@ -19,12 +19,12 @@ export function SiteFooter() {
       <p className="ml-auto">
         Made by{' '}
         <a
-          href="https://thepushkarp.com"
+          href="https://www.thepushkarp.com/"
           target="_blank"
           rel="noopener noreferrer"
           className="link"
         >
-          pushkar
+          Pushkar
         </a>
       </p>
     </footer>

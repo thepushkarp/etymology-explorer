@@ -24,4 +24,4 @@ Each entry is synthesized from Etymonline, Wiktionary and dictionary sources. Ev
 
 ## About
 
-Made by [Pushkar Patel](https://thepushkarp.com).
+Made by [Pushkar](https://www.thepushkarp.com/).
