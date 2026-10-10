@@ -10,6 +10,7 @@ import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
 import {
   BETA_SYMBOL,
   LANGUAGES,
+  parseLanguageCode,
   SUPPORTED_LANGUAGE_CODES,
   type LanguageCode,
 } from '@/lib/languages'
@@ -68,7 +69,10 @@ export function Landing() {
               <select
                 aria-label="Word language"
                 value={language}
-                onChange={(event) => setLanguage(event.target.value as LanguageCode)}
+                onChange={(event) => {
+                  const selectedLanguage = parseLanguageCode(event.target.value)
+                  if (selectedLanguage) setLanguage(selectedLanguage)
+                }}
                 className="cursor-pointer appearance-none bg-paper py-2 pr-5 text-sm text-ink [color-scheme:light] dark:[color-scheme:dark]"
               >
                 {SUPPORTED_LANGUAGE_CODES.map((code) => (

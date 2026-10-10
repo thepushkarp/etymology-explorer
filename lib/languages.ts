@@ -98,7 +98,7 @@ export function isLanguageCode(value: unknown): value is LanguageCode {
 export function parseLanguageCode(value: string | null | undefined): LanguageCode | null {
   if (!value) return 'en'
   const normalized = value.toLowerCase()
-  return isLanguageCode(normalized) ? normalized : null
+  return SUPPORTED_LANGUAGE_CODES.find((code) => code === normalized) ?? null
 }
 
 export function isBetaLanguage(language: LanguageCode): language is BetaLanguageCode {
