@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { SearchBox } from '@/components/SearchBox'
+import { ChevronDownIcon } from '@/components/Icons'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { WordLink } from '@/components/WordLink'
@@ -61,25 +62,28 @@ export function Landing() {
         </h1>
 
         <div className="animate-rise mt-12 [animation-delay:80ms]">
-          <div className="flex items-end gap-4">
-            <SearchBox key={language} language={language} size="large" autoFocus />
-            <select
-              aria-label="Word language"
-              value={language}
-              onChange={(event) => setLanguage(event.target.value as LanguageCode)}
-              className="mb-3 shrink-0 cursor-pointer bg-transparent text-right text-sm text-muted outline-none transition-colors hover:text-ink"
-            >
-              {SUPPORTED_LANGUAGE_CODES.map((code) => (
-                <option key={code} value={code}>
-                  {LANGUAGES[code].nativeName}
-                  {LANGUAGES[code].beta ? ` ${BETA_SYMBOL}` : ''}
-                </option>
-              ))}
-            </select>
+          <SearchBox key={language} language={language} size="large" autoFocus />
+          <div className="mt-2 flex flex-wrap items-center gap-x-6">
+            <div className="relative shrink-0">
+              <select
+                aria-label="Word language"
+                value={language}
+                onChange={(event) => setLanguage(event.target.value as LanguageCode)}
+                className="cursor-pointer appearance-none bg-paper py-2 pr-5 text-sm text-ink [color-scheme:light] dark:[color-scheme:dark]"
+              >
+                {SUPPORTED_LANGUAGE_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {LANGUAGES[code].nativeName}
+                    {LANGUAGES[code].beta ? ` ${BETA_SYMBOL}` : ''}
+                  </option>
+                ))}
+              </select>
+              <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-xs text-ink" />
+            </div>
+            <p className="text-sm text-muted">
+              Or <RandomWordButton language={language} />.
+            </p>
           </div>
-          <p className="mt-4 text-sm text-muted">
-            Or <RandomWordButton language={language} />.
-          </p>
         </div>
 
         <section className="mt-24" aria-labelledby="curated-heading">

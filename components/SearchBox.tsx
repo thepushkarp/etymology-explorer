@@ -99,7 +99,7 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
-          placeholder={large ? 'Type a word or phrase' : 'Search a word or phrase'}
+          placeholder={large ? 'Look up a word or phrase' : 'Search a word or phrase'}
           aria-label="Search a word or phrase"
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
@@ -113,7 +113,7 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
           spellCheck={false}
           enterKeyHint="search"
           className={`min-w-0 flex-1 bg-transparent font-serif text-ink outline-none placeholder:text-muted placeholder:italic [&::-webkit-search-cancel-button]:hidden ${
-            large ? 'text-2xl sm:text-3xl' : 'text-base'
+            large ? 'text-xl sm:text-3xl' : 'text-base'
           }`}
         />
       </div>
