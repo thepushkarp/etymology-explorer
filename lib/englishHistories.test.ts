@@ -196,6 +196,8 @@ describe('English source-defined histories', () => {
 
   test('displays only the selected English history and keeps legacy entries usable', () => {
     const generated = result(dickContext())
+    generated.partsOfSpeech = [{ pos: 'verb', definition: 'primary verb meaning' }]
+    generated.histories![0].partsOfSpeech = generated.partsOfSpeech
     expect(localizeHistoryChoices(generated).map((choice) => choice.label)).toEqual([
       'sense 1',
       'sense 2',
@@ -211,12 +213,17 @@ describe('English source-defined histories', () => {
     const display = localizeResult(generated, 'en', history.id)
     expect(display.definition).toBe('definition 2')
     expect(display.lore).toBe('history 2')
+    expect(display.partsOfSpeech).toBeUndefined()
+    history.partsOfSpeech = [{ pos: 'noun', definition: 'a detective' }]
+    expect(localizeResult(generated, 'en', history.id).partsOfSpeech).toEqual(history.partsOfSpeech)
     expect(
       display.ancestryGraph.branches.flatMap((branch) => branch.stages.map((stage) => stage.form))
     ).toEqual(['detective'])
     expect(localizeResult(generated).definition).toBe(generated.histories![0].definition)
+    expect(localizeResult(generated).partsOfSpeech).toEqual(generated.partsOfSpeech)
     delete generated.histories
     delete generated.primaryHistoryId
     expect(localizeResult(generated).definition).toBe('wrong projection')
+    expect(localizeResult(generated).partsOfSpeech).toEqual(generated.partsOfSpeech)
   })
 })

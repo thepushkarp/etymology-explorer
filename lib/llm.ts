@@ -825,15 +825,11 @@ export async function synthesizeFromResearch(
 
   for (let attempt = 0; attempt < maxValidationAttempts; attempt += 1) {
     try {
-      // Evidence-bearing sections wait for source matching. On identity failure,
-      // keep reading without publishing so completed provider usage is billed.
-      const heldSections =
-        language === 'en'
-          ? sourceHistories
-            ? ['word']
-            : ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources']
-          : ['word']
+      // Closed histories can be validated and projected before their duplicated
+      // top-level fields arrive. Other evidence waits for the finalizer.
+      const heldSections = ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources']
       const pendingSections = new Map<string, unknown>()
+      const publishedSections = new Set<string>()
       let wordVerified = false
       let languageVerified = language === 'en'
       let identityError: Error | undefined
@@ -856,6 +852,53 @@ export async function synthesizeFromResearch(
             }
             if (identityError) return
             pendingSections.set(section, data)
+            if (sourceHistories && wordVerified && languageVerified) {
+              const publish = (name: string, value: unknown) => {
+                if (publishedSections.has(name)) return
+                publishedSections.add(name)
+                if (value !== undefined) options.onSection?.(name, value)
+              }
+              if (language !== 'en') publish('language', language)
+              publish('word', researchContext.mainWord.word)
+              if (
+                !publishedSections.has('histories') &&
+                pendingSections.has('histories') &&
+                pendingSections.has('primaryHistoryId')
+              ) {
+                try {
+                  // The history contains every entry field. Reuse the terminal
+                  // identity, evidence and schema checks before publishing it.
+                  const primary = finalizeResult(
+                    {
+                      word: researchContext.mainWord.word,
+                      language,
+                      primaryHistoryId: pendingSections.get('primaryHistoryId'),
+                      histories: pendingSections.get('histories'),
+                      sources: [],
+                    } as unknown as EtymologyResult,
+                    researchContext,
+                    'streaming'
+                  )
+                  for (const name of [
+                    'primaryHistoryId',
+                    'histories',
+                    'pronunciation',
+                    'definition',
+                    'ancestryGraph',
+                    'roots',
+                    'lore',
+                    'partsOfSpeech',
+                  ]) {
+                    publish(name, (primary as unknown as Record<string, unknown>)[name])
+                  }
+                } catch (error) {
+                  // Drain the provider response even on validation failure so
+                  // its completed usage is included in the failed request.
+                  identityError = error instanceof Error ? error : new Error(String(error))
+                }
+              }
+              return
+            }
             if (
               wordVerified &&
               languageVerified &&
@@ -885,6 +928,7 @@ export async function synthesizeFromResearch(
       )
       if (options?.onSection) {
         for (const section of pendingSections.keys()) {
+          if (publishedSections.has(section)) continue
           const value = (result as unknown as Record<string, unknown>)[section]
           if (value !== undefined) options.onSection(section, value)
         }

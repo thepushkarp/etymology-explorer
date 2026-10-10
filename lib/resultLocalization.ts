@@ -34,7 +34,12 @@ export function localizeResult(
       histories.find((candidate) => candidate.id === historyId) ??
       histories.find((candidate) => candidate.id === english.primaryHistoryId) ??
       histories[0]
-    return { ...english, ...history, language: 'en' }
+    return {
+      ...english,
+      ...history,
+      partsOfSpeech: history ? history.partsOfSpeech : english.partsOfSpeech,
+      language: 'en',
+    }
   }
 
   const beta = result as BetaEtymologyResult
