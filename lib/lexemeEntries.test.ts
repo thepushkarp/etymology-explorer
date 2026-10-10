@@ -180,3 +180,34 @@ describe('deriveEntryContexts', () => {
     expect(contexts[1].text).toContain('sitis')
   })
 })
+
+test('multiword form targets match whole phrase rather than individual tokens', () => {
+  const source = structuredClone(wiktionary)
+  source.entryGroups![0].sections[1].text = 'Forma flessa plurale di ferro da stiro.'
+  const identity: SourceData = {
+    url: 'https://www.wikidata.org/wiki/L1',
+    text: JSON.stringify({
+      entities: {
+        L1: {
+          lemmas: { it: { language: 'it', value: 'ferro da stiro' } },
+          forms: [{ representations: { it: { language: 'it', value: 'ferri da stiro' } } }],
+        },
+      },
+    }),
+  }
+  const contexts = deriveEntryContexts('ferri da stiro', 'it', 'wiktionaryNative', source, identity)
+  expect(contexts.find((context) => context.entryKind === 'form')?.formOf?.word).toBe(
+    'ferro da stiro'
+  )
+})
+
+test('all source-explicit histories survive beyond four entries', () => {
+  const source = structuredClone(wiktionary)
+  source.entryGroups = Array.from({ length: 7 }, (_, index) => ({
+    ...wiktionary.entryGroups![0],
+    anchor: `Etimologia_${index}`,
+    sections: [],
+    text: `History ${index}`,
+  }))
+  expect(deriveEntryContexts('vite', 'it', 'wiktionaryNative', source, null)).toHaveLength(7)
+})

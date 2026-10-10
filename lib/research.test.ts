@@ -6,10 +6,14 @@ import {
   extractRelatedTerms,
   extractRootsCpu,
   hasCredibleMainSource,
+  phraseComponents,
+  expandLexemes,
 } from '@/lib/research'
 import { extractEtymonlineRelatedEntries, fetchEtymonline } from '@/lib/etymonline'
 import { parseSourceTexts } from '@/lib/etymologyParser'
 import { CONFIG } from '@/lib/config'
+import { SourceFetchBudget } from '@/lib/sourceFetchBudget'
+import { classifyApiError } from '@/lib/apiError'
 import { ResearchContext, StreamEvent } from '@/lib/types'
 
 const originalFetch = globalThis.fetch
@@ -255,7 +259,7 @@ Compare gainsay.
   })
 })
 
-describe('extractRootsQuick prompt clipping', () => {
+describe('extractRootsQuick full sources', () => {
   test('preserves tail evidence in the fallback root-extraction prompt', async () => {
     const previousKey = process.env.OPENROUTER_API_KEY
     process.env.OPENROUTER_API_KEY = previousKey ?? 'test-openrouter-key'
@@ -287,7 +291,7 @@ describe('extractRootsQuick prompt clipping', () => {
       )
 
       expect(result.roots).toEqual(['tailroot'])
-      expect(capturedInput).toContain('[...source excerpt clipped for prompt budget...]')
+      expect(capturedInput).toContain('head '.repeat(500))
       expect(capturedInput).toContain(tailEvidence)
     } finally {
       if (previousKey === undefined) {
@@ -374,55 +378,26 @@ describe('buildResearchPrompt token diet', () => {
     )
   }
 
-  test('freeDictionary is compacted: origin, phonetics, per-POS definitions — no audio URLs', () => {
+  test('freeDictionary retains complete origins, phonetics, definitions and references', () => {
     const prompt = buildResearchPrompt(buildContext())
 
-    expect(prompt).toContain('Phonetics: /ˈtɛlɪfoʊn/')
-    expect(prompt).toContain('Origin: late 19th century: from French téléphone')
-    expect(prompt).toContain('noun: An electronic device used for two-way talking')
-    expect(prompt).toContain('verb: To call someone using a telephone')
-    // The raw JSON payload junk must be gone
-    expect(prompt).not.toContain('.mp3')
-    expect(prompt).not.toContain('A fourth definition that must be dropped')
-    expect(prompt).not.toContain('"partOfSpeech"')
+    expect(prompt).toContain('/ˈtɛlɪfoʊn/')
+    expect(prompt).toContain('late 19th century: from French téléphone')
+    expect(prompt).toContain('An electronic device used for two-way talking')
+    expect(prompt).toContain('To call someone using a telephone')
+    // Every lexical field survives the complete source serializer
+    expect(prompt).toContain('.mp3')
+    expect(prompt).toContain('A fourth definition that must be dropped')
+    expect(prompt).toContain('"partOfSpeech"')
   })
 
-  test('every source block honors its tiered character budget', () => {
-    const prompt = buildResearchPrompt(buildContext())
-    const blocks = sourceBlocks(prompt)
-    const maxBudget = Math.max(
-      CONFIG.promptBudget.mainSourceChars,
-      CONFIG.promptBudget.supplementalSourceChars
-    )
-
-    expect(blocks.length).toBeGreaterThanOrEqual(5)
-    for (const block of blocks) {
-      expect(block.length).toBeLessThanOrEqual(maxBudget)
-    }
-
-    // Tier checks: main sources get the large budget, roots and related less
-    const etymonlineBlock = blocks[0]
-    expect(etymonlineBlock.length).toBe(CONFIG.promptBudget.mainSourceChars)
-
-    const rootBlock = prompt.match(
-      /=== Root: "tele" ===\n<source_data name="etymonline">\n([\s\S]*?)\n<\/source_data>/
-    )
-    expect(rootBlock?.[1].length).toBe(CONFIG.promptBudget.rootSourceChars)
-
-    const relatedBlock = prompt.match(
-      /=== Related Term: "telegraph" ===\n<source_data name="etymonline">\n([\s\S]*?)\n<\/source_data>/
-    )
-    expect(relatedBlock?.[1].length).toBe(CONFIG.promptBudget.relatedSourceChars)
-  })
-
-  test('clipped source blocks preserve tail context with an explicit marker', () => {
-    const prompt = buildResearchPrompt(buildContext())
-    const etymonlineBlock = sourceBlocks(prompt)[0]
-
-    expect(etymonlineBlock).toContain('1835, from French téléphone.')
-    expect(etymonlineBlock).toContain('[...source excerpt clipped for prompt budget...]')
-    expect(etymonlineBlock.endsWith('x'.repeat(20))).toBe(true)
-    expect(etymonlineBlock.length).toBe(CONFIG.promptBudget.mainSourceChars)
+  test('retains full main, supplemental, root and related source text', () => {
+    const context = buildContext()
+    const prompt = buildResearchPrompt(context)
+    expect(sourceBlocks(prompt)[0]).toBe(context.mainWord.etymonline!.text)
+    expect(prompt).toContain(context.rootResearch[0].etymonlineData!.text)
+    expect(prompt).toContain(context.relatedResearch[0].etymonlineData!.text)
+    expect(prompt).not.toContain('source excerpt clipped')
   })
 })
 
@@ -436,24 +411,6 @@ function installFetchRouter(options?: { wikipediaDelayMs?: number }): {
 } {
   const requestedUrls: string[] = []
   const wikipediaDelayMs = options?.wikipediaDelayMs ?? 0
-
-  const wiktionaryExtract = [
-    '== English ==',
-    '',
-    '=== Etymology ===',
-    '',
-    `From French téléphone. By surface analysis, tele- +${LTR_MARK} -phone.`,
-    '',
-    '=== Noun ===',
-    '',
-    'telephone (plural telephones)',
-    '',
-    '== French ==',
-    '',
-    '=== Etymology ===',
-    '',
-    'Borrowed internally.',
-  ].join('\n')
 
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
@@ -475,7 +432,19 @@ function installFetchRouter(options?: { wikipediaDelayMs?: number }): {
 
     if (url.includes('wiktionary.org/w/api.php') && url.includes('telephone')) {
       return new Response(
-        JSON.stringify({ query: { pages: { '123': { extract: wiktionaryExtract } } } }),
+        JSON.stringify({
+          parse: {
+            title: 'telephone',
+            text: '<h2 id="English">English</h2><h3 id="Etymology">Etymology</h3><p>From French téléphone. By surface analysis, tele- + -phone.</p><h3 id="Noun">Noun</h3><p>telephone</p>',
+            tocdata: {
+              sections: [
+                { index: '1', line: 'English', anchor: 'English', level: '2', number: '1' },
+                { index: '2', line: 'Etymology', anchor: 'Etymology', level: '3', number: '1.1' },
+                { index: '3', line: 'Noun', anchor: 'Noun', level: '3', number: '1.2' },
+              ],
+            },
+          },
+        }),
         { status: 200 }
       )
     }
@@ -506,9 +475,11 @@ function installFetchRouter(options?: { wikipediaDelayMs?: number }): {
       }
       return new Response(
         JSON.stringify({
-          type: 'standard',
-          extract: 'A telephone is a telecommunications device.',
-          content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Telephone' } },
+          query: {
+            pages: [
+              { ns: 0, title: 'Telephone', extract: 'A telephone is a telecommunications device.' },
+            ],
+          },
         }),
         { status: 200 }
       )
@@ -584,5 +555,194 @@ describe('conductAgenticResearch abort propagation', () => {
 
     // All six in-flight source fetches were cancelled, not left hanging
     expect(abortedFetches).toBe(6)
+  })
+})
+
+describe('phrase research scope', () => {
+  test('useful components preserve each language and phrase particles', () => {
+    expect(phraseComponents('plot armour', 'en')).toEqual(['plot', 'armour'])
+    expect(phraseComponents('pomme de terre', 'fr')).toEqual(['pomme', 'terre'])
+    expect(phraseComponents('ferro da stiro', 'it')).toEqual(['ferro', 'stiro'])
+    expect(phraseComponents('fin de semana', 'es')).toEqual(['fin', 'semana'])
+    expect(phraseComponents('fim de semana', 'pt')).toEqual(['fim', 'semana'])
+  })
+  test('component sources never admit an otherwise unconfirmed phrase', () => {
+    const context: ResearchContext = {
+      language: 'fr',
+      mainWord: { word: 'pomme de terre', etymonline: null, wiktionary: null },
+      rootResearch: [
+        {
+          root: 'pomme',
+          relationship: 'component',
+          etymonlineData: null,
+          wiktionaryData: { text: 'From Latin pomum', url: 'https://en.wiktionary.org/wiki/pomme' },
+          relatedTerms: [],
+        },
+      ],
+      identifiedRoots: [],
+      relatedResearch: [],
+      totalSourcesFetched: 0,
+    }
+    expect(hasCredibleMainSource(context)).toBe(false)
+  })
+})
+
+test('component variants preserve query identity, separate scopes and actual HTTP budget', async () => {
+  const requests: string[] = []
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input)
+    const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+    if (kvUrl && url.startsWith(kvUrl)) return upstashMissResponse(init)
+    requests.push(url)
+    if (url.includes('wiktionary.org/w/api.php')) {
+      const term = new URL(url).searchParams.get('page') ?? ''
+      const paragraph =
+        term === 'armour'
+          ? 'Alternative spelling of <a href="/wiki/armor" title="armor">armor</a>.'
+          : term === 'armor'
+            ? 'Alternative spelling of <a href="/wiki/armour" title="armour">armour</a>.'
+            : 'A component definition.'
+      return Response.json({
+        parse: {
+          title: term,
+          text: `<h2 id="English">English</h2><h3 id="Noun">Noun</h3><p>${paragraph}</p>`,
+          tocdata: {
+            sections: [
+              { index: '1', line: 'English', anchor: 'English', level: '2', number: '1' },
+              { index: '2', line: 'Noun', anchor: 'Noun', level: '3', number: '1.1' },
+            ],
+          },
+        },
+      })
+    }
+    return new Response('missing', { status: 404 })
+  }) as typeof fetch
+  const context: ResearchContext = {
+    language: 'en',
+    mainWord: { word: 'plot armour', etymonline: null, wiktionary: null },
+    rootResearch: [],
+    identifiedRoots: [],
+    relatedResearch: [],
+    totalSourcesFetched: 0,
+  }
+  const budget = new SourceFetchBudget(16)
+  await expandLexemes(context, budget)
+  expect(context.mainWord.word).toBe('plot armour')
+  expect(context.rootResearch.find((item) => item.root === 'armor')).toMatchObject({
+    relationship: 'spelling-variant',
+    variantOf: { word: 'armour', language: 'en' },
+    relationshipSourceUrl: 'https://en.wiktionary.org/wiki/armor',
+  })
+  expect(
+    context.rootResearch.find((item) => item.root === 'armour')?.parentHistoryId
+  ).toBeUndefined()
+  expect(new Set(context.rootResearch.map((item) => item.evidenceScopeId)).size).toBe(
+    context.rootResearch.length
+  )
+  expect(requests.filter((url) => new URL(url).searchParams.get('page') === 'armour')).toHaveLength(
+    1
+  )
+  expect(budget.attempts).toBe(requests.length)
+  expect(budget.attempts).toBeLessThanOrEqual(16)
+})
+
+test('secondary edition homographs cannot corroborate the primary history', async () => {
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input)
+    const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+    if (kvUrl && url.startsWith(kvUrl)) return upstashMissResponse(init)
+    if (url.includes('wiktionary.org/w/api.php')) {
+      const primary = new URL(url).hostname === 'fr.wiktionary.org'
+      const languageHeading = primary ? 'Français' : 'French'
+      const heading = primary ? 'Étymologie' : 'Etymology 1'
+      const sections = [
+        { index: '1', line: languageHeading, anchor: languageHeading, level: '2', number: '1' },
+        { index: '2', line: heading, anchor: heading.replace(' ', '_'), level: '3', number: '1.1' },
+      ]
+      let html = `<h2 id="${languageHeading}">${languageHeading}</h2><h3 id="${heading.replace(' ', '_')}">${heading}</h3><p>From Latin pomum.</p>`
+      if (!primary) {
+        sections.push({
+          index: '3',
+          line: 'Etymology 2',
+          anchor: 'Etymology_2',
+          level: '3',
+          number: '1.2',
+        })
+        html += '<h3 id="Etymology_2">Etymology 2</h3><p>From Latin terra.</p>'
+      }
+      return Response.json({ parse: { title: 'pomme', text: html, tocdata: { sections } } })
+    }
+    return new Response('missing', { status: 404 })
+  }) as typeof fetch
+  const context = await conductAgenticResearch('pomme', { language: 'fr' })
+  expect(context.entryContexts).toHaveLength(1)
+  expect(context.entryContexts![0].source).toBe('wiktionaryNative')
+  expect(context.parsedChains!.every((chain) => chain.provider === 'wiktionaryNative')).toBe(true)
+  expect(context.mainWord.wiktionaryEnglish?.entryGroups).toHaveLength(2)
+  expect(buildResearchPrompt(context)).toContain('From Latin terra.')
+})
+
+test('root extraction exposes context overflow and retains billed provider failure usage', async () => {
+  const previousKey = process.env.OPENROUTER_API_KEY
+  process.env.OPENROUTER_API_KEY = previousKey ?? 'test-openrouter-key'
+  try {
+    globalThis.fetch = (async () =>
+      Response.json({
+        error: { message: 'context_length_exceeded' },
+        usage: { input_tokens: 9, output_tokens: 2, cost: 0.03 },
+      })) as unknown as typeof fetch
+    await expect(extractRootsQuick('word', 'full source', null)).rejects.toThrow(
+      'context_length_exceeded'
+    )
+    globalThis.fetch = (async () =>
+      Response.json({
+        error: { message: 'provider unavailable' },
+        usage: { input_tokens: 9, output_tokens: 2, cost: 0.03 },
+      })) as unknown as typeof fetch
+    expect(await extractRootsQuick('word', 'full source', null)).toMatchObject({
+      roots: [],
+      usage: { inputTokens: 9, outputTokens: 2, costUSD: 0.03 },
+    })
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
+    else process.env.OPENROUTER_API_KEY = previousKey
+  }
+})
+
+describe('source rate limits are temporary failures', () => {
+  const respond = (status: number, credibleWikipedia = false) => {
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input)
+      const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+      if (kvUrl && url.startsWith(kvUrl)) return upstashMissResponse(init)
+      if (credibleWikipedia && new URL(url).hostname === 'en.wikipedia.org')
+        return Response.json({
+          query: { pages: [{ ns: 0, title: 'Bank', extract: 'A complete article.' }] },
+        })
+      return new Response('unavailable', { status })
+    }) as typeof fetch
+  }
+  test('English and beta no-primary HTTP 429 errors bypass lexical absence', async () => {
+    respond(429)
+    for (const language of ['en', 'fr'] as const) {
+      let error: unknown
+      try {
+        await conductAgenticResearch('bank', { language })
+      } catch (caught) {
+        error = caught
+      }
+      expect(classifyApiError(error).status).toBe(429)
+    }
+  })
+  test('a credible primary bundle survives other source HTTP 429 responses', async () => {
+    respond(429, true)
+    const context = await conductAgenticResearch('bank')
+    expect(hasCredibleMainSource(context)).toBe(true)
+  })
+  test('genuine HTTP 404 absence remains a no-source result', async () => {
+    respond(404)
+    for (const language of ['en', 'fr'] as const) {
+      expect(hasCredibleMainSource(await conductAgenticResearch('bank', { language }))).toBe(false)
+    }
   })
 })

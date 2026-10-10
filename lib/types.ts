@@ -291,6 +291,8 @@ export interface LexicalHistory<Text extends ResultText> {
 export type EnglishEtymologyResult = Omit<EtymologyResultBase<'en', string>, 'language'> & {
   /** Legacy cache entries predate language identity; absence always means English. */
   language?: 'en'
+  primaryHistoryId?: string
+  histories?: LexicalHistory<string>[]
 }
 export type BetaEtymologyResult = EtymologyResultBase<BetaLanguageCode, BilingualText> & {
   primaryHistoryId: string
@@ -324,11 +326,16 @@ export interface SourceData {
   url: string
   relatedEntries?: string[]
   entryGroups?: WiktionaryEntryGroup[]
+  requestedWord?: string
+  resolvedWord?: string
+  language?: LanguageCode
+  variants?: Array<{ word: string; relationship: 'spelling-variant' | 'redirect'; url: string }>
+  revisionId?: number | string
 }
 
 export interface ResearchEntryContext {
   id: string
-  source: 'wiktionaryEnglish' | 'wiktionaryNative'
+  source: 'wiktionaryEnglish' | 'wiktionaryNative' | 'wiktionary' | 'etymonline' | 'wikipedia'
   heading: string
   text: string
   sectionHeadings: string[]
@@ -355,6 +362,13 @@ export interface RootResearchData {
   etymonlineData: SourceData | null
   wiktionaryData: SourceData | null
   relatedTerms: string[]
+  relationship?: 'component' | 'root' | 'spelling-variant' | 'redirect'
+  parentHistoryId?: string
+  variantOf?: LexemeRef
+  relationshipSourceUrl?: string
+  evidenceScopeId?: string
+  wiktionaryEnglish?: SourceData | null
+  wiktionaryNative?: SourceData | null
 }
 
 /**

@@ -224,5 +224,13 @@ export function pruneUngroundedStages<Text extends ResultText>(graph: AncestryGr
       .filter((cp) => cp.branchIndices.length >= 2)
   }
 
+  // Pruned component roots cannot leave a merge floating above a supported
+  // whole-word chain. Keep that surviving lineage as an ordinary single branch.
+  if (graph.branches.length === 0 && graph.postMerge?.length) {
+    graph.branches = [{ root: graph.postMerge[0].form, stages: graph.postMerge }]
+    delete graph.mergePoint
+    delete graph.postMerge
+  }
+
   return pruned
 }

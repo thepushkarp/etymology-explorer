@@ -5,6 +5,8 @@ import { SearchIcon } from '@/components/Icons'
 import { useHotkey } from '@/lib/hooks/useHotkey'
 import { useSuggestions } from '@/lib/hooks/useSuggestions'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
+import { canonicalizeWord, isValidWord } from '@/lib/validation'
+import { CONFIG } from '@/lib/config'
 import type { LanguageCode } from '@/lib/languages'
 
 interface SearchBoxProps {
@@ -19,10 +21,12 @@ interface SearchBoxProps {
  */
 export function SearchBox({ language, size = 'compact', autoFocus = false }: SearchBoxProps) {
   const [value, setValue] = useState('')
+  const [error, setError] = useState('')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
   const listId = useId()
+  const errorId = useId()
   const navigateToWord = useWordNavigation()
   const suggestions = useSuggestions(value, language)
   const showList = open && suggestions.length > 0
@@ -31,8 +35,15 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
   useHotkey('/', () => inputRef.current?.focus())
 
   const go = (word: string) => {
-    const trimmed = word.trim()
-    if (!trimmed) return
+    const trimmed = canonicalizeWord(word)
+    if (!isValidWord(trimmed)) {
+      setOpen(false)
+      setError(
+        `Enter a word or phrase using letters, spaces, apostrophes, or hyphens (up to ${CONFIG.maxWordLength} characters).`
+      )
+      return
+    }
+    setError('')
     setOpen(false)
     setActive(-1)
     inputRef.current?.blur()
@@ -81,14 +92,17 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
           autoFocus={autoFocus}
           onChange={(event) => {
             setValue(event.target.value)
+            setError('')
             setActive(-1)
             setOpen(true)
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
-          placeholder={large ? 'Type a word' : 'Search a word'}
-          aria-label="Search a word"
+          placeholder={large ? 'Type a word or phrase' : 'Search a word or phrase'}
+          aria-label="Search a word or phrase"
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           role="combobox"
           aria-expanded={showList}
           aria-controls={listId}
@@ -103,6 +117,12 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
           }`}
         />
       </div>
+
+      {error && (
+        <p id={errorId} role="alert" className="mt-2 font-sans text-sm text-accent">
+          {error}
+        </p>
+      )}
 
       {showList && (
         <ul

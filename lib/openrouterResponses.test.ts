@@ -144,9 +144,7 @@ describe('openrouterResponses', () => {
           },
         ],
       })
-    ).toThrow(
-      'No text response from OpenRouter Responses API (status=incomplete, incomplete=max_output_tokens, reasoningTokens=4096, maxOutputTokens=4096, output=message[refusal])'
-    )
+    ).toThrow('OpenRouter response incomplete: max_output_tokens')
   })
 
   test('extractUsage normalizes token counts from the responses payload', () => {
@@ -307,4 +305,43 @@ describe('openrouterResponses', () => {
       finalResponse: null,
     })
   })
+})
+
+test('HTTP failures preserve actual provider usage on both transports', async () => {
+  const { createOpenRouterResponse, streamOpenRouterResponse } =
+    await import('./openrouterResponses')
+  const savedFetch = globalThis.fetch
+  const savedKey = process.env.OPENROUTER_API_KEY
+  process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        error: { message: 'context_length_exceeded' },
+        usage: { input_tokens: 123, output_tokens: 4, cost: 0.003 },
+      }),
+      { status: 400 }
+    )) as unknown as typeof fetch
+  try {
+    const request = buildSynthesisRequest('complete evidence')
+    for (const call of [
+      () => createOpenRouterResponse(request),
+      () => streamOpenRouterResponse(request, () => {}),
+    ]) {
+      try {
+        await call()
+        throw new Error('Expected HTTP rejection')
+      } catch (error) {
+        expect((error as Error).message).toContain('400 context_length_exceeded')
+        expect((error as Error & { usage: unknown }).usage).toEqual({
+          inputTokens: 123,
+          outputTokens: 4,
+          costUSD: 0.003,
+        })
+      }
+    }
+  } finally {
+    globalThis.fetch = savedFetch
+    if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
+    else process.env.OPENROUTER_API_KEY = savedKey
+  }
 })

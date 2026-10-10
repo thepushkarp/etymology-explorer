@@ -28,3 +28,16 @@ describe('apiError', () => {
     })
   })
 })
+
+test('context overflow is explicit and never claims a network timeout', () => {
+  const classified = classifyApiError(
+    new Error('400 context_length_exceeded: maximum context length')
+  )
+  expect(classified.status).toBe(422)
+  expect(classified.message).toContain('No sources were truncated')
+})
+test('output exhaustion has a distinct response', () => {
+  expect(
+    classifyApiError(new Error('OpenRouter response incomplete: max_output_tokens')).message
+  ).toContain('output limit')
+})

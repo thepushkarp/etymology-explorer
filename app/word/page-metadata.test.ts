@@ -4,6 +4,8 @@ import type { EtymologyResult } from '@/lib/types'
 let cachedResult: EtymologyResult | null = null
 
 mock.module('@/lib/cache', () => ({
+  CACHE_VERSION: 'test',
+  BETA_CACHE_VERSION: 'test',
   getCachedEtymology: async () => cachedResult,
   etymologyWordTag: (word: string, language: string) => `${language}:${word}`,
 }))
@@ -39,6 +41,19 @@ function paramsFor(word: string) {
 }
 
 describe('/word/[word] generateMetadata', () => {
+  test('uncached English and beta-language phrases have canonical noindex pages', async () => {
+    cachedResult = null
+    const english = await generateMetadata(paramsFor(' Red%20%20Herring '))
+    expect(english.alternates?.canonical).toBe('/word/red%20herring')
+    expect(english.robots).toEqual({ index: false, follow: true })
+    const french = await generateMetadata({
+      params: Promise.resolve({ segments: ['fr', 'Pomme%20de%20terre'] }),
+    })
+    expect(french.alternates?.canonical).toBe('/word/fr/pomme%20de%20terre')
+    expect(french.robots).toEqual({ index: false, follow: true })
+    await expect(generateMetadata(paramsFor('%0Ared%20herring'))).rejects.toThrow()
+  })
+
   test('cache hit: indexable metadata with canonical, description, and word OG image', async () => {
     cachedResult = fixture
     const metadata = await generateMetadata(paramsFor('perfidious'))

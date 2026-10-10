@@ -2,10 +2,15 @@ import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
 import {
   BETA_ETYMOLOGY_LLM_SCHEMA,
+  ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA,
   ETYMOLOGY_LLM_SCHEMA,
   stripNullsDeep,
 } from '@/lib/schemas/llm-schema'
-import { BetaEtymologyResultSchema, EtymologyResultSchema } from '@/lib/schemas/etymology'
+import {
+  BetaEtymologyResultSchema,
+  EnglishHistoryEtymologyResultSchema,
+  EtymologyResultSchema,
+} from '@/lib/schemas/etymology'
 
 /**
  * Mechanical cross-check between the strict-mode JSON schema sent to the LLM
@@ -125,7 +130,7 @@ function collectObjectDrift(
     const { schema: innerZod, optional } = unwrapOptional(zodValue)
 
     if (!llmChild) {
-      if (!POST_PROCESSING_ONLY_PATHS.has(childPath)) {
+      if (!POST_PROCESSING_ONLY_PATHS.has(childPath.replace(/^histories\[\]\./, ''))) {
         failures.push(
           `${childPath}: Zod key missing from llm-schema — add it (or exempt it as post-processing-only)`
         )
@@ -133,7 +138,7 @@ function collectObjectDrift(
       continue
     }
 
-    if (POST_PROCESSING_ONLY_PATHS.has(childPath)) {
+    if (POST_PROCESSING_ONLY_PATHS.has(childPath.replace(/^histories\[\]\./, ''))) {
       failures.push(`${childPath}: post-processing-only field must not be in the llm-schema`)
     }
 
@@ -426,7 +431,28 @@ describe('BETA_ETYMOLOGY_LLM_SCHEMA histories', () => {
       sources: [],
     }
     expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(true)
+    valid.histories = Array.from({ length: 6 }, (_, index) => ({
+      ...valid.histories[0],
+      id: index === 0 ? 'vine' : `history-${index}`,
+    }))
+    expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(true)
     valid.histories[0].label = { en: 'vine' } as { en: string; local: string }
     expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(false)
+  })
+})
+
+describe('ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA sync with Zod schema', () => {
+  test('source histories share strict shape and retain English prose strings', () => {
+    const failures: string[] = []
+    collectDrift(
+      EnglishHistoryEtymologyResultSchema as unknown as z.ZodType,
+      ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA as JsonSchemaNode,
+      '',
+      failures
+    )
+    expect(failures).toEqual([])
+    expect(
+      Object.keys(ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA.properties as object).slice(0, 4)
+    ).toEqual(['word', 'primaryHistoryId', 'histories', 'pronunciation'])
   })
 })

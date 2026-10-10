@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { getLlmUsageFromError, isRecoverableBetaValidationError } from '@/lib/llm'
+import {
+  finalizeResult,
+  synthesizeFromResearch,
+  getLlmUsageFromError,
+  isRecoverableBetaValidationError,
+} from '@/lib/llm'
 
 describe('getLlmUsageFromError', () => {
   test('extracts usage attached to a failed-synthesis error', () => {
@@ -51,3 +56,234 @@ describe('isRecoverableBetaValidationError', () => {
     )
   })
 })
+
+import type { BetaEtymologyResult, ResearchContext } from './types'
+import { toPartialResult, type PartialEtymology } from './streamReducer'
+
+function scopedFixture() {
+  const history = {
+    id: 'h1',
+    label: { en: 'phrase', local: 'locution' },
+    entryKind: 'lemma' as const,
+    queryNodeId: 'q1',
+    lemmaNodeId: 'q1',
+    evidenceScopeIds: ['scope1'],
+    pronunciation: '/x/',
+    definition: { en: 'primary', local: 'primaire' },
+    ancestryGraph: { branches: [] },
+    roots: [],
+    lore: { en: 'uncertain', local: 'incertain' },
+    partsOfSpeech: [],
+  }
+  const result = {
+    language: 'fr',
+    word: 'café au lait',
+    primaryHistoryId: 'h1',
+    histories: [history],
+    pronunciation: '/other/',
+    definition: { en: 'duplicated prose differs', local: 'différent' },
+    ancestryGraph: { branches: [] },
+    roots: [],
+    lore: { en: 'other', local: 'autre' },
+    partsOfSpeech: [],
+    suggestions: {},
+    modernUsage: { hasSlangMeaning: false },
+    sources: [{ name: 'invented' }],
+  } as unknown as BetaEtymologyResult
+  const context = {
+    language: 'fr',
+    mainWord: {
+      word: 'café au lait',
+      etymonline: null,
+      wiktionary: null,
+      wikipedia: {
+        text: 'phrase history unknown',
+        url: 'https://fr.wikipedia.org/wiki/Café_au_lait',
+      },
+    },
+    rootResearch: [
+      {
+        root: 'café',
+        lexeme: { word: 'café', language: 'fr' },
+        etymonlineData: null,
+        wiktionaryData: null,
+        relatedTerms: [],
+        wiktionaryNative: { text: 'component', url: 'https://fr.wiktionary.org/wiki/café' },
+      },
+    ],
+    relatedResearch: [],
+    identifiedRoots: [],
+    totalSourcesFetched: 2,
+    lexicalGraph: { histories: [history] },
+  } as unknown as ResearchContext
+  return { result, context }
+}
+
+test('canonical primary prose is projected and citations come from research', () => {
+  const { result, context } = scopedFixture()
+  const finalized = finalizeResult(result, context, 'standard')
+  expect(finalized.definition).toEqual({ en: 'primary', local: 'primaire' })
+  expect(finalized.pronunciation).toBe('/x/')
+  expect(finalized.sources.map((source) => source.name)).toEqual(['wikipedia', 'wiktionaryNative'])
+})
+test('a changed evidence scope fails before an identity can be published', () => {
+  const { result, context } = scopedFixture()
+  result.histories[0].evidenceScopeIds = ['someone-elses-scope']
+  context.lexicalGraph!.histories[0] = {
+    ...context.lexicalGraph!.histories[0],
+    evidenceScopeIds: ['scope1'],
+  }
+  expect(() => finalizeResult(result, context, 'streaming')).toThrow('history identity changed')
+})
+
+test('an incomplete synthesis fails with provider usage instead of returning partial JSON', async () => {
+  const savedFetch = globalThis.fetch
+  const savedKey = process.env.OPENROUTER_API_KEY
+  process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        status: 'incomplete',
+        output_text: '{"word":"test"}',
+        incomplete_details: { reason: 'max_output_tokens' },
+        usage: { input_tokens: 100, output_tokens: 50, cost: 0.002 },
+      }),
+      { status: 200 }
+    )) as unknown as typeof fetch
+  try {
+    const context = {
+      mainWord: { word: 'test', etymonline: null, wiktionary: null },
+      identifiedRoots: [],
+      rootResearch: [],
+      relatedResearch: [],
+      totalSourcesFetched: 0,
+    }
+    await expect(synthesizeFromResearch(context)).rejects.toMatchObject({
+      message: expect.stringContaining('max_output_tokens'),
+      usage: { inputTokens: 100, outputTokens: 50, costUSD: 0.002 },
+    })
+  } finally {
+    globalThis.fetch = savedFetch
+    if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
+    else process.env.OPENROUTER_API_KEY = savedKey
+  }
+})
+
+test.each(['en', 'fr'] as const)(
+  'streams the validated primary %s history before provider completion',
+  async (language) => {
+    const { result, context } = scopedFixture()
+    context.language = language
+    context.entryContexts = [
+      {
+        id: 'h1',
+        evidenceScopeId: 'scope1',
+        source: 'wiktionary',
+        heading: 'Etymology',
+        text: 'Origin uncertain.',
+        sectionHeadings: [],
+        sourceUrl: 'https://en.wiktionary.org/wiki/café_au_lait',
+        entryKind: 'lemma',
+      },
+    ]
+    const output =
+      language === 'en'
+        ? {
+            ...result,
+            language,
+            definition: 'wrong top-level definition',
+            lore: 'wrong top-level story',
+            histories: result.histories.map((history) => ({
+              ...history,
+              label: history.label.en,
+              definition: history.definition.en,
+              lore: history.lore.en,
+            })),
+          }
+        : result
+    // Unsupported reconstructed ancestry must already be pruned in the
+    // progressive projection, just as it is in the terminal result.
+    output.histories[0].ancestryGraph = {
+      branches: [
+        {
+          root: '*invented',
+          stages: [{ stage: 'Proto-Germanic', form: '*invented', note: { en: '', local: '' } }],
+        },
+      ],
+    }
+    const text = JSON.stringify(output)
+    const prefix = JSON.stringify({
+      language: output.language,
+      word: output.word,
+      primaryHistoryId: output.primaryHistoryId,
+      histories: output.histories,
+    }).slice(0, -1)
+    expect(text.startsWith(prefix)).toBe(true)
+    const split = prefix.length
+    const savedFetch = globalThis.fetch
+    const savedKey = process.env.OPENROUTER_API_KEY
+    process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let completed = false
+    const encoder = new TextEncoder()
+    globalThis.fetch = (async () =>
+      new Response(
+        new ReadableStream({
+          async start(controller) {
+            const send = (event: unknown) =>
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+            send({ type: 'response.output_text.delta', delta: text.slice(0, split) })
+            await gate
+            send({ type: 'response.output_text.delta', delta: text.slice(split) })
+            completed = true
+            send({
+              type: 'response.completed',
+              response: {
+                status: 'completed',
+                usage: { input_tokens: 10, output_tokens: 20, cost: 0.001 },
+              },
+            })
+            controller.close()
+          },
+        }),
+        { headers: { 'Content-Type': 'text/event-stream' } }
+      )) as unknown as typeof fetch
+    const emissions: Array<{ section: string; data: unknown; completed: boolean }> = []
+    const pending = synthesizeFromResearch(context, {
+      onSection: (section, data) => emissions.push({ section, data, completed }),
+    })
+    try {
+      // A bounded wait also makes the test fail if a regression holds all
+      // callbacks until completion, instead of deadlocking on a callback.
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      const sections = Object.fromEntries(
+        emissions.map(({ section, data }) => [section, data])
+      ) as PartialEtymology
+      const visible = toPartialResult(result.word, sections, language)
+      expect(visible.pronunciation).toBe('/x/')
+      expect(visible.definition).toBe(language === 'en' ? 'primary' : 'primaire')
+      expect(visible.ancestryGraph.branches).toEqual([])
+      expect(emissions.filter(({ section }) => section === 'histories')).toHaveLength(1)
+      expect(emissions.every((emission) => !emission.completed)).toBe(true)
+      release()
+      const finalized = await pending
+      expect(finalized.usage).toEqual({ inputTokens: 10, outputTokens: 20, costUSD: 0.001 })
+      for (const name of ['pronunciation', 'definition', 'ancestryGraph', 'lore']) {
+        const emitted = emissions.filter(({ section }) => section === name)
+        expect(emitted).toHaveLength(1)
+        expect(emitted[0].data).toEqual(
+          (finalized.result as unknown as Record<string, unknown>)[name]
+        )
+      }
+    } finally {
+      release()
+      await pending.catch(() => {})
+      globalThis.fetch = savedFetch
+      if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
+      else process.env.OPENROUTER_API_KEY = savedKey
+    }
+  }
+)

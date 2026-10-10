@@ -1,4 +1,4 @@
-import { canonicalizeWord } from './orthography'
+import { canonicalizeWord, isValidWord } from './validation'
 /**
  * In-app navigation signal for /word/{word} pages.
  *
@@ -36,6 +36,7 @@ function getStorage(): Storage | null {
 
 /** Record that the next word-page visit is an in-app navigation for `word` */
 export function markTraceIntent(word: string, language: LanguageCode = 'en'): void {
+  if (!isValidWord(word)) return
   const storage = getStorage()
   if (!storage) return
   try {
@@ -61,6 +62,7 @@ export function consumeTraceIntent(word: string, language: LanguageCode = 'en'):
 
     const intent = JSON.parse(raw) as Partial<TraceIntent>
     if (typeof intent.word !== 'string' || typeof intent.at !== 'number') return false
+    if (!isValidWord(intent.word) || !isValidWord(word)) return false
 
     const intentLanguage = intent.language ?? 'en'
     return (
@@ -70,4 +72,20 @@ export function consumeTraceIntent(word: string, language: LanguageCode = 'en'):
   } catch {
     return false
   }
+}
+
+/**
+ * Defer intent consumption until effect setup survives the current task.
+ * React Strict Mode replays setup/cleanup synchronously: its first cleanup
+ * cancels this task before consuming the single-use flag or opening a request.
+ */
+export function scheduleTraceIntent(
+  word: string,
+  language: LanguageCode,
+  start: (word: string) => void
+): () => void {
+  const timer = setTimeout(() => {
+    if (consumeTraceIntent(word, language)) start(word)
+  }, 0)
+  return () => clearTimeout(timer)
 }

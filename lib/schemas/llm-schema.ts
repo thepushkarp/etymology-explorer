@@ -117,7 +117,8 @@ export const ETYMOLOGY_LLM_SCHEMA = {
           descendantWords: {
             type: ['array', 'null'],
             items: { type: 'string' },
-            description: 'Modern derivatives in other languages; null when not notable',
+            description:
+              'Source-attested descendants of this root in other languages; exclude ancestors and cognates; null when unknown',
           },
         },
         required: ['root', 'origin', 'meaning', 'relatedWords', 'ancestorRoots', 'descendantWords'],
@@ -190,7 +191,8 @@ export const ETYMOLOGY_LLM_SCHEMA = {
     },
     sources: {
       type: 'array',
-      description: 'Source databases that contributed evidence',
+      maxItems: 0,
+      description: 'Return []; the server attaches verified sources from research.',
       items: {
         type: 'object',
         properties: {
@@ -288,27 +290,27 @@ function betaNode(value: unknown, key?: string): unknown {
 }
 
 /** Strict bilingual schema. Facts stay scalar; every prose leaf is an en/local pair. */
-export const BETA_ETYMOLOGY_LLM_SCHEMA = (() => {
-  const schema = betaNode(ETYMOLOGY_LLM_SCHEMA) as Record<string, unknown>
+function withHistories(schema: Record<string, unknown>, bilingual: boolean) {
   const properties = schema.properties as Record<string, unknown>
   const sources = properties.sources as {
     items: { properties: { name: { enum: string[] } } }
   }
 
-  sources.items.properties.name.enum = [
-    'wiktionaryEnglish',
-    'wiktionaryNative',
-    'wikidataLexeme',
-    'multilingualDictionary',
-    'dicionarioAberto',
-    'synthesized',
-  ]
+  if (bilingual)
+    sources.items.properties.name.enum = [
+      'wiktionaryEnglish',
+      'wiktionaryNative',
+      'wikidataLexeme',
+      'multilingualDictionary',
+      'dicionarioAberto',
+      'synthesized',
+    ]
 
   const history = {
     type: 'object',
     properties: {
       id: { type: 'string' },
-      label: bilingualTextSchema(false),
+      label: bilingual ? bilingualTextSchema(false) : { type: 'string' },
       entryKind: { type: 'string', enum: ['lemma', 'form', 'unresolved'] },
       queryNodeId: { type: 'string' },
       lemmaNodeId: { type: 'string' },
@@ -348,10 +350,10 @@ export const BETA_ETYMOLOGY_LLM_SCHEMA = (() => {
   }
 
   schema.properties = {
-    language: { type: 'string', enum: ['it', 'es', 'fr', 'pt'] },
+    ...(bilingual ? { language: { type: 'string', enum: ['it', 'es', 'fr', 'pt'] } } : {}),
     word: properties.word,
     primaryHistoryId: { type: 'string' },
-    histories: { type: 'array', minItems: 1, maxItems: 4, items: history },
+    histories: { type: 'array', minItems: 1, items: history },
     pronunciation: properties.pronunciation,
     definition: properties.definition,
     ancestryGraph: properties.ancestryGraph,
@@ -363,7 +365,7 @@ export const BETA_ETYMOLOGY_LLM_SCHEMA = (() => {
     sources: properties.sources,
   }
   schema.required = [
-    'language',
+    ...(bilingual ? ['language'] : []),
     'word',
     'primaryHistoryId',
     'histories',
@@ -378,7 +380,17 @@ export const BETA_ETYMOLOGY_LLM_SCHEMA = (() => {
     'sources',
   ]
   return schema
-})()
+}
+
+/** Both languages share immutable history identities; English prose remains strings. */
+export const ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA = withHistories(
+  structuredClone(ETYMOLOGY_LLM_SCHEMA) as unknown as Record<string, unknown>,
+  false
+)
+export const BETA_ETYMOLOGY_LLM_SCHEMA = withHistories(
+  betaNode(ETYMOLOGY_LLM_SCHEMA) as Record<string, unknown>,
+  true
+)
 
 /**
  * Convert the strict-mode null-union encoding back to the app's canonical

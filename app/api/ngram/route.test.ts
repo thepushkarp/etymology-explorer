@@ -23,6 +23,12 @@ describe('/api/ngram input validation', () => {
     expect(response.status).toBe(400)
   })
 
+  test('rejects controls even at input boundaries', async () => {
+    for (const word of ['\nword', 'word\r', 'red\therring']) {
+      expect((await GET(ngramRequest(word))).status).toBe(400)
+    }
+  })
+
   test('rejects words with digits', async () => {
     const response = await GET(ngramRequest('abc123'))
 
@@ -37,7 +43,7 @@ describe('/api/ngram input validation', () => {
   })
 
   test('rejects words longer than the max length', async () => {
-    const response = await GET(ngramRequest('a'.repeat(36)))
+    const response = await GET(ngramRequest('a'.repeat(121)))
 
     expect(response.status).toBe(400)
   })

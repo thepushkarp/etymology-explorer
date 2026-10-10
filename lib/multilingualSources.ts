@@ -8,6 +8,8 @@ import type { SourceData } from './types'
 import {
   cleanWiktionaryHtml,
   extractWiktionaryEntryGroups,
+  extractWiktionaryLanguageText,
+  extractWiktionaryVariants,
   type WiktionaryTocSection,
 } from './wiktionaryEntryGroups'
 
@@ -16,6 +18,8 @@ type TocSection = WiktionaryTocSection
 interface ParseResponse {
   parse?: {
     title?: string
+    redirects?: Array<{ from: string; to: string }>
+    revid?: number
     text?: string
     tocdata?: { sections?: TocSection[] }
   }
@@ -36,10 +40,11 @@ async function fetchWiktionaryEdition(
   const url = new URL(`https://${edition}.wiktionary.org/w/api.php`)
   url.searchParams.set('action', 'parse')
   url.searchParams.set('page', word)
-  url.searchParams.set('prop', 'text|tocdata')
+  url.searchParams.set('prop', 'text|tocdata|revid')
   url.searchParams.set('format', 'json')
   url.searchParams.set('formatversion', '2')
   url.searchParams.set('origin', '*')
+  url.searchParams.set('redirects', 'true')
 
   try {
     const response = await fetchWithTimeout(
@@ -53,7 +58,15 @@ async function fetchWiktionaryEdition(
     const html = data.parse?.text
     const sections = data.parse?.tocdata?.sections
     if (!html || !sections) return null
-    if (data.parse?.title && canonicalizeWord(data.parse.title) !== canonicalizeWord(word))
+    if (
+      data.parse?.title &&
+      canonicalizeWord(data.parse.title) !== canonicalizeWord(word) &&
+      !data.parse.redirects?.some(
+        (redirect) =>
+          canonicalizeWord(redirect.from) === canonicalizeWord(word) &&
+          canonicalizeWord(redirect.to) === canonicalizeWord(data.parse!.title!)
+      )
+    )
       return null
 
     const languageHeading =
@@ -63,18 +76,30 @@ async function fetchWiktionaryEdition(
       sections,
       languageHeading,
       edition === 'en' ? LANGUAGES.en.etymologyHeading : config.etymologyHeading
-    ).slice(0, 4)
-    const text = entryGroups
-      .map((group) => group.text)
-      .filter(Boolean)
-      .join('\n\n')
-      .slice(0, 6000)
+    )
+    const text = extractWiktionaryLanguageText(html, sections, languageHeading)
     if (!text) return null
 
     const result = {
       text,
-      url: `https://${edition}.wiktionary.org/wiki/${encodeURIComponent(word)}`,
+      url: `https://${edition}.wiktionary.org/wiki/${encodeURIComponent(data.parse?.title ?? word)}`,
       entryGroups,
+      requestedWord: word,
+      resolvedWord: data.parse?.title ?? word,
+      language,
+      revisionId: data.parse?.revid,
+      variants: [
+        ...extractWiktionaryVariants(html, sections, languageHeading, edition),
+        ...(data.parse?.title && canonicalizeWord(data.parse.title) !== canonicalizeWord(word)
+          ? [
+              {
+                word: data.parse.title,
+                relationship: 'redirect' as const,
+                url: `https://${edition}.wiktionary.org/wiki/${encodeURIComponent(data.parse.title)}`,
+              },
+            ]
+          : []),
+      ],
     }
     void cacheSource(source, word, result, undefined, language)
     return result
@@ -128,7 +153,7 @@ export async function fetchFreeDictionaryApi(
     })
     if (entries.length === 0) return null
     const result = {
-      text: JSON.stringify({ entries: entries.slice(0, 3), source: data.source }).slice(0, 5000),
+      text: JSON.stringify({ entries, source: data.source }),
       url: data.source?.url || url,
     }
     void cacheSource('multilingualDictionary', word, result, undefined, language)
@@ -170,11 +195,6 @@ interface WikidataLexemeEntity {
 }
 
 function compactWikidataLexeme(entity: WikidataLexemeEntity) {
-  const lexicalClaims = Object.fromEntries(
-    Object.entries(entity.claims ?? {}).filter(([, statements]) =>
-      JSON.stringify(statements).includes('"entity-type":"lexeme"')
-    )
-  )
   return {
     id: entity.id,
     type: entity.type,
@@ -189,7 +209,7 @@ function compactWikidataLexeme(entity: WikidataLexemeEntity) {
       id: sense.id,
       glosses: sense.glosses,
     })),
-    ...(Object.keys(lexicalClaims).length > 0 ? { lexicalClaims } : {}),
+    claims: entity.claims,
   }
 }
 
@@ -304,7 +324,7 @@ export async function fetchDicionarioAberto(
       .join('\n')
     if (!xml) return null
     const result = {
-      text: `Historical dictionary (older source): ${cleanWiktionaryHtml(xml)}`.slice(0, 5000),
+      text: `Historical dictionary (older source): ${cleanWiktionaryHtml(xml)}`,
       url,
     }
     void cacheSource('dicionarioAberto', word, result, undefined, 'pt')

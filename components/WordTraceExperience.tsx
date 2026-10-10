@@ -8,7 +8,7 @@ import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
-import { consumeTraceIntent } from '@/lib/traceIntent'
+import { scheduleTraceIntent } from '@/lib/traceIntent'
 import { toPartialResult, type StreamState } from '@/lib/streamReducer'
 import type { LanguageCode } from '@/lib/languages'
 
@@ -47,7 +47,7 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
   const ngram = useNgram(started ? word : null, language)
 
   useEffect(() => {
-    if (consumeTraceIntent(word, language)) search(word)
+    return scheduleTraceIntent(word, language, search)
   }, [word, language, search])
 
   const partial = useMemo(() => {

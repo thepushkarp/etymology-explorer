@@ -23,6 +23,7 @@ export interface SourceCacheRedis {
 }
 
 export type CacheableSource =
+  | 'wikipedia'
   | 'etymonline'
   | 'wiktionary'
   | 'wiktionaryEnglish'
@@ -31,8 +32,8 @@ export type CacheableSource =
   | 'multilingualDictionary'
   | 'dicionarioAberto'
 
-const SOURCE_CACHE_PREFIX = 'src:v2:'
-const BETA_SOURCE_CACHE_PREFIX = 'src:v5:'
+const SOURCE_CACHE_PREFIX = 'src:v6:'
+const BETA_SOURCE_CACHE_PREFIX = 'src:v6:'
 
 function sourceKey(source: CacheableSource, word: string, language: LanguageCode): string {
   const normalized = canonicalizeWord(word)

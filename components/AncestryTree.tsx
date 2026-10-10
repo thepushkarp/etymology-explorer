@@ -162,7 +162,7 @@ function useGraphState<T>(graph: AncestryGraph, initial: T) {
 }
 
 export function AncestryTree({ graph, word, language = 'en', definition }: AncestryTreeProps) {
-  const [openKey, setOpenKey] = useGraphState<string | null>(graph, null)
+  const [openKey, setOpenKey] = useGraphState<string | null>(graph, 'final')
   const [offsets, setOffsets] = useGraphState<Record<string, Offset>>(graph, {})
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
   const [paths, setPaths] = useState<string[]>([])
@@ -463,8 +463,10 @@ function TreeDetails({ node, onClose }: { node: TreeNode; onClose: () => void })
   const line = provenance(node.source)
 
   useEffect(() => {
-    ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [node.key])
+    if (node.kind !== 'final') {
+      ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [node.key, node.kind])
 
   return (
     <div

@@ -6,6 +6,8 @@ const redirect = (path: string) => legacySearchRedirect(new URL(path, 'https://e
 describe('legacy /?q= redirect', () => {
   test('canonicalizes and encodes the word', () => {
     expect(redirect('/?q=nice')).toBe('/word/nice')
+    expect(redirect('/?q=Red%20%20Herring')).toBe('/word/red%20herring')
+    expect(redirect('/?q=%0Ared%20herring')).toBeNull()
     expect(redirect('/?q=%20%20CafÉ%20')).toBe(`/word/${encodeURIComponent('café')}`)
   })
 

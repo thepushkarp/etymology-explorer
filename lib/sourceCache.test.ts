@@ -43,7 +43,7 @@ describe('source cache', () => {
 
     await cacheSource('etymonline', 'Telephone', DATA, store)
 
-    expect(store.keys()).toEqual(['src:v2:etymonline:telephone'])
+    expect(store.keys()).toEqual(['src:v6:etymonline:telephone'])
     expect(await getCachedSource('etymonline', 'telephone', store)).toEqual(DATA)
   })
 
@@ -61,8 +61,8 @@ describe('source cache', () => {
     await cacheSource('wiktionaryNative', 'sale', DATA, store, 'fr')
 
     expect(store.keys().sort()).toEqual([
-      'src:v5:wiktionaryNative:fr:sale',
-      'src:v5:wiktionaryNative:it:sale',
+      'src:v6:wiktionaryNative:fr:sale',
+      'src:v6:wiktionaryNative:it:sale',
     ])
   })
 
@@ -80,11 +80,25 @@ describe('source cache', () => {
 
   test('treats malformed cache entries as misses', async () => {
     const store = createStore()
-    await store.set('src:v2:etymonline:telephone', {
+    await store.set('src:v6:etymonline:telephone', {
       text: 42,
       url: 'https://example.com',
     } as unknown as SourceData)
 
     expect(await getCachedSource('etymonline', 'telephone', store)).toBeNull()
   })
+})
+
+test('Wikipedia cache preserves full text and metadata and isolates editions', async () => {
+  const store = createStore()
+  const article = {
+    ...DATA,
+    text: 'Lead\nHistory\nUntruncated final paragraph',
+    language: 'fr' as const,
+    revisionId: 42,
+  }
+  await cacheSource('wikipedia', 'pomme de terre', article, store, 'fr')
+  expect(await getCachedSource('wikipedia', 'pomme de terre', store, 'fr')).toEqual(article)
+  expect(await getCachedSource('wikipedia', 'pomme de terre', store, 'it')).toBeNull()
+  expect(await getCachedSource('wikipedia', 'pomme de terre', store, 'en')).toBeNull()
 })

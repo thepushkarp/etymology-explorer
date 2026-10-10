@@ -61,6 +61,32 @@ function includesAny(message: string, patterns: string[]): boolean {
 export function classifyApiError(error: unknown): ClassifiedApiError {
   const message = getErrorMessage(error).toLowerCase()
 
+  if (
+    includesAny(message, [
+      'context_length_exceeded',
+      'context window',
+      'maximum context length',
+      'context limit',
+      'too many input tokens',
+      'input exceeds',
+    ])
+  ) {
+    return {
+      message:
+        'The complete research exceeds the model context limit. No sources were truncated. Please try again later.',
+      status: 422,
+      streamErrorType: 'unknown',
+    }
+  }
+
+  if (includesAny(message, ['max_output_tokens', 'output token limit', 'output limit'])) {
+    return {
+      message: 'The etymology engine reached its output limit. Please try again.',
+      status: 503,
+      streamErrorType: 'unknown',
+    }
+  }
+
   if (includesAny(message, AUTH_PATTERNS)) {
     return {
       message: 'Service temporarily unavailable',

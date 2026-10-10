@@ -1,4 +1,5 @@
 import { canonicalizeWord, sameSpelling } from './orthography'
+import type { SourceData } from './types'
 import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
 /**
  * Scrapes etymology data from Etymonline.
@@ -11,11 +12,7 @@ import { safeError } from './errorUtils'
 import { CONFIG } from './config'
 import { getCachedSource, cacheSource } from './sourceCache'
 
-export interface EtymonlineResult {
-  text: string
-  url: string
-  relatedEntries?: string[]
-}
+export type EtymonlineResult = SourceData
 
 const RELATION_DESC_SIGNALS =
   /\b(from|root|cognate|latin|greek|french|english|german|proto|pie|borrowed|derived)\b/i
@@ -31,7 +28,7 @@ export async function fetchEtymonline(
   word: string,
   signal?: AbortSignal
 ): Promise<EtymonlineResult | null> {
-  const normalizedWord = canonicalizeWord(word).replace(/\s+/g, '-')
+  const normalizedWord = canonicalizeWord(word)
   const url = `https://www.etymonline.com/word/${encodeURIComponent(normalizedWord)}`
 
   const cached = await getCachedSource('etymonline', normalizedWord)
@@ -73,28 +70,20 @@ export async function fetchEtymonline(
 
     // Extract the etymology text from the page
     // Look for the main content section - Etymonline uses prose-lg class for etymology content
-    const patterns = [
-      // Current Etymonline structure: prose-lg sections contain etymology
-      /<section[^>]*class="[^"]*prose-lg[^"]*"[^>]*>([\s\S]*?)<\/section>/i,
-      // Older patterns as fallback
-      /<section[^>]*class="[^"]*word__defination[^"]*"[^>]*>([\s\S]*?)<\/section>/i,
-      /<div[^>]*class="[^"]*word_entry[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
-    ]
-
-    for (const pattern of patterns) {
-      const match = html.match(pattern)
-      if (match) {
-        const text = stripHtml(match[1])
-        // Verify this looks like etymology content (has date or language reference)
-        if (/\d{4}s?|Latin|Greek|French|Old English|German/i.test(text)) {
-          const result = {
-            text,
-            url,
-            relatedEntries: extractEtymonlineRelatedEntries(html, normalizedWord),
-          }
-          void cacheSource('etymonline', normalizedWord, result)
-          return result
+    for (const className of ['prose-lg', 'word__defination', 'word_entry']) {
+      const fragments = extractEntryContainers(html, className)
+      const text = fragments.map(stripHtml).join('\n\n')
+      if (text && /\d{4}s?|Latin|Greek|French|Old English|German/i.test(text)) {
+        const result = {
+          text,
+          url,
+          requestedWord: normalizedWord,
+          resolvedWord: normalizedWord,
+          language: 'en' as const,
+          relatedEntries: extractEtymonlineRelatedEntries(html, normalizedWord),
         }
+        void cacheSource('etymonline', normalizedWord, result)
+        return result
       }
     }
 
@@ -104,18 +93,20 @@ export async function fetchEtymonline(
     const datePattern = /\b\d{4}s?\b|\b\d{1,2}c\./
     const fallbackMatch = html.match(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)
     if (fallbackMatch) {
-      for (const p of fallbackMatch) {
-        const content = stripHtml(p)
-        // Must have a date and "from" to be etymology content
-        if (datePattern.test(content) && /\bfrom\b/i.test(content)) {
-          const result = {
-            text: content,
-            url,
-            relatedEntries: extractEtymonlineRelatedEntries(html, normalizedWord),
-          }
-          void cacheSource('etymonline', normalizedWord, result)
-          return result
+      const admitted = fallbackMatch.filter(
+        (p) => datePattern.test(stripHtml(p)) && /\bfrom\b/i.test(stripHtml(p))
+      )
+      if (admitted.length) {
+        const result = {
+          text: admitted.map(stripHtml).join('\n\n'),
+          url,
+          requestedWord: normalizedWord,
+          resolvedWord: normalizedWord,
+          language: 'en' as const,
+          relatedEntries: extractEtymonlineRelatedEntries(html, normalizedWord),
         }
+        void cacheSource('etymonline', normalizedWord, result)
+        return result
       }
     }
 
@@ -146,10 +137,7 @@ export function extractEtymonlineRelatedEntries(html: string, excludeWord: strin
     relatedTerms.set(normalizedTerm, score)
   }
 
-  return [...relatedTerms.entries()]
-    .sort((left, right) => right[1] - left[1])
-    .map(([term]) => term)
-    .slice(0, 12)
+  return [...relatedTerms.entries()].sort((left, right) => right[1] - left[1]).map(([term]) => term)
 }
 
 /**
@@ -159,4 +147,28 @@ function stripHtml(html: string): string {
   return decodeHtmlEntities(preserveLinguisticNotation(html).replace(/<[^>]*>/g, ' '))
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
+}
+
+/** Balance nested container tags rather than ending at the first inner div. */
+function extractEntryContainers(html: string, className: string): string[] {
+  const fragments: string[] = []
+  const openings = /<(section|div)\b[^>]*class=["']([^"']*)["'][^>]*>/gi
+  let consumed = -1
+  for (const opening of html.matchAll(openings)) {
+    if (opening.index < consumed || !opening[2].split(/\s+/).includes(className)) continue
+    const start = opening.index + opening[0].length
+    const tags = new RegExp(`<(/?)${opening[1]}\\b[^>]*>`, 'gi')
+    tags.lastIndex = start
+    let depth = 1
+    let tag
+    while ((tag = tags.exec(html))) {
+      depth += tag[1] ? -1 : 1
+      if (depth === 0) {
+        fragments.push(html.slice(start, tag.index))
+        consumed = tags.lastIndex
+        break
+      }
+    }
+  }
+  return fragments
 }

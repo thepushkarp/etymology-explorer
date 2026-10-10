@@ -51,7 +51,7 @@ describe('fetchFreeDictionary timeout', () => {
 })
 
 describe('compactFreeDictionary', () => {
-  test('keeps origin, phonetics, and up to three definitions per POS — drops the rest', () => {
+  test('keeps every definition, example and source reference', () => {
     const entry: FreeDictionaryEntry = {
       word: 'telephone',
       phonetic: '/ˈtɛlɪfoʊn/',
@@ -76,21 +76,17 @@ describe('compactFreeDictionary', () => {
 
     const compact = compactFreeDictionary(entry)
 
-    expect(compact).toBe(
-      [
-        'Phonetics: /ˈtɛlɪfoʊn/, /ˈtelɪfəʊn/',
-        'Origin: late 19th century: from French téléphone',
-        'noun: first | second | third',
-        'verb: to call',
-      ].join('\n')
-    )
-    expect(compact).not.toContain('.mp3')
-    expect(compact).not.toContain('example one')
+    const retained = JSON.parse(compact)
+    expect(retained.origin).toBe(entry.origin)
+    expect(retained.meanings[0].definitions).toHaveLength(4)
+    expect(retained.meanings[0].definitions[0].example).toBe('example one')
+    expect(retained.meanings[0].definitions[3].definition).toBe('fourth must be dropped')
+    expect(compact).toContain('.mp3')
   })
 
   test('tolerates malformed entries missing arrays', () => {
     const entry = { word: 'x' } as FreeDictionaryEntry
 
-    expect(compactFreeDictionary(entry)).toBe('')
+    expect(JSON.parse(compactFreeDictionary(entry)).word).toBe('x')
   })
 })

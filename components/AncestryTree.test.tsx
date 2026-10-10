@@ -25,10 +25,11 @@ describe('AncestryTree language identity', () => {
 })
 
 describe('AncestryTree nodes', () => {
-  test('renders each stage as a collapsed, expandable node', () => {
+  test('expands the final definition while earlier stages stay collapsed', () => {
     const markup = renderToStaticMarkup(
       <AncestryTree
         word="window"
+        definition="An opening in a wall to admit light or air."
         graph={{
           branches: [
             {
@@ -49,6 +50,8 @@ describe('AncestryTree nodes', () => {
     )
 
     expect(markup).toContain('aria-expanded="false"')
+    expect(markup).toContain('aria-expanded="true" aria-controls="tree-details"')
+    expect(markup).toContain('An opening in a wall to admit light or air.')
     expect(markup).not.toContain('from Old Norse vindauga')
   })
 })
