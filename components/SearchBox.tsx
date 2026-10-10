@@ -6,6 +6,7 @@ import { useHotkey } from '@/lib/hooks/useHotkey'
 import { useSuggestions } from '@/lib/hooks/useSuggestions'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
+import { CONFIG } from '@/lib/config'
 import type { LanguageCode } from '@/lib/languages'
 
 interface SearchBoxProps {
@@ -38,7 +39,12 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
     const trimmed = canonicalizeWord(word)
     if (!isValidWord(trimmed)) {
       setOpen(false)
-      setError('Enter a word or expression first!')
+      const limit = `(up to ${CONFIG.maxWordLength} characters)`
+      setError(
+        trimmed
+          ? `Use letters, spaces, apostrophes, or hyphens ${limit}.`
+          : `Enter a word or expression first! ${limit}`
+      )
       return
     }
     setError('')
