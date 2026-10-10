@@ -30,6 +30,14 @@ export function SearchIcon(props: IconProps) {
   )
 }
 
+export function EnterIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20 5v8H4m5-5-5 5 5 5" />
+    </Icon>
+  )
+}
+
 export function ChevronDownIcon(props: IconProps) {
   return (
     <Icon {...props}>

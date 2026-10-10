@@ -1,12 +1,11 @@
 'use client'
 
 import { useId, useRef, useState } from 'react'
-import { SearchIcon } from '@/components/Icons'
+import { EnterIcon, SearchIcon } from '@/components/Icons'
 import { useHotkey } from '@/lib/hooks/useHotkey'
 import { useSuggestions } from '@/lib/hooks/useSuggestions'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
-import { CONFIG } from '@/lib/config'
 import type { LanguageCode } from '@/lib/languages'
 
 interface SearchBoxProps {
@@ -16,8 +15,9 @@ interface SearchBoxProps {
 }
 
 /**
- * Word search with wordlist suggestions. Enter (or picking a suggestion)
- * navigates straight to the word page; `/` focuses the field from anywhere.
+ * Dictionary lookup with wordlist suggestions. The submit button looks up the
+ * typed text; Enter accepts a highlighted suggestion while the list is open.
+ * `/` focuses the field from anywhere.
  */
 export function SearchBox({ language, size = 'compact', autoFocus = false }: SearchBoxProps) {
   const [value, setValue] = useState('')
@@ -38,9 +38,7 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
     const trimmed = canonicalizeWord(word)
     if (!isValidWord(trimmed)) {
       setOpen(false)
-      setError(
-        `Enter a word or phrase using letters, spaces, apostrophes, or hyphens (up to ${CONFIG.maxWordLength} characters).`
-      )
+      setError('Enter a word or expression first!')
       return
     }
     setError('')
@@ -60,7 +58,12 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
       event.preventDefault()
       setOpen(true)
       setActive((index) => (index <= 0 ? count - 1 : index - 1))
+    } else if (event.key === 'Enter' && showList && activeIndex >= 0) {
+      event.preventDefault()
+      go(suggestions[activeIndex])
     } else if (event.key === 'Escape') {
+      // Dismiss suggestions without the search input's native clear action.
+      event.preventDefault()
       if (showList) setOpen(false)
       else inputRef.current?.blur()
     }
@@ -76,15 +79,10 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
       className="relative w-full min-w-0"
       onSubmit={(event) => {
         event.preventDefault()
-        go(activeIndex >= 0 ? suggestions[activeIndex] : value)
+        go(value)
       }}
     >
-      <div
-        className={`flex items-center gap-3 border-b transition-colors duration-200 focus-within:border-ink ${
-          large ? 'border-rule pb-3' : 'border-transparent pb-1'
-        }`}
-      >
-        <SearchIcon className={`shrink-0 text-muted ${large ? 'text-2xl' : 'text-base'}`} />
+      <div className="flex items-center border border-rule transition-colors duration-200 focus-within:border-muted">
         <input
           ref={inputRef}
           type="search"
@@ -99,23 +97,41 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
-          placeholder={large ? 'Look up a word or phrase' : 'Search a word or phrase'}
-          aria-label="Search a word or phrase"
+          placeholder={large ? 'Word or expression' : 'Look up…'}
+          aria-label="Look up a word or expression"
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
           role="combobox"
           aria-expanded={showList}
           aria-controls={listId}
           aria-autocomplete="list"
-          aria-activedescendant={activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
+          aria-activedescendant={
+            showList && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined
+          }
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}
           enterKeyHint="search"
           className={`min-w-0 flex-1 bg-transparent font-serif text-ink outline-none placeholder:text-muted placeholder:italic [&::-webkit-search-cancel-button]:hidden ${
-            large ? 'text-xl sm:text-3xl' : 'text-base'
+            large ? 'px-3 py-3 text-base sm:px-4 sm:py-4 sm:text-3xl' : 'px-2 py-2 text-base'
           }`}
         />
+        <button
+          type="submit"
+          aria-label={large ? undefined : 'Look up'}
+          className={`flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-2 self-stretch border-l border-rule bg-transparent font-sans text-ink transition-colors hover:bg-wash hover:text-accent ${
+            large ? 'px-3 text-base sm:px-4 sm:text-lg' : 'text-xl'
+          }`}
+        >
+          {large ? (
+            <>
+              Look up
+              <EnterIcon className="text-base" />
+            </>
+          ) : (
+            <SearchIcon />
+          )}
+        </button>
       </div>
 
       {error && (
