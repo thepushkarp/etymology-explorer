@@ -146,6 +146,35 @@ describe('English source-defined histories', () => {
     )
   })
 
+  test('rejects duplicate ancestry paths that emerge only after reconstructed roots are pruned', () => {
+    const research = dickContext()
+    const generated = result(research)
+    generated.histories![0].ancestryGraph.branches = [
+      {
+        root: 'rik-',
+        stages: [
+          { stage: 'Proto-Germanic', form: '*rik-', note: 'unsupported root' },
+          { stage: 'Old High German', form: 'Rihhart', note: 'name' },
+        ],
+      },
+      {
+        root: '-hardu',
+        stages: [
+          { stage: 'Proto-Germanic', form: '*hardu', note: 'unsupported root' },
+          { stage: 'Old High German', form: 'Rihhart', note: 'same name' },
+        ],
+      },
+    ]
+    expect(() => finalizeResult(generated, research, 'standard')).toThrow(
+      'duplicated ancestry branch'
+    )
+    expect(
+      generated.histories![0].ancestryGraph.branches.map((branch) =>
+        branch.stages.map((stage) => stage.form)
+      )
+    ).toEqual([['Rihhart'], ['Rihhart']])
+  })
+
   test('a genuine compound keeps both roots in one history with the whole form after merging', () => {
     const research = context('blackbird', ['From black + bird. A bird with black plumage.'])
     const generated = result(research)

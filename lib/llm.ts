@@ -721,6 +721,10 @@ function finalizeHistories(
     )
     enrichAncestryGraph(history.ancestryGraph, scopedChains)
     pruneUngroundedStages(history.ancestryGraph)
+    // Distinct unsupported roots can collapse into identical surviving paths.
+    if ((researchContext.language ?? 'en') === 'en') {
+      validateEnglishHistoryGraph(history as LexicalHistory<string>, researchContext)
+    }
   }
 
   const primary = result.histories.find((history) => history.id === result.primaryHistoryId)

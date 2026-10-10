@@ -2,7 +2,7 @@ import { currentSourceFetchBudget } from './sourceFetchBudget'
 
 // Exact origins, rather than domain suffixes, keep source redirects away from
 // private services, lookalike hosts, alternate ports, and unapproved editions.
-const SOURCE_ORIGINS = new Set([
+const SOURCE_ORIGINS = [
   'https://www.etymonline.com',
   'https://etymonline.com',
   'https://en.wiktionary.org',
@@ -21,14 +21,29 @@ const SOURCE_ORIGINS = new Set([
   'https://api.dicionario-aberto.net',
   'https://api.urbandictionary.com',
   'https://incels.wiki',
-])
+] as const
 
-function validateSourceTarget(target: string | URL | Request): URL {
+const APP_ORIGINS = [
+  ...SOURCE_ORIGINS,
+  'https://openrouter.ai',
+  'https://api.elevenlabs.io',
+  'https://books.google.com',
+] as const
+
+function trustedRequestUrl(target: string | URL | Request, sourceOnly: boolean): URL {
   const parsed = new URL(target instanceof Request ? target.url : String(target))
-  if (!SOURCE_ORIGINS.has(parsed.origin) || parsed.username || parsed.password) {
-    throw new Error('Unapproved source request URL')
+  const origin = (sourceOnly ? SOURCE_ORIGINS : APP_ORIGINS).find(
+    (trusted) => trusted === parsed.origin
+  )
+  if (!origin || parsed.username || parsed.password) {
+    throw new Error(sourceOnly ? 'Unapproved source request URL' : 'Unapproved request URL')
   }
-  return parsed
+  // Construct the authority from a matched server-owned literal. Only path and
+  // query are copied from the incoming URL; neither can change the destination.
+  const trusted = new URL(origin)
+  trusted.pathname = parsed.pathname
+  trusted.search = parsed.search
+  return trusted
 }
 
 /**
@@ -52,25 +67,37 @@ export async function fetchWithTimeout(
   try {
     composedSignal.throwIfAborted()
     const budget = currentSourceFetchBudget()
-    // Source redirects are followed explicitly so each HTTP hop consumes a slot.
-    let target = url
-    let init = options
+    // All redirects cross the same destination boundary. Source HTTP hops also
+    // consume the research budget, while LLM/TTS/ngram calls remain separate.
+    let target = trustedRequestUrl(url, Boolean(budget))
+    const request = url instanceof Request ? new Request(url, options) : undefined
+    let init: RequestInit = request
+      ? {
+          ...options,
+          method: request.method,
+          headers: request.headers,
+          body: request.body,
+          cache: request.cache,
+          credentials: request.credentials,
+          integrity: request.integrity,
+          keepalive: request.keepalive,
+          mode: request.mode,
+          referrer: request.referrer,
+          referrerPolicy: request.referrerPolicy,
+          ...(request.body ? { duplex: 'half' } : {}),
+        }
+      : options
     const redirect = options.redirect ?? (url instanceof Request ? url.redirect : 'follow')
     for (let hop = 0; ; hop++) {
       composedSignal.throwIfAborted()
-      if (budget) validateSourceTarget(target)
       budget?.reserve()
       const response = await fetch(target, {
         ...init,
-        ...(budget ? { redirect: 'manual' } : {}),
+        redirect: 'manual',
         signal: composedSignal,
       })
       if (budget && response.status === 429) budget.rateLimited = true
-      if (
-        !budget ||
-        redirect === 'manual' ||
-        ![301, 302, 303, 307, 308].includes(response.status)
-      ) {
+      if (redirect === 'manual' || ![301, 302, 303, 307, 308].includes(response.status)) {
         return response
       }
       if (redirect === 'error') {
@@ -81,19 +108,14 @@ export async function fetchWithTimeout(
       if (!location) return response
       await response.body?.cancel()
       if (hop >= 5) throw new Error('Too many source redirects')
-      const base = target instanceof Request ? target.url : String(target)
-      const next = new URL(location, base)
-      validateSourceTarget(next)
-      const headers = new Headers(
-        init.headers ?? (target instanceof Request ? target.headers : undefined)
-      )
-      const method = (
-        init.method ?? (target instanceof Request ? target.method : 'GET')
-      ).toUpperCase()
-      if (new URL(base).origin !== next.origin) {
+      const next = trustedRequestUrl(new URL(location, target), Boolean(budget))
+      const headers = new Headers(init.headers)
+      const method = (init.method ?? 'GET').toUpperCase()
+      if (target.origin !== next.origin) {
         headers.delete('authorization')
         headers.delete('cookie')
         headers.delete('proxy-authorization')
+        headers.delete('xi-api-key')
       }
       if (
         (response.status === 303 && method !== 'GET' && method !== 'HEAD') ||
@@ -110,6 +132,11 @@ export async function fetchWithTimeout(
         }
         init = { ...init, method: 'GET', body: undefined, headers }
       } else {
+        // Like native Fetch, a streamed upload cannot be replayed on a
+        // body-preserving redirect. App JSON POST bodies remain replayable.
+        if (init.body instanceof ReadableStream) {
+          throw new Error('Cannot replay streamed request body after redirect')
+        }
         init = { ...init, method, headers }
       }
       target = next

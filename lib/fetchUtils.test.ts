@@ -189,6 +189,127 @@ describe('source redirect boundary', () => {
   })
 })
 
+describe('app-wide destination boundary', () => {
+  test.each([
+    'https://openrouter.ai/api/v1/responses',
+    'https://api.elevenlabs.io/v1/text-to-speech/voice?output_format=mp3_44100_128',
+    'https://books.google.com/ngrams/json?content=caf%C3%A9',
+    'https://fr.wiktionary.org/w/api.php?action=opensearch&search=caf%C3%A9',
+  ])('retains approved endpoint path and query outside source scope: %s', async (url) => {
+    const calls: string[] = []
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push(String(input))
+      expect(init?.redirect).toBe('manual')
+      return new Response('ok')
+    }) as unknown as typeof fetch
+    expect((await fetchWithTimeout(url, {}, 100)).ok).toBe(true)
+    expect(calls).toEqual([url])
+  })
+
+  test('rejects unapproved initial and redirect targets without a source budget', async () => {
+    const calls: string[] = []
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      calls.push(String(input))
+      return new Response(null, {
+        status: 302,
+        headers: { location: 'https://169.254.169.254/latest/meta-data/' },
+      })
+    }) as unknown as typeof fetch
+    await expect(fetchWithTimeout('https://attacker.example', {}, 100)).rejects.toThrow(
+      'Unapproved request URL'
+    )
+    expect(calls).toHaveLength(0)
+    await expect(fetchWithTimeout('https://books.google.com/ngrams/json', {}, 100)).rejects.toThrow(
+      'Unapproved request URL'
+    )
+    expect(calls).toEqual(['https://books.google.com/ngrams/json'])
+  })
+
+  test('source scope cannot redirect to a paid provider', async () => {
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return new Response(null, {
+        status: 307,
+        headers: { location: 'https://openrouter.ai/api/v1/responses' },
+      })
+    }) as unknown as typeof fetch
+    const budget = new SourceFetchBudget(16)
+    await expect(
+      budget.run(() => fetchWithTimeout('https://en.wiktionary.org/w/api.php', {}, 100))
+    ).rejects.toThrow('Unapproved source request URL')
+    expect(calls).toBe(1)
+    expect(budget.attempts).toBe(1)
+  })
+
+  test('strips ElevenLabs credentials only when crossing an approved origin', async () => {
+    const calls: RequestInit[] = []
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      calls.push(init ?? {})
+      if (calls.length === 1)
+        return new Response(null, { status: 307, headers: { location: '/v1/next' } })
+      if (calls.length === 2)
+        return new Response(null, {
+          status: 307,
+          headers: { location: 'https://openrouter.ai/api/v1/responses' },
+        })
+      return new Response('ok')
+    }) as unknown as typeof fetch
+    await fetchWithTimeout(
+      'https://api.elevenlabs.io/v1/text-to-speech/voice',
+      { method: 'POST', body: '{"text":"word"}', headers: { 'xi-api-key': 'test-key' } },
+      100
+    )
+    expect(new Headers(calls[1].headers).get('xi-api-key')).toBe('test-key')
+    expect(new Headers(calls[2].headers).get('xi-api-key')).toBeNull()
+    expect(calls[2].body).toBe('{"text":"word"}')
+    expect(calls[2].method).toBe('POST')
+  })
+
+  test('caps unscoped redirect loops', async () => {
+    let calls = 0
+    globalThis.fetch = (async () => {
+      calls++
+      return new Response(null, { status: 302, headers: { location: '/next' } })
+    }) as unknown as typeof fetch
+    await expect(fetchWithTimeout('https://books.google.com/ngrams/json', {}, 100)).rejects.toThrow(
+      'Too many source redirects'
+    )
+    expect(calls).toBe(6)
+  })
+
+  test.each([302, 303, 307])(
+    'preserves Request POST metadata and handles redirect %i',
+    async (status) => {
+      const calls: Array<{ method: string; body: string; headers: Headers }> = []
+      globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+        const request = new Request(input, init)
+        calls.push({ method: request.method, body: await request.text(), headers: request.headers })
+        return calls.length === 1
+          ? new Response(null, { status, headers: { location: '/next' } })
+          : new Response('ok')
+      }) as unknown as typeof fetch
+      const request = new Request('https://openrouter.ai/api/v1/responses', {
+        method: 'POST',
+        body: 'payload',
+        headers: { 'Content-Type': 'text/plain', Authorization: 'test' },
+      })
+      const pending = fetchWithTimeout(request, {}, 100)
+      if (status === 307)
+        await expect(pending).rejects.toThrow('Cannot replay streamed request body')
+      else {
+        await pending
+        expect(calls[1].method).toBe('GET')
+        expect(calls[1].body).toBe('')
+        expect(calls[1].headers.get('content-type')).toBeNull()
+      }
+      expect(calls[0].method).toBe('POST')
+      expect(calls[0].body).toBe('payload')
+      expect(calls[0].headers.get('authorization')).toBe('test')
+    }
+  )
+})
+
 /** A fetch that never resolves unless its (composed) signal aborts. */
 function installHangingFetch(): void {
   globalThis.fetch = ((_input: unknown, init?: RequestInit) =>
@@ -206,7 +327,7 @@ describe('fetchWithTimeout signal composition', () => {
   test('timeout aborts convert to a descriptive timeout error', async () => {
     installHangingFetch()
 
-    expect(fetchWithTimeout('https://example.com', {}, 30)).rejects.toThrow(
+    expect(fetchWithTimeout('https://en.wiktionary.org', {}, 30)).rejects.toThrow(
       'Request timeout after 30ms'
     )
   })
@@ -215,7 +336,7 @@ describe('fetchWithTimeout signal composition', () => {
     installHangingFetch()
     const controller = new AbortController()
 
-    const pending = fetchWithTimeout('https://example.com', {}, 60_000, controller.signal)
+    const pending = fetchWithTimeout('https://en.wiktionary.org', {}, 60_000, controller.signal)
     setTimeout(() => controller.abort(), 10)
 
     expect(pending).rejects.toMatchObject({ name: 'AbortError' })
@@ -228,7 +349,7 @@ describe('fetchWithTimeout signal composition', () => {
     controller.abort()
 
     const startedAt = Date.now()
-    await fetchWithTimeout('https://example.com', {}, 60_000, controller.signal).catch(
+    await fetchWithTimeout('https://en.wiktionary.org', {}, 60_000, controller.signal).catch(
       (error: unknown) => {
         expect((error as DOMException).name).toBe('AbortError')
       }
