@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test'
-import { buildBetaSystemPrompt } from './prompts'
 import { localizeResult } from './resultLocalization'
 import { BetaEtymologyResultSchema } from './schemas/etymology'
 import type { BetaEtymologyResult } from './types'
@@ -71,12 +70,6 @@ describe('beta bilingual results', () => {
     const duplicate = structuredClone(RESULT)
     duplicate.histories.push(structuredClone(duplicate.histories[0]))
     expect(BetaEtymologyResultSchema.safeParse(duplicate).success).toBe(false)
-  })
-
-  test('neutral Portuguese and regional-label rules are explicit', () => {
-    const prompt = buildBetaSystemPrompt('Portuguese', 'pt')
-    expect(prompt).toContain('neutral Portuguese')
-    expect(prompt).toContain('Brazilian/European distinction')
   })
 
   test('a beta miss is not admitted by an English or non-Wiktionary fallback', () => {

@@ -40,8 +40,9 @@ describe('complete admitted source retention', () => {
     const result = await fetchSelectedWiktionaryLanguage('a phrase', 'English')
     expect(result?.entryGroups).toHaveLength(6)
     for (let i = 1; i <= 6; i++) {
-      expect(result?.text).toContain(`BEGIN${i}`)
-      expect(result?.text).toContain(`MIDDLE${i}`)
+      expect(result?.text).toContain(
+        `BEGIN${i} ${'full evidence '.repeat(600).trimEnd()} MIDDLE${i}`
+      )
       expect(result?.text).toContain(`TAIL${i}`)
     }
     expect(result?.text).toContain('definition 4')

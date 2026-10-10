@@ -18,10 +18,14 @@ function result(language: 'en' | 'it'): DisplayEtymologyResult {
 
 describe('EtymologyCard', () => {
   test('formats the story as paragraphs with italic forms', () => {
-    const entry = { ...result('en'), lore: 'From *fides*.\n\nA history of trust.' }
+    const entry = {
+      ...result('en'),
+      lore: 'From *fides*.\n\nFrom *bher-; **faith** remains *unfinished.',
+    }
     const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
     expect(markup).toContain('<p>From <em>fides</em>.</p>')
-    expect(markup).toContain('<p>A history of trust.</p>')
+    expect(markup).toContain('<p>From *bher-; **faith** remains *unfinished.</p>')
+    expect(markup).not.toContain('<strong>')
   })
 
   test('links English kin to word pages', () => {

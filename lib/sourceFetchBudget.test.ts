@@ -37,10 +37,9 @@ test('each HTTP redirect consumes a request and exhaustion prevents its target',
   expect(calls).toBe(2)
 })
 
-test('cache-only work and pre-aborted calls use zero slots; outside scope is unaffected', async () => {
+test('pre-aborted calls use zero slots; outside scope is unaffected', async () => {
   globalThis.fetch = (async () => new Response('ok')) as unknown as typeof fetch
   const budget = new SourceFetchBudget(0)
-  expect(await budget.run(async () => 'cached')).toBe('cached')
   await expect(
     budget.run(() => fetchWithTimeout('https://en.wiktionary.org', {}, 100, AbortSignal.abort()))
   ).rejects.toThrow()

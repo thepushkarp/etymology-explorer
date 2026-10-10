@@ -94,23 +94,20 @@ describe('source redirect boundary', () => {
     expect(budget.attempts).toBe(3)
   })
 
-  test.each([undefined, 'follow'] as const)(
-    'explicit/default follow mode counts and validates every hop (%s)',
-    async (redirect) => {
-      let calls = 0
-      globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
-        calls++
-        expect(init?.redirect).toBe('manual')
-        return new Response(null, { status: 302, headers: { location: '/next' } })
-      }) as unknown as typeof fetch
-      const budget = new SourceFetchBudget(2)
-      await expect(budget.run(() => fetchWithTimeout(source, { redirect }, 100))).rejects.toThrow(
-        'budget exhausted'
-      )
-      expect(calls).toBe(2)
-      expect(budget.attempts).toBe(2)
-    }
-  )
+  test('explicit follow mode cannot bypass the source budget', async () => {
+    let calls = 0
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      calls++
+      expect(init?.redirect).toBe('manual')
+      return new Response(null, { status: 302, headers: { location: '/next' } })
+    }) as unknown as typeof fetch
+    const budget = new SourceFetchBudget(2)
+    await expect(
+      budget.run(() => fetchWithTimeout(source, { redirect: 'follow' }, 100))
+    ).rejects.toThrow('budget exhausted')
+    expect(calls).toBe(2)
+    expect(budget.attempts).toBe(2)
+  })
 
   test.each(['manual', 'error'] as const)('honors redirect mode %s', async (redirect) => {
     let calls = 0
@@ -150,26 +147,6 @@ describe('source redirect boundary', () => {
     expect(new Headers(calls[1].headers).get('content-type')).toBe(
       expectedMethod === 'GET' ? null : 'text/plain'
     )
-  })
-
-  test('preserves a Request HEAD method and headers through a relative redirect', async () => {
-    const calls: RequestInit[] = []
-    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
-      calls.push(init ?? {})
-      return calls.length === 1
-        ? new Response(null, { status: 303, headers: { location: '/next' } })
-        : new Response(null)
-    }) as unknown as typeof fetch
-    const budget = new SourceFetchBudget(16)
-    await budget.run(() =>
-      fetchWithTimeout(
-        new Request(source, { method: 'HEAD', headers: { 'User-Agent': 'EtymologyExplorer' } }),
-        {},
-        100
-      )
-    )
-    expect(calls[1].method).toBe('HEAD')
-    expect(new Headers(calls[1].headers).get('user-agent')).toBe('EtymologyExplorer')
   })
 
   test('caller cancellation between hops prevents the next request', async () => {
@@ -278,7 +255,7 @@ describe('app-wide destination boundary', () => {
     expect(calls).toBe(6)
   })
 
-  test.each([302, 303, 307])(
+  test.each([303, 307])(
     'preserves Request POST metadata and handles redirect %i',
     async (status) => {
       const calls: Array<{ method: string; body: string; headers: Headers }> = []

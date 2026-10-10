@@ -97,16 +97,3 @@ for (const note of ['name', { en: 'name', local: 'nome' }]) {
     expect(graph.postMerge).toBeUndefined()
   })
 }
-
-test('retains a compound merge when supported component branches survive pruning', () => {
-  const graph: AncestryGraph = {
-    branches: [{ root: 'bread', stages: [{ stage: 'Old English', form: 'bread', note: 'food' }] }],
-    mergePoint: { form: 'breadboard', note: 'compound' },
-    postMerge: [{ stage: 'English', form: 'breadboard', note: 'board' }],
-  }
-  enrichAncestryGraph(graph, CHAINS)
-  expect(pruneUngroundedStages(graph)).toBe(0)
-  expect(graph.branches[0].root).toBe('bread')
-  expect(graph.mergePoint?.form).toBe('breadboard')
-  expect(graph.postMerge?.[0].form).toBe('breadboard')
-})

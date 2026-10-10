@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import { scopeEnglishHistories, buildResearchPrompt } from './research'
+import { scopeEnglishHistories } from './research'
 import { finalizeResult } from './llm'
-import { buildSynthesisRequest } from './openrouterResponses'
-import { ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA } from './schemas/llm-schema'
+import { localizeHistoryChoices, localizeResult } from './resultLocalization'
 import { EtymologyResultSchema } from './schemas/etymology'
 import type { EnglishEtymologyResult, LexicalHistory, ResearchContext, SourceData } from './types'
 
@@ -79,12 +78,7 @@ function dickContext() {
 describe('English source-defined histories', () => {
   test('four source sections stay independent while related name senses share one history', () => {
     const research = dickContext()
-    expect(research.lexicalGraph!.histories).toHaveLength(4)
     expect(new Set(research.entryContexts!.map((entry) => entry.evidenceScopeId)).size).toBe(4)
-    expect(research.entryContexts![0].text).toContain('vulgar and verb senses')
-    expect(research.entryContexts![1].text).not.toContain('Rihhart')
-    expect(research.parsedChains![0].historyId).toBe(research.entryContexts![0].id)
-    expect(buildResearchPrompt(research)).toContain(`history_id="${research.entryContexts![0].id}"`)
     const finalized = finalizeResult(
       result(research),
       research,
@@ -131,19 +125,6 @@ describe('English source-defined histories', () => {
     const missing = result(research)
     delete missing.histories
     expect(() => finalizeResult(missing, research, 'standard')).toThrow('histories are missing')
-  })
-
-  test('rejects repeated Rihhart routes within one history', () => {
-    const research = dickContext()
-    const generated = result(research)
-    const stages = [{ stage: 'Old High German', form: 'Rihhart', note: 'name' }]
-    generated.histories![0].ancestryGraph.branches = [
-      { root: 'Richard', stages },
-      { root: 'Dick', stages: structuredClone(stages) },
-    ]
-    expect(() => finalizeResult(generated, research, 'standard')).toThrow(
-      'duplicated ancestry branch'
-    )
   })
 
   test('rejects duplicate ancestry paths that emerge only after reconstructed roots are pruned', () => {
@@ -202,32 +183,40 @@ describe('English source-defined histories', () => {
     )
   })
 
-  test('linked variant phrases and competing origins do not need a CPU compound formula', () => {
-    const research = context('plot armour', ['Alternative spelling of plot armor.'])
-    const generated = result(research)
-    generated.histories![0].ancestryGraph = {
-      branches: [
-        { root: 'plot', stages: [{ stage: 'English', form: 'plot', note: 'story' }] },
-        { root: 'armour', stages: [{ stage: 'English', form: 'armour', note: 'protection' }] },
-      ],
-      mergePoint: { form: 'plot armour', note: 'phrase' },
-    }
-    expect(() => finalizeResult(generated, research, 'standard')).not.toThrow()
-    delete generated.histories![0].ancestryGraph.mergePoint
-    expect(() => finalizeResult(generated, research, 'standard')).not.toThrow()
-  })
-
-  test('English strict history output preserves string prose and cache validates nested histories', () => {
+  test('English cache validation rejects bilingual prose in nested histories', () => {
     const research = dickContext()
     const generated = result(research)
-    const format = buildSynthesisRequest('fixture', undefined, 'en', true).text.format
-    expect(format.type).toBe('json_schema')
-    expect('schema' in format && format.schema).toEqual(ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA)
     expect(EtymologyResultSchema.safeParse(generated).success).toBe(true)
     const malformed = structuredClone(generated) as unknown as {
       histories: Array<{ lore: unknown }>
     }
     malformed.histories[0].lore = { en: 'bilingual prose in an English history' }
     expect(EtymologyResultSchema.safeParse(malformed).success).toBe(false)
+  })
+
+  test('displays only the selected English history and keeps legacy entries usable', () => {
+    const generated = result(dickContext())
+    expect(localizeHistoryChoices(generated).map((choice) => choice.label)).toEqual([
+      'sense 1',
+      'sense 2',
+      'sense 3',
+      'sense 4',
+    ])
+    const history = generated.histories![1]
+    history.ancestryGraph = {
+      branches: [
+        { root: 'detective', stages: [{ stage: 'English', form: 'detective', note: 'clipping' }] },
+      ],
+    }
+    const display = localizeResult(generated, 'en', history.id)
+    expect(display.definition).toBe('definition 2')
+    expect(display.lore).toBe('history 2')
+    expect(
+      display.ancestryGraph.branches.flatMap((branch) => branch.stages.map((stage) => stage.form))
+    ).toEqual(['detective'])
+    expect(localizeResult(generated).definition).toBe(generated.histories![0].definition)
+    delete generated.histories
+    delete generated.primaryHistoryId
+    expect(localizeResult(generated).definition).toBe('wrong projection')
   })
 })

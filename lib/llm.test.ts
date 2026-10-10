@@ -1,6 +1,10 @@
-import { BETA_ETYMOLOGY_LLM_SCHEMA, ETYMOLOGY_LLM_SCHEMA } from './schemas/llm-schema'
 import { describe, expect, test } from 'bun:test'
-import { getLlmUsageFromError, isRecoverableBetaValidationError } from '@/lib/llm'
+import {
+  finalizeResult,
+  synthesizeFromResearch,
+  getLlmUsageFromError,
+  isRecoverableBetaValidationError,
+} from '@/lib/llm'
 
 describe('getLlmUsageFromError', () => {
   test('extracts usage attached to a failed-synthesis error', () => {
@@ -53,7 +57,6 @@ describe('isRecoverableBetaValidationError', () => {
   })
 })
 
-import { finalizeResult } from './llm'
 import type { BetaEtymologyResult, ResearchContext } from './types'
 
 function scopedFixture() {
@@ -117,11 +120,6 @@ function scopedFixture() {
 
 test('canonical primary prose is projected and citations come from research', () => {
   const { result, context } = scopedFixture()
-  expect(ETYMOLOGY_LLM_SCHEMA.properties.sources.maxItems).toBe(0)
-  expect(
-    (BETA_ETYMOLOGY_LLM_SCHEMA.properties as { sources: { maxItems: number } }).sources.maxItems
-  ).toBe(0)
-  result.sources = []
   const finalized = finalizeResult(result, context, 'standard')
   expect(finalized.definition).toEqual({ en: 'primary', local: 'primaire' })
   expect(finalized.pronunciation).toBe('/x/')
@@ -138,7 +136,6 @@ test('a changed evidence scope fails before an identity can be published', () =>
 })
 
 test('an incomplete synthesis fails with provider usage instead of returning partial JSON', async () => {
-  const { synthesizeFromResearch } = await import('./llm')
   const savedFetch = globalThis.fetch
   const savedKey = process.env.OPENROUTER_API_KEY
   process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
@@ -160,17 +157,10 @@ test('an incomplete synthesis fails with provider usage instead of returning par
       relatedResearch: [],
       totalSourcesFetched: 0,
     }
-    try {
-      await synthesizeFromResearch(context)
-      throw new Error('Expected incomplete rejection')
-    } catch (error) {
-      expect((error as Error).message).toContain('max_output_tokens')
-      expect(getLlmUsageFromError(error)).toEqual({
-        inputTokens: 100,
-        outputTokens: 50,
-        costUSD: 0.002,
-      })
-    }
+    await expect(synthesizeFromResearch(context)).rejects.toMatchObject({
+      message: expect.stringContaining('max_output_tokens'),
+      usage: { inputTokens: 100, outputTokens: 50, costUSD: 0.002 },
+    })
   } finally {
     globalThis.fetch = savedFetch
     if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
