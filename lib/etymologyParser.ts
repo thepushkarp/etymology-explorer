@@ -117,14 +117,18 @@ const LANGUAGE_PATTERN = new RegExp(
   'i'
 )
 
-/**
- * Extract the attested date from etymology text (e.g., "1590s", "late 14c.", "c. 1600")
- */
-function extractDate(text: string): string | undefined {
-  const dateMatch = text.match(
-    /\b(early|mid|late|c\.\s*)?\d{4}s?\b|\b(early|mid|late)\s+\d{1,2}c\./i
+/** Extract lexical attestation dates, not incidental dates elsewhere on a page. */
+function extractDate(text: string, source: 'etymonline' | 'wiktionary'): string | undefined {
+  const date = String.raw`(?:early|mid|late|c\.\s*)?\d{4}s?\b|(?:early|mid|late)\s+\d{1,2}c\.`
+  const explicit = text.match(
+    new RegExp(
+      String.raw`\b(?:first\s+)?(?:attested|recorded|used)\s+(?:in\s+|from\s+|since\s+)?(${date})`,
+      'i'
+    )
   )
-  return dateMatch ? dateMatch[0] : undefined
+  if (explicit) return explicit[1]
+  // Etymonline entries conventionally open with their lexical date.
+  return source === 'etymonline' ? text.trim().match(new RegExp(`^(${date})`, 'i'))?.[1] : undefined
 }
 
 /**
@@ -291,7 +295,7 @@ function parseSourceText(
   word: string,
   source: 'etymonline' | 'wiktionary'
 ): ParsedEtymChain {
-  const dateAttested = extractDate(text)
+  const dateAttested = extractDate(text, source)
   const segments = splitFromSegments(text)
 
   const links: ParsedEtymLink[] = []

@@ -117,7 +117,8 @@ export const ETYMOLOGY_LLM_SCHEMA = {
           descendantWords: {
             type: ['array', 'null'],
             items: { type: 'string' },
-            description: 'Modern derivatives in other languages; null when not notable',
+            description:
+              'Source-attested descendants of this root in other languages; exclude ancestors and cognates; null when unknown',
           },
         },
         required: ['root', 'origin', 'meaning', 'relatedWords', 'ancestorRoots', 'descendantWords'],
@@ -190,7 +191,8 @@ export const ETYMOLOGY_LLM_SCHEMA = {
     },
     sources: {
       type: 'array',
-      description: 'Source databases that contributed evidence',
+      maxItems: 0,
+      description: 'Return []; the server attaches verified sources from research.',
       items: {
         type: 'object',
         properties: {
@@ -351,7 +353,7 @@ export const BETA_ETYMOLOGY_LLM_SCHEMA = (() => {
     language: { type: 'string', enum: ['it', 'es', 'fr', 'pt'] },
     word: properties.word,
     primaryHistoryId: { type: 'string' },
-    histories: { type: 'array', minItems: 1, maxItems: 4, items: history },
+    histories: { type: 'array', minItems: 1, items: history },
     pronunciation: properties.pronunciation,
     definition: properties.definition,
     ancestryGraph: properties.ancestryGraph,

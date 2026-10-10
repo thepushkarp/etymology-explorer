@@ -33,7 +33,7 @@ const globalRef = globalThis as { window?: unknown }
 const originalWindow = globalRef.window
 globalRef.window = { sessionStorage }
 
-const { consumeTraceIntent, markTraceIntent } = await import('./traceIntent')
+const { consumeTraceIntent, markTraceIntent, scheduleTraceIntent } = await import('./traceIntent')
 
 afterAll(() => {
   if (originalWindow === undefined) {
@@ -48,6 +48,17 @@ beforeEach(() => {
 })
 
 describe('consumeTraceIntent', () => {
+  test('phrase direct loads never spend and valid in-app intents remain single-use', () => {
+    expect(consumeTraceIntent('pomme de terre', 'fr')).toBe(false)
+    markTraceIntent('  Pomme\u00a0de  terre ', 'fr')
+    expect(consumeTraceIntent('pomme de terre', 'fr')).toBe(true)
+    expect(consumeTraceIntent('pomme de terre', 'fr')).toBe(false)
+    markTraceIntent('red herring')
+    expect(consumeTraceIntent('red-herring')).toBe(false)
+    markTraceIntent('red\nherring')
+    expect(consumeTraceIntent('red herring')).toBe(false)
+  })
+
   test('combining encodings share intent but different accents do not', () => {
     markTraceIntent('cafe\u0301', 'fr')
     expect(consumeTraceIntent('café', 'fr')).toBe(true)
@@ -95,5 +106,39 @@ describe('consumeTraceIntent', () => {
 
     sessionStorage.setItem('etymex:trace-intent', JSON.stringify({ word: 42 }))
     expect(consumeTraceIntent('nice')).toBe(false)
+  })
+})
+
+describe('scheduled auto-trace lifecycle', () => {
+  const nextTask = () => new Promise((resolve) => setTimeout(resolve, 5))
+
+  test('Strict Mode setup-cleanup-setup opens exactly one trace', async () => {
+    markTraceIntent('red herring')
+    const starts: string[] = []
+    const cleanupFirst = scheduleTraceIntent('red herring', 'en', (word) => starts.push(word))
+    cleanupFirst()
+    const cleanupReplay = scheduleTraceIntent('red herring', 'en', (word) => starts.push(word))
+    await nextTask()
+    expect(starts).toEqual(['red herring'])
+    expect(consumeTraceIntent('red herring')).toBe(false)
+    cleanupReplay()
+  })
+
+  test('unmount before start cancels without consuming navigation intent', async () => {
+    markTraceIntent('pomme de terre', 'fr')
+    let starts = 0
+    const cleanup = scheduleTraceIntent('pomme de terre', 'fr', () => starts++)
+    cleanup()
+    await nextTask()
+    expect(starts).toBe(0)
+    expect(consumeTraceIntent('pomme de terre', 'fr')).toBe(true)
+  })
+
+  test('direct phrase loads remain idle after deferred setup', async () => {
+    let starts = 0
+    const cleanup = scheduleTraceIntent('pomme de terre', 'fr', () => starts++)
+    await nextTask()
+    expect(starts).toBe(0)
+    cleanup()
   })
 })

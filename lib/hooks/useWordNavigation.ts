@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { canonicalizeWord, isValidWord } from '@/lib/validation'
 import { markTraceIntent } from '@/lib/traceIntent'
 import { wordPagePath, type LanguageCode } from '@/lib/languages'
 
@@ -15,8 +16,8 @@ export function useWordNavigation() {
 
   return useCallback(
     (word: string, language: LanguageCode = 'en') => {
-      const trimmed = word.trim()
-      if (!trimmed) return
+      const trimmed = canonicalizeWord(word)
+      if (!isValidWord(trimmed)) return
       markTraceIntent(trimmed, language)
       router.push(wordPagePath(trimmed, language))
     },

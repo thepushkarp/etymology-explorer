@@ -135,8 +135,7 @@ export const BetaEtymologyResultSchema = createResultSchema(BilingualTextSchema,
           })
           .strict()
       )
-      .min(1)
-      .max(4),
+      .min(1),
   })
   .superRefine((result, context) => {
     const ids = result.histories.map((history) => history.id)

@@ -1,3 +1,4 @@
+import { canonicalizeWord, isValidWord } from '@/lib/validation'
 import { CONFIG } from '@/lib/config'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
 import type { NgramResult } from '@/lib/types'
@@ -16,8 +17,8 @@ export async function fetchNgram(
     smoothing?: number
   } = {}
 ): Promise<NgramResult | null> {
-  const trimmedWord = word.trim()
-  if (!trimmedWord) return null
+  const trimmedWord = canonicalizeWord(word)
+  if (!isValidWord(trimmedWord)) return null
 
   const { yearStart = 1800, yearEnd = 2019, corpus = 'eng-2019', smoothing = 3 } = options
 

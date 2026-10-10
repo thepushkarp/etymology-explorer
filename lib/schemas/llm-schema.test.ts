@@ -426,6 +426,11 @@ describe('BETA_ETYMOLOGY_LLM_SCHEMA histories', () => {
       sources: [],
     }
     expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(true)
+    valid.histories = Array.from({ length: 6 }, (_, index) => ({
+      ...valid.histories[0],
+      id: index === 0 ? 'vine' : `history-${index}`,
+    }))
+    expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(true)
     valid.histories[0].label = { en: 'vine' } as { en: string; local: string }
     expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(false)
   })

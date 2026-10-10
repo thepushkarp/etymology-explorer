@@ -59,6 +59,10 @@ function comparableHeading(value: string): string {
 export function cleanWiktionaryHtml(value: string): string {
   const withBoundaries = preserveLinguisticNotation(value)
     .replace(/<(?:style|script|noscript)[^>]*>[\s\S]*?<\/(?:style|script|noscript)>/gi, ' ')
+    .replace(
+      /<a\b[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+      (_match, url: string, label: string) => `${label} (${url})`
+    )
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<li[^>]*>/gi, '\n- ')
     .replace(/<\/(?:dd|div|dl|dt|h[1-6]|li|ol|p|table|tr|ul)>/gi, '\n')
@@ -195,4 +199,87 @@ export function extractWiktionaryEntryGroups(
       },
     ]
   })
+}
+
+/** Only explicit spelling-variant statements in the selected language admit links. */
+export function extractWiktionaryVariants(
+  html: string,
+  sections: readonly WiktionaryTocSection[],
+  languageHeading: string,
+  edition = 'en'
+): Array<{ word: string; relationship: 'spelling-variant'; url: string }> {
+  const index = sections.findIndex(
+    (section) => comparableHeading(section.line) === comparableHeading(languageHeading)
+  )
+  if (index < 0) return []
+  const start = anchorOffset(html, sections[index].anchor)
+  const next = sections
+    .slice(index + 1)
+    .find((section) => headingLevel(section) <= headingLevel(sections[index]))
+  if (start < 0) return []
+  const end = next ? anchorOffset(html, next.anchor) : html.length
+  const fragment = html.slice(start, end < 0 ? html.length : end)
+  const variants = new Map<
+    string,
+    { word: string; relationship: 'spelling-variant'; url: string }
+  >()
+  // Inspect local definition/paragraph blocks so a variant qualifier never leaks
+  // across senses into unrelated translation or cognate links.
+  for (const block of fragment.matchAll(/<(p|li|dd)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
+    const body = block[2]
+    const plain = cleanWiktionaryHtml(body.replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, '$1'))
+    const statement =
+      /\b(?:(?:British|American|UK|US)\s+(?:English\s+)?(?:standard\s+)?(?:spelling|form)|(?:alternative|alternate)\s+spelling)\s+(?:of|for)\b/i.test(
+        plain
+      )
+    const localHeading = sections
+      .filter((section) => {
+        const offset = anchorOffset(html, section.anchor)
+        return offset >= start && offset <= start + (block.index ?? 0)
+      })
+      .at(-1)
+    const listedRegionalVariant =
+      localHeading &&
+      /^Alternative forms?$/i.test(cleanHeading(localHeading.line)) &&
+      /\b(?:British|American|UK|US)\s+(?:English\s+)?(?:standard\s+)?spelling\b/i.test(plain)
+    if (!statement && !listedRegionalVariant) continue
+    // Standard MediaWiki form-of markup identifies the target, rather than a
+    // regional label link or another word mentioned in an example.
+    const target =
+      body.match(
+        /<(?:span|i)\b[^>]*class=["'](?:[^"']*\s)?(?:form-of-definition-link|mention)(?:\s[^"']*)?["'][^>]*>([\s\S]*?)<\/(?:span|i)>/i
+      )?.[1] ?? body
+    const relationTail =
+      target === body && statement
+        ? body.slice(body.search(/(?:spelling|form)[\s\S]*?\b(?:of|for)\b/i))
+        : target
+    const link = relationTail.match(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i)
+    if (!link) continue
+    const href = decodeHtmlEntities(link[1])
+    const url = new URL(href, `https://${edition}.wiktionary.org`)
+    if (url.hostname !== `${edition}.wiktionary.org` || !url.pathname.startsWith('/wiki/')) continue
+    const word = decodeURIComponent(url.pathname.slice('/wiki/'.length)).replace(/_/g, ' ')
+    if (!word || word.includes(':')) continue
+    variants.set(word, { word, relationship: 'spelling-variant', url: url.toString() })
+  }
+  return [...variants.values()]
+}
+
+/** Retains every subsection, including pronunciation/variants before etymology. */
+export function extractWiktionaryLanguageText(
+  html: string,
+  sections: readonly WiktionaryTocSection[],
+  languageHeading: string
+): string {
+  const index = sections.findIndex(
+    (section) => comparableHeading(section.line) === comparableHeading(languageHeading)
+  )
+  if (index < 0) return ''
+  const start = anchorOffset(html, sections[index].anchor)
+  if (start < 0) return ''
+  const next = sections
+    .slice(index + 1)
+    .find((section) => headingLevel(section) <= headingLevel(sections[index]))
+  const end = next ? anchorOffset(html, next.anchor) : html.length
+  return cleanWiktionaryHtml(html.slice(start, end < 0 ? html.length : end))
 }

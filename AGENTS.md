@@ -6,14 +6,18 @@ This file provides guidance to AI Coding Agents when working with code in this r
 
 EtymEx is a Next.js Etymology Explorer web app that helps users discover word origins through an LLM-powered synthesis pipeline with grounded etymological evidence. The app runs in **public mode** by default (server-side API key) with rate limiting, cost budgets, caching, and distributed request deduplication.
 
-Users search for a word, and the app:
+Users search for a word or phrase in English, Italian, Spanish, French, or Portuguese. The app:
 
-1. Fetches raw data from 6 sources in parallel (Etymonline, Wiktionary, Free Dictionary always; Wikipedia, Urban Dictionary, Incel Wiki as optional supplemental sources)
-2. Pre-parses etymological chains from source text (CPU-only)
-3. Uses OpenRouter to extract root morphemes from the first-pass source bundle
-4. Expands breadth with a bounded second pass over root pages and high-signal related pages from Etymonline and Wiktionary
-5. Sends the enriched research bundle to OpenRouter's Responses API using `openai/gpt-6-luna` for structured synthesis
-6. Post-processes LLM output to match ancestry stages to parsed evidence and assign programmatic confidence scores
+1. Fetches primary sources in parallel. English uses Etymonline, Wiktionary, and Free Dictionary plus optional Wikipedia, Urban Dictionary, and Incel Wiki. Other supported languages use native and English Wiktionary editions, selected-language Wikipedia, a multilingual dictionary, Wikidata lexemes, and Dicionário Aberto for Portuguese.
+2. Pre-parses source-local etymological chains and keeps independent lexical histories and evidence scopes.
+3. Expands explicit source spelling variants/redirects, up to four useful independent phrase components, and up to four linked variant discoveries in staged parallel waves, then researches up to four attested ancestor lexemes in their own language. English also retains CPU-first root extraction (LLM fallback only when necessary) and related-page expansion.
+4. Retains complete extracted source text and full Wikipedia article extracts in the synthesis bundle; there are no per-source character caps or prompt clipping.
+5. Sends the enriched bundle to OpenRouter's Responses API using `openai/gpt-6-luna` with low reasoning effort and strict structured output.
+6. Matches ancestry stages to scoped evidence, assigns confidence, and prunes unsupported lineage claims. Component evidence cannot establish the whole phrase's origin.
+
+For non-English queries, the primary Wiktionary edition defines source-local history boundaries; the complete secondary edition remains independent context without invented history alignment. A Wikipedia-only result has an explicitly unresolved history. Components alone cannot admit a phrase.
+
+Every actual source HTTP attempt shares a 16-request ceiling, including primary fetches, fallback attempts, Wikidata detail requests, and enrichment. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
 
 **Live**: https://etymex.com
 
@@ -48,17 +52,12 @@ GET /api/etymology?word=X[&stream=true]   (maxDuration 300s)
     ├── Redis cache check (lib/cache.ts, 30d TTL)
     ├── Cost guard check (lib/costGuard.ts, 2 modes: normal → cache_only at 90% of budget)
     ├── Singleflight lock (lib/singleflight.ts, owner-token lock; Redis down → 503 for uncached)
-    ├── Agentic Research Pipeline (lib/research.ts; request.signal aborts in-flight work):
-    │   ├── Phase 1: Fire all 6 source fetches at once (3 core + 3 optional);
-    │   │           only etymonline + wiktionary gate root expansion, while
-    │   │           Free Dictionary/Wikipedia can still admit synthesis. Raw pages come
-    │   │           from a 7d Redis source cache when available (lib/sourceCache.ts)
-    │   ├── Phase 1.5: Pre-parse "from X, from Y" chains (lib/etymologyParser.ts, CPU-only)
-    │   ├── Phase 2: CPU root extraction (derivation formulas + chain affixes);
-    │   │           LLM fallback (15s timeout, truncated input) only when CPU finds none
-    │   └── Phase 3: ONE parallel wave — root pages (max 4 roots, etymonline +
-    │               wiktionary) + main-word related-term pages (etymonline only),
-    │               max 16 total fetches
+    ├── Research Pipeline (lib/research.ts; request.signal aborts in-flight work):
+    │   ├── Parallel primary fetches, selected by language; raw source cache first
+    │   ├── CPU parsing into independent histories and scoped evidence
+    │   ├── Bounded variant/redirect and phrase-component enrichment for all supported languages
+    │   ├── Attested ancestor lookup; English CPU-first roots + related-page expansion
+    │   └── Full extracted source text retained; 16 actual source HTTP attempts total
     ├── Typo check (lib/spellcheck.ts, Levenshtein distance vs GRE wordlist)
     ├── LLM synthesis (lib/llm.ts — one entrypoint for streaming and unary)
     │   ├── OpenRouter Responses json_schema STRICT mode (schema in lib/schemas/llm-schema.ts)
@@ -84,7 +83,8 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Per-IP rate caps: etymology 20/min + 200/day, pronunciation 20/min, general 60/min
   - USD monthly limit: $10/month (conservative fallback-chain pricing in `costTracking` when OpenRouter omits provider-reported cost)
   - Timeouts: source fetches 5s, synthesis LLM 90s, root-extraction LLM 15s, TTS 15s
-  - Tiered prompt character budgets (`promptBudget`: main 1500 / supplemental 800 / root 700 / related 450)
+  - Word/phrase validation: maximum 120 canonical characters; Unicode letters/marks, spaces, apostrophes, and hyphens
+  - Source HTTP budget: 16 actual attempts across all primary, fallback, and enrichment requests; no source-text clipping
   - Rate limits, singleflight settings, feature flags
 
 - **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENROUTER_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
@@ -99,12 +99,12 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/singleflight.ts`** - Distributed request deduplication via Redis owner-token locks (SET NX with random token, 90s TTL, EXPIRE heartbeat every 30s while the pipeline runs). Results are cached BEFORE lock release. Streaming waiters poll the cache every 2s for up to 150s with SSE keepalive events and negative-cache checks; non-streaming waiters poll ~10s then return 429 + Retry-After. A holder that errors writes a short-TTL failure marker (60s) before releasing, so waiters surface the error; promotion to holder only happens on a true crash — lock vanished with neither a result nor a marker. If 10 users search "etymology" simultaneously, only 1 LLM call is made.
 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
-  - Etymology results: 30 day TTL, versioned keys (`etymology:v2.2:`)
+  - Etymology results: 30 day TTL, versioned keys (`etymology:v2.4:` for English, `etymology:beta:v7:` for other supported languages)
   - TTS audio: 1 year TTL
   - Negative cache: 30 minute TTL for admitted types (`no_sources`, `invalid_word`)
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for raw etymonline/wiktionary page data (`src:v1:<source>:<word>`). Fail-open: no Redis or a Redis error means a live fetch. Saves repeated scrapes across result-cache misses and overlapping root/related lookups.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for raw dictionary and Wikipedia source data (`src:v6:<source>:<word>` for English, `src:v6:<source>:<language>:<word>` otherwise). Fail-open: no Redis or a Redis error means a live fetch. Preserves complete source text and provenance, and saves repeated fetches across overlapping lookups.
 
 - **`lib/redis.ts`** - Shared Redis client factory (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -133,6 +133,10 @@ Pipeline flow: Raw sources → Parser (CPU) → LLM (validates/extends) → Enri
 
 New optional fields on `AncestryStage`: `isReconstructed`, `confidence`, `evidence[]` (backward compatible)
 
+### Word and Phrase Identity
+
+`lib/orthography.ts` supplies the shared identity for navigation, cache keys, evidence, and API inputs: NFC lowercase, with Unicode horizontal space separators trimmed and collapsed to one ASCII space. Accents and apostrophe/hyphen forms remain lexical information; spaced and hyphenated phrases are distinct. Controls and line separators are preserved through normalization and rejected by `lib/validation.ts`, including at input boundaries. Canonical words/phrases may contain up to 120 characters. `SearchBox` validates before navigation and presents inline feedback for invalid input.
+
 ### Word Pages (primary search URL)
 
 `/word/{word}` is the canonical, crawlable page for every word AND the primary in-app search
@@ -147,6 +151,8 @@ URL. Crawler traffic must never cost LLM money:
   ONLY when a short-lived sessionStorage flag written by the in-app navigation handler
   (`lib/hooks/useWordNavigation.ts`) is present. Direct loads and crawlers — even JS-executing
   ones — get the "Trace it live" button instead; a human click is required to spend budget.
+  Auto-start uses a cancellable deferred task before consuming the flag, so React Strict Mode
+  effect replay cannot close the only stream and leave the page loading.
 - **Revalidation**: after storing a new result, `cacheEtymology` (`lib/cache.ts`) schedules
   `revalidateTag('etymology-word:{word}', { expire: 0 })` inside `after()` — the deferral is
   required because streaming responses flush pending revalidations when the handler returns,
@@ -173,9 +179,9 @@ Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API cos
 
 - `maxRootsToExplore = 4` - Max root morphemes to research (etymonline + wiktionary each, 2 fetches per root)
 - `maxRelatedWordsPerRoot = 4` - Related terms retained per extraction pass; only main-word related terms are fetched (etymonline only, 1 fetch per term; root-page related terms are prompt context only)
-- `maxTotalFetches = 16` - Hard cap on external API calls per search (root + related pages share one budgeted wave)
-- `promptBudget` - Tiered per-block character caps for the synthesis prompt (main 1500, supplemental 800, root 700, related 450, root-extraction input 1200)
-- `sourceCacheTTL = 7d` - Raw etymonline/wiktionary page cache
+- `maxTotalFetches = 16` - Hard cap on actual source HTTP attempts per search, enforced by `lib/sourceFetchBudget.ts` through `lib/fetchUtils.ts`. Primary requests, fallbacks, detail requests, and enrichment share the ceiling; source-cache hits and LLM calls do not consume it.
+- Source text is sanitized for prompt embedding and retained in full. Context overflow returns an explicit error instead of silently truncating evidence.
+- `sourceCacheTTL = 7d` - Raw dictionary and Wikipedia source cache
 
 ### LLM Integration
 
@@ -197,7 +203,7 @@ and the output is guaranteed-shape JSON.
 
 **Synthesis flow** (`lib/llm.ts`, single `synthesizeFromResearch` entrypoint):
 
-1. Prompt: aggregated source data + pre-parsed chains (research pipeline) + system prompt
+1. Prompt: complete sanitized source data + pre-parsed chains and independent component/variant scopes (research pipeline) + system prompt
    from `lib/prompts.ts` (content/grounding rules only — shape is enforced by the schema)
 2. Transport: passing an `onSection` callback streams the response and fires once per closed
    top-level field (via `lib/sectionScanner.ts`); omitting it makes a unary call
@@ -296,7 +302,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 **Core Pipeline:**
 
-- `lib/research.ts` - Agentic research orchestrator (6-source parallel fetch)
+- `lib/research.ts` - Language-aware primary fetching and bounded scoped variant/component/ancestor enrichment
 - `lib/llm.ts` - LLM client (OpenRouter Responses API for `openai/gpt-6-luna`; unified streaming/unary synthesis)
 - `lib/sectionScanner.ts` - Incremental scanner emitting each top-level JSON field as it closes (powers synthesis_section SSE events)
 - `lib/responseAdapter.ts` - SSE/JSON response adapter for the etymology route's early returns
@@ -313,7 +319,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `lib/etymonline.ts` - HTML scraper with fallback patterns
 - `lib/wiktionary.ts` - MediaWiki API client
 - `lib/freeDictionary.ts` - Free Dictionary API client
-- `lib/wikipedia.ts` - Wikipedia REST API
+- `lib/wikipedia.ts` - Selected-language MediaWiki API full-article extracts with exact-title/redirect validation and revision provenance
 - `lib/urbanDictionary.ts` - Urban Dictionary API with quality scoring/filtering
 - `lib/incelsWiki.ts` - Incel Wiki MediaWiki API client (supplemental context)
 - `lib/elevenlabs.ts` - ElevenLabs TTS client

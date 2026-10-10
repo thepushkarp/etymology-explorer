@@ -263,7 +263,12 @@ export function reduceStreamEvent(
     return finalizeStreamText(state, event.part.text)
   }
 
-  if ((event.type === 'response.completed' || event.type === 'response.done') && event.response) {
+  if (
+    (event.type === 'response.completed' ||
+      event.type === 'response.done' ||
+      event.type === 'response.incomplete') &&
+    event.response
+  ) {
     return {
       emittedText: '',
       fullText: state.fullText,
@@ -275,7 +280,9 @@ export function reduceStreamEvent(
     (event.type === 'response.failed' || event.type === 'error') &&
     (event.response?.error?.message || event.error?.message)
   ) {
-    throw new Error(event.response?.error?.message ?? event.error?.message)
+    throw Object.assign(new Error(event.response?.error?.message ?? event.error?.message), {
+      ...(event.response ? { usage: extractUsage(event.response) } : {}),
+    })
   }
 
   if (event.error?.message) {
@@ -289,7 +296,20 @@ export function reduceStreamEvent(
   }
 }
 
+export function assertCompleteResponse(response: OpenRouterResponseLike): void {
+  if (response.status === 'incomplete' || response.status === 'failed') {
+    throw Object.assign(
+      new Error(
+        response.error?.message ??
+          `OpenRouter response ${response.status}: ${response.incomplete_details?.reason ?? 'unknown reason'}`
+      ),
+      { usage: extractUsage(response) }
+    )
+  }
+}
+
 export function extractOutputText(response: OpenRouterResponseLike): string {
+  assertCompleteResponse(response)
   if (response.output_text && response.output_text.trim().length > 0) {
     return response.output_text
   }
@@ -318,13 +338,16 @@ export function extractOutputText(response: OpenRouterResponseLike): string {
   const reasoningTokens = response.usage?.output_tokens_details?.reasoning_tokens ?? 0
   const maxOutputTokens = response.max_output_tokens ?? 'unknown'
 
-  throw new Error(
-    `No text response from OpenRouter Responses API ` +
-      `(status=${response.status ?? 'unknown'}, ` +
-      `incomplete=${incompleteReason}, ` +
-      `reasoningTokens=${reasoningTokens}, ` +
-      `maxOutputTokens=${maxOutputTokens}, ` +
-      `output=${outputTypes || 'none'})`
+  throw Object.assign(
+    new Error(
+      `No text response from OpenRouter Responses API ` +
+        `(status=${response.status ?? 'unknown'}, ` +
+        `incomplete=${incompleteReason}, ` +
+        `reasoningTokens=${reasoningTokens}, ` +
+        `maxOutputTokens=${maxOutputTokens}, ` +
+        `output=${outputTypes || 'none'})`
+    ),
+    { usage: extractUsage(response) }
   )
 }
 
@@ -383,11 +406,15 @@ export async function createOpenRouterResponse(
 
   const payload = (await response.json()) as OpenRouterResponseLike
   if (!response.ok) {
-    throw new Error(extractErrorMessage(payload, response.status))
+    throw Object.assign(new Error(extractErrorMessage(payload, response.status)), {
+      ...(payload && typeof payload === 'object' && 'usage' in payload
+        ? { usage: extractUsage(payload as OpenRouterResponseLike) }
+        : {}),
+    })
   }
 
   if (payload.error?.message) {
-    throw new Error(payload.error.message)
+    throw Object.assign(new Error(payload.error.message), { usage: extractUsage(payload) })
   }
 
   return payload
@@ -430,7 +457,11 @@ export async function streamOpenRouterResponse(
     } catch {
       payload = null
     }
-    throw new Error(extractErrorMessage(payload, response.status))
+    throw Object.assign(new Error(extractErrorMessage(payload, response.status)), {
+      ...(payload && typeof payload === 'object' && 'usage' in payload
+        ? { usage: extractUsage(payload as OpenRouterResponseLike) }
+        : {}),
+    })
   }
 
   if (!response.body) {

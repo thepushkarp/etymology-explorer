@@ -22,6 +22,7 @@ import { stripNullsDeep } from './schemas/llm-schema'
 import { createSectionScanner } from './sectionScanner'
 import { CONFIG } from './config'
 import {
+  assertCompleteResponse,
   buildSynthesisRequest,
   createOpenRouterResponse,
   extractOutputText,
@@ -366,6 +367,7 @@ async function callLlm(
       options?.signal
     )
 
+    assertCompleteResponse(response)
     if (streamedText.length === 0) {
       // Some providers deliver the text only in the final response event;
       // feed it through the scanner so section events still fire.
@@ -421,6 +423,9 @@ async function generateEtymologyResponse(
       }
     } catch (error) {
       if (!isMalformedModelOutputError(error)) {
+        const failedUsage = getLlmUsageFromError(error)
+        if (failedUsage) addUsage(totalUsage, failedUsage)
+        if (error instanceof Error) Object.assign(error, { usage: totalUsage })
         throw error
       }
 
@@ -479,6 +484,29 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
             ? { license: 'Per-entry attribution and license are provided by FreeDictionaryAPI' }
             : {}),
         })
+      }
+    }
+    if (researchContext.mainWord.wikipedia) {
+      sources.push({
+        name: 'wikipedia',
+        url: researchContext.mainWord.wikipedia.url,
+        word: mainWord,
+      })
+    }
+    for (const root of researchContext.rootResearch) {
+      for (const [name, data] of [
+        ['wiktionary', root.wiktionaryData],
+        ['wiktionaryEnglish', root.wiktionaryEnglish],
+        ['wiktionaryNative', root.wiktionaryNative],
+      ] as const) {
+        if (data && !sources.some((source) => source.url === data.url)) {
+          sources.push({
+            name,
+            url: data.url,
+            word: root.lexeme?.word ?? root.root,
+            sourceFamily: 'wiktionary',
+          })
+        }
       }
     }
     result.sources = sources.length > 0 ? sources : [{ name: 'synthesized' }]
@@ -624,7 +652,7 @@ function finalizeBetaHistories(
   result.partsOfSpeech = primary.partsOfSpeech
 }
 
-function finalizeResult(
+export function finalizeResult(
   result: EtymologyResult,
   researchContext: ResearchContext,
   phase: 'standard' | 'streaming'
@@ -700,7 +728,8 @@ export async function synthesizeFromResearch(
     try {
       // Evidence-bearing sections wait for source matching. On identity failure,
       // keep reading without publishing so completed provider usage is billed.
-      const heldSections = ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources']
+      const heldSections =
+        language === 'en' ? ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources'] : ['word']
       const pendingSections = new Map<string, unknown>()
       let wordVerified = false
       let languageVerified = language === 'en'

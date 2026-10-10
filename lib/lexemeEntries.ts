@@ -70,9 +70,11 @@ function wikidataIdentities(
 
 function containsWholeLexeme(text: string, lexeme: string): boolean {
   const target = canonicalizeWord(lexeme)
-  return canonicalizeWord(text)
-    .split(/[^\p{L}\p{M}\p{N}'’ʼ‐‑-]+/u)
-    .includes(target)
+  const normalized = canonicalizeWord(text)
+  const escaped = target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?:^|[^\\p{L}\\p{M}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{M}\\p{N}])`, 'u').test(
+    normalized
+  )
 }
 
 function matchingEtymologyLine(preamble: string, heading: string): string | null {
@@ -233,7 +235,7 @@ export function deriveEntryContexts(
     }
   }
 
-  if (contexts.length > 0) return contexts.slice(0, 4)
+  if (contexts.length > 0) return contexts
   const fallbackIdentity = historyIdentity([language, word, sourceName, 'selected-language'])
   return [
     {

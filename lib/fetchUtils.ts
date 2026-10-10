@@ -1,3 +1,5 @@
+import { currentSourceFetchBudget } from './sourceFetchBudget'
+
 /**
  * Fetch wrapper with AbortController-based timeout.
  * Prevents external sources from hanging requests indefinitely.
@@ -17,7 +19,47 @@ export async function fetchWithTimeout(
   const composedSignal = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal
 
   try {
-    return await fetch(url, { ...options, signal: composedSignal })
+    composedSignal.throwIfAborted()
+    const budget = currentSourceFetchBudget()
+    // Source redirects are followed explicitly so each HTTP hop consumes a slot.
+    let target = url
+    let init = options
+    for (let hop = 0; ; hop++) {
+      composedSignal.throwIfAborted()
+      budget?.reserve()
+      const response = await fetch(target, {
+        ...init,
+        ...(budget && !options.redirect ? { redirect: 'manual' } : {}),
+        signal: composedSignal,
+      })
+      if (budget && response.status === 429) budget.rateLimited = true
+      if (!budget || options.redirect || ![301, 302, 303, 307, 308].includes(response.status)) {
+        return response
+      }
+      const location = response.headers.get('location')
+      if (!location) return response
+      await response.body?.cancel()
+      if (hop >= 5) throw new Error('Too many source redirects')
+      const base = target instanceof Request ? target.url : String(target)
+      const next = new URL(location, base)
+      if (next.protocol !== 'https:' && next.protocol !== 'http:') {
+        throw new Error('Invalid source redirect protocol')
+      }
+      const headers = new Headers(init.headers)
+      if (new URL(base).origin !== next.origin) {
+        headers.delete('authorization')
+        headers.delete('cookie')
+      }
+      if (
+        response.status === 303 ||
+        ([301, 302].includes(response.status) && init.method === 'POST')
+      ) {
+        init = { ...init, method: 'GET', body: undefined, headers }
+      } else {
+        init = { ...init, headers }
+      }
+      target = next
+    }
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       // Caller-initiated cancellation propagates as-is; only convert

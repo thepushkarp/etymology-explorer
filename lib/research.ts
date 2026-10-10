@@ -6,7 +6,7 @@ import { canonicalizeWord } from './orthography'
  */
 
 import { fetchEtymonline } from './etymonline'
-import { fetchWiktionary } from './wiktionary'
+import { fetchWiktionary, fetchSelectedWiktionaryLanguage } from './wiktionary'
 import { fetchWikipedia } from './wikipedia'
 import { fetchUrbanDictionary } from './urbanDictionary'
 import { fetchIncelsWiki } from './incelsWiki'
@@ -27,6 +27,7 @@ import {
 } from './etymologyParser'
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
+import { classifyApiError } from './apiError'
 import {
   buildRootExtractionRequest,
   createOpenRouterResponse,
@@ -43,6 +44,7 @@ import {
 } from './multilingualSources'
 import { buildLexicalResearchGraph } from './lexemeGraph'
 import { deriveEntryContexts } from './lexemeEntries'
+import { SourceFetchBudget } from './sourceFetchBudget'
 
 export interface RootExtraction {
   roots: string[]
@@ -58,22 +60,30 @@ export interface RootExtraction {
 export function hasCredibleMainSource(context: ResearchContext): boolean {
   const { mainWord } = context
   if (context.language && context.language !== 'en') {
-    // A same-spelling entry elsewhere is never enough: one selected-language
-    // Wiktionary edition must confirm that this lexeme exists.
-    return Boolean(mainWord.wiktionaryEnglish || mainWord.wiktionaryNative)
+    return Boolean(mainWord.wiktionaryEnglish || mainWord.wiktionaryNative || mainWord.wikipedia)
   }
   return Boolean(
     mainWord.etymonline || mainWord.wiktionary || mainWord.freeDictionary || mainWord.wikipedia
   )
 }
 
+function completeResearch(context: ResearchContext, budget: SourceFetchBudget): ResearchContext {
+  if (budget.rateLimited && !hasCredibleMainSource(context)) {
+    throw new Error('429: research sources are rate limited')
+  }
+  context.totalSourcesFetched = budget.attempts
+  return context
+}
+
 async function conductBetaResearch(
   word: string,
   language: Exclude<LanguageCode, 'en'>,
   signal: AbortSignal | undefined,
-  onProgress: ((event: StreamEvent) => void) | undefined
+  onProgress: ((event: StreamEvent) => void) | undefined,
+  budget: SourceFetchBudget
 ): Promise<ResearchContext> {
   const sources = [
+    ['wikipedia', () => fetchWikipedia(word, signal, language)],
     ['wiktionaryEnglish', () => fetchEnglishWiktionaryLanguage(word, language, signal)],
     ['wiktionaryNative', () => fetchNativeWiktionary(word, language, signal)],
     ['multilingualDictionary', () => fetchFreeDictionaryApi(word, language, signal)],
@@ -88,7 +98,7 @@ async function conductBetaResearch(
   const results = await Promise.all(
     sources.map(async ([name, fetcher]) => {
       try {
-        const data = await fetcher()
+        const data = await budget.run(fetcher)
         emitProgress(onProgress, {
           type: 'source_complete',
           source: name,
@@ -107,20 +117,33 @@ async function conductBetaResearch(
   const byName = Object.fromEntries(sources.map(([name], index) => [name, results[index]]))
   const wiktionaryEnglish = byName.wiktionaryEnglish ?? null
   const wiktionaryNative = byName.wiktionaryNative ?? null
-  // One edition defines the source-local entry boundaries. Prefer the native
-  // edition when it exposes structured groups; English Wiktionary remains
-  // independent supporting evidence and is never concatenated into a chain.
+  // Native structured groups define history boundaries; the other edition stays independent.
   const primarySource = wiktionaryNative?.entryGroups?.length
     ? (['wiktionaryNative', wiktionaryNative] as const)
     : (['wiktionaryEnglish', wiktionaryEnglish] as const)
-  const entryContexts: ResearchEntryContext[] = deriveEntryContexts(
+  let entryContexts: ResearchEntryContext[] = deriveEntryContexts(
     word,
     language,
     primarySource[0],
     primarySource[1],
     byName.wikidataLexeme ?? null
   )
+  if (entryContexts.length === 0 && byName.wikipedia) {
+    entryContexts = [
+      {
+        id: `history:${language}:${encodeURIComponent(word)}:unresolved`,
+        evidenceScopeId: `scope:${language}:${encodeURIComponent(word)}:wikipedia`,
+        source: 'wikipedia',
+        heading: word,
+        text: byName.wikipedia.text,
+        sectionHeadings: [],
+        sourceUrl: byName.wikipedia.url,
+        entryKind: 'unresolved',
+      },
+    ]
+  }
   const parsedChains = entryContexts.flatMap((entry) => {
+    if (entry.source === 'wikipedia') return []
     const chain = parseWiktionaryText(entry.text, word, {
       historyId: entry.id,
       evidenceScopeId: entry.evidenceScopeId,
@@ -144,7 +167,7 @@ async function conductBetaResearch(
     roots: identifiedRootLexemes.map((lexeme) => lexeme.word),
   })
 
-  return {
+  const context: ResearchContext = {
     language,
     mainWord: {
       word,
@@ -155,6 +178,7 @@ async function conductBetaResearch(
       multilingualDictionary: byName.multilingualDictionary ?? null,
       wikidataLexeme: byName.wikidataLexeme ?? null,
       dicionarioAberto: byName.dicionarioAberto ?? null,
+      wikipedia: byName.wikipedia ?? null,
     },
     identifiedRoots: identifiedRootLexemes.map((lexeme) => lexeme.word),
     identifiedRootLexemes,
@@ -163,10 +187,148 @@ async function conductBetaResearch(
     parsedChains,
     entryContexts,
     lexicalGraph,
-    // Wikidata uses search + entity-detail requests; all beta research stays
-    // well below the shared 16-fetch ceiling (5 normally, 6 for Portuguese).
-    totalSourcesFetched: sources.length + (byName.wikidataLexeme ? 1 : 0),
+    totalSourcesFetched: budget.attempts,
   }
+  await expandLexemes(context, budget, signal)
+  return completeResearch(context, budget)
+}
+
+/** Components describe their own lexemes, never attest the phrase's history. */
+export function phraseComponents(word: string, language: LanguageCode): string[] {
+  const particles = new Set(
+    {
+      en: ['the', 'of', 'and', 'a', 'an'],
+      fr: ['de', 'du', 'des', 'la', 'le', 'les', 'un', 'une', 'et'],
+      it: ['di', 'da', 'del', 'della', 'il', 'lo', 'la', 'e'],
+      es: ['de', 'del', 'la', 'el', 'los', 'las', 'y'],
+      pt: ['de', 'da', 'do', 'das', 'dos', 'a', 'o', 'as', 'os', 'e'],
+    }[language]
+  )
+  if (!/\s/u.test(word)) return []
+  return [...new Set(word.split(/\s+/u).map(canonicalizeWord))]
+    .filter((part) => part.length > 1 && !particles.has(part))
+    .slice(0, CONFIG.maxRootsToExplore)
+}
+
+export async function expandLexemes(
+  context: ResearchContext,
+  budget: SourceFetchBudget,
+  signal?: AbortSignal
+): Promise<void> {
+  const language = context.language ?? 'en'
+  const word = context.mainWord.word
+  const history = context.entryContexts?.length === 1 ? context.entryContexts[0] : undefined
+  const seen = new Set([`${language}:${word}`])
+  const variants = [
+    context.mainWord.etymonline,
+    context.mainWord.wiktionary,
+    context.mainWord.wiktionaryEnglish,
+    context.mainWord.wiktionaryNative,
+    context.mainWord.wikipedia,
+  ].flatMap((source) => source?.variants ?? [])
+  type Candidate = {
+    word: string
+    relationship: 'spelling-variant' | 'redirect' | 'component'
+    parentWord?: string
+    parentHistoryId?: string
+    sourceUrl?: string
+  }
+  const fetchWave = async (candidates: Candidate[]): Promise<Candidate[]> => {
+    const unique = candidates
+      .filter((candidate) => {
+        const key = `${language}:${canonicalizeWord(candidate.word)}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      .slice(0, CONFIG.maxRootsToExplore)
+    const results = await Promise.all(
+      unique.map(async (candidate) => {
+        signal?.throwIfAborted()
+        const term = canonicalizeWord(candidate.word)
+        const fetchers =
+          language === 'en'
+            ? [() => fetchEtymonline(term, signal), () => fetchWiktionary(term, signal)]
+            : [
+                () => fetchEnglishWiktionaryLanguage(term, language, signal),
+                () => fetchNativeWiktionary(term, language, signal),
+              ]
+        const sources = await Promise.all(
+          fetchers.map((fetcher) => budget.run(fetcher).catch(() => null))
+        )
+        context.rootResearch.push({
+          root: term,
+          lexeme: { word: term, language },
+          relationship: candidate.relationship,
+          // Components have an independent scope and never inherit a homograph's history.
+          parentHistoryId: candidate.parentHistoryId,
+          variantOf:
+            candidate.relationship !== 'component'
+              ? { word: candidate.parentWord ?? word, language }
+              : undefined,
+          relationshipSourceUrl: candidate.sourceUrl,
+          evidenceScopeId: `scope:${language}:${encodeURIComponent(candidate.parentWord ?? word)}:${candidate.relationship}:${encodeURIComponent(term)}`,
+          etymonlineData: language === 'en' ? sources[0] : null,
+          wiktionaryData: language === 'en' ? sources[1] : sources[0],
+          wiktionaryEnglish: language !== 'en' ? sources[0] : undefined,
+          wiktionaryNative: language !== 'en' ? sources[1] : undefined,
+          relatedTerms: [],
+        })
+        return sources
+          .flatMap((source) => source?.variants ?? [])
+          .map((variant) => ({
+            word: variant.word,
+            relationship: variant.relationship,
+            parentWord: term,
+            parentHistoryId: candidate.parentHistoryId,
+            sourceUrl: variant.url,
+          }))
+      })
+    )
+    return results.flat()
+  }
+  // Identity and component variants take priority over ancestors and related pages.
+  const phraseVariants = await fetchWave(
+    variants.map((variant) => ({
+      word: variant.word,
+      relationship: variant.relationship,
+      parentWord: word,
+      parentHistoryId: history?.id,
+      sourceUrl: variant.url,
+    }))
+  )
+  const componentVariants = await fetchWave(
+    phraseComponents(word, language).map((component) => ({
+      word: component,
+      relationship: 'component',
+    }))
+  )
+  await fetchWave([...phraseVariants, ...componentVariants])
+  const ancestors = (context.parsedChains ?? [])
+    .flatMap((chain) => chain.links.map((link) => ({ chain, link })))
+    .filter(({ link }) => !link.isReconstructed && link.form !== word)
+    .slice(0, CONFIG.maxRootsToExplore)
+  await Promise.all(
+    ancestors.map(async ({ chain, link }) => {
+      const key = `${link.language}:${canonicalizeWord(link.form)}`
+      if (seen.has(key)) return
+      seen.add(key)
+      const data = await budget
+        .run(() => fetchSelectedWiktionaryLanguage(link.form, link.language, signal))
+        .catch(() => null)
+      if (!data) return
+      context.rootResearch.push({
+        root: link.form,
+        lexeme: { word: link.form, language: link.language },
+        relationship: 'root',
+        parentHistoryId: chain.historyId,
+        evidenceScopeId: chain.evidenceScopeId,
+        etymonlineData: null,
+        wiktionaryData: data,
+        relatedTerms: [],
+      })
+    })
+  )
 }
 
 export async function extractRootsQuick(
@@ -175,14 +337,9 @@ export async function extractRootsQuick(
   wiktionaryText: string | null,
   signal?: AbortSignal
 ): Promise<RootExtraction> {
-  // A 100-token extraction doesn't need the full source pages, but long
-  // entries can put compounds or cognates near the tail. Use the same
-  // head+tail clipping strategy as synthesis so the fallback does not
-  // silently lose late derivation clues.
-  const maxChars = CONFIG.promptBudget.rootExtractionSourceChars
   const sourceText = [etymonlineText, wiktionaryText]
     .filter((text): text is string => Boolean(text))
-    .map((text) => sanitizeSourceText(text, maxChars))
+    .map((text) => sanitizeSourceText(text))
     .join('\n\n')
 
   if (!sourceText) {
@@ -219,9 +376,13 @@ Return the JSON object only, no explanation:`
 
     response = await createOpenRouterResponse(request, CONFIG.timeouts.rootExtraction, signal)
   } catch (error) {
-    if (signal?.aborted) throw error
+    if (signal?.aborted || classifyApiError(error).status === 422) throw error
     console.error('Root extraction error:', safeError(error))
-    return { roots: [], usage: null }
+    const usage =
+      error && typeof error === 'object' && 'usage' in error
+        ? (error as { usage?: LlmUsage }).usage
+        : undefined
+    return { roots: [], usage: usage ?? null }
   }
 
   // The call was billed even if the output is unusable — always report usage.
@@ -229,6 +390,7 @@ Return the JSON object only, no explanation:`
   try {
     return { roots: parseRootsArray(extractOutputText(response)), usage }
   } catch (error) {
+    if (classifyApiError(error).status === 422) throw error
     console.error('Root extraction error:', safeError(error))
     return { roots: [], usage }
   }
@@ -558,25 +720,24 @@ export async function conductAgenticResearch(
   options?: { skipOptionalSources?: boolean; signal?: AbortSignal; language?: LanguageCode },
   onProgress?: (event: StreamEvent) => void
 ): Promise<ResearchContext> {
-  let totalFetches = 0
+  const budget = new SourceFetchBudget(CONFIG.maxTotalFetches)
   const normalizedWord = canonicalizeWord(word)
   const language = options?.language ?? 'en'
   if (isBetaLanguage(language)) {
-    return conductBetaResearch(normalizedWord, language, options?.signal, onProgress)
+    return conductBetaResearch(normalizedWord, language, options?.signal, onProgress, budget)
   }
   const skipOptional = options?.skipOptionalSources ?? false
   const signal = options?.signal
 
-  // Every source fails soft: a throwing client must not reject the whole
-  // Promise.all and lose the other five sources. The no-etymonline-AND-no-
-  // wiktionary check below already handles the nothing-found case.
+  // A failing source must not discard the remaining source bundle.
   const runSource = <T>(
     source: string,
     startTime: number,
     fetcher: () => Promise<T | null>,
     preview: (data: T | null) => string | undefined
   ): Promise<T | null> => {
-    return fetcher()
+    return budget
+      .run(fetcher)
       .then((data) => {
         emitProgress(onProgress, {
           type: 'source_complete',
@@ -656,7 +817,6 @@ export async function conductAgenticResearch(
         () => fetchIncelsWiki(normalizedWord, signal),
         (data) => data?.text.slice(0, 100)
       )
-  totalFetches += 3 + (skipOptional ? 0 : 3)
 
   const [etymonlineData, wiktionaryData] = await Promise.all([etymonlinePromise, wiktionaryPromise])
   signal?.throwIfAborted()
@@ -675,7 +835,7 @@ export async function conductAgenticResearch(
     identifiedRoots: [],
     rootResearch: [],
     relatedResearch: [],
-    totalSourcesFetched: totalFetches,
+    totalSourcesFetched: budget.attempts,
     rawSources: {},
   }
 
@@ -720,21 +880,22 @@ export async function conductAgenticResearch(
   if (!etymonlineData && !wiktionaryData) {
     console.log('[Research] No source data found for main word')
     await joinRemainingSources()
-    return context
+    await expandLexemes(context, budget, signal)
+    return completeResearch(context, budget)
   }
 
   // Phase 2: Identify roots — CPU first, LLM fallback
-  const cpuRoots = extractRootsCpu(
-    normalizedWord,
-    etymonlineData?.text ?? null,
-    wiktionaryData?.text ?? null,
-    parsedChains
-  )
+  const cpuRoots = [
+    ...phraseComponents(normalizedWord, language),
+    ...extractRootsCpu(
+      normalizedWord,
+      etymonlineData?.text ?? null,
+      wiktionaryData?.text ?? null,
+      parsedChains
+    ),
+  ].slice(0, CONFIG.maxRootsToExplore)
   let identifiedRoots = cpuRoots
-  if (cpuRoots.length > 0) {
-    console.log(`[Research] Phase 2: CPU-derived roots: ${cpuRoots.join(', ')} (no LLM call)`)
-  } else {
-    console.log('[Research] Phase 2: No CPU roots found, falling back to LLM extraction')
+  if (cpuRoots.length === 0) {
     const { roots, usage } = await extractRootsQuick(
       normalizedWord,
       etymonlineData?.text ?? null,
@@ -754,11 +915,14 @@ export async function conductAgenticResearch(
   })
   signal?.throwIfAborted()
 
-  // Phase 3: ONE parallel wave — root pages and related-term pages together.
-  // Related terms are mined from the main word's text only, so they never
-  // wait on root results.
+  // Expand phrase identity first, then roots and main-word related terms.
   const rootsToResearch = identifiedRoots.filter(
-    (root) => root !== normalizedWord && root.length > 1
+    (root) =>
+      root !== normalizedWord &&
+      root.length > 1 &&
+      !parsedChains.some((chain) =>
+        chain.links.some((link) => canonicalizeWord(link.form) === root)
+      )
   )
   const mainCombinedText = [etymonlineData?.text, wiktionaryData?.text].filter(Boolean).join(' ')
   const mainRelatedTerms = extractRelatedTerms(
@@ -767,13 +931,13 @@ export async function conductAgenticResearch(
     etymonlineData?.relatedEntries ?? []
   )
 
-  // Budget: each root costs 2 fetches (etymonline + wiktionary), each
-  // related term costs 1 (etymonline only).
-  const remainingBudget = CONFIG.maxTotalFetches - totalFetches
-  const rootsToFetch = rootsToResearch.slice(
-    0,
-    Math.min(Math.floor(remainingBudget / 2), CONFIG.maxRootsToExplore)
-  )
+  // Candidate breadth complements the shared actual-HTTP budget.
+  await joinRemainingSources()
+  await expandLexemes(context, budget, signal)
+  const remainingBudget = budget.remaining
+  const rootsToFetch = rootsToResearch
+    .filter((root) => !context.rootResearch.some((data) => data.root === root))
+    .slice(0, Math.min(Math.floor(remainingBudget / 2), CONFIG.maxRootsToExplore))
   const relatedTermsToFetch = mainRelatedTerms
     .filter((term) => !rootsToFetch.includes(term))
     .slice(
@@ -791,14 +955,17 @@ export async function conductAgenticResearch(
     )
 
     const [rootResults, relatedResults] = await Promise.all([
-      Promise.allSettled(rootsToFetch.map((root) => fetchRootResearch(root, signal))),
-      Promise.allSettled(relatedTermsToFetch.map((term) => fetchRelatedTermResearch(term, signal))),
+      Promise.allSettled(
+        rootsToFetch.map((root) => budget.run(() => fetchRootResearch(root, signal)))
+      ),
+      Promise.allSettled(
+        relatedTermsToFetch.map((term) => budget.run(() => fetchRelatedTermResearch(term, signal)))
+      ),
     ])
 
     for (const [index, result] of rootResults.entries()) {
       if (result.status === 'fulfilled') {
         context.rootResearch.push(result.value)
-        totalFetches += 2
 
         emitProgress(onProgress, {
           type: 'root_research',
@@ -817,29 +984,22 @@ export async function conductAgenticResearch(
       }
     }
 
-    for (const [index, result] of relatedResults.entries()) {
+    for (const result of relatedResults) {
       if (result.status === 'fulfilled') {
         context.relatedResearch.push(result.value)
-        totalFetches += 1
         continue
       }
 
       console.error('[Research] Related-term fetch failed:', safeError(result.reason))
-      console.warn(
-        `[Research] Related-term fetch skipped: ${relatedTermsToFetch[index] ?? 'unknown'}`
-      )
     }
   } else {
     console.log('[Research] Phase 3: Skipping expansion (budget or no candidates found)')
   }
 
-  await joinRemainingSources()
   signal?.throwIfAborted()
 
-  context.totalSourcesFetched = totalFetches
-  console.log(`[Research] Complete. Total fetches: ${totalFetches}`)
-
-  return context
+  console.log(`[Research] Complete. Total HTTP requests: ${budget.attempts}`)
+  return completeResearch(context, budget)
 }
 
 /**
@@ -847,7 +1007,7 @@ export async function conductAgenticResearch(
  * Strips XML tags, control characters, and Unicode directional overrides
  * to prevent prompt injection via source data.
  */
-function sanitizeSourceText(text: string, maxChars: number): string {
+function sanitizeSourceText(text: string): string {
   let sanitized = text
   // Strip ALL XML-like tags
   sanitized = sanitized.replace(/<\/?[a-zA-Z][^>]*>/g, '')
@@ -855,37 +1015,37 @@ function sanitizeSourceText(text: string, maxChars: number): string {
   sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
   // Neutralize Unicode directional overrides
   sanitized = sanitized.replace(/[\u200E\u200F\u202A-\u202E]/g, '')
-  if (sanitized.length <= maxChars) {
-    return sanitized
-  }
-
-  const marker = '\n[...source excerpt clipped for prompt budget...]\n'
-  if (maxChars <= marker.length + 2) {
-    return sanitized.slice(0, maxChars)
-  }
-
-  const headChars = Math.ceil((maxChars - marker.length) * 0.7)
-  const tailChars = maxChars - marker.length - headChars
-  return sanitized.slice(0, headChars) + marker + sanitized.slice(-tailChars)
+  return sanitized
 }
 
 /**
  * Build a rich prompt from research context for final synthesis.
  * Source data is wrapped in <source_data> XML tags for prompt injection
- * defense and clipped to the tiered CONFIG.promptBudget caps. Clipping keeps
- * the source opening plus tail context with an explicit omission marker; the
- * full parsed chain evidence is appended separately below.
+ * defense. Full source content and parsed evidence are retained.
  */
 export function buildResearchPrompt(context: ResearchContext): string {
   const sections: string[] = []
-  const { mainSourceChars, supplementalSourceChars, rootSourceChars, relatedSourceChars } =
-    CONFIG.promptBudget
 
+  sections.push(
+    'Research components and variants independently. Component origins do not prove the whole phrase history. Preserve the requested query spelling.'
+  )
+  for (const source of [
+    context.mainWord.etymonline,
+    context.mainWord.wiktionary,
+    context.mainWord.wiktionaryEnglish,
+    context.mainWord.wiktionaryNative,
+    context.mainWord.wikipedia,
+  ]) {
+    if (source?.variants?.length)
+      sections.push(
+        `Explicit source variants for ${source.requestedWord ?? context.mainWord.word}: ${sanitizeSourceText(JSON.stringify(source.variants))}`
+      )
+  }
   // Main word section
   sections.push(`=== Main Word: "${context.mainWord.word}" ===`)
   if (context.mainWord.etymonline) {
     sections.push(
-      `\n<source_data name="etymonline">\n${sanitizeSourceText(context.mainWord.etymonline.text, mainSourceChars)}\n</source_data>`
+      `\n<source_data name="etymonline">\n${sanitizeSourceText(context.mainWord.etymonline.text)}\n</source_data>`
     )
     if (context.mainWord.etymonline.relatedEntries?.length) {
       sections.push(
@@ -895,7 +1055,7 @@ export function buildResearchPrompt(context: ResearchContext): string {
   }
   if (context.mainWord.wiktionary) {
     sections.push(
-      `\n<source_data name="wiktionary">\n${sanitizeSourceText(context.mainWord.wiktionary.text, mainSourceChars)}\n</source_data>`
+      `\n<source_data name="wiktionary">\n${sanitizeSourceText(context.mainWord.wiktionary.text)}\n</source_data>`
     )
   }
   if (context.entryContexts?.length) {
@@ -905,7 +1065,7 @@ export function buildResearchPrompt(context: ResearchContext): string {
     )
     for (const entry of context.entryContexts) {
       sections.push(
-        `\n<source_data name="${entry.source}" history_id="${entry.id}" evidence_scope_id="${entry.evidenceScopeId}">\n${sanitizeSourceText(entry.text, mainSourceChars)}\n</source_data>`
+        `\n<source_data name="${entry.source}" history_id="${entry.id}" evidence_scope_id="${entry.evidenceScopeId}">\n${sanitizeSourceText(entry.text)}\n</source_data>`
       )
       if (entry.sectionHeadings.length > 0) {
         sections.push(`Section context: ${entry.sectionHeadings.join(' > ')}`)
@@ -914,12 +1074,10 @@ export function buildResearchPrompt(context: ResearchContext): string {
   }
 
   const betaMainSources = [
-    ...(context.entryContexts?.length
-      ? []
-      : ([
-          ['wiktionary_english_selected_language', context.mainWord.wiktionaryEnglish],
-          ['wiktionary_native_edition', context.mainWord.wiktionaryNative],
-        ] as const)),
+    ...([
+      ['wiktionary_english_selected_language', context.mainWord.wiktionaryEnglish],
+      ['wiktionary_native_edition', context.mainWord.wiktionaryNative],
+    ] as const),
     ['freedictionaryapi_senses_only', context.mainWord.multilingualDictionary],
     ['wikidata_lexeme', context.mainWord.wikidataLexeme],
     ['dicionario_aberto_historical', context.mainWord.dicionarioAberto],
@@ -927,28 +1085,28 @@ export function buildResearchPrompt(context: ResearchContext): string {
   for (const [name, source] of betaMainSources) {
     if (source) {
       sections.push(
-        `\n<source_data name="${name}">\n${sanitizeSourceText(source.text, mainSourceChars)}\n</source_data>`
+        `\n<source_data name="${name}">\n${sanitizeSourceText(source.text)}\n</source_data>`
       )
     }
   }
   if (context.mainWord.wikipedia) {
     sections.push(
-      `\n<source_data name="wikipedia">\n${sanitizeSourceText(context.mainWord.wikipedia.text, supplementalSourceChars)}\n</source_data>`
+      `\n<source_data name="wikipedia">\n${sanitizeSourceText(context.mainWord.wikipedia.text)}\n</source_data>`
     )
   }
   if (context.mainWord.freeDictionary) {
     sections.push(
-      `\n<source_data name="free_dictionary">\n${sanitizeSourceText(compactFreeDictionary(context.mainWord.freeDictionary), supplementalSourceChars)}\n</source_data>`
+      `\n<source_data name="free_dictionary">\n${sanitizeSourceText(compactFreeDictionary(context.mainWord.freeDictionary))}\n</source_data>`
     )
   }
   if (context.mainWord.urbanDictionary) {
     sections.push(
-      `\n<source_data name="urban_dictionary">\n${sanitizeSourceText(context.mainWord.urbanDictionary.text, supplementalSourceChars)}\n</source_data>`
+      `\n<source_data name="urban_dictionary">\n${sanitizeSourceText(context.mainWord.urbanDictionary.text)}\n</source_data>`
     )
   }
   if (context.mainWord.incelsWiki) {
     sections.push(
-      `\n<source_data name="incels_wiki">\n${sanitizeSourceText(context.mainWord.incelsWiki.text, supplementalSourceChars)}\n</source_data>`
+      `\n<source_data name="incels_wiki">\n${sanitizeSourceText(context.mainWord.incelsWiki.text)}\n</source_data>`
     )
   }
 
@@ -970,16 +1128,18 @@ export function buildResearchPrompt(context: ResearchContext): string {
       edges: context.lexicalGraph.edges,
     }
     sections.push(
-      `\n=== Source-Built Lexical Graph ===\n${sanitizeSourceText(JSON.stringify(graphSummary), mainSourceChars * 2)}`
+      `\n=== Source-Built Lexical Graph ===\n${sanitizeSourceText(JSON.stringify(graphSummary))}`
     )
   }
 
   // Root research sections
   for (const rootData of context.rootResearch) {
-    sections.push(`\n=== Root: "${rootData.root}" ===`)
+    sections.push(
+      `\n=== ${rootData.relationship ?? 'root'}: "${rootData.root}"; language=${rootData.lexeme?.language ?? context.language ?? 'en'}; parent_history=${rootData.parentHistoryId ?? 'none'}; evidence_scope=${rootData.evidenceScopeId ?? 'independent'}; variant_of=${rootData.variantOf ? `${rootData.variantOf.language}:${rootData.variantOf.word}` : 'none'}; relationship_source=${rootData.relationshipSourceUrl ?? 'none'} ===`
+    )
     if (rootData.etymonlineData) {
       sections.push(
-        `<source_data name="etymonline">\n${sanitizeSourceText(rootData.etymonlineData.text, rootSourceChars)}\n</source_data>`
+        `<source_data name="etymonline">\n${sanitizeSourceText(rootData.etymonlineData.text)}\n</source_data>`
       )
       if (rootData.etymonlineData.relatedEntries?.length) {
         sections.push(
@@ -989,7 +1149,31 @@ export function buildResearchPrompt(context: ResearchContext): string {
     }
     if (rootData.wiktionaryData) {
       sections.push(
-        `<source_data name="wiktionary">\n${sanitizeSourceText(rootData.wiktionaryData.text, rootSourceChars)}\n</source_data>`
+        `<source_data name="wiktionary">\n${sanitizeSourceText(rootData.wiktionaryData.text)}\n</source_data>`
+      )
+    }
+    if (
+      rootData.wiktionaryEnglish &&
+      rootData.wiktionaryEnglish.text !== rootData.wiktionaryData?.text
+    ) {
+      sections.push(
+        `<source_data name="wiktionary_english_selected_language">\n${sanitizeSourceText(rootData.wiktionaryEnglish.text)}\n</source_data>`
+      )
+    }
+    for (const source of [
+      rootData.etymonlineData,
+      rootData.wiktionaryData,
+      rootData.wiktionaryEnglish,
+      rootData.wiktionaryNative,
+    ]) {
+      if (source?.requestedWord || source?.resolvedWord)
+        sections.push(
+          `Source identity: ${sanitizeSourceText(JSON.stringify({ requestedWord: source.requestedWord, resolvedWord: source.resolvedWord, url: source.url, variants: source.variants }))}`
+        )
+    }
+    if (rootData.wiktionaryNative) {
+      sections.push(
+        `<source_data name="wiktionary_native">\n${sanitizeSourceText(rootData.wiktionaryNative.text)}\n</source_data>`
       )
     }
     if (rootData.relatedTerms.length > 0) {
@@ -1001,7 +1185,7 @@ export function buildResearchPrompt(context: ResearchContext): string {
     sections.push(`\n=== Related Term: "${relatedData.term}" ===`)
     if (relatedData.etymonlineData) {
       sections.push(
-        `<source_data name="etymonline">\n${sanitizeSourceText(relatedData.etymonlineData.text, relatedSourceChars)}\n</source_data>`
+        `<source_data name="etymonline">\n${sanitizeSourceText(relatedData.etymonlineData.text)}\n</source_data>`
       )
     }
   }

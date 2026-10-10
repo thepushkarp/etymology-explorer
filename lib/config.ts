@@ -17,9 +17,9 @@ export const CONFIG = {
   },
 
   // Input validation
-  maxWordLength: 35,
+  maxWordLength: 120,
   // Marks must follow letters; punctuation separates nonempty letter groups.
-  wordPattern: /^(?:\p{L}\p{M}*)+(?:['’ʼ‐‑-](?:\p{L}\p{M}*)+)*$/u,
+  wordPattern: /^(?:\p{L}\p{M}*)+(?:[ '’ʼ‐‑-](?:\p{L}\p{M}*)+)*$/u,
 
   // Rate limits (per IP)
   rateLimit: {
@@ -27,16 +27,6 @@ export const CONFIG = {
     etymologyDaily: { requests: 200, window: '24 h' },
     pronunciation: { requests: 20, window: '1 m' },
     general: { requests: 60, window: '1 m' },
-  },
-
-  // Per-block character budgets for synthesis prompt source data
-  // (prompt injection defense + token diet — tiered by evidentiary value)
-  promptBudget: {
-    mainSourceChars: 5000, // etymonline/wiktionary text for the searched word
-    supplementalSourceChars: 1500, // wikipedia / freeDictionary / urban / incels
-    rootSourceChars: 2500, // per-source text for each explored root
-    relatedSourceChars: 1000, // per-source text for each related term
-    rootExtractionSourceChars: 1800, // per-source input to the LLM root-extraction fallback
   },
 
   // Research pipeline

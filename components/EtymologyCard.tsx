@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { DisplayEtymologyResult } from '@/lib/types'
 import type { BetaLanguageCode } from '@/lib/languages'
+import { StoryText } from '@/components/etymology-card/StoryText'
 import { resultLabels, type ResultLocale } from '@/lib/resultLocalization'
 import { AncestryTree } from './AncestryTree'
 import { ContextSection } from './etymology-card/ContextSection'
@@ -57,7 +58,7 @@ export function EtymologyCard({
       {(result.lore || pending) && (
         <Section id="entry-story" title={labels.story}>
           {result.lore ? (
-            <p className="max-w-2xl font-serif text-lg leading-[1.8] text-ink">{result.lore}</p>
+            <StoryText text={result.lore} />
           ) : (
             <Skeleton widths={['w-full', 'w-11/12', 'w-full', 'w-3/5']} />
           )}

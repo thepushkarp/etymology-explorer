@@ -9,6 +9,26 @@ import { cleanWiktionaryHtml } from './wiktionaryEntryGroups'
 import type { AncestryGraph } from './types'
 
 describe('lexical spelling identity', () => {
+  test('phrases normalize horizontal separators without merging hyphenated variants', () => {
+    expect(canonicalizeWord('  POMME\u00a0 DE\u2003TERRE  ')).toBe('pomme de terre')
+    expect(isValidWord('  ferro  da stiro  ')).toBe(true)
+    expect(wordPagePath('Pomme  de terre', 'fr')).toBe('/word/fr/pomme%20de%20terre')
+    expect(sameSpelling('red herring', 'red-herring')).toBe(false)
+    expect(isValidWord('a'.repeat(120))).toBe(true)
+    expect(isValidWord('a'.repeat(121))).toBe(false)
+  })
+
+  test.each([
+    '\nword',
+    'word\r',
+    'red\therring',
+    'red\nherring',
+    'red\u2028herring',
+    'red\u0000herring',
+  ])('rejects controls and vertical separators before normalization: %s', (word) =>
+    expect(isValidWord(canonicalizeWord(word))).toBe(false)
+  )
+
   test.each([
     ['cote', 'côte'],
     ['e', 'é'],

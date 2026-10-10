@@ -23,8 +23,6 @@ interface UrbanDictionaryEntry {
 
 const MIN_DEFINITION_WORDS = 5
 const MIN_DEFINITION_CHARS = 20
-const MAX_DEFINITION_CHARS = 500
-const MAX_URBAN_ENTRIES = 2
 const MIN_QUALITY_SCORE = 1
 
 const LOW_SIGNAL_PATTERNS = [
@@ -47,13 +45,12 @@ function scoreQuality(entry: UrbanDictionaryEntry): number {
   const downvotes = Math.max(0, entry.thumbs_down)
   const wordCount = definition.split(/\s+/).filter(Boolean).length
 
-  if (definition.length < MIN_DEFINITION_CHARS || definition.length > MAX_DEFINITION_CHARS)
-    return -10
+  if (definition.length < MIN_DEFINITION_CHARS) return -10
   if (wordCount < MIN_DEFINITION_WORDS) return -10
 
   let score = 0
 
-  if (definition.length >= 35 && definition.length <= 260) score += 1
+  if (definition.length >= MIN_DEFINITION_CHARS || wordCount >= MIN_DEFINITION_WORDS) score += 1
   if (example.length >= 20) score += 1
 
   // In some environments votes are always 0; treat vote quality as optional signal.
@@ -103,7 +100,6 @@ export async function fetchUrbanDictionary(
         const voteScoreB = b.entry.thumbs_up - b.entry.thumbs_down
         return b.quality - a.quality || voteScoreB - voteScoreA
       })
-      .slice(0, MAX_URBAN_ENTRIES)
 
     if (filtered.length === 0) return null
 
@@ -125,6 +121,9 @@ export async function fetchUrbanDictionary(
 
     return {
       text,
+      requestedWord: normalizedWord,
+      resolvedWord: normalizedWord,
+      language: 'en',
       url: `https://www.urbandictionary.com/define.php?term=${encodeURIComponent(word)}`,
     }
   } catch {

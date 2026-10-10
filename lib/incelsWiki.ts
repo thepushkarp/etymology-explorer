@@ -47,7 +47,6 @@ export async function fetchIncelsWiki(
   url.searchParams.set('titles', normalizedWord)
   url.searchParams.set('prop', 'extracts')
   url.searchParams.set('explaintext', 'true')
-  url.searchParams.set('exchars', '1200')
   url.searchParams.set('format', 'json')
   url.searchParams.set('origin', '*')
 
@@ -85,6 +84,9 @@ export async function fetchIncelsWiki(
     const pageTitle = page.title ?? normalizedWord
     return {
       text,
+      requestedWord: normalizedWord,
+      resolvedWord: pageTitle,
+      language: 'en',
       url: buildPageUrl(pageTitle),
     }
   } catch (error) {

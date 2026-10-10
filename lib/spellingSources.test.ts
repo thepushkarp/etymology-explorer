@@ -35,12 +35,14 @@ describe('source spelling boundaries', () => {
 
   test('accepts canonically equivalent headwords', async () => {
     reply({
-      query: {
-        pages: {
-          '1': {
-            title: 'cafe\u0301',
-            extract: '== English ==\n=== Etymology ===\nBorrowed from French café.',
-          },
+      parse: {
+        title: 'cafe\u0301',
+        text: '<h2 id="English">English</h2><h3 id="Etymology">Etymology</h3><p>Borrowed from French café.</p>',
+        tocdata: {
+          sections: [
+            { index: '1', line: 'English', anchor: 'English', hLevel: 2, number: '1' },
+            { index: '2', line: 'Etymology', anchor: 'Etymology', hLevel: 3, number: '1.1' },
+          ],
         },
       },
     })

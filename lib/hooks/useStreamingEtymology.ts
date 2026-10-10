@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useReducer, useRef } from 'react'
+import { canonicalizeWord, isValidWord } from '@/lib/validation'
 import { StreamEvent } from '@/lib/types'
 import { initialStreamState, streamReducer } from '@/lib/streamReducer'
 import type { LanguageCode } from '@/lib/languages'
@@ -60,6 +61,9 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
 
   useEffect(() => {
     return () => {
+      // Prevent pending backoff timers and fallback responses from reviving a
+      // request after this hook has unmounted.
+      activeRequestRef.current += 1
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
         eventSourceRef.current = null
@@ -69,8 +73,8 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
 
   const search = useCallback(
     (word: string) => {
-      const trimmed = word.trim().toLowerCase()
-      if (!trimmed) return
+      const trimmed = canonicalizeWord(word)
+      if (!isValidWord(trimmed)) return
 
       const requestId = activeRequestRef.current + 1
       activeRequestRef.current = requestId
