@@ -1,5 +1,5 @@
 import { canonicalizeWord } from './orthography'
-import { LANGUAGES, type BetaLanguageCode } from './languages'
+import { LANGUAGES, type LanguageCode } from './languages'
 import type { ResearchEntryContext, SourceData } from './types'
 
 interface WikidataText {
@@ -33,7 +33,7 @@ function historyIdentity(parts: string[]): { id: string; evidenceScopeId: string
 
 function selectedValue(
   values: Record<string, WikidataText> | undefined,
-  language: BetaLanguageCode
+  language: LanguageCode
 ): string | null {
   const match = Object.values(values ?? {}).find(
     (value) => value.language?.toLocaleLowerCase().split('-')[0] === language && value.value
@@ -44,7 +44,7 @@ function selectedValue(
 function wikidataIdentities(
   source: SourceData | null,
   word: string,
-  language: BetaLanguageCode
+  language: LanguageCode
 ): { queryIsLemma: boolean; formTargets: string[] } {
   if (!source) return { queryIsLemma: false, formTargets: [] }
   try {
@@ -110,8 +110,8 @@ function numberedPreambleBlocks(preamble: string): Array<{ heading: string; text
  */
 export function deriveEntryContexts(
   word: string,
-  language: BetaLanguageCode,
-  sourceName: 'wiktionaryEnglish' | 'wiktionaryNative',
+  language: LanguageCode,
+  sourceName: 'wiktionaryEnglish' | 'wiktionaryNative' | 'wiktionary' | 'etymonline',
   source: SourceData | null,
   wikidata: SourceData | null
 ): ResearchEntryContext[] {
@@ -128,7 +128,7 @@ export function deriveEntryContexts(
       // headings mention it (definition, pronunciation, derived terms, etc.).
       const section =
         matches.find((candidate) =>
-          sourceName === 'wiktionaryEnglish'
+          sourceName !== 'wiktionaryNative'
             ? /\b(?:plural|singular|form|inflection) of\b/i.test(candidate.text)
             : LANGUAGES[language].formHeading.test(candidate.heading)
         ) ?? matches[0]
@@ -167,7 +167,7 @@ export function deriveEntryContexts(
           sectionHeadings: [block.heading],
           evidenceScopeId: entryIdentity.evidenceScopeId,
           sourceUrl: source.url,
-          entryKind: identity.queryIsLemma ? 'lemma' : 'unresolved',
+          entryKind: identity.queryIsLemma || language === 'en' ? 'lemma' : 'unresolved',
         })
       }
     } else if (lemmaSections.length >= 2) {
@@ -188,7 +188,7 @@ export function deriveEntryContexts(
           sectionHeadings: section.path,
           evidenceScopeId: entryIdentity.evidenceScopeId,
           sourceUrl: source.url,
-          entryKind: identity.queryIsLemma ? 'lemma' : 'unresolved',
+          entryKind: identity.queryIsLemma || language === 'en' ? 'lemma' : 'unresolved',
         })
       }
     } else {
@@ -206,7 +206,7 @@ export function deriveEntryContexts(
             .map((section) => section.heading),
           evidenceScopeId: entryIdentity.evidenceScopeId,
           sourceUrl: source.url,
-          entryKind: identity.queryIsLemma ? 'lemma' : 'unresolved',
+          entryKind: identity.queryIsLemma || language === 'en' ? 'lemma' : 'unresolved',
         })
       }
     }
@@ -246,7 +246,7 @@ export function deriveEntryContexts(
       sectionHeadings: [],
       evidenceScopeId: fallbackIdentity.evidenceScopeId,
       sourceUrl: source.url,
-      entryKind: identity.queryIsLemma ? 'lemma' : 'unresolved',
+      entryKind: identity.queryIsLemma || language === 'en' ? 'lemma' : 'unresolved',
     },
   ]
 }

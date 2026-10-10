@@ -131,7 +131,7 @@ export function buildLexicalResearchGraph(
         graph.evidence[evidenceId] = {
           id: evidenceId,
           provider: chain.provider ?? chain.source,
-          sourceFamily: 'wiktionary',
+          sourceFamily: chain.source,
           sourceUrl: context.sourceUrl,
           evidenceScopeId: context.evidenceScopeId,
           subjectKind: 'edge',

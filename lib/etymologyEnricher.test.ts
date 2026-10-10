@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { enrichAncestryGraph, pruneUngroundedStages } from '@/lib/etymologyEnricher'
-import type { AncestryGraph, AncestryStage } from '@/lib/types'
+import type { AncestryGraph, AncestryStage, ResultText } from '@/lib/types'
 import type { ParsedEtymChain } from '@/lib/etymologyParser'
 
 const CHAINS: ParsedEtymChain[] = [
@@ -57,4 +57,56 @@ describe('enricher robustness against malformed LLM output', () => {
       pruneUngroundedStages(graph)
     }).not.toThrow()
   })
+})
+
+for (const note of ['name', { en: 'name', local: 'nome' }]) {
+  test(`preserves orphaned post-merge lineage with ${typeof note === 'string' ? 'English' : 'bilingual'} prose`, () => {
+    const graph: AncestryGraph<ResultText> = {
+      branches: [
+        { root: 'rik-', stages: [{ stage: 'Proto-Germanic', form: '*rik-', note }] },
+        { root: '-hardu', stages: [{ stage: 'Proto-Germanic', form: '*hardu', note }] },
+      ],
+      mergePoint: { form: '*Rikuhardu', note },
+      postMerge: [
+        { stage: 'Old High German', form: 'Rihhart', note },
+        { stage: 'English', form: 'Richard', note },
+      ],
+    }
+    const chains: ParsedEtymChain[] = [
+      {
+        source: 'wiktionary',
+        word: 'dick',
+        links: [
+          {
+            language: 'Old High German',
+            form: 'Rihhart',
+            isReconstructed: false,
+            rawSnippet: 'from Old High German Rihhart',
+          },
+        ],
+      },
+    ]
+    enrichAncestryGraph(graph, chains)
+    expect(pruneUngroundedStages(graph)).toBe(2)
+    expect(graph.branches).toHaveLength(1)
+    expect(graph.branches[0].root).toBe('Rihhart')
+    expect(graph.branches[0].stages.map((stage) => stage.form)).toEqual(['Rihhart', 'Richard'])
+    expect(graph.branches[0].stages[0].note).toEqual(note)
+    expect(graph.branches[0].stages[0].confidence).toBe('medium')
+    expect(graph.mergePoint).toBeUndefined()
+    expect(graph.postMerge).toBeUndefined()
+  })
+}
+
+test('retains a compound merge when supported component branches survive pruning', () => {
+  const graph: AncestryGraph = {
+    branches: [{ root: 'bread', stages: [{ stage: 'Old English', form: 'bread', note: 'food' }] }],
+    mergePoint: { form: 'breadboard', note: 'compound' },
+    postMerge: [{ stage: 'English', form: 'breadboard', note: 'board' }],
+  }
+  enrichAncestryGraph(graph, CHAINS)
+  expect(pruneUngroundedStages(graph)).toBe(0)
+  expect(graph.branches[0].root).toBe('bread')
+  expect(graph.mergePoint?.form).toBe('breadboard')
+  expect(graph.postMerge?.[0].form).toBe('breadboard')
 })

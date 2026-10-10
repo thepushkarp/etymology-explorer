@@ -21,7 +21,7 @@ import {
 } from './types'
 import {
   parseWiktionaryText,
-  parseSourceTexts,
+  parseEtymonlineText,
   formatParsedChainsForPrompt,
   type ParsedEtymChain,
 } from './etymologyParser'
@@ -143,7 +143,7 @@ async function conductBetaResearch(
     ]
   }
   const parsedChains = entryContexts.flatMap((entry) => {
-    if (entry.source === 'wikipedia') return []
+    if (entry.source !== 'wiktionaryEnglish' && entry.source !== 'wiktionaryNative') return []
     const chain = parseWiktionaryText(entry.text, word, {
       historyId: entry.id,
       evidenceScopeId: entry.evidenceScopeId,
@@ -191,6 +191,49 @@ async function conductBetaResearch(
   }
   await expandLexemes(context, budget, signal)
   return completeResearch(context, budget)
+}
+
+/** English uses the same source-defined entry identities as selected-language research. */
+export function scopeEnglishHistories(context: ResearchContext): void {
+  const word = context.mainWord.word
+  const primary = context.mainWord.wiktionary
+    ? (['wiktionary', context.mainWord.wiktionary] as const)
+    : (['etymonline', context.mainWord.etymonline] as const)
+  let entries = deriveEntryContexts(word, 'en', primary[0], primary[1], null)
+  if (!entries.length) {
+    const source = context.mainWord.wikipedia
+    entries = [
+      {
+        id: `history:en:${encodeURIComponent(word)}:unresolved`,
+        evidenceScopeId: `scope:en:${encodeURIComponent(word)}:unresolved`,
+        source: 'wikipedia',
+        heading: word,
+        text: source?.text ?? '',
+        sectionHeadings: [],
+        sourceUrl: source?.url ?? '',
+        entryKind: 'unresolved',
+      },
+    ]
+  }
+  const chains = entries.flatMap((entry) => {
+    if (entry.source === 'wikipedia') return []
+    const parsed =
+      entry.source === 'etymonline'
+        ? parseEtymonlineText(entry.text, word)
+        : parseWiktionaryText(entry.text, word)
+    return parsed.links.length
+      ? [
+          {
+            ...parsed,
+            historyId: entry.id,
+            evidenceScopeId: entry.evidenceScopeId,
+          },
+        ]
+      : []
+  })
+  context.entryContexts = entries
+  context.parsedChains = chains
+  context.lexicalGraph = buildLexicalResearchGraph(word, 'en', entries, chains)
 }
 
 /** Components describe their own lexemes, never attest the phrase's history. */
@@ -858,12 +901,8 @@ export async function conductAgenticResearch(
 
   // Phase 1.5: Pre-parse etymology chains from source text (CPU-only, no API calls)
   console.log('[Research] Phase 1.5: Pre-parsing etymology chains')
-  const parsedChains = parseSourceTexts(
-    normalizedWord,
-    etymonlineData?.text ?? null,
-    wiktionaryData?.text ?? null
-  )
-  context.parsedChains = parsedChains
+  scopeEnglishHistories(context)
+  const parsedChains = context.parsedChains ?? []
   const dateAttested = parsedChains.find((c) => c.dateAttested)?.dateAttested
   if (dateAttested && context.rawSources) {
     context.rawSources.dateAttested = dateAttested
@@ -880,26 +919,34 @@ export async function conductAgenticResearch(
   if (!etymonlineData && !wiktionaryData) {
     console.log('[Research] No source data found for main word')
     await joinRemainingSources()
+    scopeEnglishHistories(context)
     await expandLexemes(context, budget, signal)
     return completeResearch(context, budget)
   }
 
   // Phase 2: Identify roots — CPU first, LLM fallback
   const cpuRoots = [
-    ...phraseComponents(normalizedWord, language),
-    ...extractRootsCpu(
-      normalizedWord,
-      etymonlineData?.text ?? null,
-      wiktionaryData?.text ?? null,
-      parsedChains
-    ),
+    ...new Set([
+      ...phraseComponents(normalizedWord, language),
+      // Secondary edition formulas are research candidates, never corroborating
+      // chains or an assertion that independent source histories form a compound.
+      ...extractRootsCpu(normalizedWord, etymonlineData?.text ?? null, null, []),
+      ...(context.entryContexts ?? []).flatMap((entry) =>
+        extractRootsCpu(
+          normalizedWord,
+          entry.text,
+          null,
+          parsedChains.filter((chain) => chain.historyId === entry.id)
+        )
+      ),
+    ]),
   ].slice(0, CONFIG.maxRootsToExplore)
   let identifiedRoots = cpuRoots
-  if (cpuRoots.length === 0) {
+  if (cpuRoots.length === 0 && context.entryContexts?.length === 1) {
     const { roots, usage } = await extractRootsQuick(
       normalizedWord,
-      etymonlineData?.text ?? null,
-      wiktionaryData?.text ?? null,
+      context.entryContexts[0].text,
+      null,
       signal
     )
     identifiedRoots = roots
@@ -965,7 +1012,15 @@ export async function conductAgenticResearch(
 
     for (const [index, result] of rootResults.entries()) {
       if (result.status === 'fulfilled') {
-        context.rootResearch.push(result.value)
+        const owners = (context.entryContexts ?? []).filter((entry) =>
+          extractRootsCpu(normalizedWord, entry.text, null, []).includes(result.value.root)
+        )
+        context.rootResearch.push({
+          ...result.value,
+          relationship: 'root',
+          parentHistoryId: owners.length === 1 ? owners[0].id : undefined,
+          evidenceScopeId: `scope:en:root:${encodeURIComponent(result.value.root)}`,
+        })
 
         emitProgress(onProgress, {
           type: 'root_research',
@@ -1061,7 +1116,7 @@ export function buildResearchPrompt(context: ResearchContext): string {
   if (context.entryContexts?.length) {
     sections.push('\n=== Immutable Lexical Histories ===')
     sections.push(
-      'Keep every history ID independent. Do not merge, split, rename, or move evidence between histories.'
+      'Keep every history ID independent. Do not merge, split, rename, or move evidence between histories. Unscoped complete source text stays independent context; matching spelling alone cannot align it to a history.'
     )
     for (const entry of context.entryContexts) {
       sections.push(
@@ -1112,7 +1167,9 @@ export function buildResearchPrompt(context: ResearchContext): string {
 
   // Identified roots
   if (context.identifiedRoots.length > 0) {
-    sections.push(`\n=== Identified Root Components ===\n${context.identifiedRoots.join(', ')}`)
+    sections.push(
+      `\n=== Root Research Candidates (independent histories; not a combined derivation formula) ===\n${context.identifiedRoots.join(', ')}`
+    )
   }
   if (context.identifiedRootLexemes?.length) {
     sections.push(

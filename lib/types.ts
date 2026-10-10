@@ -291,6 +291,8 @@ export interface LexicalHistory<Text extends ResultText> {
 export type EnglishEtymologyResult = Omit<EtymologyResultBase<'en', string>, 'language'> & {
   /** Legacy cache entries predate language identity; absence always means English. */
   language?: 'en'
+  primaryHistoryId?: string
+  histories?: LexicalHistory<string>[]
 }
 export type BetaEtymologyResult = EtymologyResultBase<BetaLanguageCode, BilingualText> & {
   primaryHistoryId: string
@@ -333,7 +335,7 @@ export interface SourceData {
 
 export interface ResearchEntryContext {
   id: string
-  source: 'wiktionaryEnglish' | 'wiktionaryNative' | 'wikipedia'
+  source: 'wiktionaryEnglish' | 'wiktionaryNative' | 'wiktionary' | 'etymonline' | 'wikipedia'
   heading: string
   text: string
   sectionHeadings: string[]

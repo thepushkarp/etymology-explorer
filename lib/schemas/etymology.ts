@@ -116,50 +116,69 @@ const WordSuggestionsSchema = z
 
 const EnglishResultSchema = createResultSchema(z.string())
 
-export const BetaEtymologyResultSchema = createResultSchema(BilingualTextSchema, true)
-  .extend({
-    language: z.enum(['it', 'es', 'fr', 'pt']),
+function createHistoryFields<Text extends z.ZodTypeAny>(text: Text) {
+  return {
     primaryHistoryId: z.string().min(1),
     histories: z
       .array(
         z
           .object({
             id: z.string().min(1),
-            label: BilingualTextSchema,
+            label: text,
             entryKind: z.enum(['lemma', 'form', 'unresolved']),
             queryNodeId: z.string().min(1),
             lemmaNodeId: z.string().min(1),
             formOf: z.object({ word: z.string().min(1), language: z.string().min(1) }).optional(),
             evidenceScopeIds: z.array(z.string().min(1)).min(1),
-            ...createEntryFields(BilingualTextSchema),
+            ...createEntryFields(text),
           })
           .strict()
       )
       .min(1),
+  }
+}
+
+function validateHistories(
+  result: { primaryHistoryId?: string; histories?: Array<{ id: string }> },
+  context: z.RefinementCtx
+) {
+  if (!result.histories && !result.primaryHistoryId) return
+  const ids = result.histories?.map((history) => history.id) ?? []
+  if (new Set(ids).size !== ids.length) {
+    context.addIssue({ code: 'custom', path: ['histories'], message: 'History IDs must be unique' })
+  }
+  if (!result.primaryHistoryId || !ids.includes(result.primaryHistoryId)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['primaryHistoryId'],
+      message: 'Primary history must reference an existing history',
+    })
+  }
+}
+
+export const EnglishHistoryEtymologyResultSchema = EnglishResultSchema.extend(
+  createHistoryFields(z.string())
+).superRefine(validateHistories)
+
+export const BetaEtymologyResultSchema = createResultSchema(BilingualTextSchema, true)
+  .extend({
+    language: z.enum(['it', 'es', 'fr', 'pt']),
+    ...createHistoryFields(BilingualTextSchema),
   })
-  .superRefine((result, context) => {
-    const ids = result.histories.map((history) => history.id)
-    if (new Set(ids).size !== ids.length) {
-      context.addIssue({
-        code: 'custom',
-        path: ['histories'],
-        message: 'History IDs must be unique',
-      })
-    }
-    if (!ids.includes(result.primaryHistoryId)) {
-      context.addIssue({
-        code: 'custom',
-        path: ['primaryHistoryId'],
-        message: 'Primary history must reference an existing history',
-      })
-    }
-  })
+  .superRefine(validateHistories)
 
 /**
  * Main EtymologyResult schema for cache validation.
  * Uses .passthrough() to allow additional fields for forward compatibility.
  */
-export const EtymologyResultSchema = EnglishResultSchema
+export const EtymologyResultSchema = EnglishResultSchema.superRefine((result, context) => {
+  if (result.histories !== undefined || result.primaryHistoryId !== undefined) {
+    const parsed = EnglishHistoryEtymologyResultSchema.safeParse(result)
+    if (!parsed.success)
+      for (const issue of parsed.error.issues)
+        context.addIssue({ code: 'custom', path: issue.path, message: issue.message })
+  }
+})
 export const CachedEtymologyResultSchema = z.union([
   BetaEtymologyResultSchema,
   EtymologyResultSchema,

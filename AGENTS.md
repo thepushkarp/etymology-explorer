@@ -15,7 +15,7 @@ Users search for a word or phrase in English, Italian, Spanish, French, or Portu
 5. Sends the enriched bundle to OpenRouter's Responses API using `openai/gpt-6-luna` with low reasoning effort and strict structured output.
 6. Matches ancestry stages to scoped evidence, assigns confidence, and prunes unsupported lineage claims. Component evidence cannot establish the whole phrase's origin.
 
-For non-English queries, the primary Wiktionary edition defines source-local history boundaries; the complete secondary edition remains independent context without invented history alignment. A Wikipedia-only result has an explicitly unresolved history. Components alone cannot admit a phrase.
+The primary Wiktionary edition defines source-local history boundaries, with Etymonline as the English fallback; complete secondary sources remain independent context without invented history alignment. Each history has its own selectable story and lineage, with compound branches kept within that history. A Wikipedia-only result has an explicitly unresolved history. Components alone cannot admit a phrase.
 
 Every actual source HTTP attempt shares a 16-request ceiling, including primary fetches, fallback attempts, Wikidata detail requests, and enrichment. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
 
@@ -99,7 +99,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/singleflight.ts`** - Distributed request deduplication via Redis owner-token locks (SET NX with random token, 90s TTL, EXPIRE heartbeat every 30s while the pipeline runs). Results are cached BEFORE lock release. Streaming waiters poll the cache every 2s for up to 150s with SSE keepalive events and negative-cache checks; non-streaming waiters poll ~10s then return 429 + Retry-After. A holder that errors writes a short-TTL failure marker (60s) before releasing, so waiters surface the error; promotion to holder only happens on a true crash — lock vanished with neither a result nor a marker. If 10 users search "etymology" simultaneously, only 1 LLM call is made.
 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
-  - Etymology results: 30 day TTL, versioned keys (`etymology:v2.4:` for English, `etymology:beta:v7:` for other supported languages)
+  - Etymology results: 30 day TTL, versioned keys (`etymology:v2.5:` for English, `etymology:beta:v7:` for other supported languages)
   - TTS audio: 1 year TTL
   - Negative cache: 30 minute TTL for admitted types (`no_sources`, `invalid_word`)
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)

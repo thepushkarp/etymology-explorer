@@ -71,7 +71,7 @@ describe('cacheEtymology word-page revalidation', () => {
   test('uses NFC keys and refuses an otherwise valid result for another spelling', async () => {
     currentRedis = fakeRedis({ get: mock(async () => ({ ...RESULT, word: 'café' })) })
     expect((await getCachedEtymology('cafe\u0301'))?.word).toBe('café')
-    expect(currentRedis.get).toHaveBeenCalledWith('etymology:v2.4:café')
+    expect(currentRedis.get).toHaveBeenCalledWith('etymology:v2.5:café')
     expect(await getCachedEtymology('cafe')).toBeNull()
   })
 
@@ -170,7 +170,7 @@ describe('cacheEtymology word-page revalidation', () => {
 
   test('decodes English and beta result keys from the shared sitemap scan', () => {
     expect(ETYMOLOGY_SCAN_PATTERN).toBe('etymology:*')
-    expect(lexemeFromEtymologyCacheKey('etymology:v2.4:sale')).toEqual({
+    expect(lexemeFromEtymologyCacheKey('etymology:v2.5:sale')).toEqual({
       language: 'en',
       word: 'sale',
     })

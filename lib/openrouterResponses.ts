@@ -1,7 +1,11 @@
 import { CONFIG } from '@/lib/config'
 import { getEnv } from '@/lib/env'
 import { fetchWithTimeout } from '@/lib/fetchUtils'
-import { BETA_ETYMOLOGY_LLM_SCHEMA, ETYMOLOGY_LLM_SCHEMA } from '@/lib/schemas/llm-schema'
+import {
+  BETA_ETYMOLOGY_LLM_SCHEMA,
+  ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA,
+  ETYMOLOGY_LLM_SCHEMA,
+} from '@/lib/schemas/llm-schema'
 import type { LlmUsage } from '@/lib/types'
 import type { LanguageCode } from '@/lib/languages'
 
@@ -156,7 +160,8 @@ function buildRequest(
 export function buildSynthesisRequest(
   input: string,
   model?: string,
-  language: LanguageCode = 'en'
+  language: LanguageCode = 'en',
+  sourceHistories = false
 ): OpenRouterRequest {
   const resolvedModel = model ?? CONFIG.model
   const request = buildRequest(
@@ -166,7 +171,12 @@ export function buildSynthesisRequest(
       type: 'json_schema',
       name: 'etymology_result',
       strict: true,
-      schema: language === 'en' ? ETYMOLOGY_LLM_SCHEMA : BETA_ETYMOLOGY_LLM_SCHEMA,
+      schema:
+        language === 'en'
+          ? sourceHistories
+            ? ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA
+            : ETYMOLOGY_LLM_SCHEMA
+          : BETA_ETYMOLOGY_LLM_SCHEMA,
     },
     synthesisReasoningForModel(resolvedModel),
     resolvedModel,

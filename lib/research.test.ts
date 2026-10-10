@@ -657,7 +657,7 @@ test('secondary edition homographs cannot corroborate the primary history', asyn
     const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
     if (kvUrl && url.startsWith(kvUrl)) return upstashMissResponse(init)
     if (url.includes('wiktionary.org/w/api.php')) {
-      const primary = url.includes('fr.wiktionary.org')
+      const primary = new URL(url).hostname === 'fr.wiktionary.org'
       const languageHeading = primary ? 'Français' : 'French'
       const heading = primary ? 'Étymologie' : 'Etymology 1'
       const sections = [
@@ -752,7 +752,7 @@ describe('source rate limits are temporary failures', () => {
       const url = String(input)
       const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
       if (kvUrl && url.startsWith(kvUrl)) return upstashMissResponse(init)
-      if (credibleWikipedia && url.includes('wikipedia.org'))
+      if (credibleWikipedia && new URL(url).hostname === 'en.wikipedia.org')
         return Response.json({
           query: { pages: [{ ns: 0, title: 'Bank', extract: 'A complete article.' }] },
         })

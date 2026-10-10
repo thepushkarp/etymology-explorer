@@ -17,8 +17,8 @@ export interface DisplayHistoryChoice {
   partsOfSpeech: string[]
 }
 
-function pick(text: BilingualText, locale: ResultLocale): string {
-  return text[locale]
+function pick(text: string | BilingualText, locale: ResultLocale): string {
+  return typeof text === 'string' ? text : text[locale]
 }
 
 export function localizeResult(
@@ -29,7 +29,12 @@ export function localizeResult(
   const language = result.language ?? 'en'
   if (language === 'en') {
     const english = result as EnglishEtymologyResult
-    return { ...english, language: 'en' }
+    const histories = english.histories ?? []
+    const history =
+      histories.find((candidate) => candidate.id === historyId) ??
+      histories.find((candidate) => candidate.id === english.primaryHistoryId) ??
+      histories[0]
+    return { ...english, ...history, language: 'en' }
   }
 
   const beta = result as BetaEtymologyResult
@@ -96,12 +101,7 @@ export function localizeHistoryChoices(
   result: EtymologyResult,
   locale: ResultLocale = 'local'
 ): DisplayHistoryChoice[] {
-  if (
-    (result.language ?? 'en') === 'en' ||
-    !('histories' in result) ||
-    !Array.isArray(result.histories)
-  )
-    return []
+  if (!('histories' in result) || !Array.isArray(result.histories)) return []
   return result.histories.map((history) => ({
     id: history.id,
     label: pick(history.label, locale),

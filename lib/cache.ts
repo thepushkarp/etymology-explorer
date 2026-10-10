@@ -22,7 +22,7 @@ function jitterTTL(ttl: number): number {
 }
 
 // Bump version when EtymologyResult schema or sourcing behavior changes
-export const CACHE_VERSION = '2.4'
+export const CACHE_VERSION = '2.5'
 export const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
 export const BETA_CACHE_VERSION = '7'
 export const BETA_ETYMOLOGY_PREFIX = `etymology:beta:v${BETA_CACHE_VERSION}:`

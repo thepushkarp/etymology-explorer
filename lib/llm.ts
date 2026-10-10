@@ -1,13 +1,13 @@
-import { sameSpelling } from './orthography'
+import { canonicalizeWord, sameSpelling } from './orthography'
 import {
   AncestryGraph,
-  BetaEtymologyResult,
   EtymologyResult,
   LlmUsage,
   SourceReference,
   ResearchContext,
   ModernUsage,
   ResultText,
+  LexicalHistory,
 } from './types'
 import {
   SYSTEM_PROMPT,
@@ -17,7 +17,11 @@ import {
 } from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph, pruneUngroundedStages } from './etymologyEnricher'
-import { BetaEtymologyResultSchema, EtymologyResultSchema } from './schemas/etymology'
+import {
+  BetaEtymologyResultSchema,
+  EnglishHistoryEtymologyResultSchema,
+  EtymologyResultSchema,
+} from './schemas/etymology'
 import { stripNullsDeep } from './schemas/llm-schema'
 import { createSectionScanner } from './sectionScanner'
 import { CONFIG } from './config'
@@ -321,6 +325,7 @@ interface SynthesisOptions {
   model?: string
   signal?: AbortSignal
   language?: LanguageCode
+  sourceHistories?: boolean
   /**
    * Streams the LLM response and fires once per closed top-level field of
    * the response JSON, in schema (render) order — ~10 events per response.
@@ -339,7 +344,12 @@ async function callLlm(
   usage: LlmUsage
 }> {
   const language = options?.language ?? 'en'
-  const request = buildSynthesisRequest(userPrompt, options?.model, language)
+  const request = buildSynthesisRequest(
+    userPrompt,
+    options?.model,
+    language,
+    options?.sourceHistories
+  )
   request.instructions =
     language === 'en'
       ? SYSTEM_PROMPT
@@ -595,15 +605,85 @@ function sameStrings(left: string[], right: string[]): boolean {
   return [...left].sort().every((value, index) => value === sortedRight[index])
 }
 
-function finalizeBetaHistories(
-  result: BetaEtymologyResult,
+/** Reject cross-history topology before any evidence-bearing English section is published. */
+function validateEnglishHistoryGraph(
+  history: LexicalHistory<string>,
+  context: ResearchContext
+): void {
+  const entry = context.entryContexts?.find((candidate) => candidate.id === history.id)
+  if (!entry) throw new Error('Schema validation failed: source history context is missing')
+  const graph = history.ancestryGraph
+  // Only this history and its explicit spelling/redirect targets can establish
+  // lexical evidence; unrelated component lookups remain independent context.
+  const identityTexts = [
+    entry.text,
+    ...context.rootResearch
+      .filter(
+        (root) =>
+          root.parentHistoryId === history.id &&
+          (root.relationship === 'spelling-variant' || root.relationship === 'redirect')
+      )
+      .flatMap((root) => [root.etymonlineData?.text, root.wiktionaryData?.text])
+      .filter((text): text is string => Boolean(text)),
+  ]
+  const scopedLinks = (context.parsedChains ?? [])
+    .filter((chain) => chain.historyId === history.id)
+    .flatMap((chain) => chain.links)
+  const foreignLinks = (context.parsedChains ?? [])
+    .filter((chain) => chain.historyId && chain.historyId !== history.id)
+    .flatMap((chain) => chain.links)
+  const forms = [
+    ...graph.branches.flatMap((branch) => branch.stages.map((stage) => stage.form)),
+    ...(graph.postMerge ?? []).map((stage) => stage.form),
+    ...(graph.mergePoint ? [graph.mergePoint.form] : []),
+  ]
+  for (const form of forms) {
+    if (
+      foreignLinks.some((link) => sameSpelling(link.form, form)) &&
+      !scopedLinks.some((link) => sameSpelling(link.form, form)) &&
+      !identityTexts.some((text) => canonicalizeWord(text).includes(canonicalizeWord(form)))
+    ) {
+      throw new Error('Schema validation failed: ancestry stage belongs to another history')
+    }
+  }
+  const paths = new Set<string>()
+  for (const branch of graph.branches) {
+    const path = JSON.stringify(
+      branch.stages.map((stage) => [canonicalizeWord(stage.stage), canonicalizeWord(stage.form)])
+    )
+    if (paths.has(path)) throw new Error('Schema validation failed: duplicated ancestry branch')
+    paths.add(path)
+    if (
+      graph.mergePoint &&
+      graph.branches.length > 1 &&
+      (sameSpelling(branch.root, context.mainWord.word) ||
+        sameSpelling(branch.root, graph.mergePoint.form) ||
+        branch.stages.some(
+          (stage) =>
+            sameSpelling(stage.form, context.mainWord.word) ||
+            sameSpelling(stage.form, graph.mergePoint!.form)
+        ))
+    ) {
+      throw new Error('Schema validation failed: whole compound duplicated in component ancestry')
+    }
+  }
+}
+
+function finalizeHistories(
+  result: Pick<
+    LexicalHistory<ResultText>,
+    'pronunciation' | 'definition' | 'roots' | 'ancestryGraph' | 'lore' | 'partsOfSpeech'
+  > & { primaryHistoryId: string; histories: LexicalHistory<ResultText>[] },
   researchContext: ResearchContext
 ): void {
   const candidates = researchContext.lexicalGraph?.histories ?? []
   if (candidates.length === 0) {
-    throw new Error('Schema validation failed: selected-language research has no entry histories')
+    throw new Error('Schema validation failed: research has no entry histories')
   }
 
+  if (!Array.isArray(result.histories)) {
+    throw new Error('Schema validation failed: source-defined histories are missing')
+  }
   const returnedIds = result.histories.map((history) => history.id)
   const expectedIds = candidates.map((history) => history.id)
   if (!sameStrings(returnedIds, expectedIds)) {
@@ -630,6 +710,9 @@ function finalizeBetaHistories(
       throw new Error(`Schema validation failed: history identity changed for ${history.id}`)
     }
 
+    if ((researchContext.language ?? 'en') === 'en') {
+      validateEnglishHistoryGraph(history as LexicalHistory<string>, researchContext)
+    }
     const scopedChains = (researchContext.parsedChains ?? []).filter(
       (chain) =>
         chain.historyId === history.id &&
@@ -668,8 +751,17 @@ export function finalizeResult(
   }
   sanitizeModernUsage(result, researchContext)
 
-  if (researchContext.language && researchContext.language !== 'en') {
-    finalizeBetaHistories(result as BetaEtymologyResult, researchContext)
+  if (
+    researchContext.lexicalGraph?.histories.length ||
+    (researchContext.language && researchContext.language !== 'en')
+  ) {
+    finalizeHistories(
+      result as EtymologyResult & {
+        primaryHistoryId: string
+        histories: LexicalHistory<ResultText>[]
+      },
+      researchContext
+    )
   } else {
     const graph = result.ancestryGraph as AncestryGraph<ResultText>
     enrichAncestryGraph(graph, researchContext.parsedChains ?? [])
@@ -686,7 +778,9 @@ export function finalizeResult(
   const validated =
     researchContext.language && researchContext.language !== 'en'
       ? BetaEtymologyResultSchema.safeParse(result)
-      : EtymologyResultSchema.safeParse(result)
+      : researchContext.lexicalGraph?.histories.length
+        ? EnglishHistoryEtymologyResultSchema.safeParse(result)
+        : EtymologyResultSchema.safeParse(result)
   if (!validated.success) {
     const issue = validated.error.issues[0]
     console.error(
@@ -722,6 +816,7 @@ export async function synthesizeFromResearch(
         )
 
   const totalUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
+  const sourceHistories = Boolean(researchContext.lexicalGraph?.histories.length)
   const maxValidationAttempts = language === 'en' ? 1 : 2
 
   for (let attempt = 0; attempt < maxValidationAttempts; attempt += 1) {
@@ -729,7 +824,11 @@ export async function synthesizeFromResearch(
       // Evidence-bearing sections wait for source matching. On identity failure,
       // keep reading without publishing so completed provider usage is billed.
       const heldSections =
-        language === 'en' ? ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources'] : ['word']
+        language === 'en'
+          ? sourceHistories
+            ? ['word']
+            : ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources']
+          : ['word']
       const pendingSections = new Map<string, unknown>()
       let wordVerified = false
       let languageVerified = language === 'en'
@@ -764,7 +863,9 @@ export async function synthesizeFromResearch(
           }
         : undefined
       const attemptOptions =
-        attempt === 0 ? { ...options, language, onSection } : { signal: options?.signal, language }
+        attempt === 0
+          ? { ...options, language, sourceHistories, onSection }
+          : { signal: options?.signal, language, sourceHistories }
       const generated = await generateEtymologyResponse(
         userPrompt,
         attemptOptions,
