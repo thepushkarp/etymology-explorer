@@ -108,6 +108,12 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/redis.ts`** - Shared Redis client factory (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 (suggestions, random-word, and pronunciation keep working without Redis)
 
+- **`app/api/pronunciation/route.ts`** - Complete MP3 playback responses precede audio-cache persistence.
+  On a cache miss, the cost check and owner-token lock acquisition run in parallel. `after()`
+  persists the complete clip before releasing the lock, keeping cleanup alive on serverless
+  runtimes. Concurrent listeners poll at `audioWaiterPollIntervalMs` (250 ms); cached clips
+  remain available under budget pressure and retain the one-year HTTP cache lifetime.
+
 - **`lib/counters.ts`** - Best-effort monthly INCR counters (cache_hit / cache_miss / error), exposed via `/api/admin/stats`
 
 - **`lib/errorUtils.ts`** - Secret redaction (provider keys, Bearer tokens, API keys)

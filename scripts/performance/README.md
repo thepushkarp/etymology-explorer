@@ -5,8 +5,9 @@ slowdown, 150 ms network latency, and 200 KB/s download speed. Each load and
 navigation scenario has five samples; scroll and drag scenarios have three.
 JSON output includes individual samples and medians in `bench-results/performance/`.
 
-The fixture server emulates the read-only Redis surface with 100 ms latency,
-cached English and French entry shapes, and a 1,000-word index. The expanded
+The fixture server emulates Redis with 100 ms latency, cached English and French
+entry shapes, and a 1,000-word index. Audio-cache and lock writes stay in local
+memory. The expanded
 word list and French fixture are synthetic UI data, not a linguistic quality
 benchmark. Browser requests for Ngram data use fixed responses; EventSource is
 replaced with a counter. These benchmarks never start provider research.
@@ -113,3 +114,4 @@ existing warning in `.remember/tmp/last-ndc.ts`.
 
 Research, generation, quality constraints, and rejected provider experiments
 are measured separately in [RESEARCH.md](./RESEARCH.md).
+Pronunciation generation and playback are measured in [AUDIO.md](./AUDIO.md).

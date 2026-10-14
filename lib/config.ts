@@ -53,6 +53,7 @@ export const CONFIG = {
     lockTTLSeconds: 90, // auto-expires if holder crashes; holder heartbeats to extend
     heartbeatIntervalMs: 30_000, // holder re-EXPIREs the lock while the pipeline runs
     waiterPollIntervalMs: 2_000, // waiters re-check the cache at this cadence
+    audioWaiterPollIntervalMs: 250, // clips often finish before the etymology poll interval
     streamWaiterMaxWaitMs: 150_000, // streaming waiters keep the SSE open this long
     unaryWaiterMaxWaitMs: 10_000, // non-streaming waiters give up (429) after this
     failureMarkerTTLSeconds: 60, // holder-failure marker; blocks waiter promotion, not retries
