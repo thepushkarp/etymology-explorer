@@ -12,7 +12,17 @@ afterEach(() => {
   globalThis.fetch = originalFetch
 })
 function respond(data: unknown) {
-  globalThis.fetch = (async () => new Response(JSON.stringify(data))) as unknown as typeof fetch
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input)
+    const redisUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+    if (redisUrl && url.startsWith(redisUrl)) {
+      const commands = JSON.parse(String(init?.body))
+      return Response.json(
+        Array.isArray(commands[0]) ? commands.map(() => ({ result: null })) : { result: null }
+      )
+    }
+    return Response.json(data)
+  }) as typeof fetch
 }
 function section(line: string, index: number, level = 3): WiktionaryTocSection {
   return {

@@ -1,6 +1,8 @@
 # Research and generation measurements
 
-The uncached pipeline is dominated by source HTTP waits and model generation.
+Most sampled uncached lookups spend their time in source HTTP waits and model generation.
+Large multilingual Wiktionary pages also exposed a substantial CPU parsing bottleneck;
+its measured fix and the latest generation experiments are in [GENERATION.md](./GENERATION.md).
 On this Mac, the initial live `quarantine` lookup spent 5.34 s researching and
 10.82 s generating; French `fenêtre` spent 3.40 s researching and 18.36 s
 generating. Etymonline returned 403 and Free Dictionary reached its existing
@@ -104,6 +106,68 @@ and compilation are excluded from the section-to-display timing.
 Raw evidence for this run: `scheduling-before.json`, `scheduling-final.json`,
 `streaming-before.json`, `streaming-after.json`, `quarantine-paired.json`,
 `french-paired.json`, and `routing-paired.json` in the results directory.
+
+## Historical ancestor source cache
+
+Selected-language ancestor lookups share the seven-day raw source cache.
+Historical selections are keyed by the exact encoded Wiktionary language
+heading and canonical word; English selections keep the existing `wiktionary`
+namespace. Complete selected-language text, history groups, explicit variants,
+redirect identity, and revision provenance survive the round trip. Misses and
+errors are not cached. The final result can be uncached while an ancestor page
+is already available from another word's research.
+
+A three-run replay uses the saved live French `fenêtre` HTTP bodies with the
+real source adapters, parsers, and Upstash client. Network boundaries are local:
+Redis takes 100 ms, primary source HTTP 30 ms, and ancestor HTTP 700 ms.
+Neither phase reads or writes a finished etymology result or calls a model.
+
+| Research state                                 |   Before |    After |
+| ---------------------------------------------- | -------: | -------: |
+| Uncached result, raw sources already available |   895 ms |   206 ms |
+| Uncached result, all source caches empty       | 1,209 ms | 1,319 ms |
+
+The warm-source research phase is 77% faster in this controlled replay; this
+is not an end-to-end generation improvement. A fully cold lookup pays one extra
+100 ms Redis round trip. Warm ancestor hits make zero source HTTP attempts
+and do not consume the 16-request HTTP budget. All six before/after contexts
+are deeply equal apart from the actual HTTP count, and all complete synthesis
+prompts have the same SHA-256 hash. The model, prompt, schema, reasoning effort,
+evidence checks, routing, and source coverage retain their existing contracts.
+
+```sh
+bun scripts/performance/ancestor-cache.ts \
+  --recording bench-results/research-performance/before-french-correct \
+  --label ancestors-final
+```
+
+Use a pipeline recording containing successful public source bodies and no
+root-extraction call. Run the same harness in the baseline and candidate
+checkouts, using distinct labels. `ancestors-before.json` and
+`ancestors-final.json` retain every sample and full context locally.
+
+Ancestor-cache validation: 390 Bun tests, typecheck, focused lint, formatting,
+the production build, and replay context/prompt parity checks pass.
+
+## Follow-up measurements
+
+The saved measurements still place synthesis ahead of research on the critical
+path. The English prompt contains 106,646 characters and the French prompt
+95,316 characters before the system prompt and strict schema. Both contain
+substantial overlapping text between the complete Wiktionary source and scoped
+history excerpts. The English scoped excerpt alone repeats 23,099 characters
+from the complete source. Paired benchmarks of exact text references reduced
+English input tokens but delayed both first content and completion. That prompt
+experiment is rejected. Publishing the first complete validated primary history
+did improve time to content with identical terminal results. See
+[GENERATION.md](./GENERATION.md) for the full measurements and quality checks.
+
+Research also retains a primary-source barrier before enrichment. Overlapping
+it with ancestor requests requires preserving primary, variant, component, and
+ancestor HTTP priority under the shared 16-attempt limit. In beta research,
+Wikidata identity affects history boundaries, so parsing an early native page
+as the final history set would change the evidence contract. Neither the
+barrier nor the prompt representation is changed by the cache optimization.
 
 Validation: 389 Bun tests, typecheck, changed-file formatting, production build,
 and both browser checks pass. The production streaming smoke displayed the

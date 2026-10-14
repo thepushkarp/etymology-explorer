@@ -155,4 +155,27 @@ describe('createSectionScanner', () => {
       { section: 'word', data: 'top' },
     ])
   })
+
+  test('emits closed array objects before the full array without confusing nested strings or arrays', () => {
+    const first = { id: 'h1', lore: '"braces } [ ]" café', graph: [{ form: '*bʰeh₂-' }] }
+    const prefix = `{"histories":[null,${JSON.stringify(first)}`
+    const items: unknown[] = []
+    const sections: Section[] = []
+    const scanner = createSectionScanner(
+      (section, data) => sections.push({ section, data }),
+      (section, index, data) => items.push({ section, index, data })
+    )
+    for (const chunk of chunked(prefix, 1)) scanner.push(chunk)
+    expect(items).toEqual([{ section: 'histories', index: 1, data: first }])
+    expect(sections).toEqual([])
+    scanner.push(',{"id":"h2"}],"word":"café"}')
+    expect(items).toEqual([
+      { section: 'histories', index: 1, data: first },
+      { section: 'histories', index: 2, data: { id: 'h2' } },
+    ])
+    expect(sections).toEqual([
+      { section: 'histories', data: [null, first, { id: 'h2' }] },
+      { section: 'word', data: 'café' },
+    ])
+  })
 })

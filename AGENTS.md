@@ -61,7 +61,7 @@ GET /api/etymology?word=X[&stream=true]   (maxDuration 300s)
     ├── Typo check (lib/spellcheck.ts, Levenshtein distance vs GRE wordlist)
     ├── LLM synthesis (lib/llm.ts — one entrypoint for streaming and unary)
     │   ├── OpenRouter Responses json_schema STRICT mode (schema in lib/schemas/llm-schema.ts)
-    │   ├── stream=true: synthesis_section SSE event per closed top-level field (render order)
+    │   ├── stream=true: synthesis_section SSE events; validated primary history projects entry fields before sibling histories finish
     │   └── Post-processing: null-stripping, enrichAncestryGraph() matches stages to evidence,
     │       assigns confidence, attachSources() writes real source attributions
     ├── Cache result in Redis
@@ -104,7 +104,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Negative cache: 30 minute TTL for admitted types (`no_sources`, `invalid_word`)
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for raw dictionary and Wikipedia source data (`src:v6:<source>:<word>` for English, `src:v6:<source>:<language>:<word>` otherwise). Fail-open: no Redis or a Redis error means a live fetch. Preserves complete source text and provenance, and saves repeated fetches across overlapping lookups.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for raw dictionary and Wikipedia source data (`src:v6:<source>:<word>` for English, `src:v6:<source>:<language>:<word>` otherwise). Historical-language selections use `src:v6:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages; English selections retain the `wiktionary` namespace. Fail-open: no Redis or a Redis error means a live fetch. Preserves complete source text and provenance, and saves repeated fetches across overlapping lookups.
 
 - **`lib/redis.ts`** - Shared Redis client factory (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -218,8 +218,11 @@ and the output is guaranteed-shape JSON.
 
 1. Prompt: complete sanitized source data + pre-parsed chains and independent component/variant scopes (research pipeline) + system prompt
    from `lib/prompts.ts` (content/grounding rules only — shape is enforced by the schema)
-2. Transport: passing an `onSection` callback streams the response and fires once per closed
-   top-level field (via `lib/sectionScanner.ts`); omitting it makes a unary call
+2. Transport: passing an `onSection` callback streams the response. The scanner reports closed
+   top-level fields and complete history objects. A primary history can project entry fields
+   after the normal identity, bilingual, and scoped-evidence checks; complete history metadata
+   waits for the full collection to validate. Entry fields publish once. Omitting the callback
+   makes a unary call.
 3. Parse: `parseGeneratedJson` fallback parse, then `stripNullsDeep` converts strict-mode nulls
    back to absent fields before sanitizers and Zod validation
 4. Retry: malformed output retries once on the unary path, never on the streaming path
@@ -317,7 +320,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 - `lib/research.ts` - Language-aware primary fetching and bounded scoped variant/component/ancestor enrichment
 - `lib/llm.ts` - LLM client (OpenRouter Responses API for `openai/gpt-6-luna`; unified streaming/unary synthesis)
-- `lib/sectionScanner.ts` - Incremental scanner emitting each top-level JSON field as it closes (powers synthesis_section SSE events)
+- `lib/sectionScanner.ts` - Incremental scanner reporting closed top-level JSON fields and complete direct object elements of their arrays; the synthesis layer validates histories before projecting SSE entry fields
 - `lib/responseAdapter.ts` - SSE/JSON response adapter for the etymology route's early returns
 - `lib/prompts.ts` - System prompt for LLM synthesis (content/grounding rules; shape enforced by schema)
 

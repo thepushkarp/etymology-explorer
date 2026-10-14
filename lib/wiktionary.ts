@@ -20,6 +20,14 @@ export async function fetchSelectedWiktionaryLanguage(
   signal?: AbortSignal
 ): Promise<WiktionaryResult | null> {
   const normalizedWord = canonicalizeWord(word)
+  // Historical languages are independent lexemes even on the same page.
+  // Preserve the established English namespace for primary and ancestor lookups.
+  const source =
+    languageHeading === 'English'
+      ? 'wiktionary'
+      : (`wiktionaryLanguage:${encodeURIComponent(languageHeading)}` as const)
+  const cached = await getCachedSource(source, normalizedWord)
+  if (cached) return cached
   const url = new URL('https://en.wiktionary.org/w/api.php')
   url.searchParams.set('action', 'parse')
   url.searchParams.set('page', normalizedWord)
@@ -75,7 +83,7 @@ export async function fetchSelectedWiktionaryLanguage(
     if (!sameSpelling(resolvedWord, normalizedWord)) {
       variants.push({ word: resolvedWord, relationship: 'redirect', url: pageUrl })
     }
-    return {
+    const result: WiktionaryResult = {
       text,
       url: pageUrl,
       entryGroups,
@@ -85,6 +93,8 @@ export async function fetchSelectedWiktionaryLanguage(
       revisionId: page.revid,
       ...(languageHeading === 'English' ? { language: 'en' as const } : {}),
     }
+    void cacheSource(source, normalizedWord, result)
+    return result
   } catch (error) {
     console.error('Wiktionary fetch error:', safeError(error))
     return null
@@ -95,10 +105,5 @@ export async function fetchWiktionary(
   word: string,
   signal?: AbortSignal
 ): Promise<WiktionaryResult | null> {
-  const normalizedWord = canonicalizeWord(word)
-  const cached = await getCachedSource('wiktionary', normalizedWord)
-  if (cached) return cached
-  const result = await fetchSelectedWiktionaryLanguage(normalizedWord, 'English', signal)
-  if (result) void cacheSource('wiktionary', normalizedWord, result)
-  return result
+  return fetchSelectedWiktionaryLanguage(word, 'English', signal)
 }

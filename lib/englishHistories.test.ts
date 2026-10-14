@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { scopeEnglishHistories } from './research'
-import { finalizeResult } from './llm'
+import { finalizeResult, synthesizeFromResearch } from './llm'
 import { localizeHistoryChoices, localizeResult } from './resultLocalization'
 import { EtymologyResultSchema } from './schemas/etymology'
 import type { EnglishEtymologyResult, LexicalHistory, ResearchContext, SourceData } from './types'
@@ -99,6 +99,47 @@ describe('English source-defined histories', () => {
       },
     ]
     expect(() => finalizeResult(generated, research, 'streaming')).toThrow('another history')
+  })
+
+  test('an early primary history retains foreign evidence checks before publishing prose', async () => {
+    const research = context('fixture', ['From Latin malus.', 'From Latin bonus.'])
+    const generated = result(research)
+    generated.histories![0].ancestryGraph.branches = [
+      { root: 'bonus', stages: [{ stage: 'Latin', form: 'bonus', note: 'another history' }] },
+    ]
+    const text = JSON.stringify(generated)
+    const savedFetch = globalThis.fetch
+    const savedKey = process.env.OPENROUTER_API_KEY
+    process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
+    globalThis.fetch = (async () =>
+      new Response(
+        `data: ${JSON.stringify({ type: 'response.output_text.delta', delta: text })}\n\n` +
+          `data: ${JSON.stringify({
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              usage: { input_tokens: 10, output_tokens: 20, cost: 0.001 },
+            },
+          })}\n\n`,
+        { headers: { 'Content-Type': 'text/event-stream' } }
+      )) as unknown as typeof fetch
+    const sections: string[] = []
+    try {
+      await expect(
+        synthesizeFromResearch(research, {
+          onSection: (section) => sections.push(section),
+        })
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('another history'),
+        usage: { inputTokens: 10, outputTokens: 20, costUSD: 0.001 },
+      })
+      expect(sections).not.toContain('definition')
+      expect(sections).not.toContain('ancestryGraph')
+    } finally {
+      globalThis.fetch = savedFetch
+      if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
+      else process.env.OPENROUTER_API_KEY = savedKey
+    }
   })
 
   test('a merge cannot use an ancestor from another lexical history', () => {

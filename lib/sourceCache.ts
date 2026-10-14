@@ -1,6 +1,6 @@
 import { canonicalizeWord } from './orthography'
 /**
- * Redis cache for raw etymonline/wiktionary page data.
+ * Redis cache for complete source lookups, including historical-language selections.
  * Repeated cache-misses for the final result (and root/related lookups that
  * overlap across words) should not re-scrape the same source pages.
  * Fails open: no Redis, or any Redis error, means a normal live fetch.
@@ -26,6 +26,7 @@ export type CacheableSource =
   | 'wikipedia'
   | 'etymonline'
   | 'wiktionary'
+  | `wiktionaryLanguage:${string}`
   | 'wiktionaryEnglish'
   | 'wiktionaryNative'
   | 'wikidataLexeme'
