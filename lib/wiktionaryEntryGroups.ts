@@ -223,9 +223,7 @@ export function extractWiktionaryVariants(
     string,
     { word: string; relationship: 'spelling-variant'; url: string }
   >()
-  // Heading positions are invariant across definition blocks. Resolving each
-  // anchor against the complete multilingual page inside the block loop makes
-  // large entries spend seconds repeatedly scanning the same HTML.
+  // Resolve invariant heading offsets once to avoid whole-page scans per block.
   const positionedSections = sections.map((section) => ({
     section,
     offset: anchorOffset(html, section.anchor),

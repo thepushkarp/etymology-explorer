@@ -189,7 +189,6 @@ export function AncestryTree({ graph, word, language = 'en', definition }: Ances
   )
   const nodes = [...columns.flat(), ...tail]
   // Edges are measured from the rendered nodes, so they follow drags, wrapping, and resizes.
-  // Read each node once; adjacent edges share the same endpoint geometry.
   const measure = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return

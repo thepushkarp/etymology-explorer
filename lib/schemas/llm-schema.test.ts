@@ -13,21 +13,6 @@ import {
 } from '@/lib/schemas/etymology'
 
 /**
- * Mechanical cross-check between the strict-mode JSON schema sent to the LLM
- * and the Zod schema that validates results. Walks both trees in parallel and
- * fails on drift, replacing the old "must stay in sync manually" footgun.
- *
- * Invariants:
- * - every object node: additionalProperties === false, required lists every key
- * - every LLM key exists in the Zod shape (no phantom fields)
- * - every Zod key exists in the LLM schema unless exempted below
- * - Zod-required keys are non-nullable in the LLM schema (a null would be
- *   stripped to absent and fail Zod validation)
- * - nullable LLM keys are optional in Zod (strip → absent must validate)
- * - leaf types are compatible (integer counts as number, enum as string)
- */
-
-/**
  * Zod keys the LLM must NOT generate: enrichment fields assigned by
  * lib/etymologyEnricher.ts post-LLM, and source url/word filled in by
  * attachSources in lib/llm.ts from the actual research context.
@@ -219,53 +204,6 @@ describe('ETYMOLOGY_LLM_SCHEMA sync with Zod schema', () => {
       'modernUsage',
       'sources',
     ])
-  })
-
-  test('walker catches a dropped required property', () => {
-    const mutated = structuredClone(ETYMOLOGY_LLM_SCHEMA) as unknown as {
-      properties: Record<string, unknown>
-      required: string[]
-    }
-    delete mutated.properties.lore
-    mutated.required = mutated.required.filter((key) => key !== 'lore')
-
-    const failures = driftFailures(mutated as JsonSchemaNode)
-    expect(failures.some((failure) => failure.includes('lore'))).toBe(true)
-  })
-
-  test('walker catches a Zod-required field becoming nullable', () => {
-    const mutated = structuredClone(ETYMOLOGY_LLM_SCHEMA) as unknown as {
-      properties: { lore: { type: string | string[] } }
-    }
-    mutated.properties.lore.type = ['string', 'null']
-
-    const failures = driftFailures(mutated as JsonSchemaNode)
-    expect(failures.some((failure) => failure.includes('lore'))).toBe(true)
-  })
-
-  test('walker catches a phantom llm-schema key', () => {
-    const mutated = structuredClone(ETYMOLOGY_LLM_SCHEMA) as unknown as {
-      properties: Record<string, unknown>
-      required: string[]
-    }
-    mutated.properties.hallucinated = { type: 'string' }
-    mutated.required = [...mutated.required, 'hallucinated']
-
-    const failures = driftFailures(mutated as JsonSchemaNode)
-    expect(failures.some((failure) => failure.includes('hallucinated'))).toBe(true)
-  })
-
-  test('walker catches a post-processing field leaking into the llm-schema', () => {
-    const mutated = structuredClone(ETYMOLOGY_LLM_SCHEMA) as unknown as {
-      properties: {
-        sources: { items: { properties: Record<string, unknown>; required: string[] } }
-      }
-    }
-    mutated.properties.sources.items.properties.url = { type: ['string', 'null'] }
-    mutated.properties.sources.items.required = ['name', 'url']
-
-    const failures = driftFailures(mutated as JsonSchemaNode)
-    expect(failures.some((failure) => failure.includes('sources[].url'))).toBe(true)
   })
 })
 

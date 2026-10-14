@@ -12,14 +12,7 @@ import { incrLanguageCounter } from '@/lib/counters'
 // TTS generation has a 15s timeout, plus cache round-trips and waiter polling.
 export const maxDuration = 60
 
-/**
- * GET /api/pronunciation?word=example
- *
- * Returns MP3 audio for word pronunciation.
- * Uses Redis cache for repeated requests, ElevenLabs TTS for generation.
- */
 export async function GET(request: NextRequest) {
-  // Feature flag
   if (!CONFIG.features.pronunciationEnabled) {
     return NextResponse.json(
       { success: false, error: 'Pronunciation service is disabled' },
@@ -57,7 +50,6 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Check cache first (cache hits are free — no budget cost)
   try {
     const cached = await getCachedAudio(normalized, language)
     if (cached) {
@@ -74,12 +66,10 @@ export async function GET(request: NextRequest) {
     console.error('[Pronunciation] Cache read error:', safeError(error))
   }
 
-  // Singleflight: prevent duplicate TTS calls for the same word
   const lockKey = `lock:audio:${lexemeKey(language, normalized)}`
   const [acquisition, costMode] = await Promise.all([tryAcquireLock(lockKey), getCostMode()])
 
   if (acquisition.status === 'busy') {
-    // Another request is generating this audio — poll for it
     console.log(`[Pronunciation] Waiting for in-flight audio for "${normalized}"`)
     const result = await pollForResult(() => getCachedAudio(normalized, language), {
       intervalMs: CONFIG.singleflight.audioWaiterPollIntervalMs,
@@ -107,7 +97,6 @@ export async function GET(request: NextRequest) {
   let cleanupScheduled = false
 
   try {
-    // Check cost mode — reject uncached expensive requests when budget is pressured
     if (costMode === 'cache_only') {
       return NextResponse.json(
         { success: false, error: 'Service temporarily unavailable' },

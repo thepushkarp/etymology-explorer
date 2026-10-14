@@ -154,7 +154,7 @@ Parser recordings are `bank-parse-before/after.json` and `parse-*-before/after.j
 Each generation directory contains `history-replay.json`; the French directory
 also contains `history-replay-realtime.json`.
 
-Verification: 400 Bun tests, typecheck, focused lint, formatting, production build,
+Verification: 393 Bun tests, typecheck, focused lint, formatting, production build,
 and the production-browser streaming smoke. The browser uses synthetic local
 Redis, SSE, and Ngram boundaries to check early French body/tree rendering, final
 consistency, and zero automatic traces on direct load; it is not a language eval.

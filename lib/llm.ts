@@ -807,12 +807,6 @@ export function finalizeResult(
   return validated.data as EtymologyResult
 }
 
-/**
- * Single synthesis entrypoint for both transports: pass `onSection` to
- * stream (entry fields fire after their primary history validates), omit it for a
- * unary call. Either way the parsed result is enriched, source-attributed,
- * and Zod-validated before it is returned.
- */
 export async function synthesizeFromResearch(
   researchContext: ResearchContext,
   options?: SynthesisOptions
@@ -835,8 +829,6 @@ export async function synthesizeFromResearch(
 
   for (let attempt = 0; attempt < maxValidationAttempts; attempt += 1) {
     try {
-      // Entry fields can publish once their complete primary history validates.
-      // The history collection still waits for validation of every supplied ID.
       const heldSections = ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources']
       const pendingSections = new Map<string, unknown>()
       const publishedSections = new Set<string>()

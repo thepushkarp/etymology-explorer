@@ -15,7 +15,6 @@ function scanChunks(chunks: string[]): Section[] {
   return sections
 }
 
-/** Split text into fixed-size chunks to simulate arbitrary token boundaries. */
 function chunked(text: string, size: number): string[] {
   const chunks: string[] = []
   for (let index = 0; index < text.length; index += size) {
