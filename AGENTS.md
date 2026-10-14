@@ -171,7 +171,7 @@ URL. Crawler traffic must never cost LLM money:
   `/word/{word}` in `proxy.ts`, so `/` stays a static page with canonical `/`.
   `ShareButton` shares `window.location.href` (already canonical). All in-app navigation —
   search submits, suggestions, related words, random word — routes to `/word/{word}`;
-  rendered word links use `components/WordLink.tsx` (real `<a href>`, prefetch off).
+  rendered word links use `components/WordLink.tsx` (real `<a href>`, prefetch on hover/focus).
 
 ### Research Pipeline Limits
 
@@ -182,6 +182,10 @@ Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API cos
 - `maxTotalFetches = 16` - Hard cap on actual source HTTP attempts per search, enforced by `lib/sourceFetchBudget.ts` through `lib/fetchUtils.ts`. Primary requests, fallbacks, detail requests, and enrichment share the ceiling; source-cache hits and LLM calls do not consume it.
 - Source text is sanitized for prompt embedding and retained in full. Context overflow returns an explicit error instead of silently truncating evidence.
 - `sourceCacheTTL = 7d` - Raw dictionary and Wikipedia source cache
+
+English's root-extraction fallback overlaps the remaining primary fetches and source-defined
+lexeme expansion. All primary sources still finish before lexeme expansion; root and related-page
+research waits for both, preserving complete source text and HTTP budget priority.
 
 ### LLM Integration
 
@@ -196,6 +200,9 @@ and the output is guaranteed-shape JSON.
   required, `additionalProperties: false` everywhere, optionality expressed as null unions, and
   top-level properties declared in **render order** (word → sources) — strict mode emits keys in
   schema order, which the section scanner and progressive rendering depend on.
+  English and beta-language entries can render the primary history's projection after the
+  server validates its identity, bilingual shape, and scoped ancestry, while shared fields
+  continue streaming.
 - `lib/schemas/etymology.ts` - Zod schema for cache validation. Uses `.passthrough()` for forward compat.
 - **Sync is enforced mechanically**: `lib/schemas/llm-schema.test.ts` walks both schemas and fails
   on drift (key sets, required lists, null unions, leaf types). Post-processing fields

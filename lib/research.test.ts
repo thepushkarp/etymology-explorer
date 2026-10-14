@@ -496,6 +496,53 @@ function installFetchRouter(options?: { wikipediaDelayMs?: number }): {
 }
 
 describe('conductAgenticResearch phase ordering', () => {
+  test('source-defined ancestors do not wait for the root-extraction LLM', async () => {
+    const savedKey = process.env.OPENROUTER_API_KEY
+    process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
+    let release!: () => void
+    const rootsReady = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let ancestorRequested = false
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (
+        process.env.ETYMOLOGY_KV_REST_API_URL &&
+        url.startsWith(process.env.ETYMOLOGY_KV_REST_API_URL)
+      )
+        return upstashMissResponse(init)
+      if (url.includes('openrouter.ai')) {
+        await rootsReady
+        return Response.json({
+          output_text: '{"roots":["traceword"]}',
+          usage: { input_tokens: 10, output_tokens: 2 },
+        })
+      }
+      if (url.includes('etymonline.com/word/traceword'))
+        return new Response('<section class="prose-lg">1590s, from Latin nexus.</section>')
+      if (new URL(url).searchParams.get('page') === 'nexus') ancestorRequested = true
+      return new Response('not found', { status: 404 })
+    }) as typeof fetch
+    const pending = conductAgenticResearch('traceword')
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      expect(ancestorRequested).toBe(true)
+      release()
+      const context = await pending
+      expect(context.identifiedRoots).toEqual(['traceword'])
+      expect(context.mainWord.etymonline?.text).toContain('from Latin nexus')
+      expect(context.totalSourcesFetched).toBeLessThanOrEqual(CONFIG.maxTotalFetches)
+    } finally {
+      release()
+      try {
+        await pending
+      } finally {
+        if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
+        else process.env.OPENROUTER_API_KEY = savedKey
+      }
+    }
+  })
+
   test('optional sources resolving after root identification still land in the synthesis context', async () => {
     const { requestedUrls } = installFetchRouter({ wikipediaDelayMs: 150 })
     const events: StreamEvent[] = []

@@ -941,26 +941,37 @@ export async function conductAgenticResearch(
       ),
     ]),
   ].slice(0, CONFIG.maxRootsToExplore)
-  let identifiedRoots = cpuRoots
-  if (cpuRoots.length === 0 && context.entryContexts?.length === 1) {
-    const { roots, usage } = await extractRootsQuick(
-      normalizedWord,
-      context.entryContexts[0].text,
-      null,
-      signal
-    )
-    identifiedRoots = roots
-    if (usage) {
-      context.llmUsage = usage
+  const identifyRoots = async () => {
+    let identifiedRoots = cpuRoots
+    if (cpuRoots.length === 0 && context.entryContexts?.length === 1) {
+      const { roots, usage } = await extractRootsQuick(
+        normalizedWord,
+        context.entryContexts[0].text,
+        null,
+        signal
+      )
+      identifiedRoots = roots
+      if (usage) {
+        context.llmUsage = usage
+      }
     }
+    context.identifiedRoots = identifiedRoots
+    console.log(`[Research] Identified roots: ${identifiedRoots.join(', ') || 'none'}`)
+    emitProgress(onProgress, {
+      type: 'roots_identified',
+      roots: identifiedRoots,
+    })
+    signal?.throwIfAborted()
+    return identifiedRoots
   }
-  context.identifiedRoots = identifiedRoots
-  console.log(`[Research] Identified roots: ${identifiedRoots.join(', ') || 'none'}`)
-  emitProgress(onProgress, {
-    type: 'roots_identified',
-    roots: identifiedRoots,
-  })
-  signal?.throwIfAborted()
+
+  // Identity/component/ancestor enrichment uses source-defined histories,
+  // independently of the root-extraction LLM. All primary sources still join
+  // before enrichment, preserving their HTTP budget priority and complete text.
+  const [identifiedRoots] = await Promise.all([
+    identifyRoots(),
+    joinRemainingSources().then(() => expandLexemes(context, budget, signal)),
+  ])
 
   // Expand phrase identity first, then roots and main-word related terms.
   const rootsToResearch = identifiedRoots.filter(
@@ -979,8 +990,6 @@ export async function conductAgenticResearch(
   )
 
   // Candidate breadth complements the shared actual-HTTP budget.
-  await joinRemainingSources()
-  await expandLexemes(context, budget, signal)
   const remainingBudget = budget.remaining
   const rootsToFetch = rootsToResearch
     .filter((root) => !context.rootResearch.some((data) => data.root === root))

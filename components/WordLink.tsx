@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { markTraceIntent } from '@/lib/traceIntent'
 import { wordPagePath, type LanguageCode } from '@/lib/languages'
 
@@ -16,7 +16,8 @@ interface WordLinkProps {
 /**
  * A real link to a word page. Clicking it marks trace intent so an uncached
  * page may auto-trace; crawlers following the href never carry that flag.
- * Prefetch is off: each prefetch would render a word page per visible link.
+ * Prefetch starts on hover or keyboard focus. A page full of word links must
+ * not render every destination just because its links enter the viewport.
  */
 export function WordLink({
   word,
@@ -25,10 +26,14 @@ export function WordLink({
   title,
   children,
 }: WordLinkProps) {
+  const [prefetch, setPrefetch] = useState(false)
+
   return (
     <Link
       href={wordPagePath(word, language)}
-      prefetch={false}
+      prefetch={prefetch}
+      onMouseEnter={() => setPrefetch(true)}
+      onFocus={() => setPrefetch(true)}
       onClick={() => markTraceIntent(word, language)}
       className={className}
       title={title}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { AncestryGraph, AncestryStage } from '@/lib/types'
 import { LANGUAGES, type LanguageCode } from '@/lib/languages'
 import { sourceLabel } from '@/lib/sourceLabels'
@@ -59,6 +59,7 @@ interface TreeNode {
 }
 
 type Offset = { x: number; y: number }
+const EMPTY_OFFSETS: Record<string, Offset> = {}
 
 /** Reconstructed and model-inferred forms are not directly attested in the sources. */
 function isAttested(stage?: AncestryStage): boolean {
@@ -154,7 +155,7 @@ function useGraphState<T>(graph: AncestryGraph, initial: T) {
         const resolved = typeof next === 'function' ? (next as (c: T) => T)(base) : next
         return { graph, value: resolved }
       }),
-    // `initial` is a fresh literal each render; only the graph identity matters.
+    // The initial value belongs to a graph; changing it alone must not reset that graph's state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [graph]
   )
@@ -163,7 +164,7 @@ function useGraphState<T>(graph: AncestryGraph, initial: T) {
 
 export function AncestryTree({ graph, word, language = 'en', definition }: AncestryTreeProps) {
   const [openKey, setOpenKey] = useGraphState<string | null>(graph, 'final')
-  const [offsets, setOffsets] = useGraphState<Record<string, Offset>>(graph, {})
+  const [offsets, setOffsets] = useGraphState(graph, EMPTY_OFFSETS)
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
   const [paths, setPaths] = useState<string[]>([])
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -182,17 +183,23 @@ export function AncestryTree({ graph, word, language = 'en', definition }: Ances
   } | null>(null)
   const suppressClick = useRef(false)
 
-  const { split, columns, tail, edges } = buildTree(graph, word, language, definition)
+  const { split, columns, tail, edges } = useMemo(
+    () => buildTree(graph, word, language, definition),
+    [graph, word, language, definition]
+  )
   const nodes = [...columns.flat(), ...tail]
   // Edges are measured from the rendered nodes, so they follow drags, wrapping, and resizes.
-  // Runs after every render and bails out when nothing moved.
-  const measure = () => {
+  // Read each node once; adjacent edges share the same endpoint geometry.
+  const measure = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const c = canvas.getBoundingClientRect()
+    const bounds = new Map(
+      [...nodeEls.current].map(([key, element]) => [key, element.getBoundingClientRect()])
+    )
     const next = edges.map(([from, to]) => {
-      const a = nodeEls.current.get(from)?.getBoundingClientRect()
-      const b = nodeEls.current.get(to)?.getBoundingClientRect()
+      const a = bounds.get(from)
+      const b = bounds.get(to)
       if (!a || !b) return ''
       const x1 = Math.round(a.left + a.width / 2 - c.left)
       const y1 = Math.round(a.bottom - c.top)
@@ -202,13 +209,15 @@ export function AncestryTree({ graph, word, language = 'en', definition }: Ances
       return `M${x1},${y1} C${x1},${y1 + bend} ${x2},${y2 - bend} ${x2},${y2}`
     })
     setPaths((previous) => (previous.join() === next.join() ? previous : next))
-  }
+  }, [edges])
   const measureRef = useRef(measure)
 
+  // Updating SVG paths does not change node geometry. Measure synchronously
+  // only for graph/layout changes or a drag, rather than for the path update itself.
   useLayoutEffect(() => {
     measureRef.current = measure
     measure()
-  })
+  }, [measure, offsets])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -240,6 +249,7 @@ export function AncestryTree({ graph, word, language = 'en', definition }: Ances
 
   // While a touch drag is active, stop the page from scrolling under the finger.
   useEffect(() => {
+    if (!draggingKey) return
     const canvas = canvasRef.current
     if (!canvas) return
     const onTouchMove = (event: TouchEvent) => {
@@ -247,7 +257,7 @@ export function AncestryTree({ graph, word, language = 'en', definition }: Ances
     }
     canvas.addEventListener('touchmove', onTouchMove, { passive: false })
     return () => canvas.removeEventListener('touchmove', onTouchMove)
-  }, [])
+  }, [draggingKey])
 
   const endDrag = () => {
     const current = drag.current
