@@ -8,7 +8,7 @@ EtymEx is a Next.js Etymology Explorer web app that helps users discover word or
 
 Users search for a word or phrase in English, Italian, Spanish, French, or Portuguese. The app:
 
-1. Fetches primary sources in parallel. English uses Etymonline, Wiktionary, and Free Dictionary plus optional Wikipedia, Urban Dictionary, and Incel Wiki. Other supported languages use native and English Wiktionary editions, selected-language Wikipedia, a multilingual dictionary, Wikidata lexemes, and Dicionário Aberto for Portuguese.
+1. Fetches primary sources in parallel. English uses Etymonline and Wiktionary plus optional Wikipedia and Incel Wiki. Other supported languages use native and English Wiktionary editions, selected-language Wikipedia, Wikidata lexemes, and Dicionário Aberto for Portuguese. FreeDictionaryAPI supplies senses and pronunciation only when direct Wiktionary evidence is unavailable; it cannot establish ancestry.
 2. Pre-parses source-local etymological chains and keeps independent lexical histories and evidence scopes.
 3. Expands explicit source spelling variants/redirects, up to four useful independent phrase components, and up to four linked variant discoveries in staged parallel waves, then researches up to four attested ancestor lexemes in their own language. English also retains CPU-first root extraction (LLM fallback only when necessary) and related-page expansion.
 4. Retains complete extracted source text and full Wikipedia article extracts in the synthesis bundle; there are no per-source character caps or prompt clipping.
@@ -17,7 +17,7 @@ Users search for a word or phrase in English, Italian, Spanish, French, or Portu
 
 The primary Wiktionary edition defines source-local history boundaries, with Etymonline as the English fallback; complete secondary sources remain independent context without invented history alignment. Each history has its own selectable story and lineage, with compound branches kept within that history. A Wikipedia-only result has an explicitly unresolved history. Components alone cannot admit a phrase.
 
-Every actual source HTTP attempt shares a 16-request ceiling, including primary fetches, fallback attempts, Wikidata detail requests, and enrichment. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
+Every actual source HTTP attempt shares a 32-request ceiling, including primary fetches, fallback attempts, Wikidata detail requests, and enrichment. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
 
 **Live**: https://etymex.com
 
@@ -57,7 +57,7 @@ GET /api/etymology?word=X[&stream=true]   (maxDuration 300s)
     │   ├── CPU parsing into independent histories and scoped evidence
     │   ├── Bounded variant/redirect and phrase-component enrichment for all supported languages
     │   ├── Attested ancestor lookup; English CPU-first roots + related-page expansion
-    │   └── Full extracted source text retained; 16 actual source HTTP attempts total
+    │   └── Full extracted source text retained; 32 actual source HTTP attempts total
     ├── Typo check (lib/spellcheck.ts, Levenshtein distance vs GRE wordlist)
     ├── LLM synthesis (lib/llm.ts — one entrypoint for streaming and unary)
     │   ├── OpenRouter Responses json_schema STRICT mode (schema in lib/schemas/llm-schema.ts)
@@ -84,7 +84,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - USD monthly limit: $10/month (conservative fallback-chain pricing in `costTracking` when OpenRouter omits provider-reported cost)
   - Timeouts: source fetches 5s, synthesis LLM 90s, root-extraction LLM 15s, TTS 15s
   - Word/phrase validation: maximum 120 canonical characters; Unicode letters/marks, spaces, apostrophes, and hyphens
-  - Source HTTP budget: 16 actual attempts across all primary, fallback, and enrichment requests; no source-text clipping
+  - Source HTTP budget: 32 actual attempts across all primary, fallback, and enrichment requests; no source-text clipping
   - Rate limits, singleflight settings, feature flags
 
 - **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENROUTER_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
@@ -99,7 +99,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/singleflight.ts`** - Distributed request deduplication via Redis owner-token locks (SET NX with random token, 90s TTL, EXPIRE heartbeat every 30s while the pipeline runs). Results are cached BEFORE lock release. Streaming waiters poll the cache every 2s for up to 150s with SSE keepalive events and negative-cache checks; non-streaming waiters poll ~10s then return 429 + Retry-After. A holder that errors writes a short-TTL failure marker (60s) before releasing, so waiters surface the error; promotion to holder only happens on a true crash — lock vanished with neither a result nor a marker. If 10 users search "etymology" simultaneously, only 1 LLM call is made.
 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
-  - Etymology results: 30 day TTL, versioned keys (`etymology:v2.5:` for English, `etymology:beta:v7:` for other supported languages)
+  - Etymology results: 30 day TTL (five minutes when research has unresolved source/root lookups), versioned keys (`etymology:v2.6:` for English, `etymology:beta:v8:` for other supported languages)
   - TTS audio: 1 year TTL
   - Negative cache: 30 minute TTL for admitted types (`no_sources`, `invalid_word`)
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
@@ -185,7 +185,8 @@ Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API cos
 
 - `maxRootsToExplore = 4` - Max root morphemes to research (etymonline + wiktionary each, 2 fetches per root)
 - `maxRelatedWordsPerRoot = 4` - Related terms retained per extraction pass; only main-word related terms are fetched (etymonline only, 1 fetch per term; root-page related terms are prompt context only)
-- `maxTotalFetches = 16` - Hard cap on actual source HTTP attempts per search, enforced by `lib/sourceFetchBudget.ts` through `lib/fetchUtils.ts`. Primary requests, fallbacks, detail requests, and enrichment share the ceiling; source-cache hits and LLM calls do not consume it.
+- `maxTotalFetches = 32` - Hard cap on actual source HTTP attempts per search, enforced by `lib/sourceFetchBudget.ts` through `lib/fetchUtils.ts`. Primary requests, fallbacks, detail requests, and enrichment share the ceiling; source-cache hits and LLM calls do not consume it.
+- Attested ancestor and English root lookups retry a transient Wiktionary HTTP/network failure once within the shared budget; 404, 429, and caller cancellation are not retried.
 - Source text is sanitized for prompt embedding and retained in full. Context overflow returns an explicit error instead of silently truncating evidence.
 - `sourceCacheTTL = 7d` - Raw dictionary and Wikipedia source cache
 
@@ -334,9 +335,8 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 - `lib/etymonline.ts` - HTML scraper with fallback patterns
 - `lib/wiktionary.ts` - MediaWiki API client
-- `lib/freeDictionary.ts` - Free Dictionary API client
+- `lib/multilingualSources.ts` - Selected-language dictionary sources and the senses-only FreeDictionaryAPI fallback for all supported languages
 - `lib/wikipedia.ts` - Selected-language MediaWiki API full-article extracts with exact-title/redirect validation and revision provenance
-- `lib/urbanDictionary.ts` - Urban Dictionary API with quality scoring/filtering
 - `lib/incelsWiki.ts` - Incel Wiki MediaWiki API client (supplemental context)
 - `lib/elevenlabs.ts` - ElevenLabs TTS client
 

@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util'
 import { buildResearchPrompt, conductAgenticResearch } from '@/lib/research'
 import { isLanguageCode } from '@/lib/languages'
 import type { ResearchContext } from '@/lib/types'
+import { CONFIG } from '@/lib/config'
 
 const { values } = parseArgs({
   options: { recording: { type: 'string' }, label: { type: 'string' } },
@@ -110,7 +111,7 @@ try {
       await Bun.sleep(0)
       while (pending.size) await Promise.all([...pending])
       assert.equal(context.totalSourcesFetched, sourceRequests.length)
-      assert.ok(context.totalSourcesFetched <= 16)
+      assert.ok(context.totalSourcesFetched <= CONFIG.maxTotalFetches)
       const evidence = { ...context, totalSourcesFetched: 0 }
       const promptHash = createHash('sha256').update(buildResearchPrompt(context)).digest('hex')
       if (rows.length) {

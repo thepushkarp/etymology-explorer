@@ -238,7 +238,9 @@ export async function GET(request: NextRequest) {
 
         await recordSpend(synthesis.usage)
 
-        await cacheEtymology(normalizedWord, synthesis.result, language)
+        await cacheEtymology(normalizedWord, synthesis.result, language, {
+          incomplete: researchContext.incompleteResearch,
+        })
         emitSecurityEvent({
           type: 'cache_miss',
           timestamp: Date.now(),

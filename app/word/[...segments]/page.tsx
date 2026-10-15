@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { CONFIG } from '@/lib/config'
 import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
 import { notFound, permanentRedirect } from 'next/navigation'
@@ -78,7 +79,7 @@ const loadCachedEtymology = cache((word: string, language: LanguageCode) => {
       ? ['word-page-etymology', CACHE_VERSION, word]
       : ['multilingual-word-page-etymology', BETA_CACHE_VERSION, language, word]
   return unstable_cache(() => getCachedEtymology(word, language), cacheKey, {
-    revalidate: 3600,
+    revalidate: CONFIG.incompleteEtymologyCacheTTL,
     tags: [etymologyWordTag(word, language)],
   })()
 })

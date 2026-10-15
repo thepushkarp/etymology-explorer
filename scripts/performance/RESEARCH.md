@@ -1,5 +1,7 @@
 # Research and generation measurements
 
+These recordings precede the current source-selection policy. See [SOURCE_SELECTION.md](./SOURCE_SELECTION.md) for fallback, recovery, and cache measurements.
+
 Most sampled uncached lookups spend their time in source HTTP waits and model generation.
 Large multilingual Wiktionary pages also exposed a substantial CPU parsing bottleneck;
 its measured fix and the latest generation experiments are in [GENERATION.md](./GENERATION.md).

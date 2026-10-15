@@ -5,15 +5,15 @@ import { readFileSync } from 'node:fs'
 const records = new Map(
   Object.entries(JSON.parse(readFileSync(new URL('./entries.json', import.meta.url))))
 )
-const base = records.get('etymology:v2.5:nice')
+const base = records.get('etymology:v2.6:nice')
 for (const word of ['muscle', 'window', 'telephone', 'bread', 'harvest', 'quarantine']) {
-  records.set(`etymology:v2.5:${word}`, { ...base, word })
+  records.set(`etymology:v2.6:${word}`, { ...base, word })
 }
 const letters = 'abcdefghijklmnopqrstuvwxyz'
 for (let i = 0; records.size < 1000; i++) {
   const word =
     letters[i % 26] + letters[Math.floor(i / 26) % 26] + letters[Math.floor(i / 676) % 26] + 'word'
-  records.set(`etymology:v2.5:${word}`, { ...base, word })
+  records.set(`etymology:v2.6:${word}`, { ...base, word })
 }
 const stats = { get: 0, scan: 0, other: 0 }
 const encode = (value) =>

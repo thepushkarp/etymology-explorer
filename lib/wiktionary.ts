@@ -10,6 +10,7 @@ import { fetchWithTimeout } from './fetchUtils'
 import { safeError } from './errorUtils'
 import { CONFIG } from './config'
 import { getCachedSource, cacheSource } from './sourceCache'
+import { currentSourceFetchBudget } from './sourceFetchBudget'
 
 export type WiktionaryResult = SourceData
 
@@ -17,7 +18,8 @@ export type WiktionaryResult = SourceData
 export async function fetchSelectedWiktionaryLanguage(
   word: string,
   languageHeading: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: { retryTransient?: boolean }
 ): Promise<WiktionaryResult | null> {
   const normalizedWord = canonicalizeWord(word)
   // Historical languages are independent lexemes even on the same page.
@@ -35,75 +37,96 @@ export async function fetchSelectedWiktionaryLanguage(
   url.searchParams.set('format', 'json')
   url.searchParams.set('formatversion', '2')
   url.searchParams.set('redirects', 'true')
-  try {
-    const response = await fetchWithTimeout(
-      url.toString(),
-      {
-        headers: { 'User-Agent': 'EtymologyExplorer/1.0 (educational project)' },
-      },
-      CONFIG.timeouts.source,
-      signal
-    )
-    if (!response.ok) return null
-    const data = (await response.json()) as {
-      parse?: {
-        title?: string
-        redirects?: Array<{ from: string; to: string }>
-        text?: string
-        revid?: number
-        tocdata?: { sections?: WiktionaryTocSection[] }
-      }
-    }
-    const page = data.parse
-    if (!page?.text || !page.tocdata?.sections) return null
-    if (
-      page.title &&
-      !sameSpelling(page.title, normalizedWord) &&
-      !page.redirects?.some(
-        (redirect) =>
-          sameSpelling(redirect.from, normalizedWord) && sameSpelling(redirect.to, page.title!)
+  const attempts = options?.retryTransient ? 2 : 1
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0 && currentSourceFetchBudget()?.rateLimited) return null
+    try {
+      const response = await fetchWithTimeout(
+        url.toString(),
+        {
+          headers: { 'User-Agent': 'EtymologyExplorer/1.0 (educational project)' },
+        },
+        CONFIG.timeouts.source,
+        signal
       )
-    )
+      if (!response.ok) {
+        if (
+          attempt + 1 < attempts &&
+          (response.status === 408 || (response.status >= 500 && response.status < 600))
+        ) {
+          await response.body?.cancel()
+          continue
+        }
+        return null
+      }
+      const data = (await response.json()) as {
+        parse?: {
+          title?: string
+          redirects?: Array<{ from: string; to: string }>
+          text?: string
+          revid?: number
+          tocdata?: { sections?: WiktionaryTocSection[] }
+        }
+      }
+      const page = data.parse
+      if (!page?.text || !page.tocdata?.sections) return null
+      if (
+        page.title &&
+        !sameSpelling(page.title, normalizedWord) &&
+        !page.redirects?.some(
+          (redirect) =>
+            sameSpelling(redirect.from, normalizedWord) && sameSpelling(redirect.to, page.title!)
+        )
+      )
+        return null
+      const entryGroups = extractWiktionaryEntryGroups(
+        page.text,
+        page.tocdata.sections,
+        languageHeading,
+        /^Etymology(?:\s+\d+)?$/i
+      )
+      const text = extractWiktionaryLanguageText(page.text, page.tocdata.sections, languageHeading)
+      if (!text) return null
+      const resolvedWord = page.title ?? normalizedWord
+      const pageUrl = `https://en.wiktionary.org/wiki/${encodeURIComponent(resolvedWord)}`
+      const variants: WiktionaryResult['variants'] = extractWiktionaryVariants(
+        page.text,
+        page.tocdata.sections,
+        languageHeading
+      )
+      if (!sameSpelling(resolvedWord, normalizedWord)) {
+        variants.push({ word: resolvedWord, relationship: 'redirect', url: pageUrl })
+      }
+      const result: WiktionaryResult = {
+        text,
+        url: pageUrl,
+        entryGroups,
+        variants,
+        requestedWord: normalizedWord,
+        resolvedWord,
+        revisionId: page.revid,
+        ...(languageHeading === 'English' ? { language: 'en' as const } : {}),
+      }
+      void cacheSource(source, normalizedWord, result)
+      return result
+    } catch (error) {
+      if (signal?.aborted) throw error
+      console.error(`Wiktionary fetch failed for "${normalizedWord}":`, safeError(error))
+      if (
+        attempt + 1 < attempts &&
+        (error instanceof TypeError || /Request timeout/i.test(safeError(error)))
+      )
+        continue
       return null
-    const entryGroups = extractWiktionaryEntryGroups(
-      page.text,
-      page.tocdata.sections,
-      languageHeading,
-      /^Etymology(?:\s+\d+)?$/i
-    )
-    const text = extractWiktionaryLanguageText(page.text, page.tocdata.sections, languageHeading)
-    if (!text) return null
-    const resolvedWord = page.title ?? normalizedWord
-    const pageUrl = `https://en.wiktionary.org/wiki/${encodeURIComponent(resolvedWord)}`
-    const variants: WiktionaryResult['variants'] = extractWiktionaryVariants(
-      page.text,
-      page.tocdata.sections,
-      languageHeading
-    )
-    if (!sameSpelling(resolvedWord, normalizedWord)) {
-      variants.push({ word: resolvedWord, relationship: 'redirect', url: pageUrl })
     }
-    const result: WiktionaryResult = {
-      text,
-      url: pageUrl,
-      entryGroups,
-      variants,
-      requestedWord: normalizedWord,
-      resolvedWord,
-      revisionId: page.revid,
-      ...(languageHeading === 'English' ? { language: 'en' as const } : {}),
-    }
-    void cacheSource(source, normalizedWord, result)
-    return result
-  } catch (error) {
-    console.error('Wiktionary fetch error:', safeError(error))
-    return null
   }
+  return null
 }
 
 export async function fetchWiktionary(
   word: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: { retryTransient?: boolean }
 ): Promise<WiktionaryResult | null> {
-  return fetchSelectedWiktionaryLanguage(word, 'English', signal)
+  return fetchSelectedWiktionaryLanguage(word, 'English', signal, options)
 }

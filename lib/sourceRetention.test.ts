@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { fetchSelectedWiktionaryLanguage } from './wiktionary'
 import { extractWiktionaryVariants, type WiktionaryTocSection } from './wiktionaryEntryGroups'
-import { compactFreeDictionary, fetchFreeDictionary } from './freeDictionary'
 import { fetchEtymonline } from './etymonline'
-import { fetchUrbanDictionary } from './urbanDictionary'
 import { fetchIncelsWiki } from './incelsWiki'
 import { fetchEnglishWiktionaryLanguage, fetchFreeDictionaryApi } from './multilingualSources'
 
@@ -125,28 +123,6 @@ describe('complete admitted source retention', () => {
     expect(dictionary?.text).toContain('TAIL4')
   })
 
-  test('Free Dictionary retains all matching entries, complete examples and references', async () => {
-    respond(
-      Array.from({ length: 5 }, (_, i) => ({
-        word: 'a phrase',
-        phonetics: [],
-        meanings: [
-          {
-            partOfSpeech: 'noun',
-            definitions: [{ definition: `sense ${i}`, example: `example ${i}` }],
-          },
-        ],
-        sourceUrls: [`https://example.test/${i}`],
-      }))
-    )
-    const result = await fetchFreeDictionary('a phrase')
-    expect(result?.entries).toHaveLength(5)
-    const text = compactFreeDictionary(result!)
-    expect(text).toContain('sense 4')
-    expect(text).toContain('example 4')
-    expect(text).toContain('https://example.test/4')
-  })
-
   test('Etymonline preserves phrase spelling in requested URL and complete entry bodies', async () => {
     let requested = ''
     globalThis.fetch = (async (url: RequestInfo | URL) => {
@@ -161,17 +137,7 @@ describe('complete admitted source retention', () => {
     expect(result?.text).toContain('TAIL')
   })
 
-  test('long meaningful Urban entries and complete supplemental extracts survive', async () => {
-    respond({
-      list: Array.from({ length: 4 }, (_, i) => ({
-        word: 'phrase',
-        definition: `A meaningful definition ${'evidence '.repeat(100)} TAIL${i}`,
-        example: 'An illustrative example of the expression.',
-        thumbs_up: 100,
-        thumbs_down: 0,
-      })),
-    })
-    expect((await fetchUrbanDictionary('phrase'))?.text).toContain('TAIL3')
+  test('complete supplemental extracts survive', async () => {
     respond({
       query: {
         pages: { 1: { title: 'phrase', extract: 'BEGIN ' + 'context '.repeat(500) + ' TAIL' } },

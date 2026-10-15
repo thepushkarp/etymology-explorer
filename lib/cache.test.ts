@@ -68,10 +68,15 @@ beforeEach(() => {
 })
 
 describe('cacheEtymology word-page revalidation', () => {
+  test('incomplete root research is cached for only five minutes', async () => {
+    currentRedis = fakeRedis()
+    await cacheEtymology('nice', RESULT, 'en', { incomplete: true })
+    expect(currentRedis.set).toHaveBeenCalledWith('etymology:v2.6:nice', RESULT, { ex: 300 })
+  })
   test('uses NFC keys and refuses an otherwise valid result for another spelling', async () => {
     currentRedis = fakeRedis({ get: mock(async () => ({ ...RESULT, word: 'café' })) })
     expect((await getCachedEtymology('cafe\u0301'))?.word).toBe('café')
-    expect(currentRedis.get).toHaveBeenCalledWith('etymology:v2.5:café')
+    expect(currentRedis.get).toHaveBeenCalledWith('etymology:v2.6:café')
     expect(await getCachedEtymology('cafe')).toBeNull()
   })
 
@@ -149,7 +154,7 @@ describe('cacheEtymology word-page revalidation', () => {
     await cacheAudio('sale', 'audio-fr', 'fr')
 
     expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
-      'etymology:beta:v7:it:sale',
+      'etymology:beta:v8:it:sale',
       'audio:v2:it:sale',
       'audio:v2:fr:sale',
     ])
@@ -170,15 +175,15 @@ describe('cacheEtymology word-page revalidation', () => {
 
   test('decodes English and beta result keys from the shared sitemap scan', () => {
     expect(ETYMOLOGY_SCAN_PATTERN).toBe('etymology:*')
-    expect(lexemeFromEtymologyCacheKey('etymology:v2.5:sale')).toEqual({
+    expect(lexemeFromEtymologyCacheKey('etymology:v2.6:sale')).toEqual({
       language: 'en',
       word: 'sale',
     })
-    expect(lexemeFromEtymologyCacheKey('etymology:beta:v7:it:sale')).toEqual({
+    expect(lexemeFromEtymologyCacheKey('etymology:beta:v8:it:sale')).toEqual({
       language: 'it',
       word: 'sale',
     })
-    expect(lexemeFromEtymologyCacheKey('etymology:beta:v7:en:sale')).toBeNull()
+    expect(lexemeFromEtymologyCacheKey('etymology:beta:v8:en:sale')).toBeNull()
   })
 
   test('never returns an English object from a beta cache key', async () => {

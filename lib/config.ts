@@ -32,10 +32,11 @@ export const CONFIG = {
   // Research pipeline
   maxRootsToExplore: 4,
   maxRelatedWordsPerRoot: 4,
-  maxTotalFetches: 16,
+  maxTotalFetches: 32,
 
   // Cache TTLs (seconds)
   etymologyCacheTTL: 30 * 24 * 60 * 60, // 30 days
+  incompleteEtymologyCacheTTL: 5 * 60,
   audioCacheTTL: 365 * 24 * 60 * 60, // 1 year
   negativeCacheTTL: 30 * 60, // 30m — limits repeat misses without cementing transient source failures
   sourceCacheTTL: 7 * 24 * 60 * 60, // 7 days — raw etymonline/wiktionary page data

@@ -1,5 +1,7 @@
 # Uncached research and generation benchmarks
 
+These recordings precede the current source-selection policy. See [SOURCE_SELECTION.md](./SOURCE_SELECTION.md) for fallback, recovery, and cache measurements.
+
 Measured on 2026-10-15 on the development Mac. Retained changes preserve the
 production model, provider routing, fallback models, reasoning effort, strict
 schema, prompts, complete source text, source budget, and evidence validators.

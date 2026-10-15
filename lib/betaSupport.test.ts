@@ -72,7 +72,7 @@ describe('beta bilingual results', () => {
     expect(BetaEtymologyResultSchema.safeParse(duplicate).success).toBe(false)
   })
 
-  test('a beta miss is not admitted by an English or non-Wiktionary fallback', () => {
+  test('a beta miss is not admitted by an English entry or Wikidata identity alone', () => {
     expect(
       hasCredibleMainSource({
         language: 'it',
@@ -80,7 +80,7 @@ describe('beta bilingual results', () => {
           word: 'sale',
           etymonline: { text: 'English sale', url: 'https://example.test' },
           wiktionary: null,
-          multilingualDictionary: { text: 'Italian senses', url: 'https://example.test/it' },
+          wikidataLexeme: { text: 'Italian identity', url: 'https://example.test/it' },
         },
         identifiedRoots: [],
         rootResearch: [],

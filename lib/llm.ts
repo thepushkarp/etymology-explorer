@@ -237,26 +237,20 @@ function dedupeStrings(values: string[]): string[] {
 }
 
 interface SupplementalSourceSignals {
-  urbanDictionary: boolean
   incelsWiki: boolean
 }
 
-const MIN_SIGNIFICANT_URBAN_CHARS = 40
 const MIN_SIGNIFICANT_INCELS_CHARS = 120
 const INCELS_USAGE_SIGNALS =
   /\b(incel|femcel|blackpill|redpill|looksmax|manosphere|internet|slang|term|coined|refers to|used)\b/i
 
 function getSupplementalSourceSignals(researchContext: ResearchContext): SupplementalSourceSignals {
-  const urbanText =
-    researchContext.mainWord.urbanDictionary?.text?.replace(/\s+/g, ' ').trim() ?? ''
   const incelsText = researchContext.mainWord.incelsWiki?.text?.replace(/\s+/g, ' ').trim() ?? ''
 
-  const urbanDictionary =
-    urbanText.length >= MIN_SIGNIFICANT_URBAN_CHARS && /Definition:/i.test(urbanText)
   const incelsWiki =
     incelsText.length >= MIN_SIGNIFICANT_INCELS_CHARS && INCELS_USAGE_SIGNALS.test(incelsText)
 
-  return { urbanDictionary, incelsWiki }
+  return { incelsWiki }
 }
 
 function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchContext): void {
@@ -276,8 +270,7 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
   const englishUsage = modernUsage as ModernUsage<string>
 
   const supplementalSignals = getSupplementalSourceSignals(researchContext)
-  const hasSupplementalSlangEvidence =
-    supplementalSignals.urbanDictionary || supplementalSignals.incelsWiki
+  const hasSupplementalSlangEvidence = supplementalSignals.incelsWiki
   if (!hasSupplementalSlangEvidence) {
     result.modernUsage = { hasSlangMeaning: false }
     return
@@ -547,24 +540,19 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
       word: mainWord,
     })
   }
-  if (researchContext.mainWord.freeDictionary) {
+  if (researchContext.mainWord.multilingualDictionary) {
     sources.push({
-      name: 'freeDictionary',
-      url: `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(mainWord)}`,
+      name: 'multilingualDictionary',
+      url: researchContext.mainWord.multilingualDictionary.url,
       word: mainWord,
+      sourceFamily: 'wiktionary',
+      license: 'Per-entry attribution and license are provided by FreeDictionaryAPI',
     })
   }
   if (researchContext.mainWord.wikipedia) {
     sources.push({
       name: 'wikipedia',
       url: researchContext.mainWord.wikipedia.url,
-      word: mainWord,
-    })
-  }
-  if (researchContext.mainWord.urbanDictionary && supplementalSignals.urbanDictionary) {
-    sources.push({
-      name: 'urbanDictionary',
-      url: researchContext.mainWord.urbanDictionary.url,
       word: mainWord,
     })
   }
@@ -704,6 +692,17 @@ function finalizeHistories(
   }
 
   for (const history of result.histories) {
+    const source = researchContext.entryContexts?.find((entry) => entry.id === history.id)?.source
+    if (
+      source === 'multilingualDictionary' &&
+      (history.roots.length ||
+        history.ancestryGraph.branches.length ||
+        history.ancestryGraph.mergePoint ||
+        history.ancestryGraph.postMerge?.length ||
+        history.ancestryGraph.convergencePoints?.length)
+    ) {
+      throw new Error('Schema validation failed: dictionary fallback cannot establish ancestry')
+    }
     const candidate = candidates.find((entry) => entry.id === history.id)
     const formOfMatches = candidate?.formOf
       ? history.formOf?.word === candidate.formOf.word &&

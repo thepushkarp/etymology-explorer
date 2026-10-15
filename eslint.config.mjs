@@ -37,6 +37,7 @@ const eslintConfig = defineConfig([
     '.pnp.loader.mjs',
     '.worktrees/**',
     'design-mockups/**',
+    'bench-results/**',
   ]),
 ])
 

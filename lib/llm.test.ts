@@ -126,6 +126,38 @@ test('canonical primary prose is projected and citations come from research', ()
   expect(finalized.pronunciation).toBe('/x/')
   expect(finalized.sources.map((source) => source.name)).toEqual(['wikipedia', 'wiktionaryNative'])
 })
+test('a senses-only fallback cannot publish an ancestry graph', () => {
+  const { result, context } = scopedFixture()
+  result.histories[0].entryKind = 'unresolved'
+  context.lexicalGraph!.histories[0].entryKind = 'unresolved'
+  context.entryContexts = [
+    {
+      id: 'h1',
+      source: 'multilingualDictionary',
+      heading: 'fixture',
+      text: 'A definition.',
+      sectionHeadings: [],
+      evidenceScopeId: 'scope1',
+      sourceUrl: 'https://freedictionaryapi.com',
+      entryKind: 'unresolved',
+    },
+  ]
+  context.mainWord.wikipedia = null
+  context.mainWord.multilingualDictionary = {
+    text: 'A definition.',
+    url: 'https://freedictionaryapi.com',
+  }
+  result.histories[0].ancestryGraph = { branches: [{ root: 'invented', stages: [] }] }
+  expect(() => finalizeResult(result, context, 'streaming')).toThrow(
+    'dictionary fallback cannot establish ancestry'
+  )
+  result.histories[0].ancestryGraph = { branches: [] }
+  const finalized = finalizeResult(result, context, 'streaming')
+  expect(finalized.ancestryGraph.branches).toEqual([])
+  expect(
+    finalized.sources.find((source) => source.name === 'multilingualDictionary')?.sourceFamily
+  ).toBe('wiktionary')
+})
 test('a changed evidence scope fails before an identity can be published', () => {
   const { result, context } = scopedFixture()
   result.histories[0].evidenceScopeIds = ['someone-elses-scope']

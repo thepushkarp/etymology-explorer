@@ -201,8 +201,7 @@ export const ETYMOLOGY_LLM_SCHEMA = {
             enum: [
               'etymonline',
               'wiktionary',
-              'freeDictionary',
-              'urbanDictionary',
+              'multilingualDictionary',
               'incelsWiki',
               'synthesized',
             ],

@@ -42,14 +42,6 @@ for (let run = 0; run < 3; run++) {
         },
       })
     }
-    if (url.hostname.includes('dictionaryapi.dev'))
-      return Response.json([
-        {
-          word: 'nexal',
-          phonetics: [],
-          meanings: [{ partOfSpeech: 'noun', definitions: [{ definition: 'A binding.' }] }],
-        },
-      ])
     if (url.hostname.includes('wikipedia'))
       return Response.json({
         query: {
@@ -62,7 +54,6 @@ for (let run = 0; run < 3; run++) {
           ],
         },
       })
-    if (url.hostname.includes('urbandictionary')) return Response.json({ list: [] })
     return new Response('not found', { status: 404 })
   }) as typeof fetch
   const context = await conductAgenticResearch('nexal')

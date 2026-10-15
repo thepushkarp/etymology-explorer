@@ -10,7 +10,7 @@ if (!values.label || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(values.label))
   throw new Error('Pass a path-safe --label')
 const base = process.env.PERF_BASE_URL ?? 'http://127.0.0.1:4199'
 const records = JSON.parse(readFileSync(new URL('./entries.json', import.meta.url), 'utf8'))
-const result = structuredClone(records['etymology:beta:v7:fr:fenêtre'])
+const result = structuredClone(records['etymology:beta:v8:fr:fenêtre'])
 result.word = 'streamfixture'
 result.definition = { en: 'English definition.', local: 'Une définition en français.' }
 result.lore = { en: 'English story.', local: 'Cette histoire complète est déjà vérifiée.' }

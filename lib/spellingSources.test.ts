@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { fetchWiktionary } from './wiktionary'
 import { fetchEtymonline } from './etymonline'
-import { fetchFreeDictionary } from './freeDictionary'
 import { fetchNativeWiktionary, fetchFreeDictionaryApi } from './multilingualSources'
 import { getWordSuggestions } from './wordSuggestions'
 
@@ -74,15 +73,10 @@ describe('source spelling boundaries', () => {
     expect((await fetchEtymonline('cote'))?.text).toBe('From Latin costa, 1600. <form> &lt;')
   })
 
-  test('dictionary arrays select the exact entry instead of their first result', async () => {
-    reply([
-      { word: 'cafe', phonetics: [], meanings: [] },
-      { word: 'café', phonetics: [], meanings: [] },
-    ])
-    expect((await fetchFreeDictionary('café'))?.word).toBe('café')
-    reply([{ word: 'cafe', phonetics: [], meanings: [] }])
-    expect(await fetchFreeDictionary('café')).toBeNull()
+  test('dictionary fallback rejects a different headword', async () => {
     reply({ word: 'cote', entries: [{ word: 'cote' }] })
+    expect(await fetchFreeDictionaryApi('côte', 'fr')).toBeNull()
+    reply({ word: 'côte', entries: [{ word: 'côte', language: { code: 'en' } }] })
     expect(await fetchFreeDictionaryApi('côte', 'fr')).toBeNull()
   })
 
