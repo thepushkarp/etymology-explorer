@@ -57,8 +57,78 @@ describe('isRecoverableBetaValidationError', () => {
   })
 })
 
-import type { BetaEtymologyResult, ResearchContext } from './types'
+import type { BetaEtymologyResult, EtymologyResult, ResearchContext } from './types'
 import { toPartialResult, type PartialEtymology } from './streamReducer'
+
+describe('modern usage evidence', () => {
+  const wikipediaText =
+    'Rizz is an English slang term referring to charisma, especially the ability to attract a romantic partner. It became popular in online communities and is used in discussions of dating.'
+  const incelsText =
+    'This community slang term refers to charisma in dating conversations. It is used in online discussions about attraction and relationships, with examples describing how someone starts a conversation.'
+
+  test.each([
+    ['Wikipedia', wikipediaText, undefined, 'Charisma used to attract a romantic partner.', true],
+    ['Incel Wiki', undefined, incelsText, 'Charisma used to attract a romantic partner.', true],
+    [
+      'unrelated Wikipedia prose',
+      'The term names a network protocol used to send data over the internet. It defines packet formats and connection states for computers communicating across different physical networks.',
+      undefined,
+      'Charisma used to attract a romantic partner.',
+      false,
+    ],
+    [
+      'a thin Wikipedia mention',
+      'Rizz is slang.',
+      undefined,
+      'A form of charisma in dating.',
+      false,
+    ],
+    ['a vague generated definition', wikipediaText, undefined, 'Internet slang', false],
+  ] as const)(
+    'validates modern usage supported by %s',
+    (_label, wikipedia, incelsWiki, definition, accepted) => {
+      const context: ResearchContext = {
+        language: 'en',
+        mainWord: {
+          word: 'rizz',
+          etymonline: null,
+          wiktionary: null,
+          ...(wikipedia
+            ? { wikipedia: { text: wikipedia, url: 'https://en.wikipedia.org/wiki/Rizz' } }
+            : {}),
+          ...(incelsWiki
+            ? { incelsWiki: { text: incelsWiki, url: 'https://incels.wiki/w/rizz' } }
+            : {}),
+        },
+        identifiedRoots: [],
+        rootResearch: [],
+        relatedResearch: [],
+        totalSourcesFetched: 1,
+      }
+      const result: EtymologyResult = {
+        language: 'en',
+        word: 'rizz',
+        pronunciation: '/rɪz/',
+        definition: 'Charisma.',
+        roots: [],
+        ancestryGraph: { branches: [] },
+        lore: 'Origin uncertain.',
+        sources: [],
+        modernUsage: {
+          hasSlangMeaning: true,
+          slangDefinition: definition,
+          contexts: ['Internet culture'],
+        },
+      }
+      const finalized = finalizeResult(result, context, 'standard')
+      expect(finalized.modernUsage).toEqual(
+        accepted
+          ? { hasSlangMeaning: true, slangDefinition: definition, contexts: ['Internet culture'] }
+          : { hasSlangMeaning: false }
+      )
+    }
+  )
+})
 
 function scopedFixture() {
   const history = {
@@ -126,6 +196,38 @@ test('canonical primary prose is projected and citations come from research', ()
   expect(finalized.pronunciation).toBe('/x/')
   expect(finalized.sources.map((source) => source.name)).toEqual(['wikipedia', 'wiktionaryNative'])
 })
+test('a senses-only fallback cannot publish an ancestry graph', () => {
+  const { result, context } = scopedFixture()
+  result.histories[0].entryKind = 'unresolved'
+  context.lexicalGraph!.histories[0].entryKind = 'unresolved'
+  context.entryContexts = [
+    {
+      id: 'h1',
+      source: 'multilingualDictionary',
+      heading: 'fixture',
+      text: 'A definition.',
+      sectionHeadings: [],
+      evidenceScopeId: 'scope1',
+      sourceUrl: 'https://freedictionaryapi.com',
+      entryKind: 'unresolved',
+    },
+  ]
+  context.mainWord.wikipedia = null
+  context.mainWord.multilingualDictionary = {
+    text: 'A definition.',
+    url: 'https://freedictionaryapi.com',
+  }
+  result.histories[0].ancestryGraph = { branches: [{ root: 'invented', stages: [] }] }
+  expect(() => finalizeResult(result, context, 'streaming')).toThrow(
+    'dictionary fallback cannot establish ancestry'
+  )
+  result.histories[0].ancestryGraph = { branches: [] }
+  const finalized = finalizeResult(result, context, 'streaming')
+  expect(finalized.ancestryGraph.branches).toEqual([])
+  expect(
+    finalized.sources.find((source) => source.name === 'multilingualDictionary')?.sourceFamily
+  ).toBe('wiktionary')
+})
 test('a changed evidence scope fails before an identity can be published', () => {
   const { result, context } = scopedFixture()
   result.histories[0].evidenceScopeIds = ['someone-elses-scope']
@@ -169,10 +271,23 @@ test('an incomplete synthesis fails with provider usage instead of returning par
   }
 })
 
-test.each(['en', 'fr'] as const)(
-  'streams the validated primary %s history before provider completion',
-  async (language) => {
+test.each([
+  ['English', 'en', false],
+  ['French', 'fr', false],
+  ['reordered French', 'fr', true],
+] as const)(
+  'streams the validated %s primary history before its array closes',
+  async (_label, language, reordered) => {
     const { result, context } = scopedFixture()
+    const sibling = {
+      ...structuredClone(result.histories[0]),
+      id: 'h2',
+      queryNodeId: 'q2',
+      lemmaNodeId: 'q2',
+      evidenceScopeIds: ['scope2'],
+    }
+    result.histories.push(sibling)
+    context.lexicalGraph!.histories.push({ ...sibling, nodeIds: ['q2'], edgeIds: [] })
     context.language = language
     context.entryContexts = [
       {
@@ -181,6 +296,16 @@ test.each(['en', 'fr'] as const)(
         source: 'wiktionary',
         heading: 'Etymology',
         text: 'Origin uncertain.',
+        sectionHeadings: [],
+        sourceUrl: 'https://en.wiktionary.org/wiki/café_au_lait',
+        entryKind: 'lemma',
+      },
+      {
+        id: 'h2',
+        evidenceScopeId: 'scope2',
+        source: 'wiktionary',
+        heading: 'Etymology 2',
+        text: 'An independent origin.',
         sectionHeadings: [],
         sourceUrl: 'https://en.wiktionary.org/wiki/café_au_lait',
         entryKind: 'lemma',
@@ -211,13 +336,18 @@ test.each(['en', 'fr'] as const)(
         },
       ],
     }
+    if (reordered) output.histories.reverse()
     const text = JSON.stringify(output)
-    const prefix = JSON.stringify({
-      language: output.language,
-      word: output.word,
-      primaryHistoryId: output.primaryHistoryId,
-      histories: output.histories,
-    }).slice(0, -1)
+    const prefix =
+      JSON.stringify({
+        language: output.language,
+        word: output.word,
+        primaryHistoryId: output.primaryHistoryId,
+      }).slice(0, -1) +
+      ',"histories":[' +
+      (reordered
+        ? output.histories.map((history) => JSON.stringify(history)).join(',')
+        : JSON.stringify(output.histories[0]))
     expect(text.startsWith(prefix)).toBe(true)
     const split = prefix.length
     const savedFetch = globalThis.fetch
@@ -266,10 +396,12 @@ test.each(['en', 'fr'] as const)(
       expect(visible.pronunciation).toBe('/x/')
       expect(visible.definition).toBe(language === 'en' ? 'primary' : 'primaire')
       expect(visible.ancestryGraph.branches).toEqual([])
-      expect(emissions.filter(({ section }) => section === 'histories')).toHaveLength(1)
+      expect(emissions.filter(({ section }) => section === 'histories')).toHaveLength(0)
       expect(emissions.every((emission) => !emission.completed)).toBe(true)
       release()
       const finalized = await pending
+      expect(finalized.result.histories).toHaveLength(2)
+      expect(emissions.filter(({ section }) => section === 'histories')).toHaveLength(1)
       expect(finalized.usage).toEqual({ inputTokens: 10, outputTokens: 20, costUSD: 0.001 })
       for (const name of ['pronunciation', 'definition', 'ancestryGraph', 'lore']) {
         const emitted = emissions.filter(({ section }) => section === name)
@@ -281,6 +413,64 @@ test.each(['en', 'fr'] as const)(
     } finally {
       release()
       await pending.catch(() => {})
+      globalThis.fetch = savedFetch
+      if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
+      else process.env.OPENROUTER_API_KEY = savedKey
+    }
+  }
+)
+
+test.each(['scope', 'bilingual', 'sibling'] as const)(
+  'an invalid %s value prevents a complete history collection and retains billed usage',
+  async (fault) => {
+    const fixture = scopedFixture()
+    const context = structuredClone(fixture.context)
+    const output = structuredClone(fixture.result)
+    if (fault === 'scope') output.histories[0].evidenceScopeIds = ['someone-elses-scope']
+    else if (fault === 'bilingual') output.histories[0].lore.local = ''
+    else {
+      const sibling = {
+        ...structuredClone(output.histories[0]),
+        id: 'h2',
+        queryNodeId: 'q2',
+        lemmaNodeId: 'q2',
+        evidenceScopeIds: ['scope2'],
+      }
+      context.lexicalGraph!.histories.push({ ...sibling, nodeIds: ['q2'], edgeIds: [] })
+      sibling.evidenceScopeIds = ['someone-elses-scope']
+      output.histories.push(sibling)
+    }
+    const text = JSON.stringify(output)
+    const response = {
+      status: 'completed',
+      output_text: text,
+      usage: { input_tokens: 10, output_tokens: 20, cost: 0.001 },
+    }
+    const savedFetch = globalThis.fetch
+    const savedKey = process.env.OPENROUTER_API_KEY
+    process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
+    globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+      if (!JSON.parse(String(init?.body)).stream) return Response.json(response)
+      return new Response(
+        `data: ${JSON.stringify({ type: 'response.output_text.delta', delta: text })}\n\n` +
+          `data: ${JSON.stringify({ type: 'response.completed', response })}\n\n`,
+        { headers: { 'Content-Type': 'text/event-stream' } }
+      )
+    }) as typeof fetch
+    const sections: string[] = []
+    try {
+      await expect(
+        synthesizeFromResearch(context, {
+          onSection: (section) => sections.push(section),
+        })
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('Schema validation failed'),
+        usage: { inputTokens: 20, outputTokens: 40, costUSD: 0.002 },
+      })
+      for (const section of ['definition', 'ancestryGraph', 'lore'])
+        expect(sections.includes(section)).toBe(fault === 'sibling')
+      expect(sections).not.toContain('histories')
+    } finally {
       globalThis.fetch = savedFetch
       if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
       else process.env.OPENROUTER_API_KEY = savedKey

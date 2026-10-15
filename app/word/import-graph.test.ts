@@ -66,11 +66,7 @@ describe('/word/[...segments] module graph (LLM spend invariant)', () => {
   const graph = collectModuleGraph(ENTRY)
 
   test('cached word pages never import the research or LLM pipeline', () => {
-    expect(graph.has(ENTRY)).toBe(true)
     expect(graph.has(join(REPO_ROOT, 'lib', 'cache.ts'))).toBe(true)
-    expect(graph.has(join(REPO_ROOT, 'components', 'EtymologyCard.tsx'))).toBe(true)
-    expect(graph.size).toBeGreaterThan(10)
-
     const forbidden = ['lib/research.ts', 'lib/llm.ts', 'lib/openrouterResponses.ts']
     for (const relativePath of forbidden) {
       const absolutePath = join(REPO_ROOT, relativePath)

@@ -237,26 +237,27 @@ function dedupeStrings(values: string[]): string[] {
 }
 
 interface SupplementalSourceSignals {
-  urbanDictionary: boolean
   incelsWiki: boolean
+  wikipedia: boolean
 }
 
-const MIN_SIGNIFICANT_URBAN_CHARS = 40
 const MIN_SIGNIFICANT_INCELS_CHARS = 120
+const MIN_SIGNIFICANT_WIKIPEDIA_CHARS = 120
 const INCELS_USAGE_SIGNALS =
   /\b(incel|femcel|blackpill|redpill|looksmax|manosphere|internet|slang|term|coined|refers to|used)\b/i
+const WIKIPEDIA_USAGE_SIGNALS = /\b(slang|colloquial(?:ly|ism)?|internet memes?)\b/i
 
 function getSupplementalSourceSignals(researchContext: ResearchContext): SupplementalSourceSignals {
-  const urbanText =
-    researchContext.mainWord.urbanDictionary?.text?.replace(/\s+/g, ' ').trim() ?? ''
   const incelsText = researchContext.mainWord.incelsWiki?.text?.replace(/\s+/g, ' ').trim() ?? ''
+  const wikipediaText = researchContext.mainWord.wikipedia?.text?.replace(/\s+/g, ' ').trim() ?? ''
 
-  const urbanDictionary =
-    urbanText.length >= MIN_SIGNIFICANT_URBAN_CHARS && /Definition:/i.test(urbanText)
   const incelsWiki =
     incelsText.length >= MIN_SIGNIFICANT_INCELS_CHARS && INCELS_USAGE_SIGNALS.test(incelsText)
+  const wikipedia =
+    wikipediaText.length >= MIN_SIGNIFICANT_WIKIPEDIA_CHARS &&
+    WIKIPEDIA_USAGE_SIGNALS.test(wikipediaText)
 
-  return { urbanDictionary, incelsWiki }
+  return { incelsWiki, wikipedia }
 }
 
 function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchContext): void {
@@ -277,7 +278,7 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
 
   const supplementalSignals = getSupplementalSourceSignals(researchContext)
   const hasSupplementalSlangEvidence =
-    supplementalSignals.urbanDictionary || supplementalSignals.incelsWiki
+    supplementalSignals.incelsWiki || supplementalSignals.wikipedia
   if (!hasSupplementalSlangEvidence) {
     result.modernUsage = { hasSlangMeaning: false }
     return
@@ -327,18 +328,22 @@ interface SynthesisOptions {
   language?: LanguageCode
   sourceHistories?: boolean
   /**
-   * Streams the LLM response and fires once per closed top-level field of
-   * the response JSON, in schema (render) order — ~10 events per response.
-   * Presence of this callback selects the streaming transport; the
-   * streaming path does not retry malformed output, because sections
-   * already on the wire cannot be retracted.
+   * Selects streaming transport and publishes validated entry fields once.
+   * Source-defined primary-history fields can arrive before the complete
+   * histories array; collection metadata waits for the full identity check.
+   * Malformed streaming output is not retried within the transport because
+   * sections already on the wire cannot be retracted.
    */
   onSection?: (section: string, data: unknown) => void
 }
 
+type LlmCallOptions = SynthesisOptions & {
+  onHistory?: (history: unknown) => void
+}
+
 async function callLlm(
   userPrompt: string,
-  options?: SynthesisOptions
+  options?: LlmCallOptions
 ): Promise<{
   text: string
   usage: LlmUsage
@@ -362,9 +367,15 @@ async function callLlm(
       return { text: extractOutputText(response), usage: extractUsage(response) }
     }
 
-    const scanner = createSectionScanner((section, data) => {
-      onSection(section, stripNullsDeep(data))
-    })
+    const onHistory = options?.onHistory
+    const scanner = createSectionScanner(
+      (section, data) => onSection(section, stripNullsDeep(data)),
+      onHistory
+        ? (section, _index, data) => {
+            if (section === 'histories') onHistory(stripNullsDeep(data))
+          }
+        : undefined
+    )
 
     let streamedText = ''
     const response = await streamOpenRouterResponse(
@@ -399,7 +410,7 @@ async function callLlm(
 
 async function generateEtymologyResponse(
   userPrompt: string,
-  options?: SynthesisOptions,
+  options?: LlmCallOptions,
   malformedAttemptLimit?: number
 ): Promise<{
   result: EtymologyResult
@@ -537,24 +548,19 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
       word: mainWord,
     })
   }
-  if (researchContext.mainWord.freeDictionary) {
+  if (researchContext.mainWord.multilingualDictionary) {
     sources.push({
-      name: 'freeDictionary',
-      url: `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(mainWord)}`,
+      name: 'multilingualDictionary',
+      url: researchContext.mainWord.multilingualDictionary.url,
       word: mainWord,
+      sourceFamily: 'wiktionary',
+      license: 'Per-entry attribution and license are provided by FreeDictionaryAPI',
     })
   }
   if (researchContext.mainWord.wikipedia) {
     sources.push({
       name: 'wikipedia',
       url: researchContext.mainWord.wikipedia.url,
-      word: mainWord,
-    })
-  }
-  if (researchContext.mainWord.urbanDictionary && supplementalSignals.urbanDictionary) {
-    sources.push({
-      name: 'urbanDictionary',
-      url: researchContext.mainWord.urbanDictionary.url,
       word: mainWord,
     })
   }
@@ -694,6 +700,17 @@ function finalizeHistories(
   }
 
   for (const history of result.histories) {
+    const source = researchContext.entryContexts?.find((entry) => entry.id === history.id)?.source
+    if (
+      source === 'multilingualDictionary' &&
+      (history.roots.length ||
+        history.ancestryGraph.branches.length ||
+        history.ancestryGraph.mergePoint ||
+        history.ancestryGraph.postMerge?.length ||
+        history.ancestryGraph.convergencePoints?.length)
+    ) {
+      throw new Error('Schema validation failed: dictionary fallback cannot establish ancestry')
+    }
     const candidate = candidates.find((entry) => entry.id === history.id)
     const formOfMatches = candidate?.formOf
       ? history.formOf?.word === candidate.formOf.word &&
@@ -797,12 +814,6 @@ export function finalizeResult(
   return validated.data as EtymologyResult
 }
 
-/**
- * Single synthesis entrypoint for both transports: pass `onSection` to
- * stream (section events fire as top-level fields close), omit it for a
- * unary call. Either way the parsed result is enriched, source-attributed,
- * and Zod-validated before it is returned.
- */
 export async function synthesizeFromResearch(
   researchContext: ResearchContext,
   options?: SynthesisOptions
@@ -825,14 +836,80 @@ export async function synthesizeFromResearch(
 
   for (let attempt = 0; attempt < maxValidationAttempts; attempt += 1) {
     try {
-      // Closed histories can be validated and projected before their duplicated
-      // top-level fields arrive. Other evidence waits for the finalizer.
       const heldSections = ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources']
       const pendingSections = new Map<string, unknown>()
       const publishedSections = new Set<string>()
       let wordVerified = false
       let languageVerified = language === 'en'
       let identityError: Error | undefined
+      let pendingPrimaryHistory: unknown
+      const entryFields = [
+        'pronunciation',
+        'definition',
+        'ancestryGraph',
+        'roots',
+        'lore',
+        'partsOfSpeech',
+      ]
+      const publish = (name: string, value: unknown) => {
+        if (publishedSections.has(name)) return
+        publishedSections.add(name)
+        if (value !== undefined) options?.onSection?.(name, value)
+      }
+      const publishEntry = (entry: EtymologyResult) => {
+        for (const name of entryFields)
+          publish(name, (entry as unknown as Record<string, unknown>)[name])
+      }
+      const publishPrimary = () => {
+        const graph = researchContext.lexicalGraph
+        if (
+          identityError ||
+          !wordVerified ||
+          !languageVerified ||
+          !pendingPrimaryHistory ||
+          publishedSections.has('definition') ||
+          !graph?.histories.length ||
+          pendingSections.get('primaryHistoryId') !== graph.histories[0].id
+        )
+          return
+        try {
+          // Only the expected history set narrows for this partial projection.
+          // Keep all source contexts and chains so foreign-history ancestry is
+          // rejected exactly as it is in the complete collection finalizer.
+          const primary = finalizeResult(
+            {
+              word: researchContext.mainWord.word,
+              language,
+              primaryHistoryId: pendingSections.get('primaryHistoryId'),
+              histories: [pendingPrimaryHistory],
+              sources: [],
+            } as unknown as EtymologyResult,
+            {
+              ...researchContext,
+              lexicalGraph: { ...graph, histories: graph.histories.slice(0, 1) },
+            },
+            'streaming'
+          )
+          publishEntry(primary)
+        } catch (error) {
+          // Preserve completed provider usage even when an early history fails.
+          identityError = error instanceof Error ? error : new Error(String(error))
+        }
+      }
+      const onHistory =
+        options?.onSection && sourceHistories
+          ? (history: unknown) => {
+              if (
+                history &&
+                typeof history === 'object' &&
+                'id' in history &&
+                history.id === researchContext.lexicalGraph?.histories[0]?.id
+              ) {
+                pendingPrimaryHistory = history
+                publishPrimary()
+              }
+            }
+          : undefined
       const onSection = options?.onSection
         ? (section: string, data: unknown) => {
             if (section === 'word') {
@@ -853,13 +930,10 @@ export async function synthesizeFromResearch(
             if (identityError) return
             pendingSections.set(section, data)
             if (sourceHistories && wordVerified && languageVerified) {
-              const publish = (name: string, value: unknown) => {
-                if (publishedSections.has(name)) return
-                publishedSections.add(name)
-                if (value !== undefined) options.onSection?.(name, value)
-              }
               if (language !== 'en') publish('language', language)
               publish('word', researchContext.mainWord.word)
+              publishPrimary()
+              if (identityError) return
               if (
                 !publishedSections.has('histories') &&
                 pendingSections.has('histories') &&
@@ -879,18 +953,10 @@ export async function synthesizeFromResearch(
                     researchContext,
                     'streaming'
                   )
-                  for (const name of [
-                    'primaryHistoryId',
-                    'histories',
-                    'pronunciation',
-                    'definition',
-                    'ancestryGraph',
-                    'roots',
-                    'lore',
-                    'partsOfSpeech',
-                  ]) {
+                  for (const name of ['primaryHistoryId', 'histories']) {
                     publish(name, (primary as unknown as Record<string, unknown>)[name])
                   }
+                  publishEntry(primary)
                 } catch (error) {
                   // Drain the provider response even on validation failure so
                   // its completed usage is included in the failed request.
@@ -911,7 +977,7 @@ export async function synthesizeFromResearch(
         : undefined
       const attemptOptions =
         attempt === 0
-          ? { ...options, language, sourceHistories, onSection }
+          ? { ...options, language, sourceHistories, onSection, onHistory }
           : { signal: options?.signal, language, sourceHistories }
       const generated = await generateEtymologyResponse(
         userPrompt,

@@ -72,11 +72,11 @@ describe('source events', () => {
   test('normalizes source names with spaces and case', () => {
     const state = run([
       { type: 'search_started' },
-      ...events({ type: 'source_complete', source: 'Urban Dictionary', timing: 300 }),
+      ...events({ type: 'source_complete', source: 'Incels Wiki', timing: 300 }),
     ])
 
-    const urban = state.sources.find((s) => s.key === 'urbandictionary')
-    expect(urban?.status).toBe('complete')
+    const source = state.sources.find((s) => s.key === 'incelswiki')
+    expect(source?.status).toBe('complete')
     expect(state.sources).toHaveLength(1)
   })
 

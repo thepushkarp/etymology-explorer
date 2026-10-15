@@ -12,6 +12,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "bun test",
+    "bench:browser": "node scripts/performance/browser.mjs",
+    "bench:fixtures": "node scripts/performance/fixture-server.mjs",
+    "bench:verify": "node scripts/performance/verify.mjs",
     "typecheck": "tsc --noEmit",
     "prepare": "husky"
   },
@@ -46,6 +49,7 @@
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
+    "playwright": "^1.64.1",
     "prettier": "^3.9.9",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3"

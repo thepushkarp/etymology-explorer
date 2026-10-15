@@ -2,7 +2,7 @@ import { canonicalizeWord } from './orthography'
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
 import { fetchWithTimeout } from './fetchUtils'
-import { LANGUAGES, type BetaLanguageCode } from './languages'
+import { LANGUAGES, type BetaLanguageCode, type LanguageCode } from './languages'
 import { cacheSource, getCachedSource, type CacheableSource } from './sourceCache'
 import type { SourceData } from './types'
 import {
@@ -127,7 +127,7 @@ export function fetchNativeWiktionary(
 
 export async function fetchFreeDictionaryApi(
   word: string,
-  language: BetaLanguageCode,
+  language: LanguageCode,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
   const cached = await getCachedSource('multilingualDictionary', word, undefined, language)
@@ -145,7 +145,11 @@ export async function fetchFreeDictionaryApi(
     if (!Array.isArray(data.entries) || data.entries.length === 0) return null
     const entries = data.entries.filter((entry) => {
       if (!entry || typeof entry !== 'object') return false
-      const headword = (entry as { word?: unknown }).word
+      const { word: headword, language: entryLanguage } = entry as {
+        word?: unknown
+        language?: { code?: unknown }
+      }
+      if (entryLanguage?.code !== undefined && entryLanguage.code !== language) return false
       return (
         headword === undefined ||
         (typeof headword === 'string' && canonicalizeWord(headword) === canonicalizeWord(word))

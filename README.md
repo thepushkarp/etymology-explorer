@@ -14,7 +14,7 @@ Try it out at [etymex.com](https://etymex.com)
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
 - **Related Words**: Discover words that share the same roots
 - **Word Suggestions**: Explore synonyms, antonyms, homophones, easily-confused words, and see-also links
-- **Modern Usage**: Slang context gated by source significance from Urban Dictionary and supplemental Incel Wiki extracts
+- **Modern Usage**: Supplemental community usage gated by source significance from Incel Wiki extracts
 - **Pronunciation Audio**: Listen to word pronunciations powered by ElevenLabs
 - **Random Word**: Open a random word to expand your vocabulary
 - **Structured Outputs**: Guaranteed valid JSON via OpenRouter `json_schema` strict mode
@@ -110,11 +110,9 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
   - [Wiktionary](https://en.wiktionary.org/) - Definitions and linguistic data
   - Native Italian, Spanish, French, and Portuguese Wiktionary editions - selected-language etymology sections
   - [Wikidata Lexemes](https://www.wikidata.org/wiki/Wikidata:Lexicographical_data/Documentation) - language-tagged lemmas, forms, senses, and lexical claims
-  - [FreeDictionaryAPI](https://freedictionaryapi.com/) - multilingual senses, forms, and IPA (not etymology)
+  - [FreeDictionaryAPI](https://freedictionaryapi.com/) - senses, forms, and IPA after direct Wiktionary misses (not etymology)
   - [Dicionário Aberto](https://api.dicionario-aberto.net/index.html) - older Portuguese dictionary evidence
-  - [Free Dictionary API](https://dictionaryapi.dev/) - Definitions, pronunciation hints, and origin data
   - [Wikipedia](https://en.wikipedia.org/) - Encyclopedic context
-  - [Urban Dictionary](https://www.urbandictionary.com/) - Modern slang (quality-filtered)
   - [Incel Wiki](https://incels.wiki/) - Supplemental community slang context
 - **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
 - **Typography**: Libre Baskerville (display serif) + Alegreya Sans (body), self-hosted woff2 subsets
@@ -158,9 +156,7 @@ etymology-explorer/
 │   ├── etymologyEnricher.ts # Post-LLM confidence enricher
 │   ├── etymonline.ts       # Etymonline HTML scraper
 │   ├── wiktionary.ts       # Wiktionary MediaWiki API client
-│   ├── freeDictionary.ts   # Free Dictionary API client
 │   ├── wikipedia.ts        # Wikipedia REST API client
-│   ├── urbanDictionary.ts  # Urban Dictionary API with quality scoring/filtering
 │   ├── incelsWiki.ts       # Incel Wiki MediaWiki API client (supplemental)
 │   ├── elevenlabs.ts       # ElevenLabs TTS for pronunciation audio
 │   ├── spellcheck.ts       # Typo detection and suggestions
@@ -204,13 +200,13 @@ etymology-explorer/
 
 1. **Request Deduplication**: Singleflight owner-token locks (90s TTL, heartbeat-extended) ensure one pipeline run per word; waiters poll the cache for the holder's result, and streaming waiters can take over if the holder crashes
 2. **Rate Limiting**: Per-IP rate limiting (20 req/min + 200 req/day) via Upstash Redis
-3. **Cache Check**: Redis cache lookup with versioned keys (`etymology:v2.2:`), schema validation on read, and negative cache (30m) for known no-source/invalid words. Without Redis, uncached searches return 503 (fail closed)
+3. **Cache Check**: Redis cache lookup with versioned keys (`etymology:v2.6:`), schema validation on read, a five-minute TTL for incomplete research, and negative cache (30m) for known no-source/invalid words. Without Redis, uncached searches return 503 (fail closed)
 4. **Grounded Etymology Pipeline**:
    - **Parser** (CPU-only): Extracts "from X, from Y" chains from raw source text
    - **Agentic Research**: Multi-phase research pipeline (aborts mid-flight if the client disconnects):
-     - Phase 1: Fire all 6 source fetches at once (Etymonline, Wiktionary, Free Dictionary, Wikipedia, Urban Dictionary, Incel Wiki); Etymonline + Wiktionary gate root expansion, while a Free Dictionary or Wikipedia hit can still admit synthesis when both primary sources miss. Raw Etymonline/Wiktionary pages are served from a 7-day Redis source cache when available
-     - Phase 2: Root morphemes extracted on-CPU from derivation formulas ("From X + Y", "equivalent to X + Y") and parsed-chain affixes (e.g., "telephone" → ["tele", "phone"]); a quick LLM call (15s timeout, truncated input) runs only when the CPU pass finds nothing
-     - Phase 3: One parallel wave fetches root pages (up to 4 roots, etymonline + wiktionary) and main-word related-term pages (etymonline only) within the 16-fetch budget
+     - Phase 1: Fetch Etymonline and Wiktionary alongside optional Wikipedia and Incel Wiki. FreeDictionaryAPI runs only when direct Wiktionary misses, providing definitions and pronunciation with an explicitly unresolved origin. Native and English Wiktionary editions define multilingual history boundaries; Wikidata supplies lexical identity. Source-cache hits avoid HTTP attempts.
+     - Phase 2: Root morphemes extracted on-CPU from derivation formulas ("From X + Y", "equivalent to X + Y") and parsed-chain affixes (e.g., "telephone" → ["tele", "phone"]); a quick LLM call (15s timeout) runs only when the CPU pass finds nothing
+     - Phase 3: One parallel wave fetches root pages (up to 4 roots, etymonline + wiktionary) and main-word related-term pages (etymonline only) within the 32-fetch budget
    - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
@@ -258,10 +254,10 @@ disabled until it completes the same etymology-quality and latency bakeoff.
                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Grounded Etymology Pipeline (client disconnect aborts in-flight work)        │
-│ 1) Fire 6 source fetches at once (etymonline/wiktionary via 7d source cache) │
+│ 1) Fetch direct sources; use a senses-only dictionary fallback on misses    │
 │ 2) Parse "from X, from Y" chains once etymonline+wiktionary land (CPU-only)  │
 │ 3) CPU root extraction from derivation formulas; LLM fallback if none found  │
-│ 4) ONE parallel wave: root pages + related-term pages (16-fetch budget)      │
+│ 4) ONE parallel wave: root pages + related-term pages (32-fetch budget)      │
 │ 5) OpenRouter synthesis, json_schema strict (sections stream when stream=true)│
 │ 6) Enrich ancestry graph + confidence/evidence                               │
 │ 7) Cache result in Redis                                                     │
@@ -307,9 +303,8 @@ MIT
 ## Acknowledgments
 
 - Etymology data from [Etymonline](https://www.etymonline.com/) and [Wiktionary](https://en.wiktionary.org/)
-- Definitions and pronunciation hints from [Free Dictionary API](https://dictionaryapi.dev/)
+- Dictionary fallback from [FreeDictionaryAPI](https://freedictionaryapi.com/)
 - Encyclopedic context from [Wikipedia](https://en.wikipedia.org/)
-- Modern slang definitions from [Urban Dictionary](https://www.urbandictionary.com/)
 - Supplemental community slang context from [Incel Wiki](https://incels.wiki/)
 - Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)
 - Powered by [OpenRouter](https://openrouter.ai/) `openai/gpt-6-luna`

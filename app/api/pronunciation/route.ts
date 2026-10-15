@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { ElevenLabsApiError, generatePronunciation, isElevenLabsConfigured } from '@/lib/elevenlabs'
 import { getCachedAudio, cacheAudio } from '@/lib/cache'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
@@ -9,17 +9,10 @@ import { CONFIG } from '@/lib/config'
 import { lexemeKey, parseLanguageCode } from '@/lib/languages'
 import { incrLanguageCounter } from '@/lib/counters'
 
-// TTS generation has an 8s timeout, plus cache round-trips and waiter polling.
+// TTS generation has a 15s timeout, plus cache round-trips and waiter polling.
 export const maxDuration = 60
 
-/**
- * GET /api/pronunciation?word=example
- *
- * Returns MP3 audio for word pronunciation.
- * Uses Redis cache for repeated requests, ElevenLabs TTS for generation.
- */
 export async function GET(request: NextRequest) {
-  // Feature flag
   if (!CONFIG.features.pronunciationEnabled) {
     return NextResponse.json(
       { success: false, error: 'Pronunciation service is disabled' },
@@ -57,7 +50,6 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Check cache first (cache hits are free — no budget cost)
   try {
     const cached = await getCachedAudio(normalized, language)
     if (cached) {
@@ -74,14 +66,14 @@ export async function GET(request: NextRequest) {
     console.error('[Pronunciation] Cache read error:', safeError(error))
   }
 
-  // Singleflight: prevent duplicate TTS calls for the same word
   const lockKey = `lock:audio:${lexemeKey(language, normalized)}`
-  const acquisition = await tryAcquireLock(lockKey)
+  const [acquisition, costMode] = await Promise.all([tryAcquireLock(lockKey), getCostMode()])
 
   if (acquisition.status === 'busy') {
-    // Another request is generating this audio — poll for it
     console.log(`[Pronunciation] Waiting for in-flight audio for "${normalized}"`)
-    const result = await pollForResult(() => getCachedAudio(normalized, language))
+    const result = await pollForResult(() => getCachedAudio(normalized, language), {
+      intervalMs: CONFIG.singleflight.audioWaiterPollIntervalMs,
+    })
     if (result) {
       const buffer = Buffer.from(result, 'base64')
       return new NextResponse(buffer, {
@@ -99,13 +91,12 @@ export async function GET(request: NextRequest) {
   }
 
   // 'unavailable' / 'error' fall through without a lock: pronunciation fails
-  // open because TTS cost is bounded (8s timeout, per-IP rate limits) and the
+  // open because TTS cost is bounded (15s timeout, per-IP rate limits) and the
   // endpoint must keep working when Redis is down.
   const lockToken = acquisition.status === 'acquired' ? acquisition.token : null
+  let cleanupScheduled = false
 
   try {
-    // Check cost mode — reject uncached expensive requests when budget is pressured
-    const costMode = await getCostMode()
     if (costMode === 'cache_only') {
       return NextResponse.json(
         { success: false, error: 'Service temporarily unavailable' },
@@ -116,9 +107,16 @@ export async function GET(request: NextRequest) {
     const audioBuffer = await generatePronunciation(normalized, language)
     const base64 = Buffer.from(audioBuffer).toString('base64')
 
-    // Cache BEFORE the lock is released in `finally` so waiters polling
-    // the audio cache find the result instead of hitting 429.
-    await cacheAudio(normalized, base64, language)
+    // Persistence must finish before releasing the lock, but neither operation
+    // needs to delay playback. after() keeps both alive on serverless runtimes.
+    after(async () => {
+      try {
+        await cacheAudio(normalized, base64, language)
+      } finally {
+        if (lockToken) await releaseLock(lockKey, lockToken)
+      }
+    })
+    cleanupScheduled = true
 
     return new NextResponse(Buffer.from(audioBuffer), {
       headers: {
@@ -143,9 +141,7 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   } finally {
-    if (lockToken) {
-      // Awaited: on serverless the context can freeze once the response
-      // returns, which would leave the lock held until its TTL expires.
+    if (lockToken && !cleanupScheduled) {
       await releaseLock(lockKey, lockToken)
     }
   }

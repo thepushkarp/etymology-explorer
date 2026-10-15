@@ -52,10 +52,6 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
 
   const partial = useMemo(() => {
     const streamed = toPartialResult(word, progress.sections, language)
-    if (language !== 'en') {
-      // Beta bodies arrive bilingual and per-history; only the header streams.
-      return { ...streamed, ancestryGraph: { branches: [] }, lore: '', roots: [], sources: [] }
-    }
     return { ...streamed, ngram: ngram.status === 'ready' ? ngram.data : undefined }
   }, [word, language, progress.sections, ngram])
 

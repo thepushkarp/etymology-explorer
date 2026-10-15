@@ -1,4 +1,6 @@
 import type { Metadata } from 'next'
+import { CONFIG } from '@/lib/config'
+import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
 import { notFound, permanentRedirect } from 'next/navigation'
 import { SiteFooter } from '@/components/SiteFooter'
@@ -70,16 +72,17 @@ async function resolveRoute(params: WordPageProps['params']): Promise<ResolvedWo
   return { language, word }
 }
 
-function loadCachedEtymology(word: string, language: LanguageCode) {
+// Metadata and page rendering share one in-flight read within this request.
+const loadCachedEtymology = cache((word: string, language: LanguageCode) => {
   const cacheKey =
     language === 'en'
       ? ['word-page-etymology', CACHE_VERSION, word]
       : ['multilingual-word-page-etymology', BETA_CACHE_VERSION, language, word]
   return unstable_cache(() => getCachedEtymology(word, language), cacheKey, {
-    revalidate: 3600,
+    revalidate: CONFIG.incompleteEtymologyCacheTTL,
     tags: [etymologyWordTag(word, language)],
   })()
-}
+})
 
 function truncateAtWordBoundary(text: string): string {
   if (text.length <= DESCRIPTION_MAX_CHARS) return text

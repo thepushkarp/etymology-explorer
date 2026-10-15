@@ -223,6 +223,11 @@ export function extractWiktionaryVariants(
     string,
     { word: string; relationship: 'spelling-variant'; url: string }
   >()
+  // Resolve invariant heading offsets once to avoid whole-page scans per block.
+  const positionedSections = sections.map((section) => ({
+    section,
+    offset: anchorOffset(html, section.anchor),
+  }))
   // Inspect local definition/paragraph blocks so a variant qualifier never leaks
   // across senses into unrelated translation or cognate links.
   for (const block of fragment.matchAll(/<(p|li|dd)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
@@ -232,12 +237,9 @@ export function extractWiktionaryVariants(
       /\b(?:(?:British|American|UK|US)\s+(?:English\s+)?(?:standard\s+)?(?:spelling|form)|(?:alternative|alternate)\s+spelling)\s+(?:of|for)\b/i.test(
         plain
       )
-    const localHeading = sections
-      .filter((section) => {
-        const offset = anchorOffset(html, section.anchor)
-        return offset >= start && offset <= start + (block.index ?? 0)
-      })
-      .at(-1)
+    const localHeading = positionedSections
+      .filter(({ offset }) => offset >= start && offset <= start + (block.index ?? 0))
+      .at(-1)?.section
     const listedRegionalVariant =
       localHeading &&
       /^Alternative forms?$/i.test(cleanHeading(localHeading.line)) &&

@@ -66,6 +66,28 @@ describe('source cache', () => {
     ])
   })
 
+  test('historical language selections retain complete provenance without crossing languages', async () => {
+    const store = createStore()
+    const latin = {
+      text: 'Complete Latin history and final reference.',
+      url: 'https://en.wiktionary.org/wiki/mala',
+      requestedWord: 'mala',
+      resolvedWord: 'mala',
+      revisionId: 77,
+      variants: [
+        {
+          word: 'māla',
+          relationship: 'spelling-variant' as const,
+          url: 'https://en.wiktionary.org/wiki/m%C4%81la',
+        },
+      ],
+    }
+    await cacheSource('wiktionaryLanguage:Latin', 'mala', latin, store)
+    expect(await getCachedSource('wiktionaryLanguage:Latin', 'mala', store)).toEqual(latin)
+    expect(await getCachedSource('wiktionaryLanguage:Old%20French', 'mala', store)).toBeNull()
+    expect(await getCachedSource('wiktionary', 'mala', store)).toBeNull()
+  })
+
   test('fails open without a Redis client', async () => {
     expect(await getCachedSource('etymonline', 'telephone', null)).toBeNull()
     await cacheSource('etymonline', 'telephone', DATA, null) // must not throw

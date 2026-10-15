@@ -28,7 +28,9 @@ export interface SectionScanner {
 }
 
 export function createSectionScanner(
-  onSection: (section: string, data: unknown) => void
+  onSection: (section: string, data: unknown) => void,
+  /** Closed object elements of top-level arrays, before the enclosing array closes. */
+  onArrayObject?: (section: string, index: number, data: unknown) => void
 ): SectionScanner {
   let buffer = ''
   let pos = 0
@@ -39,6 +41,8 @@ export function createSectionScanner(
   let keyStart = -1
   let key = ''
   let valueStart = -1
+  let arrayObjectStart = -1
+  let arrayIndex = 0
 
   const emit = (rawValue: string): void => {
     let data: unknown
@@ -104,6 +108,8 @@ export function createSectionScanner(
             depth = 1
             inString = false
             escaped = false
+            arrayObjectStart = -1
+            arrayIndex = 0
           } else if (char !== ' ' && char !== '\t' && char !== '\n' && char !== '\r') {
             phase = 'in_primitive_value'
             valueStart = pos
@@ -133,13 +139,29 @@ export function createSectionScanner(
           } else if (char === '"') {
             inString = true
           } else if (char === '{' || char === '[') {
+            if (onArrayObject && buffer[valueStart] === '[' && depth === 1 && char === '{')
+              arrayObjectStart = pos
             depth += 1
           } else if (char === '}' || char === ']') {
             depth -= 1
+            if (onArrayObject && arrayObjectStart >= 0 && depth === 1) {
+              let data: unknown
+              try {
+                data = JSON.parse(buffer.slice(arrayObjectStart, pos + 1))
+              } catch {
+                // The full-field parser and terminal validation handle malformed JSON.
+                arrayObjectStart = -1
+                break
+              }
+              arrayObjectStart = -1
+              onArrayObject(key, arrayIndex, data)
+            }
             if (depth === 0) {
               emit(buffer.slice(valueStart, pos + 1))
               phase = 'expect_key'
             }
+          } else if (char === ',' && depth === 1) {
+            arrayIndex += 1
           }
           break
 

@@ -1,5 +1,4 @@
 import type { ParsedEtymChain } from './etymologyParser'
-import type { FreeDictionaryEntry } from './freeDictionary'
 import type { BetaLanguageCode, LanguageCode } from './languages'
 import type { WiktionaryEntryGroup } from './wiktionaryEntryGroups'
 
@@ -105,8 +104,6 @@ export interface SourceReference {
   name:
     | 'etymonline'
     | 'wiktionary'
-    | 'freeDictionary'
-    | 'urbanDictionary'
     | 'incelsWiki'
     | 'wikipedia'
     | 'wiktionaryEnglish'
@@ -335,7 +332,13 @@ export interface SourceData {
 
 export interface ResearchEntryContext {
   id: string
-  source: 'wiktionaryEnglish' | 'wiktionaryNative' | 'wiktionary' | 'etymonline' | 'wikipedia'
+  source:
+    | 'wiktionaryEnglish'
+    | 'wiktionaryNative'
+    | 'wiktionary'
+    | 'etymonline'
+    | 'wikipedia'
+    | 'multilingualDictionary'
   heading: string
   text: string
   sectionHeadings: string[]
@@ -390,8 +393,6 @@ export interface ResearchContext {
     word: string
     etymonline: SourceData | null
     wiktionary: SourceData | null
-    freeDictionary?: FreeDictionaryEntry | null
-    urbanDictionary?: SourceData | null
     wikipedia?: SourceData | null
     incelsWiki?: SourceData | null
     wiktionaryEnglish?: SourceData | null
@@ -405,6 +406,7 @@ export interface ResearchContext {
   rootResearch: RootResearchData[]
   relatedResearch: RelatedTermResearchData[]
   totalSourcesFetched: number
+  incompleteResearch?: boolean
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
   entryContexts?: ResearchEntryContext[]
   lexicalGraph?: LexicalResearchGraph

@@ -133,15 +133,89 @@ describe('extractRootsCpu', () => {
 })
 
 describe('research breadth', () => {
+  test.each(['en', 'fr'] as const)(
+    'the %s dictionary fallback runs only after direct Wiktionary misses',
+    async (language) => {
+      for (const directWorks of [true, false]) {
+        const requests: string[] = []
+        globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : String(input)
+          if (
+            process.env.ETYMOLOGY_KV_REST_API_URL &&
+            url.startsWith(process.env.ETYMOLOGY_KV_REST_API_URL)
+          )
+            return upstashMissResponse(init)
+          requests.push(url)
+          const hostname = new URL(url).hostname
+          if (['en.wiktionary.org', 'fr.wiktionary.org'].includes(hostname) && directWorks) {
+            const heading =
+              language === 'en'
+                ? 'English'
+                : hostname === 'en.wiktionary.org'
+                  ? 'French'
+                  : 'Français'
+            return Response.json({
+              parse: {
+                title: 'fixture',
+                text: `<h2 id="L">${heading}</h2><h3 id="Etymology">Etymology</h3><p>From alpha + -ize.</p>`,
+                tocdata: {
+                  sections: [
+                    { index: '1', line: heading, anchor: 'L', hLevel: 2, number: '1' },
+                    {
+                      index: '2',
+                      line: 'Etymology',
+                      anchor: 'Etymology',
+                      hLevel: 3,
+                      number: '1.1',
+                    },
+                  ],
+                },
+              },
+            })
+          }
+          if (hostname === 'freedictionaryapi.com')
+            return Response.json({
+              word: 'fixture',
+              entries: [
+                {
+                  word: 'fixture',
+                  language: { code: language },
+                  senses: [{ definition: 'A documented word.' }],
+                },
+              ],
+            })
+          return new Response('', { status: 404 })
+        }) as typeof fetch
+        const context = await conductAgenticResearch('fixture', {
+          language,
+          skipOptionalSources: true,
+        })
+        const hosts = requests.map((url) => new URL(url).hostname)
+        expect(hosts.filter((host) => host === 'freedictionaryapi.com')).toHaveLength(
+          directWorks ? 0 : 1
+        )
+        expect(
+          hosts.every(
+            (host) => !['api.urbandictionary.com', 'api.dictionaryapi.dev'].includes(host)
+          )
+        ).toBe(true)
+        if (!directWorks) {
+          expect(context.entryContexts?.[0].entryKind).toBe('unresolved')
+          expect(context.parsedChains).toEqual([])
+          expect(context.incompleteResearch).toBe(true)
+          expect(hasCredibleMainSource(context)).toBe(true)
+        }
+        if (directWorks && language === 'en') expect(context.incompleteResearch).toBe(true)
+      }
+    }
+  )
   test('admits credible supplemental sources when primary etymology sources miss', () => {
     const context: ResearchContext = {
       mainWord: {
         word: 'validword',
         etymonline: null,
         wiktionary: null,
-        freeDictionary: null,
         wikipedia: null,
-        urbanDictionary: null,
         incelsWiki: null,
       },
       identifiedRoots: [],
@@ -159,9 +233,9 @@ describe('research breadth', () => {
     expect(hasCredibleMainSource(context)).toBe(true)
 
     context.mainWord.wikipedia = null
-    context.mainWord.urbanDictionary = {
+    context.mainWord.incelsWiki = {
       text: 'Community slang definition only.',
-      url: 'https://www.urbandictionary.com/define.php?term=validword',
+      url: 'https://incels.wiki/w/validword',
     }
     expect(hasCredibleMainSource(context)).toBe(false)
   })
@@ -320,31 +394,24 @@ describe('buildResearchPrompt token diet', () => {
           text: `A telephone is a device. ${'w'.repeat(5000)}`,
           url: 'https://en.wikipedia.org/wiki/Telephone',
         },
-        freeDictionary: {
-          word: 'telephone',
-          phonetic: '/ˈtɛlɪfoʊn/',
-          phonetics: [
-            {
-              text: '/ˈtɛlɪfoʊn/',
-              audio: 'https://api.dictionaryapi.dev/media/pronunciations/en/telephone-us.mp3',
-            },
-          ],
-          meanings: [
-            {
-              partOfSpeech: 'noun',
-              definitions: [
-                { definition: 'An electronic device used for two-way talking', example: 'ring' },
-                { definition: 'The telephone network', example: 'by telephone' },
-                { definition: 'A children’s whisper game' },
-                { definition: 'A fourth definition that must be dropped' },
-              ],
-            },
-            {
-              partOfSpeech: 'verb',
-              definitions: [{ definition: 'To call someone using a telephone' }],
-            },
-          ],
-          origin: 'late 19th century: from French téléphone',
+        multilingualDictionary: {
+          text: JSON.stringify({
+            pronunciations: [{ text: '/ˈtɛlɪfoʊn/', audio: 'https://example.test/telephone.mp3' }],
+            entries: [
+              {
+                partOfSpeech: 'noun',
+                definitions: [
+                  { definition: 'An electronic device used for two-way talking' },
+                  { definition: 'Fourth definition retained.' },
+                ],
+              },
+              {
+                partOfSpeech: 'verb',
+                definitions: [{ definition: 'To call someone using a telephone' }],
+              },
+            ],
+          }),
+          url: 'https://freedictionaryapi.com/api/v1/entries/en/telephone',
         },
       },
       identifiedRoots: ['tele', 'phone'],
@@ -378,16 +445,14 @@ describe('buildResearchPrompt token diet', () => {
     )
   }
 
-  test('freeDictionary retains complete origins, phonetics, definitions and references', () => {
+  test('dictionary fallback retains complete phonetics, definitions and references', () => {
     const prompt = buildResearchPrompt(buildContext())
 
     expect(prompt).toContain('/ˈtɛlɪfoʊn/')
-    expect(prompt).toContain('late 19th century: from French téléphone')
     expect(prompt).toContain('An electronic device used for two-way talking')
     expect(prompt).toContain('To call someone using a telephone')
-    // Every lexical field survives the complete source serializer
     expect(prompt).toContain('.mp3')
-    expect(prompt).toContain('A fourth definition that must be dropped')
+    expect(prompt).toContain('Fourth definition retained.')
     expect(prompt).toContain('"partOfSpeech"')
   })
 
@@ -485,10 +550,6 @@ function installFetchRouter(options?: { wikipediaDelayMs?: number }): {
       )
     }
 
-    if (url.includes('urbandictionary.com')) {
-      return new Response(JSON.stringify({ list: [] }), { status: 200 })
-    }
-
     return new Response('not found', { status: 404 })
   }) as typeof fetch
 
@@ -496,6 +557,53 @@ function installFetchRouter(options?: { wikipediaDelayMs?: number }): {
 }
 
 describe('conductAgenticResearch phase ordering', () => {
+  test('source-defined ancestors do not wait for the root-extraction LLM', async () => {
+    const savedKey = process.env.OPENROUTER_API_KEY
+    process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
+    let release!: () => void
+    const rootsReady = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let ancestorRequested = false
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (
+        process.env.ETYMOLOGY_KV_REST_API_URL &&
+        url.startsWith(process.env.ETYMOLOGY_KV_REST_API_URL)
+      )
+        return upstashMissResponse(init)
+      if (url.includes('openrouter.ai')) {
+        await rootsReady
+        return Response.json({
+          output_text: '{"roots":["traceword"]}',
+          usage: { input_tokens: 10, output_tokens: 2 },
+        })
+      }
+      if (url.includes('etymonline.com/word/traceword'))
+        return new Response('<section class="prose-lg">1590s, from Latin nexus.</section>')
+      if (new URL(url).searchParams.get('page') === 'nexus') ancestorRequested = true
+      return new Response('not found', { status: 404 })
+    }) as typeof fetch
+    const pending = conductAgenticResearch('traceword')
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      expect(ancestorRequested).toBe(true)
+      release()
+      const context = await pending
+      expect(context.identifiedRoots).toEqual(['traceword'])
+      expect(context.mainWord.etymonline?.text).toContain('from Latin nexus')
+      expect(context.totalSourcesFetched).toBeLessThanOrEqual(CONFIG.maxTotalFetches)
+    } finally {
+      release()
+      try {
+        await pending
+      } finally {
+        if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
+        else process.env.OPENROUTER_API_KEY = savedKey
+      }
+    }
+  })
+
   test('optional sources resolving after root identification still land in the synthesis context', async () => {
     const { requestedUrls } = installFetchRouter({ wikipediaDelayMs: 150 })
     const events: StreamEvent[] = []
@@ -553,8 +661,7 @@ describe('conductAgenticResearch abort propagation', () => {
     expect(researchPromise).rejects.toMatchObject({ name: 'AbortError' })
     await researchPromise.catch(() => {})
 
-    // All six in-flight source fetches were cancelled, not left hanging
-    expect(abortedFetches).toBe(6)
+    expect(abortedFetches).toBe(4)
   })
 })
 

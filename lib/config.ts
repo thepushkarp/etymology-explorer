@@ -32,10 +32,11 @@ export const CONFIG = {
   // Research pipeline
   maxRootsToExplore: 4,
   maxRelatedWordsPerRoot: 4,
-  maxTotalFetches: 16,
+  maxTotalFetches: 32,
 
   // Cache TTLs (seconds)
   etymologyCacheTTL: 30 * 24 * 60 * 60, // 30 days
+  incompleteEtymologyCacheTTL: 5 * 60,
   audioCacheTTL: 365 * 24 * 60 * 60, // 1 year
   negativeCacheTTL: 30 * 60, // 30m — limits repeat misses without cementing transient source failures
   sourceCacheTTL: 7 * 24 * 60 * 60, // 7 days — raw etymonline/wiktionary page data
@@ -53,6 +54,7 @@ export const CONFIG = {
     lockTTLSeconds: 90, // auto-expires if holder crashes; holder heartbeats to extend
     heartbeatIntervalMs: 30_000, // holder re-EXPIREs the lock while the pipeline runs
     waiterPollIntervalMs: 2_000, // waiters re-check the cache at this cadence
+    audioWaiterPollIntervalMs: 250, // clips often finish before the etymology poll interval
     streamWaiterMaxWaitMs: 150_000, // streaming waiters keep the SSE open this long
     unaryWaiterMaxWaitMs: 10_000, // non-streaming waiters give up (429) after this
     failureMarkerTTLSeconds: 60, // holder-failure marker; blocks waiter promotion, not retries

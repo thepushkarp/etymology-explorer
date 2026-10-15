@@ -3,6 +3,7 @@ import { LANGUAGES, type BetaLanguageCode } from './languages'
 import {
   cleanWiktionaryHtml,
   extractWiktionaryEntryGroups,
+  extractWiktionaryVariants,
   type WiktionaryTocSection,
 } from './wiktionaryEntryGroups'
 
@@ -156,6 +157,36 @@ describe('extractWiktionaryEntryGroups', () => {
       )
     ).toBe('Nom\n- fenêtre & ouverture\n- cadre vitré')
   })
+})
+
+test('regional spelling lists keep their local heading and selected-language boundary', () => {
+  const html = [
+    '<h2 id="English">English</h2>',
+    '<h3 id="Alternative_forms">Alternative forms</h3>',
+    '<p>A discussion with an unrelated link to <a href="/wiki/hue">hue</a>.</p>',
+    '<p>US spelling: <a href="/wiki/color">color</a></p>',
+    '<h3 id="Noun">Noun</h3>',
+    '<p>US spelling: <a href="/wiki/unrelated">unrelated</a></p>',
+    '<h2 id="French">French</h2>',
+    '<h3 id="Alternative_forms_2">Alternative forms</h3>',
+    '<p>US spelling: <a href="/wiki/other-language">other-language</a></p>',
+  ].join('')
+  const sections = ['English', 'Alternative_forms', 'Noun', 'French', 'Alternative_forms_2'].map(
+    (anchor, index) => ({
+      index: String(index),
+      anchor,
+      number: String(index),
+      line: anchor.startsWith('Alternative') ? 'Alternative forms' : anchor,
+      hLevel: anchor === 'English' || anchor === 'French' ? 2 : 3,
+    })
+  )
+  expect(extractWiktionaryVariants(html, sections, 'English')).toEqual([
+    {
+      word: 'color',
+      relationship: 'spelling-variant',
+      url: 'https://en.wiktionary.org/wiki/color',
+    },
+  ])
 })
 
 function fixture(language: BetaLanguageCode, languageHeading: string, etymologyHeading: string) {

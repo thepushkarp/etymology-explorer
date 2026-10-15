@@ -22,9 +22,9 @@ function jitterTTL(ttl: number): number {
 }
 
 // Bump version when EtymologyResult schema or sourcing behavior changes
-export const CACHE_VERSION = '2.5'
+export const CACHE_VERSION = '2.6'
 export const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
-export const BETA_CACHE_VERSION = '7'
+export const BETA_CACHE_VERSION = '8'
 export const BETA_ETYMOLOGY_PREFIX = `etymology:beta:v${BETA_CACHE_VERSION}:`
 export const ETYMOLOGY_SCAN_PATTERN = 'etymology:*'
 const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
@@ -123,7 +123,8 @@ export async function getCachedEtymology(
 export async function cacheEtymology(
   word: string,
   result: EtymologyResult,
-  language: LanguageCode = result.language ?? 'en'
+  language: LanguageCode = result.language ?? 'en',
+  options?: { incomplete?: boolean }
 ): Promise<void> {
   const redis = getRedis()
   if (!redis) return
@@ -131,7 +132,9 @@ export async function cacheEtymology(
   const normalized = canonicalizeWord(word)
   const key = etymologyKey(normalized, language)
   try {
-    await redis.set(key, result, { ex: jitterTTL(ETYMOLOGY_TTL) })
+    await redis.set(key, result, {
+      ex: options?.incomplete ? CONFIG.incompleteEtymologyCacheTTL : jitterTTL(ETYMOLOGY_TTL),
+    })
     console.log(`[Cache] Stored etymology for "${word}"`)
   } catch (error) {
     console.error('[Cache] Etymology set error:', safeError(error))
@@ -154,7 +157,7 @@ export async function cacheEtymology(
   //   serve the miss page.
   //
   // Best-effort — outside a Next request scope (tests, scripts) after()
-  // throws and the page refreshes on its hourly data-cache window instead.
+  // throws and the page refreshes on its configured data-cache interval instead.
   try {
     after(() => {
       revalidateTag(etymologyWordTag(normalized, language), { expire: 0 })

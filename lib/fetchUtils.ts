@@ -16,10 +16,8 @@ const SOURCE_ORIGINS = [
   'https://fr.wikipedia.org',
   'https://pt.wikipedia.org',
   'https://www.wikidata.org',
-  'https://api.dictionaryapi.dev',
   'https://freedictionaryapi.com',
   'https://api.dicionario-aberto.net',
-  'https://api.urbandictionary.com',
   'https://incels.wiki',
 ] as const
 
