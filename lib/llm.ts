@@ -238,19 +238,26 @@ function dedupeStrings(values: string[]): string[] {
 
 interface SupplementalSourceSignals {
   incelsWiki: boolean
+  wikipedia: boolean
 }
 
 const MIN_SIGNIFICANT_INCELS_CHARS = 120
+const MIN_SIGNIFICANT_WIKIPEDIA_CHARS = 120
 const INCELS_USAGE_SIGNALS =
   /\b(incel|femcel|blackpill|redpill|looksmax|manosphere|internet|slang|term|coined|refers to|used)\b/i
+const WIKIPEDIA_USAGE_SIGNALS = /\b(slang|colloquial(?:ly|ism)?|internet memes?)\b/i
 
 function getSupplementalSourceSignals(researchContext: ResearchContext): SupplementalSourceSignals {
   const incelsText = researchContext.mainWord.incelsWiki?.text?.replace(/\s+/g, ' ').trim() ?? ''
+  const wikipediaText = researchContext.mainWord.wikipedia?.text?.replace(/\s+/g, ' ').trim() ?? ''
 
   const incelsWiki =
     incelsText.length >= MIN_SIGNIFICANT_INCELS_CHARS && INCELS_USAGE_SIGNALS.test(incelsText)
+  const wikipedia =
+    wikipediaText.length >= MIN_SIGNIFICANT_WIKIPEDIA_CHARS &&
+    WIKIPEDIA_USAGE_SIGNALS.test(wikipediaText)
 
-  return { incelsWiki }
+  return { incelsWiki, wikipedia }
 }
 
 function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchContext): void {
@@ -270,7 +277,8 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
   const englishUsage = modernUsage as ModernUsage<string>
 
   const supplementalSignals = getSupplementalSourceSignals(researchContext)
-  const hasSupplementalSlangEvidence = supplementalSignals.incelsWiki
+  const hasSupplementalSlangEvidence =
+    supplementalSignals.incelsWiki || supplementalSignals.wikipedia
   if (!hasSupplementalSlangEvidence) {
     result.modernUsage = { hasSlangMeaning: false }
     return

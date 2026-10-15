@@ -57,8 +57,78 @@ describe('isRecoverableBetaValidationError', () => {
   })
 })
 
-import type { BetaEtymologyResult, ResearchContext } from './types'
+import type { BetaEtymologyResult, EtymologyResult, ResearchContext } from './types'
 import { toPartialResult, type PartialEtymology } from './streamReducer'
+
+describe('modern usage evidence', () => {
+  const wikipediaText =
+    'Rizz is an English slang term referring to charisma, especially the ability to attract a romantic partner. It became popular in online communities and is used in discussions of dating.'
+  const incelsText =
+    'This community slang term refers to charisma in dating conversations. It is used in online discussions about attraction and relationships, with examples describing how someone starts a conversation.'
+
+  test.each([
+    ['Wikipedia', wikipediaText, undefined, 'Charisma used to attract a romantic partner.', true],
+    ['Incel Wiki', undefined, incelsText, 'Charisma used to attract a romantic partner.', true],
+    [
+      'unrelated Wikipedia prose',
+      'The term names a network protocol used to send data over the internet. It defines packet formats and connection states for computers communicating across different physical networks.',
+      undefined,
+      'Charisma used to attract a romantic partner.',
+      false,
+    ],
+    [
+      'a thin Wikipedia mention',
+      'Rizz is slang.',
+      undefined,
+      'A form of charisma in dating.',
+      false,
+    ],
+    ['a vague generated definition', wikipediaText, undefined, 'Internet slang', false],
+  ] as const)(
+    'validates modern usage supported by %s',
+    (_label, wikipedia, incelsWiki, definition, accepted) => {
+      const context: ResearchContext = {
+        language: 'en',
+        mainWord: {
+          word: 'rizz',
+          etymonline: null,
+          wiktionary: null,
+          ...(wikipedia
+            ? { wikipedia: { text: wikipedia, url: 'https://en.wikipedia.org/wiki/Rizz' } }
+            : {}),
+          ...(incelsWiki
+            ? { incelsWiki: { text: incelsWiki, url: 'https://incels.wiki/w/rizz' } }
+            : {}),
+        },
+        identifiedRoots: [],
+        rootResearch: [],
+        relatedResearch: [],
+        totalSourcesFetched: 1,
+      }
+      const result: EtymologyResult = {
+        language: 'en',
+        word: 'rizz',
+        pronunciation: '/rɪz/',
+        definition: 'Charisma.',
+        roots: [],
+        ancestryGraph: { branches: [] },
+        lore: 'Origin uncertain.',
+        sources: [],
+        modernUsage: {
+          hasSlangMeaning: true,
+          slangDefinition: definition,
+          contexts: ['Internet culture'],
+        },
+      }
+      const finalized = finalizeResult(result, context, 'standard')
+      expect(finalized.modernUsage).toEqual(
+        accepted
+          ? { hasSlangMeaning: true, slangDefinition: definition, contexts: ['Internet culture'] }
+          : { hasSlangMeaning: false }
+      )
+    }
+  )
+})
 
 function scopedFixture() {
   const history = {

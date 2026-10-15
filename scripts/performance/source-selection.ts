@@ -69,7 +69,7 @@ try {
             ],
           })
         }
-        if (url.hostname.endsWith('wiktionary.org')) {
+        if (['en.wiktionary.org', 'fr.wiktionary.org'].includes(url.hostname)) {
           const word = url.searchParams.get('page')
           if (scenario.startsWith('en')) {
             if (word === 'polarize') return new Response(main)

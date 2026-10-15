@@ -146,9 +146,14 @@ describe('research breadth', () => {
           )
             return upstashMissResponse(init)
           requests.push(url)
-          if (url.includes('wiktionary.org') && directWorks) {
+          const hostname = new URL(url).hostname
+          if (['en.wiktionary.org', 'fr.wiktionary.org'].includes(hostname) && directWorks) {
             const heading =
-              language === 'en' ? 'English' : url.includes('en.wiktionary') ? 'French' : 'Français'
+              language === 'en'
+                ? 'English'
+                : hostname === 'en.wiktionary.org'
+                  ? 'French'
+                  : 'Français'
             return Response.json({
               parse: {
                 title: 'fixture',
@@ -168,7 +173,7 @@ describe('research breadth', () => {
               },
             })
           }
-          if (url.includes('freedictionaryapi.com'))
+          if (hostname === 'freedictionaryapi.com')
             return Response.json({
               word: 'fixture',
               entries: [
@@ -185,12 +190,13 @@ describe('research breadth', () => {
           language,
           skipOptionalSources: true,
         })
-        expect(requests.filter((url) => url.includes('freedictionaryapi.com'))).toHaveLength(
+        const hosts = requests.map((url) => new URL(url).hostname)
+        expect(hosts.filter((host) => host === 'freedictionaryapi.com')).toHaveLength(
           directWorks ? 0 : 1
         )
         expect(
-          requests.every(
-            (url) => !url.includes('urbandictionary.com') && !url.includes('dictionaryapi.dev')
+          hosts.every(
+            (host) => !['api.urbandictionary.com', 'api.dictionaryapi.dev'].includes(host)
           )
         ).toBe(true)
         if (!directWorks) {
