@@ -1,6 +1,6 @@
 import { canonicalizeWord } from './orthography'
 import { LANGUAGES, type LanguageCode } from './languages'
-import type { ResearchEntryContext, SourceData } from './types'
+import type { ResearchEntryContext, SourceData, SourceProviderId } from './types'
 
 interface WikidataText {
   language?: string
@@ -90,7 +90,9 @@ function matchingEtymologyLine(preamble: string, heading: string): string | null
 function numberedPreambleBlocks(preamble: string): Array<{ heading: string; text: string }> {
   const lines = preamble.split('\n')
   const starts = lines.flatMap((line, index) => {
-    const match = line.match(/^\s*-?\s*([^:\n]{2,60}\(\d+(?:\s*[-–]\s*\d+)?\)):\s*$/u)
+    const match = line.match(
+      /^\s*-?\s*((?:[^:\n]{2,60}\(\d+(?:\s*[-–]\s*\d+)?\)|[^\d:\n]{2,60}\d+(?:\s*[-–]\s*\d+)?\s*\([^:\n()]+\))):\s*/u
+    )
     return match ? [{ index, heading: match[1].trim() }] : []
   })
   if (starts.length < 2) return []
@@ -111,11 +113,24 @@ function numberedPreambleBlocks(preamble: string): Array<{ heading: string; text
 export function deriveEntryContexts(
   word: string,
   language: LanguageCode,
-  sourceName: 'wiktionaryEnglish' | 'wiktionaryNative' | 'wiktionary' | 'etymonline',
+  sourceName: SourceProviderId,
   source: SourceData | null,
   wikidata: SourceData | null
 ): ResearchEntryContext[] {
   if (!source) return []
+  // Specialist adapters validate exact headwords and retain each numbered entry.
+  // Their boundaries do not depend on MediaWiki form-of section conventions.
+  if (!['wiktionaryEnglish', 'wiktionaryNative', 'wiktionary', 'etymonline'].includes(sourceName)) {
+    return (source.entryGroups ?? []).map((group) => ({
+      ...historyIdentity([language, word, sourceName, group.anchor]),
+      source: sourceName,
+      heading: group.heading,
+      text: group.text,
+      sectionHeadings: group.sections.map((section) => section.heading),
+      sourceUrl: group.sourceUrl ?? source.url,
+      entryKind: 'lemma' as const,
+    }))
+  }
   const identity = wikidataIdentities(wikidata, word, language)
   const groups = source.entryGroups ?? []
   const contexts: ResearchEntryContext[] = []

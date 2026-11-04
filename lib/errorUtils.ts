@@ -17,8 +17,9 @@ const SECRET_PATTERNS = [
 /** Env vars whose exact values must never appear in error messages. */
 const SECRET_ENV_VARS = [
   'OPENROUTER_API_KEY',
-  'ETYMOLOGY_KV_REST_API_TOKEN',
+  'KV_REST_API_TOKEN',
   'ELEVENLABS_API_KEY',
+  'EXA_API_KEY',
   'ADMIN_SECRET',
 ] as const
 

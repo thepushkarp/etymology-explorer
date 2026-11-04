@@ -20,6 +20,7 @@ import {
   type ParsedEtymLink,
 } from './etymologyParser'
 import { canonicalizeWord } from './orthography'
+import { sourceFamily, type SourceProviderId, type SourceFamilyId } from './sourceProviders'
 
 /** Parenthetical glosses are annotations; every character in the form is significant. */
 function normalize(s: string): string {
@@ -58,7 +59,8 @@ function compatibleLanguage(left: string, right: string): boolean {
 
 interface MatchResult {
   link: ParsedEtymLink
-  source: 'etymonline' | 'wiktionary'
+  source: SourceProviderId
+  family: SourceFamilyId
 }
 
 /** Match within the caller's history scope and an explicitly identified language. */
@@ -76,7 +78,12 @@ function findMatches(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]
           (form) => normalize(stage.form) === normalize(form)
         )
       ) {
-        matches.push({ link, source: chain.source })
+        const provider = chain.provider ?? chain.source
+        matches.push({
+          link,
+          source: provider,
+          family: chain.sourceFamily ?? sourceFamily(provider),
+        })
       }
     }
   }
@@ -88,7 +95,7 @@ function findMatches(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]
  * Determine confidence from the number of distinct sources that attest a stage.
  */
 function determineConfidence(matches: MatchResult[]): StageConfidence {
-  const families = new Set(matches.map((match) => match.source))
+  const families = new Set(matches.map((match) => match.family))
   if (families.size >= 2) return 'high'
   if (families.size === 1) return 'medium'
   return 'low'
@@ -107,7 +114,7 @@ function buildEvidence(matches: MatchResult[]): StageEvidence[] {
     evidence.push({
       source: match.source,
       snippet: match.link.rawSnippet,
-      sourceFamily: match.source,
+      sourceFamily: match.family,
     })
   }
 

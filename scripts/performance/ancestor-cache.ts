@@ -29,8 +29,8 @@ for (const request of summary.requests) {
 
 // Dummy credentials and a fetch-only Redis boundary keep every write local.
 const redisUrl = 'https://source-cache.benchmark.invalid'
-process.env.ETYMOLOGY_KV_REST_API_URL = redisUrl
-process.env.ETYMOLOGY_KV_REST_API_TOKEN = 'benchmark'
+process.env.KV_REST_API_URL = redisUrl
+process.env.KV_REST_API_TOKEN = 'benchmark'
 const records = new Map<string, unknown>()
 const pending = new Set<Promise<Response>>()
 const rows: Array<{

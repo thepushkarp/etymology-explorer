@@ -7,7 +7,8 @@ import { canonicalizeWord } from './orthography'
 import { CONFIG } from './config'
 import { getRedis } from './redis'
 import { safeError } from './errorUtils'
-import type { SourceData } from './types'
+import type { SourceData, SourceRecord } from './types'
+import { SOURCE_PROVIDER_IDS, SOURCE_FAMILY_IDS } from './sourceProviders'
 import type { LanguageCode } from './languages'
 
 /**
@@ -17,7 +18,7 @@ import type { LanguageCode } from './languages'
  */
 export interface SourceCacheRedis {
   get(key: string): Promise<unknown>
-  set(key: string, value: SourceData, opts?: { ex?: number }): Promise<unknown>
+  set(key: string, value: SourceData | SourceRecord[], opts?: { ex?: number }): Promise<unknown>
 }
 
 export type CacheableSource =
@@ -30,16 +31,15 @@ export type CacheableSource =
   | 'wikidataLexeme'
   | 'multilingualDictionary'
   | 'dicionarioAberto'
+  | 'incelsWiki'
 
-const SOURCE_CACHE_PREFIX = 'src:v6:'
-const BETA_SOURCE_CACHE_PREFIX = 'src:v6:'
+const SOURCE_CACHE_PREFIX = 'src:v8:'
 
 function sourceKey(source: CacheableSource, word: string, language: LanguageCode): string {
   const normalized = canonicalizeWord(word)
-  const prefix = language === 'en' ? SOURCE_CACHE_PREFIX : BETA_SOURCE_CACHE_PREFIX
   return language === 'en'
-    ? `${prefix}${source}:${normalized}`
-    : `${prefix}${source}:${language}:${normalized}`
+    ? `${SOURCE_CACHE_PREFIX}${source}:${normalized}`
+    : `${SOURCE_CACHE_PREFIX}${source}:${language}:${normalized}`
 }
 
 function isSourceData(value: unknown): value is SourceData {
@@ -82,11 +82,59 @@ export async function cacheSource(
   client: SourceCacheRedis | null = getRedis(),
   language: LanguageCode = 'en'
 ): Promise<void> {
-  if (!client) return
+  if (!client || data.incomplete) return
 
   try {
     await client.set(sourceKey(source, word, language), data, { ex: CONFIG.sourceCacheTTL })
   } catch (error) {
     console.error(`[SourceCache] ${source} set error:`, safeError(error))
+  }
+}
+
+/** A provider request can return several independent dictionaries or homographs. */
+function bundleKey(provider: string, word: string, lexicalLanguage: string): string {
+  return `${SOURCE_CACHE_PREFIX}bundle:${encodeURIComponent(provider)}:${encodeURIComponent(lexicalLanguage)}:${canonicalizeWord(word)}`
+}
+
+export async function getCachedSourceBundle(
+  provider: string,
+  word: string,
+  lexicalLanguage: string,
+  client: SourceCacheRedis | null = getRedis()
+): Promise<SourceRecord[] | null> {
+  if (!client) return null
+  try {
+    const raw = await client.get(bundleKey(provider, word, lexicalLanguage))
+    if (!Array.isArray(raw) || raw.length === 0) return null
+    return raw.every(
+      (record) =>
+        record &&
+        typeof record === 'object' &&
+        (SOURCE_PROVIDER_IDS as readonly unknown[]).includes(record.provider) &&
+        (SOURCE_FAMILY_IDS as readonly unknown[]).includes(record.sourceFamily) &&
+        isSourceData(record.data)
+    )
+      ? (raw as SourceRecord[])
+      : null
+  } catch (error) {
+    console.error(`[SourceCache] ${provider} bundle read failed:`, safeError(error))
+    return null
+  }
+}
+
+export async function cacheSourceBundle(
+  provider: string,
+  word: string,
+  lexicalLanguage: string,
+  records: SourceRecord[],
+  client: SourceCacheRedis | null = getRedis()
+): Promise<void> {
+  if (!client || records.length === 0 || records.some((record) => record.data.incomplete)) return
+  try {
+    await client.set(bundleKey(provider, word, lexicalLanguage), records, {
+      ex: CONFIG.sourceCacheTTL,
+    })
+  } catch (error) {
+    console.error(`[SourceCache] ${provider} bundle write failed:`, safeError(error))
   }
 }

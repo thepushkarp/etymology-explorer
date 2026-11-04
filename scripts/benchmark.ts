@@ -33,7 +33,7 @@ import type {
 const RESULTS_DIR = join(process.cwd(), 'bench-results')
 
 // The in-process research + synthesis path only needs the OpenRouter key today.
-// Redis (ETYMOLOGY_KV_*) is route-level infrastructure (cache/costGuard/singleflight)
+// Redis (KV_*) is route-level infrastructure (cache/costGuard/singleflight)
 // and is not touched by this harness.
 const REQUIRED_ENV_VARS = ['OPENROUTER_API_KEY'] as const
 
@@ -120,7 +120,7 @@ function assertRequiredEnv(): void {
   fail(
     `missing required environment variable(s): ${missing.join(', ')}.\n` +
       'Set them in .env.local (see .env.example for the full list) or export them ' +
-      'before running the benchmark. Redis (ETYMOLOGY_KV_*) variables are NOT ' +
+      'before running the benchmark. Redis (KV_*) variables are NOT ' +
       'required — the in-process pipeline does not use Redis.'
   )
 }

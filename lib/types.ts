@@ -1,6 +1,8 @@
 import type { ParsedEtymChain } from './etymologyParser'
 import type { BetaLanguageCode, LanguageCode } from './languages'
 import type { WiktionaryEntryGroup } from './wiktionaryEntryGroups'
+import type { SourceProviderId, SourceFamilyId } from './sourceProviders'
+export type { SourceProviderId, SourceFamilyId } from './sourceProviders'
 
 export interface BilingualText {
   en: string
@@ -13,8 +15,6 @@ export interface LexemeRef {
   word: string
   language: string
 }
-
-export type SourceFamilyId = 'etymonline' | 'wiktionary' | 'wikidata' | 'dicionarioAberto' | 'other'
 
 export type LexicalRelation =
   | 'inherited_from'
@@ -101,20 +101,10 @@ export interface Root<Text extends ResultText = string> {
  * A source reference with name, URL, and the specific word looked up
  */
 export interface SourceReference {
-  name:
-    | 'etymonline'
-    | 'wiktionary'
-    | 'incelsWiki'
-    | 'wikipedia'
-    | 'wiktionaryEnglish'
-    | 'wiktionaryNative'
-    | 'wikidataLexeme'
-    | 'multilingualDictionary'
-    | 'dicionarioAberto'
-    | 'synthesized'
+  name: SourceProviderId | 'synthesized'
   url?: string // URL of the actual page used (undefined for 'synthesized')
   word?: string // The specific word/root that was looked up (undefined for 'synthesized')
-  sourceFamily?: 'etymonline' | 'wiktionary' | 'wikidata' | 'dicionarioAberto' | 'other'
+  sourceFamily?: SourceFamilyId
   license?: string
 }
 
@@ -122,8 +112,7 @@ export interface SourceReference {
  * Evidence linking an ancestry stage to a parsed source snippet
  */
 export interface StageEvidence {
-  source:
-    'etymonline' | 'wiktionary' | 'wiktionaryEnglish' | 'wiktionaryNative' | 'dicionarioAberto'
+  source: SourceProviderId
   snippet: string // raw text excerpt (~120 chars max)
   sourceFamily?: string
 }
@@ -328,17 +317,39 @@ export interface SourceData {
   language?: LanguageCode
   variants?: Array<{ word: string; relationship: 'spelling-variant' | 'redirect'; url: string }>
   revisionId?: number | string
+  sourceFamily?: SourceFamilyId
+  sourceEntryId?: string
+  lexicalLanguage?: string
+  evidenceRole?: 'etymology' | 'lexical' | 'context'
+  incomplete?: boolean
+  retrieval?: {
+    method: 'direct' | 'exa'
+    retrievedAt: string
+    requestId?: string
+    cacheStatus?: string
+  }
 }
+
+export interface SourceRecord {
+  provider: SourceProviderId
+  sourceFamily: SourceFamilyId
+  data: SourceData
+  evidenceRole?: 'etymology' | 'lexical' | 'context'
+}
+
+export interface SourceOutcome {
+  status: 'found' | 'not_found' | 'no_evidence' | 'blocked' | 'unavailable' | 'budget_skipped'
+  reason?: string
+  httpStatus?: number
+}
+
+export type SourceFetchOutcome =
+  | { status: 'found'; data: SourceData }
+  | { status: Exclude<SourceOutcome['status'], 'found'>; reason?: string; httpStatus?: number }
 
 export interface ResearchEntryContext {
   id: string
-  source:
-    | 'wiktionaryEnglish'
-    | 'wiktionaryNative'
-    | 'wiktionary'
-    | 'etymonline'
-    | 'wikipedia'
-    | 'multilingualDictionary'
+  source: SourceProviderId
   heading: string
   text: string
   sectionHeadings: string[]
@@ -361,6 +372,7 @@ export interface RawSourceData {
  */
 export interface RootResearchData {
   root: string
+  sources?: SourceRecord[]
   lexeme?: LexemeRef
   etymonlineData: SourceData | null
   wiktionaryData: SourceData | null
@@ -375,10 +387,11 @@ export interface RootResearchData {
 }
 
 /**
- * Research data for a related term (peripheral evidence: etymonline only)
+ * Research data for a related term, retained as peripheral evidence.
  */
 export interface RelatedTermResearchData {
   term: string
+  sources?: SourceRecord[]
   lexeme?: LexemeRef
   etymonlineData: SourceData | null
 }
@@ -391,6 +404,7 @@ export interface ResearchContext {
   language?: LanguageCode
   mainWord: {
     word: string
+    sources?: SourceRecord[]
     etymonline: SourceData | null
     wiktionary: SourceData | null
     wikipedia?: SourceData | null
@@ -407,6 +421,7 @@ export interface ResearchContext {
   relatedResearch: RelatedTermResearchData[]
   totalSourcesFetched: number
   incompleteResearch?: boolean
+  sourceOutcomes?: Array<{ lexeme: LexemeRef; source: string; outcome: SourceOutcome }>
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text
   entryContexts?: ResearchEntryContext[]
   lexicalGraph?: LexicalResearchGraph
@@ -447,6 +462,7 @@ export type StreamEvent =
       preview?: string
     }
   | { type: 'source_failed'; source: string; error: string }
+  | { type: 'source_outcome'; source: string; outcome: SourceOutcome; timing?: number }
   | { type: 'parsing_complete'; chainCount: number; dateAttested?: string }
   | { type: 'roots_identified'; roots: string[] }
   | { type: 'root_research'; root: string; source: string; status: string }

@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/ErrorState'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
+import { SourceIcon } from '@/components/SourceIcon'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { scheduleTraceIntent } from '@/lib/traceIntent'
@@ -144,12 +145,22 @@ function TraceStatus({ progress }: { progress: StreamState }) {
               source.status === 'complete' ? 'text-ink' : 'text-faint'
             }`}
           >
-            <span className={source.status === 'failed' ? 'line-through' : ''}>{source.label}</span>{' '}
-            <span className="tabular-nums text-muted">
+            <span className="inline-flex items-center gap-1.5 align-middle">
+              <SourceIcon source={source.key} />
+              {source.label}
+            </span>{' '}
+            <span className="tabular-nums text-muted" title={source.reason}>
               {source.status === 'pending'
                 ? seconds(elapsed)
-                : source.status === 'failed'
-                  ? 'failed'
+                : source.status !== 'complete'
+                  ? {
+                      failed: 'unavailable',
+                      not_found: 'no entry',
+                      no_evidence: 'no evidence',
+                      blocked: 'blocked',
+                      unavailable: 'unavailable',
+                      budget_skipped: 'limit reached',
+                    }[source.status]
                   : source.timing !== undefined
                     ? seconds(source.timing)
                     : 'done'}

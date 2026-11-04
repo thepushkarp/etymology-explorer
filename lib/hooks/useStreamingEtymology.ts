@@ -5,6 +5,7 @@ import { canonicalizeWord, isValidWord } from '@/lib/validation'
 import { StreamEvent } from '@/lib/types'
 import { initialStreamState, streamReducer } from '@/lib/streamReducer'
 import type { LanguageCode } from '@/lib/languages'
+import { recordRecentSearchIntent } from '@/lib/recentSearchClient'
 
 const MAX_RETRIES = 2
 const RETRY_BASE_DELAY_MS = 600
@@ -20,6 +21,7 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
 
   const eventSourceRef = useRef<EventSource | null>(null)
   const activeRequestRef = useRef(0)
+  const completedRequestRef = useRef<number | null>(null)
 
   const fallbackFetch = useCallback(
     async (word: string, requestId: number) => {
@@ -29,9 +31,11 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
         )
         const payload = await response.json()
 
-        if (activeRequestRef.current !== requestId) return
+        if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
+          return
 
         if (!response.ok || !payload.success || !payload.data) {
+          completedRequestRef.current = requestId
           dispatch({
             type: 'fallback_error',
             error: {
@@ -44,8 +48,12 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
         }
 
         dispatch({ type: 'fallback_success', result: payload.data })
+        completedRequestRef.current = requestId
+        void recordRecentSearchIntent(word, language)
       } catch {
-        if (activeRequestRef.current !== requestId) return
+        if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
+          return
+        completedRequestRef.current = requestId
         dispatch({
           type: 'fallback_error',
           error: {
@@ -69,7 +77,7 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
         eventSourceRef.current = null
       }
     }
-  }, [])
+  }, [language])
 
   const search = useCallback(
     (word: string) => {
@@ -86,14 +94,21 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
       }
 
       const connect = (attempt: number) => {
-        if (activeRequestRef.current !== requestId) return
+        if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
+          return
 
         const url = `/api/etymology?word=${encodeURIComponent(trimmed)}&language=${language}&stream=true`
         const eventSource = new EventSource(url)
         eventSourceRef.current = eventSource
 
         eventSource.addEventListener('message', (event) => {
-          if (activeRequestRef.current !== requestId) return
+          if (
+            activeRequestRef.current !== requestId ||
+            completedRequestRef.current === requestId ||
+            eventSourceRef.current !== eventSource
+          ) {
+            return
+          }
 
           try {
             const streamEvent: StreamEvent = JSON.parse(event.data)
@@ -101,14 +116,24 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
             dispatch({ type: 'stream_event', event: streamEvent })
 
             if (streamEvent.type === 'result' || streamEvent.type === 'error') {
+              completedRequestRef.current = requestId
               eventSource.close()
               eventSourceRef.current = null
+              if (streamEvent.type === 'result') {
+                void recordRecentSearchIntent(trimmed, language)
+              }
             }
           } catch {
-            if (activeRequestRef.current !== requestId) return
+            if (
+              activeRequestRef.current !== requestId ||
+              completedRequestRef.current === requestId
+            ) {
+              return
+            }
 
             if (attempt < MAX_RETRIES) {
               eventSource.close()
+              eventSourceRef.current = null
               const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
               window.setTimeout(() => {
                 connect(attempt + 1)
@@ -123,7 +148,13 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
         })
 
         eventSource.addEventListener('error', () => {
-          if (activeRequestRef.current !== requestId) return
+          if (
+            activeRequestRef.current !== requestId ||
+            completedRequestRef.current === requestId ||
+            eventSourceRef.current !== eventSource
+          ) {
+            return
+          }
 
           eventSource.close()
           eventSourceRef.current = null

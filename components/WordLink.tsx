@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState, type ReactNode } from 'react'
 import { markTraceIntent } from '@/lib/traceIntent'
 import { wordPagePath, type LanguageCode } from '@/lib/languages'
+import { recordRecentSearchIntent } from '@/lib/recentSearchClient'
 
 interface WordLinkProps {
   word: string
@@ -34,7 +35,10 @@ export function WordLink({
       prefetch={prefetch}
       onMouseEnter={() => setPrefetch(true)}
       onFocus={() => setPrefetch(true)}
-      onClick={() => markTraceIntent(word, language)}
+      onClick={() => {
+        markTraceIntent(word, language)
+        void recordRecentSearchIntent(word, language)
+      }}
       className={className}
       title={title}
     >

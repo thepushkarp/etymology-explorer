@@ -34,8 +34,8 @@ After the benchmark, clear that generated fixture cache and rebuild with the
 normal environment.
 
 ```sh
-export ETYMOLOGY_KV_REST_API_URL=http://127.0.0.1:4198
-export ETYMOLOGY_KV_REST_API_TOKEN=benchmark
+export KV_REST_API_URL=http://127.0.0.1:4198
+export KV_REST_API_TOKEN=benchmark
 export OPENROUTER_API_KEY=benchmark-no-provider
 export RATE_LIMIT_ENABLED=false
 export FORCE_CACHE_ONLY=true

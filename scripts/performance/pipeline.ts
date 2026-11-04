@@ -23,8 +23,8 @@ const { values } = parseArgs({
 if (!values.label || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(values.label))
   throw new Error('Pass a path-safe --label')
 if (!isLanguageCode(values.language)) throw new Error('Unsupported benchmark language')
-delete process.env.ETYMOLOGY_KV_REST_API_URL
-delete process.env.ETYMOLOGY_KV_REST_API_TOKEN
+delete process.env.KV_REST_API_URL
+delete process.env.KV_REST_API_TOKEN
 const directory = join('bench-results', 'research-performance', values.label)
 mkdirSync(directory, { recursive: true })
 const requests: Array<{

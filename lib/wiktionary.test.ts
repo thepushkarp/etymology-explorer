@@ -21,10 +21,7 @@ const page = {
 function serve(statuses: number[]) {
   let attempts = 0
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    if (
-      process.env.ETYMOLOGY_KV_REST_API_URL &&
-      String(input).startsWith(process.env.ETYMOLOGY_KV_REST_API_URL)
-    ) {
+    if (process.env.KV_REST_API_URL && String(input).startsWith(process.env.KV_REST_API_URL)) {
       const body = JSON.parse(String(init?.body))
       return Response.json(
         Array.isArray(body[0]) ? body.map(() => ({ result: null })) : { result: null }

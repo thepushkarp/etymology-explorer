@@ -27,7 +27,7 @@ five minutes instead of approximately thirty days. This keeps singleflight waite
 working while allowing a later lookup to recover missing evidence. Word-page data
 also revalidates every five minutes so its cache cannot hold an incomplete result
 for the former hourly interval. Complete Redis results retain their thirty-day TTL.
-Cache namespaces are English `etymology:v2.6:` and multilingual `etymology:beta:v8:`;
+Cache namespaces are English `etymology:v2.7:` and multilingual `etymology:beta:v9:`;
 older entries are retained under their previous namespaces.
 
 ## Controlled measurements

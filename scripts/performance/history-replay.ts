@@ -18,8 +18,8 @@ const { values } = parseArgs({
 })
 if (!values.recording || !values['baseline-module'])
   throw new Error('Pass --recording and --baseline-module pointing to the frozen baseline')
-delete process.env.ETYMOLOGY_KV_REST_API_URL
-delete process.env.ETYMOLOGY_KV_REST_API_TOKEN
+delete process.env.KV_REST_API_URL
+delete process.env.KV_REST_API_TOKEN
 const baseline: { synthesizeFromResearch: typeof synthesizeFromResearch } = await import(
   resolve(values['baseline-module'])
 )

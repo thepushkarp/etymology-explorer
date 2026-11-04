@@ -34,6 +34,18 @@ export const CONFIG = {
   maxRelatedWordsPerRoot: 4,
   maxTotalFetches: 32,
 
+  // Exa's full-text search and recovery share their own paid-request allowance.
+  exa: {
+    monthlyLimitUSD: 10,
+    searchCostMicros: 7_000,
+    contentPageCostMicros: 1_000,
+    maxRequests: 5,
+    maxSearches: 2,
+    maxContentPages: 8,
+    searchResults: 5,
+    timeoutMs: 15_000,
+  },
+
   // Cache TTLs (seconds)
   etymologyCacheTTL: 30 * 24 * 60 * 60, // 30 days
   incompleteEtymologyCacheTTL: 5 * 60,

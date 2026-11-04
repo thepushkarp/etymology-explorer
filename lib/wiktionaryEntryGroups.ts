@@ -28,6 +28,7 @@ export interface WiktionaryEntrySection {
 
 /** One source-defined etymology, without merging it with adjacent etymologies. */
 export interface WiktionaryEntryGroup {
+  sourceUrl?: string
   index: string
   number: string
   heading: string

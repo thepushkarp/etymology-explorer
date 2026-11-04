@@ -4,8 +4,8 @@ import { conductAgenticResearch } from '@/lib/research'
 
 const label = process.argv[2]
 if (!label || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(label)) throw new Error('Pass a path-safe label')
-delete process.env.ETYMOLOGY_KV_REST_API_URL
-delete process.env.ETYMOLOGY_KV_REST_API_TOKEN
+delete process.env.KV_REST_API_URL
+delete process.env.KV_REST_API_TOKEN
 process.env.OPENROUTER_API_KEY ??= 'benchmark'
 const rows = []
 for (let run = 0; run < 3; run++) {

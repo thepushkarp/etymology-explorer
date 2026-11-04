@@ -19,6 +19,17 @@ const SOURCE_ORIGINS = [
   'https://freedictionaryapi.com',
   'https://api.dicionario-aberto.net',
   'https://incels.wiki',
+  'https://api.exa.ai',
+  'https://ahdictionary.com',
+  'https://www.ahdictionary.com',
+  'https://dizionario.internazionale.it',
+  'https://dle.rae.es',
+  'https://www.asale.org',
+  'https://www.cnrtl.fr',
+  'https://dicionario.priberam.org',
+  'https://michaelis.uol.com.br',
+  'https://bosworthtoller.com',
+  'https://anastrophe.uchicago.edu',
 ] as const
 
 const APP_ORIGINS = [
@@ -114,6 +125,7 @@ export async function fetchWithTimeout(
         headers.delete('cookie')
         headers.delete('proxy-authorization')
         headers.delete('xi-api-key')
+        headers.delete('x-api-key')
       }
       if (
         (response.status === 303 && method !== 'GET' && method !== 'HEAD') ||

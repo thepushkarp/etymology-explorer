@@ -15,6 +15,7 @@ import type {
   EnglishEtymologyResult,
   EtymologyResult,
   StreamEvent,
+  SourceOutcome,
 } from './types'
 import type { LanguageCode } from './languages'
 import { localizeResult } from './resultLocalization'
@@ -26,13 +27,15 @@ export type StreamStatus = 'idle' | 'loading' | 'success' | 'error'
 /** Coarse pipeline phase for progress UI and screen-reader announcements */
 export type StreamPhase = 'idle' | 'sources' | 'synthesis' | 'done' | 'error'
 
-export type SourceStatus = 'pending' | 'complete' | 'failed'
+export type SourceStatus =
+  'pending' | 'complete' | 'failed' | Exclude<SourceOutcome['status'], 'found'>
 
 export interface SourceProgress {
   key: string
   label: string
   status: SourceStatus
   timing?: number
+  reason?: string
 }
 
 /** Top-level synthesis sections, named and ordered exactly as in the LLM schema */
@@ -114,7 +117,7 @@ export type StreamAction =
 function upsertSource(
   sources: SourceProgress[],
   rawSource: string,
-  patch: Partial<Pick<SourceProgress, 'status' | 'timing'>>
+  patch: Partial<Pick<SourceProgress, 'status' | 'timing' | 'reason'>>
 ): SourceProgress[] {
   const key = sourceKey(rawSource)
   const existing = sources.find((source) => source.key === key)
@@ -153,7 +156,23 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
       }
 
     case 'source_failed':
-      return { ...state, sources: upsertSource(state.sources, event.source, { status: 'failed' }) }
+      return {
+        ...state,
+        sources: upsertSource(state.sources, event.source, {
+          status: 'failed',
+          reason: event.error,
+        }),
+      }
+
+    case 'source_outcome':
+      return {
+        ...state,
+        sources: upsertSource(state.sources, event.source, {
+          status: event.outcome.status === 'found' ? 'complete' : event.outcome.status,
+          timing: event.timing,
+          reason: event.outcome.reason,
+        }),
+      }
 
     case 'parsing_complete':
     case 'roots_identified':

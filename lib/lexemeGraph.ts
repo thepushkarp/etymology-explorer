@@ -1,4 +1,5 @@
 import { canonicalizeWord } from './orthography'
+import { sourceFamily } from './sourceProviders'
 import type { ParsedEtymChain, ParsedEtymLink } from './etymologyParser'
 import type {
   LexicalEdge,
@@ -131,7 +132,7 @@ export function buildLexicalResearchGraph(
         graph.evidence[evidenceId] = {
           id: evidenceId,
           provider: chain.provider ?? chain.source,
-          sourceFamily: chain.source,
+          sourceFamily: chain.sourceFamily ?? sourceFamily(chain.provider ?? chain.source),
           sourceUrl: context.sourceUrl,
           evidenceScopeId: context.evidenceScopeId,
           subjectKind: 'edge',

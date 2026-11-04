@@ -1,120 +1,161 @@
 import { canonicalizeWord, sameSpelling } from './orthography'
-import type { SourceData } from './types'
+import type { SourceData, SourceFetchOutcome } from './types'
 import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
-/**
- * Scrapes etymology data from Etymonline.
- * Note: This is fragile as HTML structure may change.
- * Always implement graceful fallback.
- */
-
 import { fetchWithTimeout } from './fetchUtils'
-import { safeError } from './errorUtils'
 import { CONFIG } from './config'
 import { getCachedSource, cacheSource } from './sourceCache'
+import { sourceFailure, sourceHttpFailure } from './sourceOutcome'
 
 export type EtymonlineResult = SourceData
 
 const RELATION_DESC_SIGNALS =
   /\b(from|root|cognate|latin|greek|french|english|german|proto|pie|borrowed|derived)\b/i
 const STOP_WORDS = new Set(['the', 'and', 'for', 'from', 'with', 'word'])
+const ETYMOLOGY_SIGNALS = /\bfrom\b|\d{4}s?|\d{1,2}c\.|Latin|Greek|French|Old English|German/i
+const ENTRY_CLASSES = ['prose-lg', 'word__defination', 'word_entry']
 
-/**
- * Fetch etymology text from Etymonline (7d Redis source cache in front)
- * @param word - The word to look up
- * @param signal - Optional caller cancellation signal (e.g. client disconnect)
- * @returns Object with text and URL, or null if not found/failed
- */
+function entryWord(heading: string): string {
+  return stripHtml(heading)
+    .replace(/\s*\([^)]*\)\s*$/, '')
+    .trim()
+}
+
+function isChallenge(html: string): boolean {
+  return /cf-chl-|cf_chl_|challenges\.cloudflare\.com|<title>\s*Just a moment|Verify you are human|Performing security verification/i.test(
+    html
+  )
+}
+
+/** Retain complete source-defined entries, excluding adjacent headwords and related cards. */
+function parseEtymonlineHtml(word: string, html: string, recovered: boolean): SourceData | null {
+  if (isChallenge(html) || html.includes('NEXT_HTTP_ERROR_FALLBACK;404')) return null
+  const heading = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]
+  const headword = heading?.match(/<em\b[^>]*>([\s\S]*?)<\/em>/i)?.[1] ?? heading
+  if (headword && !sameSpelling(entryWord(headword), word)) return null
+  const headings = [...html.matchAll(/<h([12])\b[^>]*>([\s\S]*?)<\/h\1>/gi)]
+  const entries: Array<{ heading: string; text: string }> = []
+  let incomplete = false
+  for (let index = 0; index < headings.length; index++) {
+    const current = headings[index]
+    if (current[1] !== '2' || !sameSpelling(entryWord(current[2]), word)) continue
+    const next = headings[index + 1]
+    const body = html.slice(current.index! + current[0].length, next?.index ?? html.length)
+    const containers = ENTRY_CLASSES.map((className) =>
+      extractEntryContainers(body, className)
+    ).find((fragments) => fragments.length > 0)
+    // Exa can flatten related entries into unlabeled paragraphs. An open-ended
+    // recovered body cannot prove where this headword ends, even with a correct URL.
+    if (!next && !containers) {
+      incomplete = true
+      continue
+    }
+    const text = (containers ?? [body]).map(stripHtml).join('\n\n').trim()
+    if (text && ETYMOLOGY_SIGNALS.test(text)) entries.push({ heading: stripHtml(current[2]), text })
+    else incomplete = true
+  }
+  if (!entries.length && !headings.some((match) => match[1] === '2') && !recovered) {
+    const containers = ENTRY_CLASSES.map((className) =>
+      extractEntryContainers(html, className)
+    ).find((fragments) => fragments.length > 0)
+    const text = containers?.map(stripHtml).join('\n\n').trim()
+    if (text && ETYMOLOGY_SIGNALS.test(text)) entries.push({ heading: word, text })
+  }
+  if (!entries.length) return null
+  const url = `https://www.etymonline.com/word/${encodeURIComponent(word)}`
+  return {
+    text: entries.map((entry) => entry.text).join('\n\n'),
+    url,
+    requestedWord: word,
+    resolvedWord: word,
+    language: 'en',
+    lexicalLanguage: 'English',
+    sourceFamily: 'etymonline',
+    evidenceRole: 'etymology',
+    ...(incomplete ? { incomplete: true } : {}),
+    relatedEntries: extractEtymonlineRelatedEntries(html, word),
+    entryGroups: entries.map((entry, index) => ({
+      index: String(index + 1),
+      number: String(index + 1),
+      heading: entry.heading,
+      anchor: `etymonline-${index + 1}`,
+      level: 2,
+      text: entry.text,
+      sections: [],
+      sourceUrl: url,
+    })),
+  }
+}
+
+/** Exa is a transport; only an exact publisher URL with recoverable entry boundaries is evidence. */
+export function parseRecoveredEtymonline(
+  word: string,
+  document: { url: string; text: string; title?: string }
+): SourceData | null {
+  const normalized = canonicalizeWord(word)
+  try {
+    const url = new URL(document.url)
+    if (
+      url.protocol !== 'https:' ||
+      !['www.etymonline.com', 'etymonline.com'].includes(url.hostname) ||
+      url.port ||
+      url.username ||
+      url.password ||
+      url.search ||
+      !url.pathname.startsWith('/word/') ||
+      !sameSpelling(decodeURIComponent(url.pathname.slice('/word/'.length)), normalized)
+    )
+      return null
+  } catch {
+    return null
+  }
+  return parseEtymonlineHtml(normalized, document.text, true)
+}
+
+export async function fetchEtymonlineOutcome(
+  word: string,
+  signal?: AbortSignal,
+  options: { skipDirect?: boolean } = {}
+): Promise<SourceFetchOutcome> {
+  const normalizedWord = canonicalizeWord(word)
+  signal?.throwIfAborted()
+  const cached = await getCachedSource('etymonline', normalizedWord)
+  signal?.throwIfAborted()
+  if (cached) return { status: 'found', data: cached }
+  if (options.skipDirect) {
+    return {
+      status: 'blocked',
+      reason: 'Etymonline requires the browser challenge already observed during this trace',
+    }
+  }
+  const url = `https://www.etymonline.com/word/${encodeURIComponent(normalizedWord)}`
+  try {
+    const response = await fetchWithTimeout(
+      url,
+      { headers: { 'User-Agent': 'EtymologyExplorer/1.0 (educational project)' } },
+      CONFIG.timeouts.source,
+      signal
+    )
+    if (!response.ok) return sourceHttpFailure(response, 'Etymonline')
+    const html = await response.text()
+    if (isChallenge(html))
+      return { status: 'blocked', reason: 'Etymonline returned a browser challenge' }
+    if (html.includes('NEXT_HTTP_ERROR_FALLBACK;404')) return { status: 'not_found' }
+    const data = parseEtymonlineHtml(normalizedWord, html, false)
+    if (!data)
+      return { status: 'no_evidence', reason: 'Etymonline returned no matching, bounded entry' }
+    if (!data.incomplete) await cacheSource('etymonline', normalizedWord, data)
+    return { status: 'found', data }
+  } catch (error) {
+    return sourceFailure(error, signal)
+  }
+}
+
 export async function fetchEtymonline(
   word: string,
   signal?: AbortSignal
 ): Promise<EtymonlineResult | null> {
-  const normalizedWord = canonicalizeWord(word)
-  const url = `https://www.etymonline.com/word/${encodeURIComponent(normalizedWord)}`
-
-  const cached = await getCachedSource('etymonline', normalizedWord)
-  if (cached) return cached
-
-  try {
-    const response = await fetchWithTimeout(
-      url,
-      {
-        headers: {
-          'User-Agent': 'EtymologyExplorer/1.0 (educational project)',
-        },
-      },
-      CONFIG.timeouts.source,
-      signal
-    )
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        return null // Word not found
-      }
-      console.error(`Etymonline error: ${response.status}`)
-      return null
-    }
-
-    const html = await response.text()
-    const heading = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]
-    const headword = heading?.match(/<em\b[^>]*>([\s\S]*?)<\/em>/i)?.[1] ?? heading
-    if (
-      headword &&
-      !sameSpelling(stripHtml(headword).replace(/\s*\([^)]*\)\s*$/, ''), normalizedWord)
-    )
-      return null
-
-    // Check if this is a 404 page (Etymonline returns 200 with fallback content)
-    if (html.includes('NEXT_HTTP_ERROR_FALLBACK;404')) {
-      return null
-    }
-
-    // Extract the etymology text from the page
-    // Look for the main content section - Etymonline uses prose-lg class for etymology content
-    for (const className of ['prose-lg', 'word__defination', 'word_entry']) {
-      const fragments = extractEntryContainers(html, className)
-      const text = fragments.map(stripHtml).join('\n\n')
-      if (text && /\d{4}s?|Latin|Greek|French|Old English|German/i.test(text)) {
-        const result = {
-          text,
-          url,
-          requestedWord: normalizedWord,
-          resolvedWord: normalizedWord,
-          language: 'en' as const,
-          relatedEntries: extractEtymonlineRelatedEntries(html, normalizedWord),
-        }
-        void cacheSource('etymonline', normalizedWord, result)
-        return result
-      }
-    }
-
-    // Fallback: look for paragraphs with clear etymology markers
-    // Use <p\b to avoid matching <path>, <param>, etc.
-    // Require a date pattern like "1590s" or "16c." to ensure it's etymology
-    const datePattern = /\b\d{4}s?\b|\b\d{1,2}c\./
-    const fallbackMatch = html.match(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)
-    if (fallbackMatch) {
-      const admitted = fallbackMatch.filter(
-        (p) => datePattern.test(stripHtml(p)) && /\bfrom\b/i.test(stripHtml(p))
-      )
-      if (admitted.length) {
-        const result = {
-          text: admitted.map(stripHtml).join('\n\n'),
-          url,
-          requestedWord: normalizedWord,
-          resolvedWord: normalizedWord,
-          language: 'en' as const,
-          relatedEntries: extractEtymonlineRelatedEntries(html, normalizedWord),
-        }
-        void cacheSource('etymonline', normalizedWord, result)
-        return result
-      }
-    }
-
-    return null
-  } catch (error) {
-    console.error('Etymonline fetch error:', safeError(error))
-    return null
-  }
+  const outcome = await fetchEtymonlineOutcome(word, signal)
+  return outcome.status === 'found' ? outcome.data : null
 }
 
 export function extractEtymonlineRelatedEntries(html: string, excludeWord: string): string[] {
@@ -144,7 +185,8 @@ export function extractEtymonlineRelatedEntries(html: string, excludeWord: strin
  * Remove HTML tags and clean up text
  */
 function stripHtml(html: string): string {
-  return decodeHtmlEntities(preserveLinguisticNotation(html).replace(/<[^>]*>/g, ' '))
+  const content = html.replace(/<(script|style|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+  return decodeHtmlEntities(preserveLinguisticNotation(content).replace(/<[^>]*>/g, ' '))
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
 }

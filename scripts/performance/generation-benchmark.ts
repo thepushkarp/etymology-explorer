@@ -38,8 +38,8 @@ if (!values.context || !values.label || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(val
   throw new Error('Pass --context and a new path-safe --label')
 const runs = Number(values.runs)
 if (!Number.isInteger(runs) || runs < 1 || runs > 3) throw new Error('--runs must be 1..3')
-delete process.env.ETYMOLOGY_KV_REST_API_URL
-delete process.env.ETYMOLOGY_KV_REST_API_TOKEN
+delete process.env.KV_REST_API_URL
+delete process.env.KV_REST_API_TOKEN
 const context = JSON.parse(readFileSync(values.context, 'utf8')) as ResearchContext
 const contextHash = createHash('sha256').update(JSON.stringify(context)).digest('hex')
 const language = context.language ?? 'en'
