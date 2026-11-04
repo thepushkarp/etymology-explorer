@@ -103,12 +103,12 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/singleflight.ts`** - Distributed request deduplication via Redis owner-token locks (SET NX with random token, 90s TTL, EXPIRE heartbeat every 30s while the pipeline runs). Results are cached BEFORE lock release. Streaming waiters poll the cache every 2s for up to 150s with SSE keepalive events and negative-cache checks; non-streaming waiters poll ~10s then return 429 + Retry-After. A holder that errors writes a short-TTL failure marker (60s) before releasing, so waiters surface the error; promotion to holder only happens on a true crash — lock vanished with neither a result nor a marker. If 10 users search "etymology" simultaneously, only 1 LLM call is made.
 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
-  - Etymology results: 30 day TTL (five minutes when research has unresolved source/root lookups), versioned keys (`etymology:v2.6:` for English, `etymology:beta:v8:` for other supported languages)
+  - Etymology results: 30 day TTL (five minutes when research has unresolved source/root lookups), versioned keys (`etymology:v2.7:` for English, `etymology:beta:v9:` for other supported languages)
   - TTS audio: 1 year TTL
   - Negative cache: 30 minute TTL for admitted types (`no_sources`, `invalid_word`)
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v6:<source>:<word>` for English, `src:v6:<source>:<language>:<word>` otherwise; bounded Etymonline entries use `src:v7:etymonline:`). Historical Wiktionary selections use `src:v6:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v7:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v8:<source>:<word>` for English, `src:v8:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v8:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v8:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
 
 - **`lib/redis.ts`** - Shared Redis client factory using KV_REST_API_URL and KV_REST_API_TOKEN (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 and Exa requires functioning accounting (suggestions, random-word, and pronunciation keep working without Redis)
 

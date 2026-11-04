@@ -1,5 +1,10 @@
 import { unstable_cache } from 'next/cache'
-import { ETYMOLOGY_SCAN_PATTERN, lexemeFromEtymologyCacheKey } from '@/lib/cache'
+import {
+  ETYMOLOGY_SCAN_PATTERN,
+  CACHE_VERSION,
+  BETA_CACHE_VERSION,
+  lexemeFromEtymologyCacheKey,
+} from '@/lib/cache'
 import { safeError } from '@/lib/errorUtils'
 import type { LanguageCode } from '@/lib/languages'
 import { getRedis } from '@/lib/redis'
@@ -54,6 +59,8 @@ async function scanTracedWords(): Promise<TracedWord[]> {
  * client's no-store fetches from flipping callers to dynamic rendering.
  * Callers must copy before sorting: the cache may hand back a shared array.
  */
-export const getTracedWords = unstable_cache(scanTracedWords, ['traced-words'], {
-  revalidate: 86400,
-})
+export const getTracedWords = unstable_cache(
+  scanTracedWords,
+  ['traced-words', CACHE_VERSION, BETA_CACHE_VERSION],
+  { revalidate: 86400 }
+)

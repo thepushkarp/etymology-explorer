@@ -140,12 +140,12 @@ export function Landing() {
                 <WordLink
                   word={entry.word}
                   language={language}
-                  className="group flex items-baseline justify-between gap-6 border-b border-rule py-4"
+                  className="group flex flex-col items-start gap-1 border-b border-rule py-4"
                 >
                   <span className="font-serif text-xl text-ink transition-colors group-hover:text-accent">
                     {entry.word}
                   </span>
-                  <span className="text-right font-serif text-sm italic text-muted transition-colors group-hover:text-ink">
+                  <span className="text-left font-serif text-sm italic text-muted transition-colors group-hover:text-ink">
                     {entry.teaser}
                   </span>
                 </WordLink>

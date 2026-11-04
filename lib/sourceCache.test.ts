@@ -47,9 +47,12 @@ describe('source cache', () => {
   test('round-trips source data with a source-and-word-scoped key', async () => {
     const store = createStore()
 
+    await store.set('src:v7:etymonline:telephone', DATA)
+    expect(await getCachedSource('etymonline', 'telephone', store)).toBeNull()
+
     await cacheSource('etymonline', 'Telephone', DATA, store)
 
-    expect(store.keys()).toEqual(['src:v7:etymonline:telephone'])
+    expect(store.keys()).toContain('src:v8:etymonline:telephone')
     expect(await getCachedSource('etymonline', 'telephone', store)).toEqual(DATA)
   })
 
@@ -67,8 +70,8 @@ describe('source cache', () => {
     await cacheSource('wiktionaryNative', 'sale', DATA, store, 'fr')
 
     expect(store.keys().sort()).toEqual([
-      'src:v6:wiktionaryNative:fr:sale',
-      'src:v6:wiktionaryNative:it:sale',
+      'src:v8:wiktionaryNative:fr:sale',
+      'src:v8:wiktionaryNative:it:sale',
     ])
   })
 
@@ -108,7 +111,7 @@ describe('source cache', () => {
 
   test('treats malformed cache entries as misses', async () => {
     const store = createStore()
-    await store.set('src:v7:etymonline:telephone', {
+    await store.set('src:v8:etymonline:telephone', {
       text: 42,
       url: 'https://example.com',
     } as unknown as SourceData)

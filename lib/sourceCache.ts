@@ -33,20 +33,13 @@ export type CacheableSource =
   | 'dicionarioAberto'
   | 'incelsWiki'
 
-const SOURCE_CACHE_PREFIX = 'src:v6:'
-const BETA_SOURCE_CACHE_PREFIX = 'src:v6:'
+const SOURCE_CACHE_PREFIX = 'src:v8:'
 
 function sourceKey(source: CacheableSource, word: string, language: LanguageCode): string {
   const normalized = canonicalizeWord(word)
-  const prefix =
-    source === 'etymonline'
-      ? 'src:v7:'
-      : language === 'en'
-        ? SOURCE_CACHE_PREFIX
-        : BETA_SOURCE_CACHE_PREFIX
   return language === 'en'
-    ? `${prefix}${source}:${normalized}`
-    : `${prefix}${source}:${language}:${normalized}`
+    ? `${SOURCE_CACHE_PREFIX}${source}:${normalized}`
+    : `${SOURCE_CACHE_PREFIX}${source}:${language}:${normalized}`
 }
 
 function isSourceData(value: unknown): value is SourceData {
@@ -100,7 +93,7 @@ export async function cacheSource(
 
 /** A provider request can return several independent dictionaries or homographs. */
 function bundleKey(provider: string, word: string, lexicalLanguage: string): string {
-  return `src:v7:bundle:${encodeURIComponent(provider)}:${encodeURIComponent(lexicalLanguage)}:${canonicalizeWord(word)}`
+  return `${SOURCE_CACHE_PREFIX}bundle:${encodeURIComponent(provider)}:${encodeURIComponent(lexicalLanguage)}:${canonicalizeWord(word)}`
 }
 
 export async function getCachedSourceBundle(

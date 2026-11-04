@@ -34,7 +34,7 @@ return #entries
 `
 
 function recentSearchKey(language: LanguageCode): string {
-  return `recent-searches:v1:${language}`
+  return `recent-searches:v2:${language}`
 }
 
 export async function recordRecentSearch(

@@ -22,9 +22,9 @@ function jitterTTL(ttl: number): number {
 }
 
 // Bump version when EtymologyResult schema or sourcing behavior changes
-export const CACHE_VERSION = '2.6'
+export const CACHE_VERSION = '2.7'
 export const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
-export const BETA_CACHE_VERSION = '8'
+export const BETA_CACHE_VERSION = '9'
 export const BETA_ETYMOLOGY_PREFIX = `etymology:beta:v${BETA_CACHE_VERSION}:`
 export const ETYMOLOGY_SCAN_PATTERN = 'etymology:*'
 const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
@@ -228,7 +228,7 @@ export async function getNegativeCache(
 
   const normalized = canonicalizeWord(word)
   const key =
-    language === 'en' ? `neg:v4:${normalized}` : `neg:v4:${lexemeKey(language, normalized)}`
+    language === 'en' ? `neg:v5:${normalized}` : `neg:v5:${lexemeKey(language, normalized)}`
   try {
     const exists = await redis.exists(key)
     return exists === 1
@@ -257,7 +257,7 @@ export async function cacheNegative(
 
   const normalized = canonicalizeWord(word)
   const key =
-    language === 'en' ? `neg:v4:${normalized}` : `neg:v4:${lexemeKey(language, normalized)}`
+    language === 'en' ? `neg:v5:${normalized}` : `neg:v5:${lexemeKey(language, normalized)}`
   try {
     await redis.set(key, '1', { ex: jitterTTL(CONFIG.negativeCacheTTL) })
   } catch (error) {

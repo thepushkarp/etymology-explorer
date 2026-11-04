@@ -26,7 +26,9 @@ export function recentSearchPreview(
     .replace(/\s+/gu, ' ')
     .trim()
   let teaser = lore || localizedText(primary?.definition ?? result.definition, language).trim()
-  teaser = teaser.replace(/\s+/gu, ' ')
+  teaser = teaser
+    .replace(/(\*\*|__|\*|_)(?=\S)([^*_]*?\S)\1(?![\p{L}\p{N}])/gu, '$2')
+    .replace(/\s+/gu, ' ')
   if (!teaser) return null
   if (teaser.length > TEASER_LENGTH) {
     const prefix = teaser.slice(0, TEASER_LENGTH - 1)

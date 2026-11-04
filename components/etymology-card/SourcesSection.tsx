@@ -2,6 +2,7 @@ import type { BetaLanguageCode } from '@/lib/languages'
 import { sourceLabel } from '@/lib/sourceLabels'
 import type { SourceReference } from '@/lib/types'
 import { Section } from './Section'
+import { SourceIcon } from '@/components/SourceIcon'
 
 function groupByOrigin(sources: SourceReference[]) {
   const groups = new Map<string, SourceReference[]>()
@@ -20,7 +21,10 @@ export function SourcesSection({ sources, title }: { sources: SourceReference[];
       <ul className="space-y-2 text-sm">
         {groupByOrigin(sources).map(({ label, entries }) => (
           <li key={label} className="flex flex-col gap-1 sm:flex-row sm:gap-6">
-            <span className="w-32 shrink-0 text-muted">{label}</span>
+            <span className="flex w-32 shrink-0 items-center gap-1.5 text-muted">
+              <SourceIcon source={entries[0].name} />
+              {label}
+            </span>
             <span className="font-serif text-ink">
               {entries.map((source, index) => (
                 <span key={`${source.word}-${source.url}-${index}`}>

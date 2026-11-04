@@ -22,7 +22,7 @@ const result: EtymologyResult = {
 
 describe('recent search previews', () => {
   test('uses the selected language and primary history, with a bounded whole-word teaser', () => {
-    const local = 'Una parola dalla storia antica. '.repeat(8)
+    const local = '*Una* parola dalla storia antica. '.repeat(8)
     const italian: EtymologyResult = {
       language: 'it',
       word: ' CÀSA ',
@@ -56,6 +56,9 @@ describe('recent search previews', () => {
     expect(preview.teaser.endsWith('…')).toBe(true)
     expect(recentSearchPreview(italian, 'en')).toBeNull()
     expect(recentSearchPreview({ ...result, lore: '  ' }, 'en')?.teaser).toBe('Pleasant.')
+    expect(recentSearchPreview({ ...result, lore: 'From *hūsą to *house*.' }, 'en')?.teaser).toBe(
+      'From *hūsą to house.'
+    )
   })
 
   test('deduplicates normalized words and fills remaining slots from curated entries', () => {
@@ -82,7 +85,7 @@ describe('recent search previews', () => {
     expect(await recordRecentSearch('  NICE ', 'en', client, load)).toBe(true)
     expect(load).toHaveBeenCalledWith('nice', 'en')
     const args = client.eval.mock.calls[0] as unknown as [string, string[], string[]]
-    expect(args[1]).toEqual(['recent-searches:v1:en'])
+    expect(args[1]).toEqual(['recent-searches:v2:en'])
     expect(JSON.parse(args[2][0])).toEqual({ word: 'nice', teaser: result.lore })
     expect(await recordRecentSearch('other', 'en', client, load)).toBe(false)
     expect(await recordRecentSearch('nice', 'it', client, load)).toBe(false)
@@ -149,12 +152,12 @@ describe.skipIf(!Bun.which('redis-server') || !Bun.which('redis-cli'))(
       )
       const load = async (word: string) => ({ ...result, word })
       await Promise.all(words.map((word) => recordRecentSearch(word, 'en', client, load)))
-      const pool = (await client.get('recent-searches:v1:en')) as Array<{ word: string }>
+      const pool = (await client.get('recent-searches:v2:en')) as Array<{ word: string }>
       expect(pool).toHaveLength(20)
       expect(new Set(pool.map((entry) => entry.word)).size).toBe(20)
       const repeated = pool[15].word
       await recordRecentSearch(repeated, 'en', client, load)
-      const promoted = (await client.get('recent-searches:v1:en')) as Array<{ word: string }>
+      const promoted = (await client.get('recent-searches:v2:en')) as Array<{ word: string }>
       expect(promoted).toHaveLength(20)
       expect(promoted[0].word).toBe(repeated)
       expect(await getRecentSearches('it', client)).toEqual([])
