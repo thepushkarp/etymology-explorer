@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
 import { markTraceIntent } from '@/lib/traceIntent'
 import { wordPagePath, type LanguageCode } from '@/lib/languages'
+import { recordRecentSearchIntent } from '@/lib/recentSearchClient'
 
 /**
  * Programmatic in-app word navigation: mark the trace-intent flag (so an
@@ -19,6 +20,7 @@ export function useWordNavigation() {
       const trimmed = canonicalizeWord(word)
       if (!isValidWord(trimmed)) return
       markTraceIntent(trimmed, language)
+      void recordRecentSearchIntent(trimmed, language)
       router.push(wordPagePath(trimmed, language))
     },
     [router]

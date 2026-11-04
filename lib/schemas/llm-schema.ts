@@ -20,6 +20,8 @@
  * prompt's content rules (lib/prompts.ts) don't already say.
  */
 
+import { SOURCE_PROVIDER_IDS } from '../sourceProviders'
+
 const ANCESTRY_STAGE_SCHEMA = {
   type: 'object',
   properties: {
@@ -198,13 +200,7 @@ export const ETYMOLOGY_LLM_SCHEMA = {
         properties: {
           name: {
             type: 'string',
-            enum: [
-              'etymonline',
-              'wiktionary',
-              'multilingualDictionary',
-              'incelsWiki',
-              'synthesized',
-            ],
+            enum: [...SOURCE_PROVIDER_IDS, 'synthesized'],
           },
         },
         required: ['name'],
@@ -291,20 +287,6 @@ function betaNode(value: unknown, key?: string): unknown {
 /** Strict bilingual schema. Facts stay scalar; every prose leaf is an en/local pair. */
 function withHistories(schema: Record<string, unknown>, bilingual: boolean) {
   const properties = schema.properties as Record<string, unknown>
-  const sources = properties.sources as {
-    items: { properties: { name: { enum: string[] } } }
-  }
-
-  if (bilingual)
-    sources.items.properties.name.enum = [
-      'wiktionaryEnglish',
-      'wiktionaryNative',
-      'wikidataLexeme',
-      'multilingualDictionary',
-      'dicionarioAberto',
-      'synthesized',
-    ]
-
   const history = {
     type: 'object',
     properties: {

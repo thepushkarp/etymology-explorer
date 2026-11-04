@@ -18,6 +18,32 @@ const CHAINS: ParsedEtymChain[] = [
   },
 ]
 
+test('confidence counts publisher families across editions and retrieval routes', () => {
+  const stage: AncestryStage = { stage: 'Latin', form: 'fenestra', note: '' }
+  const graph: AncestryGraph = { branches: [{ root: 'window', stages: [stage] }] }
+  const chain: ParsedEtymChain = {
+    source: 'wiktionary',
+    word: 'window',
+    links: [
+      {
+        language: 'Latin',
+        form: 'fenestra',
+        isReconstructed: false,
+        rawSnippet: 'from Latin fenestra',
+      },
+    ],
+  }
+  const mirrors: ParsedEtymChain[] = [
+    { ...chain, provider: 'wiktionaryEnglish' },
+    { ...chain, provider: 'wiktionaryNative' },
+  ]
+  enrichAncestryGraph(graph, mirrors)
+  expect(stage.confidence).toBe('medium')
+  enrichAncestryGraph(graph, [...mirrors, { ...chain, source: 'deMauro', provider: 'deMauro' }])
+  expect(stage.confidence).toBe('high')
+  expect(stage.evidence?.map((evidence) => evidence.sourceFamily)).toContain('deMauro')
+})
+
 describe('enricher robustness against malformed LLM output', () => {
   test('drops convergence points missing pieRoot instead of crashing', () => {
     const graph: AncestryGraph = {

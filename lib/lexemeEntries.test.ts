@@ -62,6 +62,29 @@ const wikidata: SourceData = {
 }
 
 describe('deriveEntryContexts', () => {
+  test('specialist homographs retain independent scopes and entry URLs', () => {
+    const source: SourceData = {
+      text: 'Two independent entries.',
+      url: 'https://example.test/word/manga',
+      entryGroups: ['fruit', 'sleeve'].map((meaning, index) => ({
+        index: String(index),
+        number: String(index),
+        heading: `manga ${index + 1}`,
+        anchor: `manga-${index + 1}`,
+        level: 2,
+        text: meaning,
+        sections: [],
+        sourceUrl: `https://example.test/word/manga-${index + 1}`,
+      })),
+    }
+    const entries = deriveEntryContexts('manga', 'pt', 'michaelis', source, null)
+    expect(entries).toHaveLength(2)
+    expect(new Set(entries.map((entry) => entry.evidenceScopeId)).size).toBe(2)
+    expect(entries.map((entry) => entry.sourceUrl)).toEqual(
+      source.entryGroups!.map((group) => group.sourceUrl!)
+    )
+    expect(entries.map((entry) => entry.text)).toEqual(['fruit', 'sleeve'])
+  })
   test('keeps accented lemma and unaccented inflection identity separate', () => {
     const source = structuredClone(wiktionary)
     source.entryGroups![0].sections[1].text = 'Forma flessa plurale di víté.'
@@ -178,6 +201,17 @@ describe('deriveEntryContexts', () => {
     expect(contexts[0].text).toContain('sedes')
     expect(contexts[0].text).not.toContain('sitis')
     expect(contexts[1].text).toContain('sitis')
+
+    source.url = 'https://pt.wiktionary.org/wiki/manga'
+    source.text =
+      'Etimologia\n[editar]\nDe 1 (fruta): do malaiala മാങ്ങ (māṅṅa)\nDe 2 (vestuário): do latim manica\nPronúncia'
+    source.entryGroups![0].text = source.text
+    const inline = deriveEntryContexts('manga', 'pt', 'wiktionaryNative', source, null)
+    expect(inline.map((entry) => entry.heading)).toEqual(['De 1 (fruta)', 'De 2 (vestuário)'])
+    expect(inline[0].text).toContain('മാങ്ങ (māṅṅa)')
+    expect(inline[0].text).not.toContain('manica')
+    expect(inline[1].text).toBe('De 2 (vestuário): do latim manica')
+    expect(inline[0].evidenceScopeId).not.toBe(inline[1].evidenceScopeId)
   })
 })
 

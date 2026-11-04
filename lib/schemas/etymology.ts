@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod'
+import { SOURCE_FAMILY_IDS, SOURCE_PROVIDER_IDS } from '../sourceProviders'
 
 const BilingualTextSchema = z.object({ en: z.string().min(1), local: z.string().min(1) }).strict()
 
@@ -67,22 +68,18 @@ function createEntryFields<Text extends z.ZodTypeAny>(text: Text) {
   }
 }
 
-function createResultSchema<Text extends z.ZodTypeAny>(text: Text, extendedSources = false) {
+function createResultSchema<Text extends z.ZodTypeAny>(text: Text) {
   const entry = createEntryFields(text)
   const sourceBase = {
-    name: z.string(),
+    name: z.enum([...SOURCE_PROVIDER_IDS, 'synthesized']),
     url: z.string().optional(),
     word: z.string().optional(),
   }
-  const source = z.object(
-    extendedSources
-      ? {
-          ...sourceBase,
-          sourceFamily: z.string().optional(),
-          license: z.string().optional(),
-        }
-      : sourceBase
-  )
+  const source = z.object({
+    ...sourceBase,
+    sourceFamily: z.enum(SOURCE_FAMILY_IDS).optional(),
+    license: z.string().optional(),
+  })
 
   return z
     .object({
@@ -160,7 +157,7 @@ export const EnglishHistoryEtymologyResultSchema = EnglishResultSchema.extend(
   createHistoryFields(z.string())
 ).superRefine(validateHistories)
 
-export const BetaEtymologyResultSchema = createResultSchema(BilingualTextSchema, true)
+export const BetaEtymologyResultSchema = createResultSchema(BilingualTextSchema)
   .extend({
     language: z.enum(['it', 'es', 'fr', 'pt']),
     ...createHistoryFields(BilingualTextSchema),

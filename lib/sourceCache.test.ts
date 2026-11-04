@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { getCachedSource, cacheSource, type SourceCacheRedis } from '@/lib/sourceCache'
+import {
+  getCachedSource,
+  cacheSource,
+  getCachedSourceBundle,
+  cacheSourceBundle,
+  type SourceCacheRedis,
+} from '@/lib/sourceCache'
 import type { SourceData } from '@/lib/types'
 
 /** Map-backed double mirroring @upstash/redis object (de)serialization. */
@@ -43,7 +49,7 @@ describe('source cache', () => {
 
     await cacheSource('etymonline', 'Telephone', DATA, store)
 
-    expect(store.keys()).toEqual(['src:v6:etymonline:telephone'])
+    expect(store.keys()).toEqual(['src:v7:etymonline:telephone'])
     expect(await getCachedSource('etymonline', 'telephone', store)).toEqual(DATA)
   })
 
@@ -102,7 +108,7 @@ describe('source cache', () => {
 
   test('treats malformed cache entries as misses', async () => {
     const store = createStore()
-    await store.set('src:v6:etymonline:telephone', {
+    await store.set('src:v7:etymonline:telephone', {
       text: 42,
       url: 'https://example.com',
     } as unknown as SourceData)
@@ -123,4 +129,38 @@ test('Wikipedia cache preserves full text and metadata and isolates editions', a
   expect(await getCachedSource('wikipedia', 'pomme de terre', store, 'fr')).toEqual(article)
   expect(await getCachedSource('wikipedia', 'pomme de terre', store, 'it')).toBeNull()
   expect(await getCachedSource('wikipedia', 'pomme de terre', store, 'en')).toBeNull()
+})
+
+test('source bundles preserve publisher provenance and historical language isolation', async () => {
+  const store = createStore()
+  const records = [
+    {
+      provider: 'lewisShort' as const,
+      sourceFamily: 'lewisShort' as const,
+      data: {
+        ...DATA,
+        lexicalLanguage: 'Latin',
+        text: 'Complete historical entry with its final reference.',
+        retrieval: { method: 'exa' as const, retrievedAt: '2026-11-04T00:00:00Z' },
+      },
+    },
+  ]
+  await cacheSourceBundle('lewisShort', 'casa', 'Latin', records, store)
+  expect(await getCachedSourceBundle('lewisShort', 'casa', 'Latin', store)).toEqual(records)
+  expect(await getCachedSourceBundle('lewisShort', 'casa', 'Italian', store)).toBeNull()
+  expect(await getCachedSourceBundle('lsj', 'casa', 'Latin', store)).toBeNull()
+})
+
+test('partial source entries and bundles are not stored for seven days', async () => {
+  const store = createStore()
+  const data = { ...DATA, incomplete: true }
+  await cacheSource('etymonline', 'fixture', data, store)
+  await cacheSourceBundle(
+    'deMauro',
+    'fixture',
+    'Italian',
+    [{ provider: 'deMauro', sourceFamily: 'deMauro', data }],
+    store
+  )
+  expect(store.keys()).toEqual([])
 })

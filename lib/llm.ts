@@ -34,6 +34,13 @@ import {
   streamOpenRouterResponse,
 } from './openrouterResponses'
 import { LANGUAGES, type LanguageCode } from './languages'
+import {
+  lexicalSourceRecords,
+  mainSourceRecords,
+  relatedSourceRecords,
+  rootSourceRecords,
+  sourceEvidenceRole,
+} from './researchSources'
 
 export interface SynthesisResult {
   result: EtymologyResult
@@ -247,12 +254,24 @@ const INCELS_USAGE_SIGNALS =
   /\b(incel|femcel|blackpill|redpill|looksmax|manosphere|internet|slang|term|coined|refers to|used)\b/i
 const WIKIPEDIA_USAGE_SIGNALS = /\b(slang|colloquial(?:ly|ism)?|internet memes?)\b/i
 
-function getSupplementalSourceSignals(researchContext: ResearchContext): SupplementalSourceSignals {
-  const incelsText = researchContext.mainWord.incelsWiki?.text?.replace(/\s+/g, ' ').trim() ?? ''
-  const wikipediaText = researchContext.mainWord.wikipedia?.text?.replace(/\s+/g, ' ').trim() ?? ''
+function hasIncelsUsageEvidence(text: string): boolean {
+  const compact = text.replace(/\s+/g, ' ').trim()
+  return compact.length >= MIN_SIGNIFICANT_INCELS_CHARS && INCELS_USAGE_SIGNALS.test(compact)
+}
 
-  const incelsWiki =
-    incelsText.length >= MIN_SIGNIFICANT_INCELS_CHARS && INCELS_USAGE_SIGNALS.test(incelsText)
+function getSupplementalSourceSignals(researchContext: ResearchContext): SupplementalSourceSignals {
+  const sources = mainSourceRecords(researchContext.mainWord)
+  const textFor = (provider: 'incelsWiki' | 'wikipedia') =>
+    sources
+      .filter((source) => source.provider === provider)
+      .map((source) => source.data.text)
+      .join('\n')
+      .replace(/\s+/g, ' ')
+      .trim()
+  const incelsText = textFor('incelsWiki')
+  const wikipediaText = textFor('wikipedia')
+
+  const incelsWiki = hasIncelsUsageEvidence(incelsText)
   const wikipedia =
     wikipediaText.length >= MIN_SIGNIFICANT_WIKIPEDIA_CHARS &&
     WIKIPEDIA_USAGE_SIGNALS.test(wikipediaText)
@@ -481,127 +500,46 @@ export function isRecoverableBetaValidationError(error: unknown, language: Langu
 
 function attachSources(result: EtymologyResult, researchContext: ResearchContext): EtymologyResult {
   const sources: SourceReference[] = []
-  const supplementalSignals = getSupplementalSourceSignals(researchContext)
-  const mainWord = researchContext.mainWord.word
-  const language = researchContext.language ?? 'en'
-
-  if (language !== 'en') {
-    const betaSources = [
-      ['wiktionaryEnglish', researchContext.mainWord.wiktionaryEnglish, 'wiktionary'],
-      ['wiktionaryNative', researchContext.mainWord.wiktionaryNative, 'wiktionary'],
-      ['wikidataLexeme', researchContext.mainWord.wikidataLexeme, 'wikidata'],
-      ['multilingualDictionary', researchContext.mainWord.multilingualDictionary, 'wiktionary'],
-      ['dicionarioAberto', researchContext.mainWord.dicionarioAberto, 'dicionarioAberto'],
-    ] as const
-
-    for (const [name, data, sourceFamily] of betaSources) {
-      if (data) {
+  const seen = new Set<string>()
+  const lookups = [
+    { word: researchContext.mainWord.word, records: mainSourceRecords(researchContext.mainWord) },
+    ...researchContext.rootResearch.map((root) => ({
+      word: root.lexeme?.word ?? root.root,
+      records: rootSourceRecords(root),
+    })),
+    ...researchContext.relatedResearch.map((related) => ({
+      word: related.lexeme?.word ?? related.term,
+      records: relatedSourceRecords(related),
+    })),
+  ]
+  for (const { word, records } of lookups) {
+    for (const record of records) {
+      if (record.provider === 'incelsWiki' && !hasIncelsUsageEvidence(record.data.text)) continue
+      // A portal can host several independent dictionaries at the same URL.
+      // Conversely, direct and recovered copies of one publisher are one source.
+      const urls = new Set([
+        record.data.url,
+        ...(record.data.entryGroups ?? []).flatMap((group) =>
+          group.sourceUrl ? [group.sourceUrl] : []
+        ),
+      ])
+      for (const url of urls) {
+        const key = `${record.provider}:${url}`
+        if (seen.has(key)) continue
+        seen.add(key)
         sources.push({
-          name,
-          url: data.url,
-          word: mainWord,
-          sourceFamily,
-          ...(name === 'multilingualDictionary'
+          name: record.provider,
+          url,
+          word,
+          sourceFamily: record.sourceFamily,
+          ...(record.provider === 'multilingualDictionary'
             ? { license: 'Per-entry attribution and license are provided by FreeDictionaryAPI' }
             : {}),
         })
       }
     }
-    if (researchContext.mainWord.wikipedia) {
-      sources.push({
-        name: 'wikipedia',
-        url: researchContext.mainWord.wikipedia.url,
-        word: mainWord,
-      })
-    }
-    for (const root of researchContext.rootResearch) {
-      for (const [name, data] of [
-        ['wiktionary', root.wiktionaryData],
-        ['wiktionaryEnglish', root.wiktionaryEnglish],
-        ['wiktionaryNative', root.wiktionaryNative],
-      ] as const) {
-        if (data && !sources.some((source) => source.url === data.url)) {
-          sources.push({
-            name,
-            url: data.url,
-            word: root.lexeme?.word ?? root.root,
-            sourceFamily: 'wiktionary',
-          })
-        }
-      }
-    }
-    result.sources = sources.length > 0 ? sources : [{ name: 'synthesized' }]
-    return result
   }
-
-  if (researchContext.mainWord.etymonline) {
-    sources.push({
-      name: 'etymonline',
-      url: researchContext.mainWord.etymonline.url,
-      word: mainWord,
-    })
-  }
-  if (researchContext.mainWord.wiktionary) {
-    sources.push({
-      name: 'wiktionary',
-      url: researchContext.mainWord.wiktionary.url,
-      word: mainWord,
-    })
-  }
-  if (researchContext.mainWord.multilingualDictionary) {
-    sources.push({
-      name: 'multilingualDictionary',
-      url: researchContext.mainWord.multilingualDictionary.url,
-      word: mainWord,
-      sourceFamily: 'wiktionary',
-      license: 'Per-entry attribution and license are provided by FreeDictionaryAPI',
-    })
-  }
-  if (researchContext.mainWord.wikipedia) {
-    sources.push({
-      name: 'wikipedia',
-      url: researchContext.mainWord.wikipedia.url,
-      word: mainWord,
-    })
-  }
-  if (researchContext.mainWord.incelsWiki && supplementalSignals.incelsWiki) {
-    sources.push({
-      name: 'incelsWiki',
-      url: researchContext.mainWord.incelsWiki.url,
-      word: mainWord,
-    })
-  }
-  for (const rootData of researchContext.rootResearch) {
-    if (
-      rootData.etymonlineData &&
-      !sources.some((source) => source.url === rootData.etymonlineData?.url)
-    ) {
-      sources.push({ name: 'etymonline', url: rootData.etymonlineData.url, word: rootData.root })
-    }
-    if (
-      rootData.wiktionaryData &&
-      !sources.some((source) => source.url === rootData.wiktionaryData?.url)
-    ) {
-      sources.push({ name: 'wiktionary', url: rootData.wiktionaryData.url, word: rootData.root })
-    }
-  }
-  for (const relatedData of researchContext.relatedResearch) {
-    if (
-      relatedData.etymonlineData &&
-      !sources.some((source) => source.url === relatedData.etymonlineData?.url)
-    ) {
-      sources.push({
-        name: 'etymonline',
-        url: relatedData.etymonlineData.url,
-        word: relatedData.term,
-      })
-    }
-  }
-  if (sources.length === 0) {
-    sources.push({ name: 'synthesized' })
-  }
-
-  result.sources = sources
+  result.sources = sources.length ? sources : [{ name: 'synthesized' }]
   return result
 }
 
@@ -611,11 +549,8 @@ function sameStrings(left: string[], right: string[]): boolean {
   return [...left].sort().every((value, index) => value === sortedRight[index])
 }
 
-/** Reject cross-history topology before any evidence-bearing English section is published. */
-function validateEnglishHistoryGraph(
-  history: LexicalHistory<string>,
-  context: ResearchContext
-): void {
+/** Reject cross-history topology before any evidence-bearing section is published. */
+function validateHistoryGraph(history: LexicalHistory<ResultText>, context: ResearchContext): void {
   const entry = context.entryContexts?.find((candidate) => candidate.id === history.id)
   if (!entry) throw new Error('Schema validation failed: source history context is missing')
   const graph = history.ancestryGraph
@@ -629,7 +564,9 @@ function validateEnglishHistoryGraph(
           root.parentHistoryId === history.id &&
           (root.relationship === 'spelling-variant' || root.relationship === 'redirect')
       )
-      .flatMap((root) => [root.etymonlineData?.text, root.wiktionaryData?.text])
+      .flatMap((root) =>
+        lexicalSourceRecords(rootSourceRecords(root)).map((source) => source.data.text)
+      )
       .filter((text): text is string => Boolean(text)),
   ]
   const scopedLinks = (context.parsedChains ?? [])
@@ -701,15 +638,26 @@ function finalizeHistories(
 
   for (const history of result.histories) {
     const source = researchContext.entryContexts?.find((entry) => entry.id === history.id)?.source
+    const sourceRecord = mainSourceRecords(researchContext.mainWord).find(
+      (record) => record.provider === source
+    )
+    const cannotEstablishAncestry =
+      source === 'multilingualDictionary' ||
+      source === 'wikipedia' ||
+      (sourceRecord && sourceEvidenceRole(sourceRecord) !== 'etymology')
     if (
-      source === 'multilingualDictionary' &&
+      cannotEstablishAncestry &&
       (history.roots.length ||
         history.ancestryGraph.branches.length ||
         history.ancestryGraph.mergePoint ||
         history.ancestryGraph.postMerge?.length ||
         history.ancestryGraph.convergencePoints?.length)
     ) {
-      throw new Error('Schema validation failed: dictionary fallback cannot establish ancestry')
+      throw new Error(
+        source === 'multilingualDictionary'
+          ? 'Schema validation failed: dictionary fallback cannot establish ancestry'
+          : 'Schema validation failed: contextual or senses-only source cannot establish ancestry'
+      )
     }
     const candidate = candidates.find((entry) => entry.id === history.id)
     const formOfMatches = candidate?.formOf
@@ -727,9 +675,7 @@ function finalizeHistories(
       throw new Error(`Schema validation failed: history identity changed for ${history.id}`)
     }
 
-    if ((researchContext.language ?? 'en') === 'en') {
-      validateEnglishHistoryGraph(history as LexicalHistory<string>, researchContext)
-    }
+    validateHistoryGraph(history, researchContext)
     const scopedChains = (researchContext.parsedChains ?? []).filter(
       (chain) =>
         chain.historyId === history.id &&
@@ -739,9 +685,7 @@ function finalizeHistories(
     enrichAncestryGraph(history.ancestryGraph, scopedChains)
     pruneUngroundedStages(history.ancestryGraph)
     // Distinct unsupported roots can collapse into identical surviving paths.
-    if ((researchContext.language ?? 'en') === 'en') {
-      validateEnglishHistoryGraph(history as LexicalHistory<string>, researchContext)
-    }
+    validateHistoryGraph(history, researchContext)
   }
 
   const primary = result.histories.find((history) => history.id === result.primaryHistoryId)

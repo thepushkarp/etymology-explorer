@@ -1,5 +1,59 @@
 # Research and generation measurements
 
+## Multilingual source comparison
+
+`rich-research.ts` evaluates a fixed 30-word corpus across English, Italian,
+Spanish, French, and Portuguese. It records complete source responses, research
+contexts, generated entries, progress events, request outcomes, and provider
+usage under ignored `bench-results/rich-research/`. Both Redis environment
+namespaces are removed before research, so production caches, locks, and
+accounting remain untouched. Provider keys and request headers are not saved.
+
+Run the same script in a frozen baseline checkout and the candidate checkout,
+using one absolute output directory. Only one evaluation process may use that
+directory at a time. All generation is pinned to the configured Luna model;
+fallback routing is disabled to keep the comparison meaningful. The local
+ledger reserves a conservative request allowance before every LLM dispatch,
+settles known usage, and retains unknown charges. Its default cumulative limit
+is $10 across phases; `--cost-limit` can lower it.
+
+```sh
+# Run in the baseline checkout, then in the candidate checkout.
+bun scripts/performance/rich-research.ts --phase baseline --output "$EVALUATION_OUTPUT"
+bun scripts/performance/rich-research.ts --phase candidate \
+  --output "$EVALUATION_OUTPUT" --replay "$EVALUATION_OUTPUT/baseline"
+
+bun scripts/performance/rich-research-report.ts \
+  --baseline "$EVALUATION_OUTPUT/baseline" --candidate "$EVALUATION_OUTPUT/candidate" \
+  --output "$EVALUATION_OUTPUT/comparison.md"
+```
+
+`--language` selects a corpus language; combining it with `--word` also allows
+a separate control word. Existing
+completed sample directories are retained, so interrupted runs can resume.
+Use a fresh phase name for a deliberate repeat. `--research-only` prohibits
+all model calls, including the English root-extraction fallback.
+`--context` with an explicit word and language re-synthesizes a frozen context
+without source requests; its source-attempt count describes the saved research,
+while the request log contains only the new generation calls.
+
+Candidate replay uses exact method, URL, and body hashes for recorded sources;
+new requests remain live. Consequently its durations do not measure production
+latency. Source outages and throttling remain visible in both recordings and
+the report. The report inventories source pages, histories, ancestry stages,
+and errors; independent reading of the evidence and output is required before
+calling a larger inventory an improvement.
+
+Exa is disabled when no isolated accounting client is provided. To evaluate it,
+start a private Redis process with TCP disabled and a private Unix socket, then
+pass `--exa-redis-socket /path/to/private/socket`. The harness injects only the
+Exa budget client, using the production Lua scripts against that local Redis;
+ordinary source caches remain disabled. Keep the same Redis instance across
+Exa evaluation phases so its $10 allowance is shared. No production datastore
+credentials are used by this client. Stop the private Redis process afterward.
+
+## Earlier research measurements
+
 These recordings precede the current source-selection policy. See [SOURCE_SELECTION.md](./SOURCE_SELECTION.md) for fallback, recovery, and cache measurements.
 
 Most sampled uncached lookups spend their time in source HTTP waits and model generation.

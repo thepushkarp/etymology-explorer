@@ -17,6 +17,8 @@ Try it out at [etymex.com](https://etymex.com)
 - **Modern Usage**: Supplemental community usage gated by source significance from Incel Wiki extracts
 - **Pronunciation Audio**: Listen to word pronunciations powered by ElevenLabs
 - **Random Word**: Open a random word to expand your vocabulary
+- **Recently Explored**: Four random selections from the latest 20 successful searches in each language, with localized previews and curated fallback words
+- **Specialist Dictionaries**: General and language-specific evidence for query words, components, variants, and ancestors
 - **Structured Outputs**: Guaranteed valid JSON via OpenRouter `json_schema` strict mode
 - **Streaming UI**: Optional `?stream=true` server-sent events for source progress,
   per-section synthesis events, cached hits, and early error responses
@@ -72,8 +74,12 @@ OPENROUTER_API_KEY=your_openrouter_key_here
 ADMIN_SECRET=your_admin_secret_here
 
 # Optional: Upstash Redis (rate limiting + caching)
-ETYMOLOGY_KV_REST_API_URL=your_upstash_url_here
-ETYMOLOGY_KV_REST_API_TOKEN=your_upstash_token_here
+KV_REST_API_URL=your_upstash_url_here
+KV_REST_API_TOKEN=your_upstash_token_here
+
+# Optional: Exa recovery and source discovery (separate $10 monthly allowance)
+EXA_API_KEY=your_exa_key_here
+EXA_ENABLED=true
 
 # Optional: ElevenLabs (pronunciation audio)
 ELEVENLABS_API_KEY=your_elevenlabs_key_here
@@ -93,6 +99,15 @@ language selection and text normalization. Accent still depends on the configure
 `pt` does not select a Brazilian or European accent.
 
 See `.env.example` for full documentation.
+
+Exa requests reserve their tariff before dispatch against a separate $10 UTC-month
+allowance in Redis. Missing credentials, unavailable accounting, or an exhausted
+allowance disable Exa while ordinary sources continue. Use a dedicated Exa key
+with a $10 provider-side budget as an additional limit; the provider's billing
+period may differ from a calendar month. Each trace permits at most two searches,
+eight Contents pages, and five Exa HTTP calls within the shared 32-attempt source
+budget. Retrieved text is attributed to its publisher, and ambiguous entry
+boundaries cannot establish ancestry.
 
 For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and restart `bun dev`.
 
@@ -114,6 +129,9 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
   - [Dicionário Aberto](https://api.dicionario-aberto.net/index.html) - older Portuguese dictionary evidence
   - [Wikipedia](https://en.wikipedia.org/) - Encyclopedic context
   - [Incel Wiki](https://incels.wiki/) - Supplemental community slang context
+  - American Heritage, Il Nuovo De Mauro, RAE/ASALE DLE and Americanismos, CNRTL's TLFi/Littré/Académie collections, Priberam, and Michaelis - language-specific dictionaries
+  - Bosworth–Toller, Lewis & Short, and LSJ through Logeion - historical-language lexemes
+  - [Exa](https://exa.ai/) - optional blocked-page recovery and targeted publisher discovery
 - **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
 - **Typography**: Libre Baskerville (display serif) + Alegreya Sans (body), self-hosted woff2 subsets
 
@@ -186,15 +204,16 @@ etymology-explorer/
 
 ## API Endpoints
 
-| Endpoint             | Method | Description                                                        | Auth Required     |
-| -------------------- | ------ | ------------------------------------------------------------------ | ----------------- |
-| `/api/etymology`     | GET    | Synthesize etymology (`?word=X`, optional `language` and `stream`) | No (rate-limited) |
-| `/api/pronunciation` | GET    | Get pronunciation audio (`?word=X&language=it`)                    | No                |
-| `/api/suggestions`   | GET    | Get language-aware autocomplete suggestions                        | No                |
-| `/api/random-word`   | GET    | Get a random word                                                  | No                |
-| `/api/ngram`         | GET    | Get language-aware Google Books usage data (`?word=X`)             | No                |
-| `/api/health`        | GET    | Liveness check                                                     | No                |
-| `/api/admin/stats`   | GET    | Get budget/usage statistics and counters                           | Admin secret      |
+| Endpoint               | Method     | Description                                                        | Auth Required     |
+| ---------------------- | ---------- | ------------------------------------------------------------------ | ----------------- |
+| `/api/etymology`       | GET        | Synthesize etymology (`?word=X`, optional `language` and `stream`) | No (rate-limited) |
+| `/api/pronunciation`   | GET        | Get pronunciation audio (`?word=X&language=it`)                    | No                |
+| `/api/suggestions`     | GET        | Get language-aware autocomplete suggestions                        | No                |
+| `/api/random-word`     | GET        | Get a random word                                                  | No                |
+| `/api/ngram`           | GET        | Get language-aware Google Books usage data (`?word=X`)             | No                |
+| `/api/health`          | GET        | Liveness check                                                     | No                |
+| `/api/admin/stats`     | GET        | Get budget/usage statistics and counters                           | Admin secret      |
+| `/api/recent-searches` | GET / POST | Sample recent searches or record a validated cached lookup         | No (rate-limited) |
 
 ## How It Works
 

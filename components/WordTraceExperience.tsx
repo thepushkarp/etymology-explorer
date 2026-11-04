@@ -144,12 +144,19 @@ function TraceStatus({ progress }: { progress: StreamState }) {
               source.status === 'complete' ? 'text-ink' : 'text-faint'
             }`}
           >
-            <span className={source.status === 'failed' ? 'line-through' : ''}>{source.label}</span>{' '}
-            <span className="tabular-nums text-muted">
+            <span>{source.label}</span>{' '}
+            <span className="tabular-nums text-muted" title={source.reason}>
               {source.status === 'pending'
                 ? seconds(elapsed)
-                : source.status === 'failed'
-                  ? 'failed'
+                : source.status !== 'complete'
+                  ? {
+                      failed: 'unavailable',
+                      not_found: 'no entry',
+                      no_evidence: 'no evidence',
+                      blocked: 'blocked',
+                      unavailable: 'unavailable',
+                      budget_skipped: 'limit reached',
+                    }[source.status]
                   : source.timing !== undefined
                     ? seconds(source.timing)
                     : 'done'}

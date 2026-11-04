@@ -1,12 +1,17 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { SearchBox } from '@/components/SearchBox'
 import { ChevronDownIcon } from '@/components/Icons'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { WordLink } from '@/components/WordLink'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
+import {
+  landingSearchPreviews,
+  parseRecentSearchPreviews,
+  type RecentSearchPreview,
+} from '@/lib/recentSearchPreview'
 import {
   BETA_SYMBOL,
   LANGUAGES,
@@ -50,7 +55,34 @@ const CURATED_WORDS: Record<LanguageCode, Array<{ word: string; teaser: string }
 
 export function Landing() {
   const [language, setLanguage] = useState<LanguageCode>('en')
-  const words = CURATED_WORDS[language]
+  const [recent, setRecent] = useState<{
+    language: LanguageCode
+    words: RecentSearchPreview[]
+  } | null>(null)
+  const recentWords = recent?.language === language ? recent.words : []
+  const words = landingSearchPreviews(recentWords, CURATED_WORDS[language])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    async function loadRecentSearches() {
+      try {
+        const response = await fetch(`/api/recent-searches?language=${language}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const payload = await response.json()
+        if (!payload.success) throw new Error('Recent searches unavailable')
+        if (!controller.signal.aborted) {
+          setRecent({ language, words: parseRecentSearchPreviews(payload.data).slice(0, 4) })
+        }
+      } catch (error) {
+        if (!controller.signal.aborted) console.warn('[RecentSearches] Preview unavailable:', error)
+      }
+    }
+    void loadRecentSearches()
+    return () => controller.abort()
+  }, [language])
 
   return (
     <>
@@ -92,7 +124,11 @@ export function Landing() {
 
         <section className="mt-24" aria-labelledby="curated-heading">
           <h2 id="curated-heading" className="label">
-            Start here
+            {recentWords.length === 4
+              ? 'Recently explored'
+              : recentWords.length > 0
+                ? 'Explore a word'
+                : 'Start here'}
           </h2>
           <ul className="mt-4 border-t border-rule">
             {words.map((entry, index) => (

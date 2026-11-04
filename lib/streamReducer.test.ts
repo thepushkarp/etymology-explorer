@@ -134,6 +134,37 @@ describe('source events', () => {
     expect(state.sources.find((s) => s.key === 'wikipedia')?.status).toBe('failed')
   })
 
+  test('source outcomes distinguish missing entries from blocks and allow recovery', () => {
+    const state = run(
+      events(
+        { type: 'source_outcome', source: 'incelsWiki', outcome: { status: 'not_found' } },
+        {
+          type: 'source_outcome',
+          source: 'etymonline',
+          outcome: { status: 'blocked', reason: 'Browser challenge' },
+        },
+        { type: 'source_outcome', source: 'deMauro', outcome: { status: 'budget_skipped' } }
+      )
+    )
+    expect(state.sources.map((source) => source.status)).toEqual([
+      'not_found',
+      'blocked',
+      'budget_skipped',
+    ])
+    expect(state.sources[1].reason).toBe('Browser challenge')
+    const recovered = run(
+      events({
+        type: 'source_outcome',
+        source: 'etymonline',
+        outcome: { status: 'found' },
+        timing: 500,
+      }),
+      state
+    )
+    expect(recovered.sources[1]).toMatchObject({ status: 'complete', timing: 500 })
+    expect(recovered.sources[1].reason).toBeUndefined()
+  })
+
   test('root_research events do not produce a new state reference', () => {
     const before = run([{ type: 'search_started' }])
     const after = streamReducer(before, {

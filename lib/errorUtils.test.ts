@@ -29,17 +29,17 @@ describe('safeError secret redaction', () => {
   })
 
   test('redacts exact configured secret values wherever they appear', () => {
-    const previous = process.env.ETYMOLOGY_KV_REST_API_TOKEN
-    process.env.ETYMOLOGY_KV_REST_API_TOKEN = 'plain-looking-token-value-123'
+    const previous = process.env.KV_REST_API_TOKEN
+    process.env.KV_REST_API_TOKEN = 'plain-looking-token-value-123'
     try {
       const safe = safeError('POST failed: token=plain-looking-token-value-123 in body')
       expect(safe).not.toInclude('plain-looking-token-value-123')
       expect(safe).toInclude('[REDACTED]')
     } finally {
       if (previous === undefined) {
-        delete process.env.ETYMOLOGY_KV_REST_API_TOKEN
+        delete process.env.KV_REST_API_TOKEN
       } else {
-        process.env.ETYMOLOGY_KV_REST_API_TOKEN = previous
+        process.env.KV_REST_API_TOKEN = previous
       }
     }
   })

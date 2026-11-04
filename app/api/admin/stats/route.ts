@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, timingSafeEqual } from 'crypto'
 import { getSpendStats } from '@/lib/costGuard'
+import { getExaSpendStats } from '@/lib/exaBudget'
 import { getCounters, getLanguageCounters } from '@/lib/counters'
 import { getEnv } from '@/lib/env'
 
@@ -30,10 +31,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
   }
 
-  const [spend, counters, languageCounters] = await Promise.all([
+  const [spend, counters, languageCounters, exa] = await Promise.all([
     getSpendStats(),
     getCounters(),
     getLanguageCounters(),
+    getExaSpendStats(),
   ])
 
   if (!spend) {
@@ -50,6 +52,7 @@ export async function GET(request: NextRequest) {
       spend,
       counters,
       languageCounters,
+      exa,
     },
   })
 }

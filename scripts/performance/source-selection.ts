@@ -2,8 +2,8 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { conductAgenticResearch } from '@/lib/research'
 import type { ResearchContext } from '@/lib/types'
-delete process.env.ETYMOLOGY_KV_REST_API_URL
-delete process.env.ETYMOLOGY_KV_REST_API_TOKEN
+delete process.env.KV_REST_API_URL
+delete process.env.KV_REST_API_TOKEN
 const { values } = parseArgs({
   options: {
     label: { type: 'string' },

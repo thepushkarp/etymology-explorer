@@ -88,8 +88,8 @@ dummy provider keys. Clear or move aside the generated `.next/cache/fetch-cache`
 when switching Redis backends, as described in [README.md](./README.md).
 
 ```sh
-export ETYMOLOGY_KV_REST_API_URL=http://127.0.0.1:4198
-export ETYMOLOGY_KV_REST_API_TOKEN=benchmark
+export KV_REST_API_URL=http://127.0.0.1:4198
+export KV_REST_API_TOKEN=benchmark
 export OPENROUTER_API_KEY=benchmark-no-provider
 export ELEVENLABS_API_KEY=benchmark
 export ELEVENLABS_VOICE_ID=benchmark

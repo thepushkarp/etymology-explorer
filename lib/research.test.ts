@@ -140,10 +140,7 @@ describe('research breadth', () => {
         const requests: string[] = []
         globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
           const url = input instanceof Request ? input.url : String(input)
-          if (
-            process.env.ETYMOLOGY_KV_REST_API_URL &&
-            url.startsWith(process.env.ETYMOLOGY_KV_REST_API_URL)
-          )
+          if (process.env.KV_REST_API_URL && url.startsWith(process.env.KV_REST_API_URL))
             return upstashMissResponse(init)
           requests.push(url)
           const hostname = new URL(url).hostname
@@ -191,9 +188,13 @@ describe('research breadth', () => {
           skipOptionalSources: true,
         })
         const hosts = requests.map((url) => new URL(url).hostname)
-        expect(hosts.filter((host) => host === 'freedictionaryapi.com')).toHaveLength(
-          directWorks ? 0 : 1
-        )
+        expect(
+          requests.filter(
+            (url) =>
+              new URL(url).hostname === 'freedictionaryapi.com' &&
+              new URL(url).pathname.endsWith('/fixture')
+          )
+        ).toHaveLength(directWorks ? 0 : 1)
         expect(
           hosts.every(
             (host) => !['api.urbandictionary.com', 'api.dictionaryapi.dev'].includes(host)
@@ -257,7 +258,7 @@ describe('research breadth', () => {
 
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-      const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+      const kvUrl = process.env.KV_REST_API_URL
       if (kvUrl && url.startsWith(kvUrl)) {
         return upstashMissResponse(init)
       }
@@ -440,9 +441,9 @@ describe('buildResearchPrompt token diet', () => {
   }
 
   function sourceBlocks(prompt: string): string[] {
-    return [...prompt.matchAll(/<source_data name="[^"]+">\n([\s\S]*?)\n<\/source_data>/g)].map(
-      (match) => match[1]
-    )
+    return [
+      ...prompt.matchAll(/<source_data name="[^"]+"[^>]*>\n([\s\S]*?)\n<\/source_data>/g),
+    ].map((match) => match[1])
   }
 
   test('dictionary fallback retains complete phonetics, definitions and references', () => {
@@ -483,7 +484,7 @@ function installFetchRouter(options?: { wikipediaDelayMs?: number }): {
 
     // Upstash source-cache REST calls (only when local env has credentials):
     // always answer "miss" so tests never depend on a live Redis.
-    const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+    const kvUrl = process.env.KV_REST_API_URL
     if (kvUrl && url.startsWith(kvUrl)) {
       return upstashMissResponse(init)
     }
@@ -567,10 +568,7 @@ describe('conductAgenticResearch phase ordering', () => {
     let ancestorRequested = false
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input)
-      if (
-        process.env.ETYMOLOGY_KV_REST_API_URL &&
-        url.startsWith(process.env.ETYMOLOGY_KV_REST_API_URL)
-      )
+      if (process.env.KV_REST_API_URL && url.startsWith(process.env.KV_REST_API_URL))
         return upstashMissResponse(init)
       if (url.includes('openrouter.ai')) {
         await rootsReady
@@ -634,17 +632,19 @@ describe('conductAgenticResearch phase ordering', () => {
 describe('conductAgenticResearch abort propagation', () => {
   test('aborting the signal cancels pending fetches and rejects the pipeline', async () => {
     let abortedFetches = 0
+    let startedFetches = 0
 
     globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
 
       // Keep the source cache instant so the pipeline reaches the real fetches
-      const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+      const kvUrl = process.env.KV_REST_API_URL
       if (kvUrl && url.startsWith(kvUrl)) {
         return Promise.resolve(upstashMissResponse(init))
       }
 
       // Source fetches hang until the abort signal fires
+      startedFetches += 1
       return new Promise((_resolve, reject) => {
         init?.signal?.addEventListener('abort', () => {
           abortedFetches += 1
@@ -661,7 +661,8 @@ describe('conductAgenticResearch abort propagation', () => {
     expect(researchPromise).rejects.toMatchObject({ name: 'AbortError' })
     await researchPromise.catch(() => {})
 
-    expect(abortedFetches).toBe(4)
+    expect(startedFetches).toBeGreaterThan(0)
+    expect(abortedFetches).toBe(startedFetches)
   })
 })
 
@@ -698,7 +699,7 @@ test('component variants preserve query identity, separate scopes and actual HTT
   const requests: string[] = []
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
-    const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+    const kvUrl = process.env.KV_REST_API_URL
     if (kvUrl && url.startsWith(kvUrl)) return upstashMissResponse(init)
     requests.push(url)
     if (url.includes('wiktionary.org/w/api.php')) {
@@ -756,7 +757,7 @@ test('component variants preserve query identity, separate scopes and actual HTT
 test('secondary edition homographs cannot corroborate the primary history', async () => {
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
-    const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+    const kvUrl = process.env.KV_REST_API_URL
     if (kvUrl && url.startsWith(kvUrl)) return upstashMissResponse(init)
     if (url.includes('wiktionary.org/w/api.php')) {
       const primary = new URL(url).hostname === 'fr.wiktionary.org'
@@ -820,7 +821,7 @@ describe('source rate limits are temporary failures', () => {
   const respond = (status: number, credibleWikipedia = false) => {
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input)
-      const kvUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+      const kvUrl = process.env.KV_REST_API_URL
       if (kvUrl && url.startsWith(kvUrl)) return upstashMissResponse(init)
       if (credibleWikipedia && new URL(url).hostname === 'en.wikipedia.org')
         return Response.json({

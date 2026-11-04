@@ -12,7 +12,7 @@ afterEach(() => {
 function respond(data: unknown) {
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = input instanceof Request ? input.url : String(input)
-    const redisUrl = process.env.ETYMOLOGY_KV_REST_API_URL
+    const redisUrl = process.env.KV_REST_API_URL
     if (redisUrl && url.startsWith(redisUrl)) {
       const commands = JSON.parse(String(init?.body))
       return Response.json(

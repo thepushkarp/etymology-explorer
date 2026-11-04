@@ -185,6 +185,18 @@ function scopedFixture() {
     identifiedRoots: [],
     totalSourcesFetched: 2,
     lexicalGraph: { histories: [history] },
+    entryContexts: [
+      {
+        id: 'h1',
+        source: 'wikipedia',
+        heading: 'café au lait',
+        text: 'phrase history unknown',
+        sectionHeadings: [],
+        evidenceScopeId: 'scope1',
+        sourceUrl: 'https://fr.wikipedia.org/wiki/Café_au_lait',
+        entryKind: 'lemma',
+      },
+    ],
   } as unknown as ResearchContext
   return { result, context }
 }
@@ -236,6 +248,23 @@ test('a changed evidence scope fails before an identity can be published', () =>
     evidenceScopeIds: ['scope1'],
   }
   expect(() => finalizeResult(result, context, 'streaming')).toThrow('history identity changed')
+})
+
+test('an encyclopedia-only history cannot establish a lexical ancestry', () => {
+  const { result, context } = scopedFixture()
+  result.histories[0].ancestryGraph = {
+    branches: [
+      {
+        root: 'unattested',
+        stages: [
+          { stage: 'Latin', form: 'unattested', note: { en: 'Unsupported.', local: 'Non étayé.' } },
+        ],
+      },
+    ],
+  }
+  expect(() => finalizeResult(result, context, 'streaming')).toThrow(
+    'contextual or senses-only source cannot establish ancestry'
+  )
 })
 
 test('an incomplete synthesis fails with provider usage instead of returning partial JSON', async () => {

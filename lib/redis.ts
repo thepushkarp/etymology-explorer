@@ -13,14 +13,14 @@ let client: Redis | null | undefined
 export function getRedis(): Redis | null {
   if (client !== undefined) return client
 
-  if (!process.env.ETYMOLOGY_KV_REST_API_URL || !process.env.ETYMOLOGY_KV_REST_API_TOKEN) {
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
     client = null
     return client
   }
 
   client = new Redis({
-    url: process.env.ETYMOLOGY_KV_REST_API_URL,
-    token: process.env.ETYMOLOGY_KV_REST_API_TOKEN,
+    url: process.env.KV_REST_API_URL,
+    token: process.env.KV_REST_API_TOKEN,
   })
   return client
 }

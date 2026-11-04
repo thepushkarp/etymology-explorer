@@ -8,16 +8,16 @@ EtymEx is a Next.js Etymology Explorer web app that helps users discover word or
 
 Users search for a word or phrase in English, Italian, Spanish, French, or Portuguese. The app:
 
-1. Fetches primary sources in parallel. English uses Etymonline and Wiktionary plus optional Wikipedia and Incel Wiki. Other supported languages use native and English Wiktionary editions, selected-language Wikipedia, Wikidata lexemes, and Dicionário Aberto for Portuguese. FreeDictionaryAPI supplies senses and pronunciation only when direct Wiktionary evidence is unavailable; it cannot establish ancestry.
+1. Uses a shared lexeme lookup for query words, ancestors, components, variants, and related terms. General sources (Wiktionary, Wikipedia, and applicable lexical APIs) run alongside all applicable specialist dictionaries. Modern specialists include American Heritage, De Mauro, DLE/Americanismos, CNRTL's TLFi/Littré/Académie collections, Priberam, and Michaelis. Historical specialists include Bosworth–Toller, Lewis & Short, and LSJ. FreeDictionaryAPI supplies senses and pronunciation only when direct Wiktionary evidence is unavailable; it cannot establish ancestry.
 2. Pre-parses source-local etymological chains and keeps independent lexical histories and evidence scopes.
-3. Expands explicit source spelling variants/redirects, up to four useful independent phrase components, and up to four linked variant discoveries in staged parallel waves, then researches up to four attested ancestor lexemes in their own language. English also retains CPU-first root extraction (LLM fallback only when necessary) and related-page expansion.
+3. Expands explicit source spelling variants/redirects, up to four useful independent phrase components, and up to four unique attested ancestors in their own language in a shared wave, followed by up to four linked variant discoveries. English also retains CPU-first root extraction (LLM fallback only when necessary) and related-page expansion.
 4. Retains complete extracted source text and full Wikipedia article extracts in the synthesis bundle; there are no per-source character caps or prompt clipping.
 5. Sends the enriched bundle to OpenRouter's Responses API using `openai/gpt-6-luna` with low reasoning effort and strict structured output.
 6. Matches ancestry stages to scoped evidence, assigns confidence, and prunes unsupported lineage claims. Component evidence cannot establish the whole phrase's origin.
 
-The primary Wiktionary edition defines source-local history boundaries, with Etymonline as the English fallback; complete secondary sources remain independent context without invented history alignment. Each history has its own selectable story and lineage, with compound branches kept within that history. A Wikipedia-only result has an explicitly unresolved history. Components alone cannot admit a phrase.
+The primary Wiktionary edition defines source-local history boundaries, with Etymonline as the English fallback and source-defined specialist entries as further fallbacks; complete secondary sources remain independent context without invented history alignment. Each history has its own selectable story and lineage, with compound branches kept within that history. Wikipedia and community context cannot establish ancestry. Components alone cannot admit a phrase.
 
-Every actual source HTTP attempt shares a 32-request ceiling, including primary fetches, fallback attempts, Wikidata detail requests, and enrichment. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
+Every application source HTTP attempt shares a 32-request ceiling, including primary fetches, fallback attempts, Wikidata detail requests, enrichment, and Exa API calls. Exa's internal crawling is outside that application counter. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
 
 **Live**: https://etymex.com
 
@@ -87,7 +87,11 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Source HTTP budget: 32 actual attempts across all primary, fallback, and enrichment requests; no source-text clipping
   - Rate limits, singleflight settings, feature flags
 
-- **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENROUTER_API_KEY, ADMIN_SECRET, Redis credentials, ElevenLabs config.
+- **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENROUTER_API_KEY, ADMIN_SECRET, KV_REST_API_URL, KV_REST_API_TOKEN, Exa, and ElevenLabs config.
+
+- **`lib/exa.ts` / `lib/exaBudget.ts`** - Optional publisher retrieval and targeted discovery with a separate $10 UTC-month allowance. Atomic preflight tariff reservations fail closed for Exa when Redis is unavailable. Unknown charges remain reserved; provider estimates do not authorize refunds. Each trace permits two searches, eight Contents pages, and five API calls; full text is validated against exact publisher identity and entry boundaries. Exa is a retrieval method, never an independent evidence family. A dedicated key should also carry a $10 provider-side billing-period budget.
+
+- **`lib/recentSearches.ts`** - Atomic per-language lists of the latest 20 distinct successful searches. GET `/api/recent-searches` samples four; POST records only server-validated cached results and localized previews. Explicit navigation and completed traces record searches; prefetching and passive loads do not. The static homepage fills gaps from curated words.
 
 - **`lib/costGuard.ts`** - Monthly USD budget enforcement via pipelined Redis INCRBYFLOAT + EXPIRE NX:
   - Normal mode (0-90% of budget): allow uncached requests
@@ -104,9 +108,9 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Negative cache: 30 minute TTL for admitted types (`no_sources`, `invalid_word`)
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for raw dictionary and Wikipedia source data (`src:v6:<source>:<word>` for English, `src:v6:<source>:<language>:<word>` otherwise). Historical-language selections use `src:v6:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages; English selections retain the `wiktionary` namespace. Fail-open: no Redis or a Redis error means a live fetch. Preserves complete source text and provenance, and saves repeated fetches across overlapping lookups.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v6:<source>:<word>` for English, `src:v6:<source>:<language>:<word>` otherwise; bounded Etymonline entries use `src:v7:etymonline:`). Historical Wiktionary selections use `src:v6:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v7:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
 
-- **`lib/redis.ts`** - Shared Redis client factory (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 (suggestions, random-word, and pronunciation keep working without Redis)
+- **`lib/redis.ts`** - Shared Redis client factory using KV_REST_API_URL and KV_REST_API_TOKEN (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 and Exa requires functioning accounting (suggestions, random-word, and pronunciation keep working without Redis)
 
 - **`app/api/pronunciation/route.ts`** - Complete MP3 playback responses precede audio-cache persistence.
   On a cache miss, the cost check and owner-token lock acquisition run in parallel. `after()`
@@ -183,8 +187,8 @@ URL. Crawler traffic must never cost LLM money:
 
 Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API costs:
 
-- `maxRootsToExplore = 4` - Max root morphemes to research (etymonline + wiktionary each, 2 fetches per root)
-- `maxRelatedWordsPerRoot = 4` - Related terms retained per extraction pass; only main-word related terms are fetched (etymonline only, 1 fetch per term; root-page related terms are prompt context only)
+- `maxRootsToExplore = 4` - Max unique attested ancestors/root morphemes per expansion; repeated ancestors retain all parent-history attachments while sharing source lookups.
+- `maxRelatedWordsPerRoot = 4` - Related terms retained per extraction pass; only main-word related terms are fetched through the shared lookup, after primary and scoped enrichment.
 - `maxTotalFetches = 32` - Hard cap on actual source HTTP attempts per search, enforced by `lib/sourceFetchBudget.ts` through `lib/fetchUtils.ts`. Primary requests, fallbacks, detail requests, and enrichment share the ceiling; source-cache hits and LLM calls do not consume it.
 - Attested ancestor and English root lookups retry a transient Wiktionary HTTP/network failure once within the shared budget; 404, 429, and caller cancellation are not retried.
 - Source text is sanitized for prompt embedding and retained in full. Context overflow returns an explicit error instead of silently truncating evidence.
@@ -320,6 +324,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 **Core Pipeline:**
 
 - `lib/research.ts` - Language-aware primary fetching and bounded scoped variant/component/ancestor enrichment
+- `lib/lexemeResearch.ts` - Request-scoped shared lookup, provider scheduling, cache reuse, source outcomes, and Exa recovery/discovery
 - `lib/llm.ts` - LLM client (OpenRouter Responses API for `openai/gpt-6-luna`; unified streaming/unary synthesis)
 - `lib/sectionScanner.ts` - Incremental scanner reporting closed top-level JSON fields and complete direct object elements of their arrays; the synthesis layer validates histories before projecting SSE entry fields
 - `lib/responseAdapter.ts` - SSE/JSON response adapter for the etymology route's early returns
@@ -338,6 +343,8 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `lib/multilingualSources.ts` - Selected-language dictionary sources and the senses-only FreeDictionaryAPI fallback for all supported languages
 - `lib/wikipedia.ts` - Selected-language MediaWiki API full-article extracts with exact-title/redirect validation and revision provenance
 - `lib/incelsWiki.ts` - Incel Wiki MediaWiki API client (supplemental context)
+- `lib/specialistSources.ts` - Modern dictionary adapters retaining exact homographs and publisher families
+- `lib/historicalSources.ts` - Old English, Latin, and Ancient Greek dictionary adapters
 - `lib/elevenlabs.ts` - ElevenLabs TTS client
 
 **Word Pages (primary search URL):**

@@ -1,7 +1,8 @@
 import { canonicalizeWord, HISTORICAL_FORM } from './orthography'
+import { sourceFamily, type SourceProviderId, type SourceFamilyId } from './sourceProviders'
 
 /**
- * Pre-parses etymology text from Etymonline and Wiktionary into structured chains.
+ * Pre-parses source-local etymology text into structured chains.
  * Extracts "from X, from Y" chains before the LLM call so the LLM validates
  * rather than invents ancestry stages.
  *
@@ -23,19 +24,53 @@ export interface ParsedEtymLink {
 }
 
 export interface ParsedEtymChain {
-  source: 'etymonline' | 'wiktionary'
+  source: SourceProviderId
+  sourceFamily?: SourceFamilyId
   word: string
   links: ParsedEtymLink[] // ordered modern → oldest
   dateAttested?: string // "1590s"
   historyId?: string
   evidenceScopeId?: string
-  provider?: 'wiktionaryEnglish' | 'wiktionaryNative'
+  provider?: SourceProviderId
 }
 
 export interface ParsedChainIdentity {
   historyId: string
   evidenceScopeId: string
-  provider: 'wiktionaryEnglish' | 'wiktionaryNative'
+  provider: SourceProviderId
+}
+
+/** A period qualifier belongs to the language identity, never to the following lemma. */
+const HISTORICAL_LANGUAGE_ALIASES: Record<string, string> = {
+  'latim vulgar': 'Vulgar Latin',
+  'latino volgare': 'Vulgar Latin',
+  'latín vulgar': 'Vulgar Latin',
+  'latin vulgaire': 'Vulgar Latin',
+  'lat. vulg.': 'Vulgar Latin',
+  'latim clássico': 'Classical Latin',
+  'latino classico': 'Classical Latin',
+  'latín clásico': 'Classical Latin',
+  'latin classique': 'Classical Latin',
+  'latim medieval': 'Medieval Latin',
+  'latino medievale': 'Medieval Latin',
+  'latín medieval': 'Medieval Latin',
+  'latin médiéval': 'Medieval Latin',
+  'latim tardio': 'Late Latin',
+  'latino tardo': 'Late Latin',
+  'latín tardío': 'Late Latin',
+  'latin tardif': 'Late Latin',
+  'grego antigo': 'Ancient Greek',
+  'greco antico': 'Ancient Greek',
+  'griego antiguo': 'Ancient Greek',
+  'grec ancien': 'Ancient Greek',
+  'francês antigo': 'Old French',
+  'francese antico': 'Old French',
+  'francés antiguo': 'Old French',
+  'ancien français': 'Old French',
+  'inglês antigo': 'Old English',
+  'inglese antico': 'Old English',
+  'inglés antiguo': 'Old English',
+  'vieil anglais': 'Old English',
 }
 
 /**
@@ -106,6 +141,13 @@ const KNOWN_LANGUAGES = [
   'Francês',
   'Portugais',
   'Português',
+  'lat.',
+  'lat',
+  'gr.',
+  'gr',
+  'fr.',
+  'it.',
+  'esp.',
 ]
 
 /**
@@ -113,12 +155,15 @@ const KNOWN_LANGUAGES = [
  * Explicit separators avoid ASCII word-boundary errors after accented language names.
  */
 const LANGUAGE_PATTERN = new RegExp(
-  `^(${KNOWN_LANGUAGES.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?=[\\s,:]|$)[\\s,:]*`,
+  `^(${[...KNOWN_LANGUAGES, ...Object.keys(HISTORICAL_LANGUAGE_ALIASES)]
+    .sort((left, right) => right.length - left.length)
+    .map((language) => language.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|')})(?=[\\s,:]|$)[\\s,:]*`,
   'i'
 )
 
 /** Extract lexical attestation dates, not incidental dates elsewhere on a page. */
-function extractDate(text: string, source: 'etymonline' | 'wiktionary'): string | undefined {
+function extractDate(text: string, source: SourceProviderId): string | undefined {
   const date = String.raw`(?:early|mid|late|c\.\s*)?\d{4}s?\b|(?:early|mid|late)\s+\d{1,2}c\.`
   const explicit = text.match(
     new RegExp(
@@ -173,7 +218,7 @@ function extractForm(text: string): string | undefined {
  * Parse a single "from ..." segment into a ParsedEtymLink.
  * Returns null if the segment doesn't contain a recognizable language.
  */
-function parseSegment(segment: string): ParsedEtymLink | null {
+function parseSegment(segment: string, sourceSnippet: string): ParsedEtymLink | null {
   const trimmed = segment.normalize('NFC').trim()
 
   // Try to match a known language at the start
@@ -199,7 +244,7 @@ function parseSegment(segment: string): ParsedEtymLink | null {
   const meaning = extractMeaning(variant ? afterForm.slice(variant[0].length) : afterForm)
 
   // Build a raw snippet (cap at 120 chars, trim to word boundary)
-  let rawSnippet = `from ${trimmed}`.slice(0, 120)
+  let rawSnippet = sourceSnippet.slice(0, 120)
   if (rawSnippet.length === 120) {
     const lastSpace = rawSnippet.lastIndexOf(' ')
     if (lastSpace > 80) rawSnippet = rawSnippet.slice(0, lastSpace) + '...'
@@ -221,6 +266,7 @@ function parseSegment(segment: string): ParsedEtymLink | null {
 export function normalizeLanguageName(name: string): string {
   const lower = canonicalizeWord(name)
   if (lower === 'pie') return 'Proto-Indo-European'
+  if (HISTORICAL_LANGUAGE_ALIASES[lower]) return HISTORICAL_LANGUAGE_ALIASES[lower]
   const localized: Record<string, string> = {
     protoindoeuropeo: 'Proto-Indo-European',
     'proto-indo-europeu': 'Proto-Indo-European',
@@ -239,6 +285,13 @@ export function normalizeLanguageName(name: string): string {
     francês: 'French',
     portugais: 'Portuguese',
     português: 'Portuguese',
+    'lat.': 'Latin',
+    lat: 'Latin',
+    'gr.': 'Greek',
+    gr: 'Greek',
+    'fr.': 'French',
+    'it.': 'Italian',
+    'esp.': 'Spanish',
   }
   if (localized[lower]) return localized[lower]
   // Capitalize first letter of each word
@@ -257,50 +310,35 @@ export function isReconstructedForm(form: unknown, language: unknown): boolean {
  * Split text into "from ..." segments.
  * Handles both "from Latin ..." and "from PIE root *..." patterns.
  */
-function splitFromSegments(text: string): string[] {
-  // Split on "from " that's preceded by whitespace, comma, semicolon, or start
-  const normalizedText = text.replace(
-    /(?:\b(?:dal|dalla|dallo|del|della|dello|du|des|do|da)\b|\bde\b)\s+/gi,
-    ' from '
-  )
-  const segments: string[] = []
-  const pattern = /(?:^|[,;\s])\s*from\s+/gi
-  let lastIndex = 0
-  let match
-
-  while ((match = pattern.exec(normalizedText)) !== null) {
-    const segStart = match.index + match[0].length
-    if (segments.length > 0) {
-      // The previous segment ends where this "from" starts
-      segments[segments.length - 1] = normalizedText.slice(lastIndex, match.index).trim()
+function splitFromSegments(text: string): Array<{ segment: string; snippet: string }> {
+  const matches = [
+    ...text.matchAll(
+      /(?:^|[,;\s])\s*(?:from|dal|dalla|dallo|del|della|dello|du|des|do|da|de|au)\s+/gi
+    ),
+  ]
+  return matches.map((match, index) => {
+    const end = matches[index + 1]?.index ?? text.length
+    return {
+      segment: text.slice(match.index! + match[0].length, end).trim(),
+      // Keep the publisher's connector and spelling in evidence snippets.
+      snippet: text
+        .slice(match.index, end)
+        .replace(/^[,;\s]+/, '')
+        .trim(),
     }
-    segments.push('') // placeholder for this segment
-    lastIndex = segStart
-  }
-
-  // Close out the last segment
-  if (segments.length > 0) {
-    segments[segments.length - 1] = normalizedText.slice(lastIndex).trim()
-  }
-
-  return segments
+  })
 }
 
 /**
- * Shared parsing logic for both Etymonline and Wiktionary text.
- * Both sources use similar "from X, from Y" chain patterns.
+ * Shared parsing of explicit language-and-form origin statements.
  */
-function parseSourceText(
-  text: string,
-  word: string,
-  source: 'etymonline' | 'wiktionary'
-): ParsedEtymChain {
+function parseSourceText(text: string, word: string, source: SourceProviderId): ParsedEtymChain {
   const dateAttested = extractDate(text, source)
   const segments = splitFromSegments(text)
 
   const links: ParsedEtymLink[] = []
-  for (const segment of segments) {
-    const link = parseSegment(segment)
+  for (const { segment, snippet } of segments) {
+    const link = parseSegment(segment, snippet)
     if (link) {
       links.push(link)
     }
@@ -329,6 +367,21 @@ export function parseWiktionaryText(
   identity?: ParsedChainIdentity
 ): ParsedEtymChain {
   return { ...parseSourceText(text, word, 'wiktionary'), ...identity }
+}
+
+/** The caller supplies a single dictionary history, never a combined results page. */
+export function parseDictionaryText(
+  text: string,
+  word: string,
+  provider: SourceProviderId,
+  identity?: ParsedChainIdentity
+): ParsedEtymChain {
+  return {
+    ...parseSourceText(text, word, provider),
+    sourceFamily: sourceFamily(provider),
+    provider,
+    ...identity,
+  }
 }
 
 /**
