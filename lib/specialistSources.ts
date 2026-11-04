@@ -1,5 +1,6 @@
 import { CONFIG } from './config'
 import { fetchWithTimeout } from './fetchUtils'
+import { safeError } from './errorUtils'
 import type { LanguageCode } from './languages'
 import { canonicalizeWord } from './orthography'
 import { decodeHtmlEntities } from './sourceText'
@@ -178,6 +179,22 @@ async function page(url: string, signal?: AbortSignal): Promise<string | null> {
   return response.text()
 }
 
+function settledEntryGroups(
+  entries: PromiseSettledResult<WiktionaryEntryGroup[]>[],
+  links: string[],
+  signal?: AbortSignal
+): WiktionaryEntryGroup[][] {
+  signal?.throwIfAborted()
+  return entries.map((entry, index) => {
+    if (entry.status === 'fulfilled') return entry.value
+    console.warn(
+      `[SpecialistSources] Entry fetch failed for ${links[index]}:`,
+      safeError(entry.reason)
+    )
+    return []
+  })
+}
+
 function trustedLink(href: string | undefined, origin: string, pathPrefix: string): string | null {
   if (!href) return null
   const url = new URL(href, origin)
@@ -225,33 +242,34 @@ async function fetchDeMauro(word: string, signal?: AbortSignal): Promise<Special
     .map((node) => trustedLink(node.attributes.href, origin, '/parola/'))
     .filter((link): link is string => Boolean(link))
   const entryLinks = [...new Set(links)]
-  const groups = (
-    await Promise.all(
-      entryLinks.map(async (link) => {
-        const entry = await page(link, signal)
-        if (!entry) return []
-        const root = elements(entry)
-        const title = all(root, (node) => node.tag === 'h1').find((node) =>
-          exact(headword(fragment(entry, node)), word)
-        )
-        const lemmaSections = all(root, (node) => node.attributes.id === 'lemma_lemma')
-        const etymology = lemmaSections.length > 1 ? lemmaSections.at(-1) : undefined
-        const description = all(root, (node) => node.attributes.id === 'descrizione')[0]
-        if (!title || !description) return []
-        const text = plain(entry.slice(title.start, description.end))
-        return [
-          group(
-            new URL(link).pathname,
-            plain(fragment(entry, title)),
-            text,
-            etymology ? plain(fragment(entry, etymology)) : '',
-            link
-          ),
-        ]
-      })
-    )
-  ).flat()
+  const entries = await Promise.allSettled(
+    entryLinks.map(async (link) => {
+      const entry = await page(link, signal)
+      if (!entry) return []
+      const root = elements(entry)
+      const title = all(root, (node) => node.tag === 'h1').find((node) =>
+        exact(headword(fragment(entry, node)), word)
+      )
+      const lemmaSections = all(root, (node) => node.attributes.id === 'lemma_lemma')
+      const etymology = lemmaSections.length > 1 ? lemmaSections.at(-1) : undefined
+      const description = all(root, (node) => node.attributes.id === 'descrizione')[0]
+      if (!title || !description) return []
+      const text = plain(entry.slice(title.start, description.end))
+      return [
+        group(
+          new URL(link).pathname,
+          plain(fragment(entry, title)),
+          text,
+          etymology ? plain(fragment(entry, etymology)) : '',
+          link
+        ),
+      ]
+    })
+  )
+  const groups = settledEntryGroups(entries, entryLinks, signal).flat()
   if (entryLinks.length && !groups.length) {
+    const failure = entries.find((entry) => entry.status === 'rejected')
+    if (failure) throw failure.reason
     throw new Error(`De Mauro advertised entries could not be read for ${word}`)
   }
   const records = result('deMauro', 'deMauro', word, 'it', url, groups)
@@ -440,12 +458,14 @@ async function fetchMichaelis(
         .map((node) => trustedLink(node.attributes.href, origin, '/palavra/'))
         .filter((link): link is string => Boolean(link))
     : []
-  const siblings = await Promise.all(
-    [...new Set(links)].map(async (link) => {
+  const entryLinks = [...new Set(links)]
+  const entries = await Promise.allSettled(
+    entryLinks.map(async (link) => {
       const entry = await page(link, signal)
       return entry ? extract(entry, link) : []
     })
   )
+  const siblings = settledEntryGroups(entries, entryLinks, signal)
   groups.push(...siblings.flat())
   const records = result('michaelis', 'michaelis', word, 'pt', url, groups)
   // An advertised exact homograph is part of this lookup even when its source

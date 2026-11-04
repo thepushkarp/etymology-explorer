@@ -169,6 +169,60 @@ test('misses, HTTP failures, caller cancellation, and HTTP budget exhaustion sta
   expect(requests).toHaveLength(0)
 })
 
+function homographFixture(id: string, url: URL): string {
+  if (id === 'deMauro') {
+    return url.pathname.startsWith('/cerca/')
+      ? '<a class="serp-lemma-title" href="/parola/banco">banco</a><a class="serp-lemma-title" href="/parola/banco_2">banco</a>'
+      : '<h1>banco</h1><section id="lemma_lemma">banco</section><section id="lemma_lemma">Latin.</section><section id="descrizione">Complete available entry.</section>'
+  }
+  return '<div class="verbete bs-component"><E1>banco</E1><p>Complete available entry.</p><SM>ETIMOLOGIA</SM>Latin.</div><ul id="lista_verbetes_links"><a href="/palavra/banco_2">banco</a></ul>'
+}
+
+test.each(['deMauro', 'michaelis'])(
+  '%s retains fetched homographs when a sibling request fails or exceeds the budget',
+  async (id) => {
+    for (const failure of [429, 503, new Error('Request timeout after 5000ms'), 'budget']) {
+      const requests = serve((url) => {
+        if (url.pathname.endsWith('_2')) {
+          if (failure instanceof Error) throw failure
+          return new Response('Unavailable', { status: Number(failure) })
+        }
+        return homographFixture(id, url)
+      })
+      const budget = new SourceFetchBudget(failure === 'budget' ? (id === 'deMauro' ? 2 : 1) : 3)
+      const [result] = await budget.run(() => provider(id).fetch('banco'))
+      expect(result.data.entryGroups).toHaveLength(1)
+      expect(result.data.text).toContain('Complete available entry.')
+      expect(result.data.incomplete).toBe(true)
+      if (failure === 'budget') expect(requests).toHaveLength(budget.maximum)
+    }
+    if (id === 'deMauro') {
+      serve((url) =>
+        url.pathname.startsWith('/cerca/')
+          ? homographFixture(id, url)
+          : new Response('Unavailable', { status: 429 })
+      )
+      await expect(provider(id).fetch('banco')).rejects.toThrow('HTTP 429')
+    }
+  }
+)
+
+test.each(['deMauro', 'michaelis'])(
+  '%s propagates caller cancellation during a sibling request',
+  async (id) => {
+    const controller = new AbortController()
+    const reason = new Error('Caller disconnected')
+    serve((url) => {
+      if (url.pathname.endsWith('_2')) {
+        controller.abort(reason)
+        throw reason
+      }
+      return homographFixture(id, url)
+    })
+    await expect(provider(id).fetch('banco', controller.signal)).rejects.toBe(reason)
+  }
+)
+
 test('recovered Académie entries scope explicit etymology while retaining unaligned document text', () => {
   const document = {
     url: 'https://www.dictionnaire-academie.fr/article/A9A3457',
