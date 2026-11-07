@@ -10,12 +10,21 @@ plain-text bullet under a `###` group. `Unreleased` stays out of the dialog.
 
 ## [0.1.0] - 2026-11-07
 
-### Added
+### First release, with all features consolidated
 
-- Trace the origin of English words and phrases through a lineage grounded in dictionary evidence, with a confidence rating for each stage.
-- Look up words in Italian, Spanish, French, and Portuguese (beta), with paired local and English text.
+- Trace the origin of any English word or phrase back through the languages it passed through.
+- Follow each word's lineage in an interactive tree.
+- See a confidence rating and sources for every stage of a lineage, grounded in dictionary evidence.
+- Explore root morphemes and the words that share them.
+- Read a short story of each word's history, with two contrasting usage examples.
 - Follow words with independent histories through separate stories and lineages.
-- Read two contrasting usage examples after each story.
-- Hear pronunciations, see usage over time, and explore related words.
-- Open a random word, revisit recent searches, and browse the index of traced words.
+- Look up words in Italian, Spanish, French, and Portuguese (beta), with paired local and English text.
+- Draw on general and specialist dictionaries, including historical ones for Old English, Latin, and Ancient Greek.
+- Watch new traces arrive live, section by section.
+- Check parts of speech, hear pronunciations, and see usage over time.
+- Find synonyms, antonyms, homophones, easily confused words, and see-also links.
+- Get autocomplete and typo suggestions while searching.
+- Open a random word or revisit recent searches.
+- Share a page for every traced word, and browse them all in the index.
+- Switch between light and dark themes.
 - See the current version and changelog from the site header.

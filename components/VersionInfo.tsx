@@ -49,7 +49,7 @@ function ReleaseEntry({ release }: { release: ChangelogRelease }) {
       {release.groups.map((group) => (
         <section key={group.title} className="mt-4">
           <h4 className="label">{group.title}</h4>
-          <ul className="mt-2 space-y-2 font-serif text-sm leading-relaxed">
+          <ul className="mt-2 list-disc space-y-2 pl-4 font-serif text-sm leading-relaxed marker:text-faint">
             {group.items.map((item) => (
               <li key={item}>{item}</li>
             ))}
