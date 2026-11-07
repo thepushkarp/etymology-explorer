@@ -1,7 +1,11 @@
 import type { NextConfig } from 'next'
+import { version } from './package.json'
 
 const nextConfig: NextConfig = {
   trailingSlash: false,
+  // Inlines only the version string; importing package.json from client code
+  // would ship the whole file.
+  env: { NEXT_PUBLIC_APP_VERSION: version },
   async headers() {
     return [
       {

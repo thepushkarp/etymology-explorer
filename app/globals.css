@@ -71,6 +71,11 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* A modal dialog does not stop the page behind it from scrolling. */
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
 ::selection {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }

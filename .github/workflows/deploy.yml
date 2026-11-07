@@ -1,0 +1,48 @@
+name: Deploy Production
+
+# The only path to production: vercel.json turns off Git deployments for main.
+# `released` skips drafts and pre-releases and fires when one is promoted.
+on:
+  release:
+    types: [released]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Verify release version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          expected="v$(jq -r .version package.json)"
+          if [ "$RELEASE_TAG" != "$expected" ]; then
+            echo "::error::Release tag $RELEASE_TAG does not match package.json version $expected"
+            exit 1
+          fi
+
+      # Builds on Vercel rather than with --prebuilt, which keeps the project's
+      # Node version and production env vars off the GitHub runner.
+      - name: Deploy to Vercel production
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: bunx vercel@59.16.0 deploy --prod --yes --token="$VERCEL_TOKEN"
