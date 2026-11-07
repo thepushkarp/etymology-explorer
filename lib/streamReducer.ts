@@ -46,6 +46,7 @@ export const SECTION_KEYS = [
   'ancestryGraph',
   'roots',
   'lore',
+  'examples',
   'partsOfSpeech',
   'suggestions',
   'modernUsage',
@@ -69,7 +70,7 @@ export function toPartialResult(
   sections: PartialEtymology,
   language: LanguageCode = 'en'
 ): DisplayEtymologyResult {
-  const partial: DisplayEtymologyResult = {
+  const partial: EnglishEtymologyResult = {
     language: 'en',
     word: sections.word ?? word,
     pronunciation: sections.pronunciation ?? '',
@@ -77,12 +78,13 @@ export function toPartialResult(
     roots: sections.roots ?? [],
     ancestryGraph: sections.ancestryGraph ?? { branches: [] },
     lore: sections.lore ?? '',
+    examples: sections.examples,
     sources: sections.sources ?? [],
     partsOfSpeech: sections.partsOfSpeech,
     suggestions: sections.suggestions,
     modernUsage: sections.modernUsage,
   }
-  if (language === 'en') return partial
+  if (language === 'en') return localizeResult(partial, 'en')
 
   const betaPartial = {
     ...partial,

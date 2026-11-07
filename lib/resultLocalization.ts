@@ -2,6 +2,7 @@ import type {
   BetaEtymologyResult,
   BilingualText,
   DisplayEtymologyResult,
+  DisplayUsageExample,
   EtymologyResult,
   EnglishEtymologyResult,
 } from './types'
@@ -21,6 +22,28 @@ function pick(text: string | BilingualText, locale: ResultLocale): string {
   return typeof text === 'string' ? text : text[locale]
 }
 
+/**
+ * Usage examples always show the sentence in the entry's own language: an
+ * English rendering of an Italian example would no longer contain the word.
+ * The English locale adds the translation as a gloss instead of replacing it.
+ */
+function displayExamples(
+  examples: Array<string | BilingualText> | undefined,
+  locale: ResultLocale
+): DisplayUsageExample[] | undefined {
+  const display = examples
+    ?.map((example) =>
+      typeof example === 'string'
+        ? { text: example.trim() }
+        : {
+            text: example.local.trim(),
+            translation: locale === 'en' ? example.en.trim() || undefined : undefined,
+          }
+    )
+    .filter((example) => example.text)
+  return display?.length ? display : undefined
+}
+
 export function localizeResult(
   result: EtymologyResult,
   locale: ResultLocale = 'local',
@@ -38,6 +61,7 @@ export function localizeResult(
       ...english,
       ...history,
       partsOfSpeech: history ? history.partsOfSpeech : english.partsOfSpeech,
+      examples: displayExamples(history ? history.examples : english.examples, locale),
       language: 'en',
     }
   }
@@ -57,6 +81,7 @@ export function localizeResult(
     pronunciation: history.pronunciation,
     definition: pick(history.definition, locale),
     lore: pick(history.lore, locale),
+    examples: displayExamples(history.examples, locale),
     roots: history.roots.map((root) => ({ ...root, meaning: pick(root.meaning, locale) })),
     // The beta schema does not yet attach language identity to suggestion
     // strings, so they must not become guessed selected-language links.
@@ -119,6 +144,7 @@ export function localizeHistoryChoices(
 type SectionLabels = {
   ancestry: string
   story: string
+  examples: string
   usage: string
   usageUnavailable: string
   modernUsage: string
@@ -132,6 +158,7 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
   it: {
     ancestry: 'Ascendenza della parola',
     story: 'La storia',
+    examples: 'Esempi d’uso',
     usage: 'Uso nel tempo',
     usageUnavailable: 'I dati storici sull’uso non sono ancora disponibili per questo corpus.',
     modernUsage: 'Uso moderno',
@@ -143,6 +170,7 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
   es: {
     ancestry: 'Ascendencia de la palabra',
     story: 'La historia',
+    examples: 'Ejemplos de uso',
     usage: 'Uso a través del tiempo',
     usageUnavailable: 'Los datos históricos de uso aún no están disponibles para este corpus.',
     modernUsage: 'Uso moderno',
@@ -154,6 +182,7 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
   fr: {
     ancestry: 'Ascendance du mot',
     story: "L'histoire",
+    examples: 'Exemples d’usage',
     usage: 'Usage au fil du temps',
     usageUnavailable:
       "Les données historiques d'usage ne sont pas encore disponibles pour ce corpus.",
@@ -166,6 +195,7 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
   pt: {
     ancestry: 'Ascendência da palavra',
     story: 'A história',
+    examples: 'Exemplos de uso',
     usage: 'Uso ao longo do tempo',
     usageUnavailable: 'Os dados históricos de uso ainda não estão disponíveis para este corpus.',
     modernUsage: 'Uso moderno',
@@ -179,6 +209,7 @@ const LOCAL_LABELS: Record<BetaLanguageCode, SectionLabels> = {
 const ENGLISH_LABELS: SectionLabels = {
   ancestry: 'Lineage',
   story: 'The story',
+  examples: 'In use',
   usage: 'Usage over time',
   usageUnavailable: 'Usage history is not available for this word yet.',
   modernUsage: 'Modern usage',

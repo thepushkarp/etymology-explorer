@@ -128,6 +128,13 @@ export const ETYMOLOGY_LLM_SCHEMA = {
       },
     },
     lore: { type: 'string' },
+    examples: {
+      type: 'array',
+      minItems: 2,
+      maxItems: 2,
+      items: { type: 'string' },
+      description: 'Two contrasting example sentences using the word in this sense',
+    },
     partsOfSpeech: {
       type: 'array',
       items: {
@@ -215,6 +222,7 @@ export const ETYMOLOGY_LLM_SCHEMA = {
     'ancestryGraph',
     'roots',
     'lore',
+    'examples',
     'partsOfSpeech',
     'suggestions',
     'modernUsage',
@@ -232,7 +240,7 @@ const TRANSLATABLE_TEXT_KEYS = new Set([
   'slangDefinition',
   'popularizedBy',
 ])
-const TRANSLATABLE_TEXT_ARRAY_KEYS = new Set(['contexts', 'notableReferences'])
+const TRANSLATABLE_TEXT_ARRAY_KEYS = new Set(['contexts', 'notableReferences', 'examples'])
 
 function bilingualTextSchema(nullable: boolean) {
   return {
@@ -310,6 +318,7 @@ function withHistories(schema: Record<string, unknown>, bilingual: boolean) {
       ancestryGraph: properties.ancestryGraph,
       roots: properties.roots,
       lore: properties.lore,
+      examples: properties.examples,
       partsOfSpeech: properties.partsOfSpeech,
     },
     required: [
@@ -325,6 +334,7 @@ function withHistories(schema: Record<string, unknown>, bilingual: boolean) {
       'ancestryGraph',
       'roots',
       'lore',
+      'examples',
       'partsOfSpeech',
     ],
     additionalProperties: false,
@@ -340,6 +350,7 @@ function withHistories(schema: Record<string, unknown>, bilingual: boolean) {
     ancestryGraph: properties.ancestryGraph,
     roots: properties.roots,
     lore: properties.lore,
+    examples: properties.examples,
     partsOfSpeech: properties.partsOfSpeech,
     suggestions: properties.suggestions,
     modernUsage: properties.modernUsage,
@@ -355,6 +366,7 @@ function withHistories(schema: Record<string, unknown>, bilingual: boolean) {
     'ancestryGraph',
     'roots',
     'lore',
+    'examples',
     'partsOfSpeech',
     'suggestions',
     'modernUsage',

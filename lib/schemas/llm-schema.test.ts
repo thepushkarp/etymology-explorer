@@ -201,6 +201,7 @@ describe('ETYMOLOGY_LLM_SCHEMA sync with Zod schema', () => {
       'ancestryGraph',
       'roots',
       'lore',
+      'examples',
       'partsOfSpeech',
       'suggestions',
       'modernUsage',
@@ -332,6 +333,7 @@ describe('BETA_ETYMOLOGY_LLM_SCHEMA histories', () => {
       'ancestryGraph',
       'roots',
       'lore',
+      'examples',
       'partsOfSpeech',
       'suggestions',
       'modernUsage',
@@ -378,6 +380,45 @@ describe('BETA_ETYMOLOGY_LLM_SCHEMA histories', () => {
     expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(true)
     valid.histories[0].label = { en: 'vine' } as { en: string; local: string }
     expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(false)
+  })
+})
+
+describe('usage examples', () => {
+  test('every entry and history requires exactly two examples', () => {
+    const histories = (BETA_ETYMOLOGY_LLM_SCHEMA.properties as Record<string, JsonSchemaNode>)
+      .histories.items as JsonSchemaNode & {
+      properties: Record<string, JsonSchemaNode & { minItems?: number; maxItems?: number }>
+    }
+    for (const node of [
+      ETYMOLOGY_LLM_SCHEMA.properties.examples,
+      histories.properties.examples,
+    ] as Array<{ minItems?: number; maxItems?: number }>) {
+      expect(node.minItems).toBe(2)
+      expect(node.maxItems).toBe(2)
+    }
+    expect(histories.required).toContain('examples')
+  })
+
+  test('beta examples pair the local sentence with its English translation', () => {
+    const examples = (BETA_ETYMOLOGY_LLM_SCHEMA.properties as Record<string, JsonSchemaNode>)
+      .examples
+    expect(examples.items?.required).toEqual(['en', 'local'])
+  })
+
+  test('entries cached before examples existed remain valid', () => {
+    const legacy = {
+      word: 'fede',
+      pronunciation: '/ˈfe.de/',
+      definition: 'faith',
+      roots: [],
+      ancestryGraph: { branches: [] },
+      lore: 'A history of trust.',
+      sources: [],
+    }
+    expect(EtymologyResultSchema.safeParse(legacy).success).toBe(true)
+    expect(
+      EtymologyResultSchema.safeParse({ ...legacy, examples: ['One.', 'Two.', 'Three.'] }).success
+    ).toBe(false)
   })
 })
 

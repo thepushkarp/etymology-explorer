@@ -215,6 +215,11 @@ and the output is guaranteed-shape JSON.
   server validates its identity, bilingual shape, and scoped ancestry, while shared fields
   continue streaming.
 - `lib/schemas/etymology.ts` - Zod schema for cache validation. Uses `.passthrough()` for forward compat.
+- **Usage examples**: every entry and every history carries exactly two contrasting `examples`
+  (strict `minItems`/`maxItems` 2), rendered after the story. Beta examples are `{ en, local }`
+  pairs where `local` is the selected-language sentence and `en` its translation; display always
+  shows the local sentence and adds the translation as a gloss in the English locale. Zod keeps
+  the field optional so entries cached before it existed stay valid and simply omit the section.
 - **Sync is enforced mechanically**: `lib/schemas/llm-schema.test.ts` walks both schemas and fails
   on drift (key sets, required lists, null unions, leaf types). Post-processing fields
   (confidence, evidence, isReconstructed, source url/word) are exempted explicitly in that test.
