@@ -44,8 +44,8 @@ Pre-commit hooks (Husky + lint-staged) automatically run ESLint and Prettier on 
 
 Production deploys only from a published GitHub release; `vercel.json` disables Git deployments for
 `main`, while PR branches keep their previews. `.github/workflows/deploy.yml` deploys a `released`
-event after checking that the tag equals `v` + the `package.json` version, using the `VERCEL_TOKEN`,
-`VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` repository secrets.
+event after checking that the tagged commit is on `main` and the tag equals `v` + the `package.json`
+version, using the `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` repository secrets.
 
 Record user-facing changes under `## [Unreleased]` in `CHANGELOG.md` as single-line, plain-text
 bullets under a `###` group. `lib/changelog.ts` rejects anything else, which fails the build. To
