@@ -6,6 +6,7 @@ import { resultLabels, type ResultLocale } from '@/lib/resultLocalization'
 import { AncestryTree } from './AncestryTree'
 import { ContextSection } from './etymology-card/ContextSection'
 import { EntryHeader } from './etymology-card/EntryHeader'
+import { ExamplesList } from './etymology-card/ExamplesSection'
 import { KinSection } from './etymology-card/KinSection'
 import { ModernUsageSection } from './etymology-card/ModernUsageSection'
 import { RelatedWordsSection } from './etymology-card/RelatedWordsSection'
@@ -61,6 +62,16 @@ export function EtymologyCard({
             <StoryText text={result.lore} />
           ) : (
             <Skeleton widths={['w-full', 'w-11/12', 'w-full', 'w-3/5']} />
+          )}
+        </Section>
+      )}
+
+      {(result.examples?.length || pending) && (
+        <Section id="entry-examples" title={labels.examples}>
+          {result.examples?.length ? (
+            <ExamplesList examples={result.examples} />
+          ) : (
+            <Skeleton widths={['w-10/12', 'w-8/12']} />
           )}
         </Section>
       )}

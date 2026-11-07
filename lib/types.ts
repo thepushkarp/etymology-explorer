@@ -246,6 +246,12 @@ export interface EtymologyResultBase<Language extends LanguageCode, Text extends
   roots: Root<Text>[] // 1 to many roots depending on word composition
   ancestryGraph: AncestryGraph<Text> // Graph showing how roots evolved and merged
   lore: Text // 4-6 sentence revelationary narrative with "aha" moments
+  /**
+   * Two contrasting example sentences for this entry. Beta prose pairs the
+   * selected-language sentence (`local`) with its English translation (`en`).
+   * Absent on entries cached before the field existed.
+   */
+  examples?: Text[]
   sources: SourceReference[]
   partsOfSpeech?: POSDefinition<Text>[] // Definitions per grammatical category
   suggestions?: WordSuggestions // Related words for vocabulary building
@@ -271,6 +277,7 @@ export interface LexicalHistory<Text extends ResultText> {
   roots: Root<Text>[]
   ancestryGraph: AncestryGraph<Text>
   lore: Text
+  examples?: Text[]
   partsOfSpeech?: POSDefinition<Text>[]
 }
 
@@ -285,7 +292,14 @@ export type BetaEtymologyResult = EtymologyResultBase<BetaLanguageCode, Bilingua
   histories: LexicalHistory<BilingualText>[]
 }
 export type EtymologyResult = EnglishEtymologyResult | BetaEtymologyResult
-export type DisplayEtymologyResult = EtymologyResultBase<LanguageCode, string>
+/** A rendered usage example; `translation` glosses a foreign-language sentence. */
+export interface DisplayUsageExample {
+  text: string
+  translation?: string
+}
+export type DisplayEtymologyResult = Omit<EtymologyResultBase<LanguageCode, string>, 'examples'> & {
+  examples?: DisplayUsageExample[]
+}
 
 /**
  * API response wrapper

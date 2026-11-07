@@ -41,11 +41,40 @@ describe('EtymologyCard', () => {
     expect(markup).not.toContain('href="/word/fidelity"')
   })
 
+  test('sets usage examples after the story', () => {
+    const entry = {
+      ...result('en'),
+      examples: [{ text: 'She kept *fede* with them.' }, { text: 'A second sentence.' }],
+    }
+    const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
+    expect(markup.indexOf('id="entry-examples"')).toBeGreaterThan(
+      markup.indexOf('id="entry-story"')
+    )
+    expect(markup).toContain('<em>fede</em>')
+    expect(markup).toContain('A second sentence.')
+  })
+
+  test('glosses foreign-language examples with their translation', () => {
+    const entry = {
+      ...result('it'),
+      examples: [{ text: 'Ha perso la fede.', translation: 'They lost their faith.' }],
+    }
+    const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
+    expect(markup).toContain('Ha perso la fede.')
+    expect(markup).toContain('They lost their faith.')
+  })
+
+  test('omits examples for entries cached before they existed', () => {
+    const markup = renderToStaticMarkup(<EtymologyCard result={result('en')} />)
+    expect(markup).not.toContain('id="entry-examples"')
+  })
+
   test('holds places for sections that have not streamed in yet', () => {
     const streaming = { ...result('en'), definition: '', lore: '' }
     const markup = renderToStaticMarkup(<EtymologyCard result={streaming} pending />)
     expect(markup).toContain('aria-busy="true"')
     expect(markup).toContain('id="entry-ancestry"')
     expect(markup).toContain('id="entry-story"')
+    expect(markup).toContain('id="entry-examples"')
   })
 })

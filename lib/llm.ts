@@ -615,7 +615,13 @@ function validateHistoryGraph(history: LexicalHistory<ResultText>, context: Rese
 function finalizeHistories(
   result: Pick<
     LexicalHistory<ResultText>,
-    'pronunciation' | 'definition' | 'roots' | 'ancestryGraph' | 'lore' | 'partsOfSpeech'
+    | 'pronunciation'
+    | 'definition'
+    | 'roots'
+    | 'ancestryGraph'
+    | 'lore'
+    | 'examples'
+    | 'partsOfSpeech'
   > & { primaryHistoryId: string; histories: LexicalHistory<ResultText>[] },
   researchContext: ResearchContext
 ): void {
@@ -697,6 +703,7 @@ function finalizeHistories(
   result.roots = primary.roots
   result.ancestryGraph = primary.ancestryGraph
   result.lore = primary.lore
+  result.examples = primary.examples
   result.partsOfSpeech = primary.partsOfSpeech
 }
 
@@ -793,6 +800,7 @@ export async function synthesizeFromResearch(
         'ancestryGraph',
         'roots',
         'lore',
+        'examples',
         'partsOfSpeech',
       ]
       const publish = (name: string, value: unknown) => {

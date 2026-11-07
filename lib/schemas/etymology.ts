@@ -55,6 +55,8 @@ function createEntryFields<Text extends z.ZodTypeAny>(text: Text) {
     definition: text,
     roots: z.array(root),
     lore: text,
+    // Optional: entries cached before usage examples existed stay valid.
+    examples: z.array(text).max(2).optional(),
     ancestryGraph,
     partsOfSpeech: z
       .array(

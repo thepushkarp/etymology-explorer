@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 /** A small prose format: blank-line paragraphs and single-star italic emphasis. */
-function emphasize(text: string): ReactNode[] {
+export function emphasize(text: string): ReactNode[] {
   const nodes: ReactNode[] = []
   // Require nonempty, unpadded text; leave double stars and unmatched historical
   // reconstruction markers untouched. React text nodes always escape HTML.
