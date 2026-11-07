@@ -40,6 +40,23 @@ bun run start            # Start production server
 
 Pre-commit hooks (Husky + lint-staged) automatically run ESLint and Prettier on staged files.
 
+## Releases
+
+Production deploys only from a published GitHub release; `vercel.json` disables Git deployments for
+`main`, while PR branches keep their previews. `.github/workflows/deploy.yml` deploys a `released`
+event after checking that the tagged commit is on `main` and the tag equals `v` + the `package.json`
+version, using the `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` repository secrets.
+
+Record user-facing changes under `## [Unreleased]` in `CHANGELOG.md` as single-line, plain-text
+bullets under a `###` group. `lib/changelog.ts` rejects anything else, which fails the build. To
+release, follow the steps in the README's Releasing section. `lib/changelog.test.ts` fails if the
+newest release in `CHANGELOG.md` differs from `package.json`.
+
+The header shows `NEXT_PUBLIC_APP_VERSION`, inlined from `package.json` by `next.config.ts`.
+`components/VersionInfo.tsx` fetches the prerendered `/api/changelog` only when its dialog opens,
+which keeps changelog text out of every page. `lib/changelog.ts` must stay free of `node:fs`: it is
+in the client graph through `SiteHeader`, and only the route reads the file.
+
 ## Architecture
 
 ### Data Flow
@@ -286,7 +303,7 @@ The UI is a quiet, typeset dictionary page: the words carry it, the chrome gets 
 ### Anti-patterns to Avoid
 
 - Rounded cards with drop shadows, gradient backgrounds, colored chip rainbows
-- Section nav chips, modals, and sidebars for secondary features
+- Section nav chips, modals, and sidebars for secondary features (the header's changelog dialog is the one exception)
 - Faux-bold text (`font-semibold`/`font-bold`) — only 400 weights are loaded
 
 ### Guiding Question
@@ -303,6 +320,7 @@ When adding UI: _"Would this feel at home in a beautifully typeset etymology dic
 | `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, 15s timeout)                                |
 | `/api/ngram`         | GET    | Google Books ngram usage data - `?word=word`                                      |
 | `/api/health`        | GET    | Liveness check                                                                    |
+| `/api/changelog`     | GET    | Released versions parsed from `CHANGELOG.md` (prerendered at build)               |
 | `/api/admin/stats`   | GET    | Budget + counter stats (requires `x-admin-secret` header)                         |
 
 All return `{ success: boolean, data?: T, error?: string }` wrapper.
@@ -362,6 +380,14 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `components/AncestryTree.tsx` - Lineage tree: CSS-laid-out nodes, edges measured from the DOM into an SVG overlay, draggable nodes (mouse drag; touch press-and-hold), one shared details panel
 - `lib/streamReducer.ts` - Pure reducer folding SSE events into structured progress state
 - `lib/traceIntent.ts` - sessionStorage in-app-navigation flag gating auto-trace (crawler cost invariant)
+
+**Releases:**
+
+- `CHANGELOG.md` - Version history; source for the site's changelog dialog
+- `lib/changelog.ts` - Changelog parser and GitHub release links
+- `components/VersionInfo.tsx` - Header version button and changelog dialog
+- `vercel.json` - Disables Git deployments for `main`
+- `.github/workflows/deploy.yml` - Production deploy on a published GitHub release
 
 **Admin:**
 

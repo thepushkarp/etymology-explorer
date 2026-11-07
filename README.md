@@ -142,6 +142,7 @@ etymology-explorer/
 ├── app/
 │   ├── api/
 │   │   ├── admin/stats/    # Budget/usage statistics (admin-only)
+│   │   ├── changelog/      # Released versions from CHANGELOG.md (prerendered)
 │   │   ├── etymology/      # Main etymology synthesis endpoint (GET)
 │   │   ├── pronunciation/  # TTS audio endpoint (ElevenLabs)
 │   │   ├── random-word/    # Random word selection
@@ -165,6 +166,7 @@ etymology-explorer/
 │   ├── FaqAccordion.tsx    # Accessible FAQ accordion
 │   ├── Landing.tsx         # Landing page
 │   ├── SearchBox.tsx       # Word search with suggestions
+│   ├── VersionInfo.tsx     # Header version button and changelog dialog
 │   ├── WordLink.tsx        # Link to a word page (marks trace intent)
 │   └── WordTraceExperience.tsx # Live trace for uncached words
 ├── lib/
@@ -199,6 +201,8 @@ etymology-explorer/
 ├── data/
 │   ├── faq.ts              # FAQ content with FaqItem interface
 │   └── gre-words.json      # Vocabulary word list
+├── CHANGELOG.md            # Version history shown in the changelog dialog
+├── vercel.json             # Turns off Git deployments for main
 └── .env.example            # Environment variable template
 ```
 
@@ -314,6 +318,22 @@ Deploy easily on [Vercel](https://vercel.com):
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/thepushkarp/etymology-explorer)
 
 **Important**: Set environment variables in your Vercel project settings (see Environment Configuration section above).
+
+### Releasing
+
+Production deploys only when a GitHub release is published. Pull requests still get Vercel previews, but merging to `main` does not change the live site.
+
+Pre-1.0 versions use minor bumps for user-facing features and patch bumps for fixes.
+
+1. In a pull request, move the entries under `## [Unreleased]` in `CHANGELOG.md` into a new `## [x.y.z] - YYYY-MM-DD` section, then run `bun pm version x.y.z --no-git-tag-version`.
+2. Merge the pull request.
+3. Publish a GitHub release from `main` with the tag `vx.y.z`, using the new changelog section as its notes:
+
+   ```bash
+   gh release create vx.y.z --target main --title vx.y.z --notes-file <notes-file>
+   ```
+
+The [Deploy Production](.github/workflows/deploy.yml) workflow then deploys that tag. It needs the `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` repository secrets. Drafts and pre-releases do not deploy. To roll back, use Instant Rollback in the Vercel dashboard.
 
 ## License
 
