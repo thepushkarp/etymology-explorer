@@ -24,11 +24,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # main only accepts pull requests, so this keeps unreviewed commits out of
-      # production. A tag can otherwise point at any commit in the repository.
+      # Catches a release tagged on the wrong commit; main only accepts pull
+      # requests. This is not a security boundary: release events run the workflow
+      # from the tagged commit, so a tag on an edited workflow skips this check.
+      # The full ref name stops a tag called origin/main from shadowing the branch.
       - name: Verify release commit is on main
         run: |
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
             echo "::error::Release commit $GITHUB_SHA is not on main"
             exit 1
           fi
