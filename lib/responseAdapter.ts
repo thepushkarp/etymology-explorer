@@ -38,6 +38,7 @@ export interface AdapterErrorOptions {
 
 export interface AdapterResultOptions {
   cached: boolean
+  identity?: Extract<StreamEvent, { type: 'entry_identity' }>
   /** Headers applied in both modes. */
   headers?: Record<string, string>
 }
@@ -76,9 +77,9 @@ export function createResponseAdapter(stream: boolean): ResponseAdapter {
       )
     },
 
-    result(result, { cached, headers }) {
+    result(result, { cached, headers, identity }) {
       if (stream) {
-        return streamResultResponse(result, headers)
+        return streamResultResponse(result, headers, identity)
       }
       return NextResponse.json<ApiResponse<WordEntry> & { cached: boolean }>(
         { success: true, data: result, cached },

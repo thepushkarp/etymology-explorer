@@ -15,6 +15,7 @@ import type {
   StreamEvent,
   SourceOutcome,
   ScriptTarget,
+  EntrySpelling,
 } from './types'
 import type { LanguageCode } from './languages'
 import { StreamingUiError, toStreamingUiError } from './streamingError'
@@ -95,6 +96,8 @@ export interface LanguageStreamState {
 }
 
 export interface StreamState {
+  word?: string
+  identity?: ScriptTarget & { spellings?: EntrySpelling[] }
   languages: LanguageCode[]
   otherLanguages: string[]
   otherScripts?: ScriptTarget[]
@@ -110,7 +113,7 @@ export interface StreamState {
 }
 
 export type StreamAction =
-  | { type: 'search_started' }
+  | { type: 'search_started'; word?: string }
   | { type: 'stream_reconnecting' }
   | { type: 'stream_event'; event: StreamEvent }
   | { type: 'fallback_success'; result: WordEntry }
@@ -177,6 +180,12 @@ export const initialStreamState: StreamState = {
 }
 
 function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
+  if (event.type === 'entry_identity') {
+    return {
+      ...state,
+      identity: { word: event.word, language: event.language, spellings: event.spellings },
+    }
+  }
   if (event.type === 'languages_resolved') {
     return {
       ...state,
@@ -339,6 +348,7 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
     case 'search_started':
       return {
         ...initialStreamState,
+        word: action.word,
         status: 'loading',
         phase: 'sources',
       }

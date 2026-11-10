@@ -14,6 +14,7 @@ import { consumeTraceIntent, scheduleTraceIntent } from '@/lib/traceIntent'
 import { toPartialResult, type StreamState } from '@/lib/streamReducer'
 import { LANGUAGES, type LanguageCode } from '@/lib/languages'
 import type { WordEntry } from '@/lib/types'
+import { spellingPronunciation } from '@/lib/scriptTargets'
 
 interface WordTraceExperienceProps {
   word: string
@@ -53,11 +54,13 @@ export function WordTraceExperience({
   initialEntry,
   stale = false,
 }: WordTraceExperienceProps) {
-  const { progress, search } = useStreamingEtymology()
+  const { progress, search } = useStreamingEtymology(language, word)
+  const activeWord = progress.identity?.word ?? progress.result?.word ?? progress.word ?? word
+  const activeLanguage = progress.identity?.language ?? language
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>()
   const selected =
-    (progress.status === 'error' ? language : selectedLanguage) ??
-    language ??
+    (progress.status === 'error' ? activeLanguage : selectedLanguage) ??
+    activeLanguage ??
     progress.result?.languages[0] ??
     progress.languages[0] ??
     initialEntry?.languages[0] ??
@@ -72,7 +75,10 @@ export function WordTraceExperience({
   )
   const started = progress.status !== 'idle'
   // Start the usage-chart request alongside the trace so it is ready when the entry is.
-  const ngram = useNgram(started && progress.languages.includes(selected) ? word : null, selected)
+  const ngram = useNgram(
+    started && progress.languages.includes(selected) ? activeWord : null,
+    selected
+  )
 
   useEffect(() => {
     if (unavailable || (initialEntry && stale)) {
@@ -83,24 +89,26 @@ export function WordTraceExperience({
   }, [word, language, search, unavailable, initialEntry, stale])
 
   const partial = useMemo(() => {
-    const streamed = toPartialResult(word, slice?.sections ?? {}, selected)
+    const streamed = toPartialResult(activeWord, slice?.sections ?? {}, selected)
     return { ...streamed, ngram: ngram.status === 'ready' ? ngram.data : undefined }
-  }, [word, selected, slice?.sections, ngram])
+  }, [activeWord, selected, slice?.sections, ngram])
+
+  const savedTabs = progress.status === 'error' || activeWord === initialEntry?.word
 
   const tabs = (
     <LanguageTabs
-      word={word}
+      word={savedTabs && initialEntry ? initialEntry.word : activeWord}
       languages={
         progress.status === 'error' && initialEntry
           ? initialEntry.languages
           : progress.languages.length
             ? progress.languages
-            : (initialEntry?.languages ?? [])
+            : ((savedTabs ? initialEntry?.languages : []) ?? [])
       }
       otherLanguages={
         progress.otherLanguages.length
           ? progress.otherLanguages
-          : (initialEntry?.otherLanguages ?? [])
+          : ((savedTabs ? initialEntry?.otherLanguages : []) ?? [])
       }
       otherScripts={
         progress.status === 'error'
@@ -111,14 +119,14 @@ export function WordTraceExperience({
       onSelect={started && progress.status !== 'error' ? setSelectedLanguage : undefined}
     />
   )
-  const start = () => search(word, language, { refresh: stale })
+  const start = () => search(activeWord, activeLanguage, { refresh: stale })
 
   return (
     <>
-      <SiteHeader showSearch searchLanguage={language} />
+      <SiteHeader showSearch searchLanguage={activeLanguage} />
       <main className="mx-auto w-full max-w-3xl px-4 pt-14 sm:px-6 sm:pt-20">
         <div aria-live="polite" role="status" className="sr-only">
-          {announcementFor(progress, word)}
+          {announcementFor(progress, activeWord)}
         </div>
 
         {progress.status === 'success' && progress.result ? (
@@ -132,6 +140,7 @@ export function WordTraceExperience({
         ) : (
           <EtymologyCard
             result={partial}
+            pronunciationWord={spellingPronunciation(selected, progress.identity?.spellings)}
             pending={progress.status === 'loading'}
             subheader={
               <>

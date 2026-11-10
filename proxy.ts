@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Ratelimit } from '@upstash/ratelimit'
 import { CONFIG } from '@/lib/config'
 import { getRedis } from '@/lib/redis'
-import { wordPagePath } from '@/lib/languages'
+import { candidateLanguages, isLanguageCode, LANGUAGES, wordPagePath } from '@/lib/languages'
+import { getCachedSpellingEntry } from '@/lib/cache'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
 
 type LimiterName = keyof typeof CONFIG.rateLimit
@@ -65,6 +66,36 @@ export async function proxy(request: NextRequest) {
   const redirectPath = request.method === 'GET' ? legacySearchRedirect(request.nextUrl) : null
   if (redirectPath) {
     return NextResponse.redirect(new URL(redirectPath, request.nextUrl), 308)
+  }
+
+  if (request.method === 'GET' || request.method === 'HEAD') {
+    const segments = pathname.split('/').slice(1)
+    const hint = segments.length === 3 ? segments[1].toLowerCase() : undefined
+    if (segments[0] === 'word' && (segments.length === 2 || (hint && isLanguageCode(hint)))) {
+      let word = ''
+      try {
+        word = canonicalizeWord(decodeURIComponent(segments.at(-1)!))
+      } catch {
+        // Invalid encoding is handled by the word page's not-found response.
+      }
+      if (isValidWord(word)) {
+        const language = hint && isLanguageCode(hint) ? hint : undefined
+        const candidates = candidateLanguages(word)
+        const selected = language ?? (candidates.length === 1 ? candidates[0] : undefined)
+        const alias =
+          selected && LANGUAGES[selected].spellingIdentity
+            ? await getCachedSpellingEntry(word, language)
+            : null
+        if (alias) {
+          const response = NextResponse.redirect(
+            new URL(wordPagePath(alias.word, alias.language), request.nextUrl),
+            307
+          )
+          response.headers.set('Cache-Control', 'private, no-store')
+          return response
+        }
+      }
+    }
   }
 
   if (pathname.startsWith('/api/') && CONFIG.features.rateLimitEnabled) {

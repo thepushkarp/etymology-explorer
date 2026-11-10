@@ -10,6 +10,7 @@ interface EntryHeaderProps {
   actions?: ReactNode
   subheader?: ReactNode
   pending?: boolean
+  pronunciationWord?: string
 }
 
 const STRATUM_LABELS: Record<EtymologyStratum, string> = {
@@ -44,7 +45,13 @@ function originHook(result: EtymologyEntry): ReactNode {
   return <>From {parts}.</>
 }
 
-export function EntryHeader({ result, actions, subheader, pending }: EntryHeaderProps) {
+export function EntryHeader({
+  result,
+  actions,
+  subheader,
+  pending,
+  pronunciationWord,
+}: EntryHeaderProps) {
   const hook = originHook(result)
   const partsOfSpeech = [...new Set(result.partsOfSpeech?.map((part) => part.pos) ?? [])]
   const attested = result.rawSources?.dateAttested
@@ -71,7 +78,10 @@ export function EntryHeader({ result, actions, subheader, pending }: EntryHeader
         {result.pronunciation && (
           <span lang="en" dir="ltr" className="inline-flex items-center gap-1.5 font-serif">
             {result.pronunciation}
-            <PronunciationButton word={result.word} language={result.language} />
+            <PronunciationButton
+              word={pronunciationWord ?? result.word}
+              language={result.language}
+            />
           </span>
         )}
         {partsOfSpeech.length > 0 && (

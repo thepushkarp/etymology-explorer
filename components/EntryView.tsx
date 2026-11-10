@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { EntrySelector } from '@/components/etymology-card/EntrySelector'
 import { LanguageTabs } from '@/components/LanguageTabs'
@@ -10,9 +11,10 @@ import { TraceStatus } from '@/components/TraceStatus'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { consumeTraceIntent } from '@/lib/traceIntent'
-import { LANGUAGES, type LanguageCode } from '@/lib/languages'
+import { LANGUAGES, wordPagePath, type LanguageCode } from '@/lib/languages'
 import { historyChoices, historyEntry } from '@/lib/resultHistories'
-import type { EtymologyResult, WordEntry } from '@/lib/types'
+import { spellingPronunciation } from '@/lib/scriptTargets'
+import type { EntrySpelling, EtymologyResult, WordEntry } from '@/lib/types'
 
 interface EntryViewProps {
   entry: WordEntry
@@ -32,7 +34,7 @@ export function EntryView({
   languageTabs,
   unavailableMessage,
 }: EntryViewProps) {
-  const { progress, search } = useStreamingEtymology()
+  const { progress, search } = useStreamingEtymology(language, entry.word)
   const [refreshedLanguage, setRefreshedLanguage] = useState<LanguageCode>()
   const displayed = progress.result ?? entry
   const requested = refreshedLanguage ?? language ?? displayed.languages[0]
@@ -41,6 +43,7 @@ export function EntryView({
       ? displayed.languages[0]
       : requested
   const result = selected ? displayed.entries[selected] : undefined
+  const spellings = displayed.spellings?.filter((spelling) => spelling.language === selected) ?? []
 
   useEffect(() => {
     consumeTraceIntent(entry.word)
@@ -77,9 +80,28 @@ export function EntryView({
     <FinishedLanguage
       key={`${result.language}:${result.primaryHistoryId}`}
       result={result}
+      spellings={spellings}
       subheader={
         <>
           {tabs}
+          {spellings.length > 0 && (
+            <p className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-2 text-sm text-muted">
+              <span>Also written</span>
+              {spellings.map((spelling) => (
+                <span key={spelling.word}>
+                  <Link
+                    href={wordPagePath(displayed.word, spelling.language)}
+                    lang={spelling.language}
+                    dir="auto"
+                    className="link font-serif text-ink"
+                  >
+                    {spelling.word}
+                  </Link>
+                  {spelling.kind === 'misspelling' && ' (misspelling)'}
+                </span>
+              ))}
+            </p>
+          )}
           {progress.status === 'loading' && <TraceStatus progress={progress} language={selected} />}
         </>
       }
@@ -108,11 +130,13 @@ function FinishedLanguage({
   subheader,
   actions,
   status,
+  spellings,
 }: {
   result: EtymologyResult
   subheader: ReactNode
   actions: ReactNode
   status?: string
+  spellings: EntrySpelling[]
 }) {
   const [historyId, setHistoryId] = useState(result.primaryHistoryId)
   const ngram = useNgram(result.word, result.language)
@@ -128,6 +152,11 @@ function FinishedLanguage({
   return (
     <EtymologyCard
       result={display}
+      pronunciationWord={
+        result.histories.length === 1
+          ? spellingPronunciation(result.language, spellings)
+          : undefined
+      }
       usageUnavailable={ngram.status === 'unavailable'}
       actions={actions}
       subheader={
@@ -144,7 +173,15 @@ function FinishedLanguage({
             activeEntryId={historyId}
             onChange={setHistoryId}
           />
-          <ScriptLinks targets={display.counterparts} />
+          <ScriptLinks
+            targets={display.counterparts?.filter(
+              (target) =>
+                !spellings.some(
+                  (spelling) =>
+                    spelling.word === target.word && spelling.language === target.language
+                )
+            )}
+          />
         </>
       }
     />

@@ -2,7 +2,7 @@ import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
 import { sameSpelling } from './orthography'
 import { LANGUAGES, languageFromName, lexicalLanguageName, type LanguageCode } from './languages'
 import { normalizeScriptTargets } from './scriptTargets'
-import type { LexemeRef, ScriptTarget, SourceLexicalRelation } from './types'
+import type { LexemeRef, ScriptTarget, SourceData, SourceLexicalRelation } from './types'
 /** A section returned by MediaWiki's `prop=tocdata` parser response. */
 export interface WiktionaryTocSection {
   index: string
@@ -164,6 +164,76 @@ function hasClass(attributes: string, name: string): boolean {
   return (attribute(attributes, 'class') ?? '').split(/\s+/).includes(name)
 }
 
+function balancedElement(html: string, start: number) {
+  const opening = html.slice(start).match(/^<([a-z][a-z0-9]*)\b([^>]*)>/i)
+  if (!opening) return undefined
+  const tags = new RegExp(`<(/?)${opening[1]}\\b[^>]*>`, 'gi')
+  tags.lastIndex = start + opening[0].length
+  let depth = 1
+  let closing
+  while ((closing = tags.exec(html))) {
+    depth += closing[1] ? -1 : 1
+    if (depth === 0)
+      return {
+        attributes: opening[2],
+        body: html.slice(start + opening[0].length, closing.index),
+        end: tags.lastIndex,
+      }
+  }
+  return undefined
+}
+
+function languageFragment(
+  html: string,
+  sections: readonly WiktionaryTocSection[],
+  languageHeading: string
+) {
+  const index = sections.findIndex(
+    (section) => comparableHeading(section.line) === comparableHeading(languageHeading)
+  )
+  if (index < 0) return undefined
+  const start = anchorOffset(html, sections[index].anchor)
+  const next = sections
+    .slice(index + 1)
+    .find((section) => headingLevel(section) <= headingLevel(sections[index]))
+  const end = next ? anchorOffset(html, next.anchor) : html.length
+  return start >= 0 && end > start ? { start, html: html.slice(start, end) } : undefined
+}
+
+function japaneseSeeEntries(html: string, edition: string) {
+  const entries = []
+  let consumed = 0
+  for (const opening of html.matchAll(/<table\b([^>]*)>/gi)) {
+    if (opening.index < consumed || !hasClass(opening[1], 'ja-see')) continue
+    const table = balancedElement(html, opening.index)
+    if (!table) continue
+    consumed = table.end
+    const header = table.body.match(/<b\b[^>]*>([\s\S]*?)<\/b>/i)?.[1]
+    if (!header || !/^For pronunciation and definitions\b/i.test(cleanWiktionaryHtml(header)))
+      continue
+    const targets: ScriptTarget[] = []
+    let targetCount = 0
+    for (const term of table.body.matchAll(/<(span|i|b)\b([^>]*)>\s*[【〖]\s*([\s\S]*?)[】〗]/gi)) {
+      targetCount++
+      if (attribute(term[2], 'lang') === 'ja' && [...term[3].matchAll(/<a\b/gi)].length === 1)
+        targets.push(...scriptLink(term[3], 'ja', edition))
+    }
+    const subject = header.match(/<(span|i)\b([^>]*)>([\s\S]*?)<\/\1>/i)
+    entries.push({
+      start: opening.index,
+      end: table.end,
+      header: cleanWiktionaryHtml(header),
+      subject:
+        subject && attribute(subject[2], 'lang') === 'ja'
+          ? cleanWiktionaryHtml(lexicalSpellingHtml(subject[3]))
+          : undefined,
+      targetCount,
+      targets: normalizeScriptTargets(targets),
+    })
+  }
+  return entries
+}
+
 /** The destination title, language anchor, and tagged language must agree. */
 function scriptLink(html: string, language: LanguageCode, edition: string): ScriptTarget[] {
   const href = html.match(/<a\b[^>]*href=["']([^"']+)["']/i)?.[1]
@@ -190,7 +260,7 @@ function selectedHeadwordLines(html: string, language: LanguageCode) {
   return [...html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].flatMap((block) =>
     [...block[1].matchAll(/<strong\b([^>]*)>([\s\S]*?)<\/strong>/gi)].flatMap((headword) =>
       hasClass(headword[1], 'headword') && attribute(headword[1], 'lang') === language
-        ? [{ body: block[1], headword }]
+        ? [{ body: block[1], headword, start: block.index }]
         : []
     )
   )
@@ -264,23 +334,12 @@ export function extractWiktionaryRomanizations(
         const prefix = cleanWiktionaryHtml(definition[1].slice(0, linkMarker))
         if (!/^(?:(?:[\p{L}\p{M}ō -]+)\s+)?(?:romanization|transcription) of$/iu.test(prefix))
           continue
-        const targetHtml = definition[1].slice(linkMarker)
-        const target = targetHtml.match(/^<(span|i)\b([^>]*)>/i)
+        const target = balancedElement(definition[1], linkMarker)
         if (!target) continue
-        const tags = new RegExp(`<(/?)${target[1]}\\b[^>]*>`, 'gi')
-        tags.lastIndex = target[0].length
-        let depth = 1
-        let closing
-        while ((closing = tags.exec(targetHtml))) {
-          depth += closing[1] ? -1 : 1
-          if (depth === 0) break
-        }
-        if (!closing) continue
-        const targetBody = targetHtml.slice(target[0].length, closing.index)
-        if (attribute(target[2], 'lang') === language) {
-          targets.push(...scriptLink(targetBody, language, 'en'))
+        if (attribute(target.attributes, 'lang') === language) {
+          targets.push(...scriptLink(target.body, language, 'en'))
         } else {
-          for (const term of targetBody.matchAll(/<(i|b|span)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
+          for (const term of target.body.matchAll(/<(i|b|span)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
             if (attribute(term[2], 'lang') === language)
               targets.push(...scriptLink(term[3], language, 'en'))
           }
@@ -289,6 +348,144 @@ export function extractWiktionaryRomanizations(
     }
   }
   return normalizeScriptTargets(targets)
+}
+
+export function extractWiktionarySpellingRedirect(
+  html: string,
+  sections: readonly WiktionaryTocSection[],
+  languageHeading: string,
+  requestedWord: string,
+  edition = 'en'
+): SourceData['spellingRedirect'] {
+  const language = languageFromName(languageHeading)
+  const selected = languageFragment(html, sections, languageHeading)
+  if (!language || !selected) return undefined
+  const fragment = selected.html
+  const headings = [...fragment.matchAll(/<h[1-6]\b[^>]*>([\s\S]*?)<\/h[1-6]>/gi)].map((heading) =>
+    cleanWiktionaryHtml(heading[1])
+  )
+  if (
+    headings.filter((heading) => /^Etymology(?:\s+\d+)?$/i.test(heading)).length > 1 ||
+    headings.some((heading) => /^Romanization$/i.test(heading))
+  )
+    return undefined
+  const tables = language === 'ja' ? japaneseSeeEntries(fragment, edition) : []
+  if (tables.length) {
+    const table = tables[0]
+    let outside = fragment.slice(0, table.start) + fragment.slice(table.end)
+    for (const marker of [...outside.matchAll(/<span\b([^>]*)>/gi)].reverse()) {
+      if (!hasClass(marker[1], 'mw-editsection')) continue
+      const element = balancedElement(outside, marker.index)
+      if (element) outside = outside.slice(0, marker.index) + outside.slice(element.end)
+    }
+    outside = outside
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<h[1-6]\b[^>]*>[\s\S]*?<\/h[1-6]>/gi, '')
+    if (
+      tables.length !== 1 ||
+      table.targetCount !== 1 ||
+      table.targets.length !== 1 ||
+      !sameSpelling(table.subject ?? '', requestedWord) ||
+      !/\bsee the following entry\.$/i.test(table.header) ||
+      cleanWiktionaryHtml(outside)
+    )
+      return undefined
+    const target = table.targets[0]
+    return sameSpelling(target.word, requestedWord) ? undefined : { ...target, kind: 'spelling' }
+  }
+  if (/\bja-see\b/.test(fragment)) return undefined
+  const headwords = selectedHeadwordLines(fragment, language)
+  if (
+    headwords.length !== 1 ||
+    !sameSpelling(cleanWiktionaryHtml(lexicalSpellingHtml(headwords[0].headword[2])), requestedWord)
+  )
+    return undefined
+  const definitions: string[] = []
+  let consumed = 0
+  for (const opening of fragment.matchAll(/<ol\b([^>]*)>/gi)) {
+    if (opening.index < consumed || hasClass(opening[1], 'references')) continue
+    const list = balancedElement(fragment, opening.index)
+    if (!list) return undefined
+    consumed = list.end
+    let previous = 0
+    for (const item of list.body.matchAll(/<li\b[^>]*>/gi)) {
+      if (item.index < previous) continue
+      const definition = balancedElement(list.body, item.index)
+      if (!definition) return undefined
+      previous = definition.end
+      definitions.push(definition.body)
+    }
+  }
+  if (definitions.length !== 1) return undefined
+  const definition = definitions[0]
+  const marker = definition.search(/<(?:span|i)\b[^>]*class=["'][^"']*\bform-of-definition-link\b/i)
+  if (marker < 0) return undefined
+  const kind = cleanWiktionaryHtml(definition.slice(0, marker)).match(
+    /^(misspelling|(?:alternative|alternate) spelling) of$/i
+  )?.[1]
+  const target = balancedElement(definition, marker)
+  if (!kind || !target || cleanWiktionaryHtml(definition.slice(target.end)).replace(/\./g, ''))
+    return undefined
+  const terms = [...target.body.matchAll(/<(span|i|b)\b([^>]*\blang=["'][^"']+["'][^>]*)>/gi)]
+  if (
+    terms.length !== 1 ||
+    attribute(terms[0][2], 'lang') !== language ||
+    [...target.body.matchAll(/<a\b/gi)].length !== 1
+  )
+    return undefined
+  const targets = scriptLink(target.body, language, edition)
+  return targets.length === 1 && !sameSpelling(targets[0].word, requestedWord)
+    ? { ...targets[0], kind: /^misspelling$/i.test(kind) ? 'misspelling' : 'spelling' }
+    : undefined
+}
+
+export function isWiktionarySpellingLemma(
+  html: string,
+  sections: readonly WiktionaryTocSection[],
+  languageHeading: string,
+  requestedWord: string,
+  resolvedWord: string
+): boolean {
+  const language = languageFromName(languageHeading)
+  const selected = languageFragment(html, sections, languageHeading)
+  if (!language || !selected || !sameSpelling(requestedWord, resolvedWord)) return false
+  const fragment = selected.html
+  if (/\bja-see\b/.test(fragment)) return false
+  const headings = [...fragment.matchAll(/<h[1-6]\b[^>]*>([\s\S]*?)<\/h[1-6]>/gi)]
+  if (
+    headings.filter((heading) => /^Etymology(?:\s+\d+)?$/i.test(cleanWiktionaryHtml(heading[1])))
+      .length > 1 ||
+    headings.some((heading) => /^Romanization$/i.test(cleanWiktionaryHtml(heading[1])))
+  )
+    return false
+  const headwords = selectedHeadwordLines(fragment, language)
+  if (
+    headwords.length !== 1 ||
+    !sameSpelling(cleanWiktionaryHtml(lexicalSpellingHtml(headwords[0].headword[2])), requestedWord)
+  )
+    return false
+  const owner = headings.findLastIndex((heading) => heading.index < headwords[0].start)
+  if (
+    owner < 0 ||
+    !/^(?:Noun|Verb|Adjective|Adverb|Pronoun|Interjection|Conjunction|Preposition|Postposition|Determiner|Particle|Numeral|Proper noun)$/i.test(
+      cleanWiktionaryHtml(headings[owner][1])
+    )
+  )
+    return false
+  const body = fragment.slice(headwords[0].start, headings[owner + 1]?.index)
+  const opening = body.match(/<ol\b[^>]*>/i)
+  const list = opening && balancedElement(body, opening.index!)
+  if (!list || /\bform-of-definition\b/.test(list.body)) return false
+  let definitions = 0
+  let consumed = 0
+  for (const item of list.body.matchAll(/<li\b[^>]*>/gi)) {
+    if (item.index < consumed) continue
+    const definition = balancedElement(list.body, item.index)
+    if (!definition || !cleanWiktionaryHtml(definition.body)) return false
+    consumed = definition.end
+    definitions++
+  }
+  return definitions > 0
 }
 
 function affirmativeOriginPrefix(prefix: string, pattern: RegExp): boolean {
@@ -552,17 +749,9 @@ export function extractWiktionaryVariants(
   languageHeading: string,
   edition = 'en'
 ): Array<{ word: string; relationship: 'spelling-variant' | 'redirect'; url: string }> {
-  const index = sections.findIndex(
-    (section) => comparableHeading(section.line) === comparableHeading(languageHeading)
-  )
-  if (index < 0) return []
-  const start = anchorOffset(html, sections[index].anchor)
-  const next = sections
-    .slice(index + 1)
-    .find((section) => headingLevel(section) <= headingLevel(sections[index]))
-  if (start < 0) return []
-  const end = next ? anchorOffset(html, next.anchor) : html.length
-  const fragment = html.slice(start, end < 0 ? html.length : end)
+  const selected = languageFragment(html, sections, languageHeading)
+  if (!selected) return []
+  const { start, html: fragment } = selected
   const variants = new Map<
     string,
     { word: string; relationship: 'spelling-variant' | 'redirect'; url: string }
@@ -594,29 +783,15 @@ export function extractWiktionaryVariants(
         addJapaneseSpellings(cell[1])
       }
     }
-  }
-  for (const table of fragment.matchAll(
-    /<table\b[^>]*class=["'][^"']*\bja-see\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi
-  )) {
-    const header = table[1].match(/<b\b[^>]*>([\s\S]*?)<\/b>/i)
-    if (!header || !/^For pronunciation and definitions\b/i.test(cleanWiktionaryHtml(header[1])))
-      continue
-    // The first entry cell is the redirect; lower definition cells can list alternatives.
-    const target = table[1]
-      .slice(header.index! + header[0].length)
-      .match(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/i)
-    if (!target) continue
-    const url = new URL(decodeHtmlEntities(target[1]), `https://${edition}.wiktionary.org`)
-    if (
-      url.hostname !== `${edition}.wiktionary.org` ||
-      !url.pathname.startsWith('/wiki/') ||
-      comparableHeading(decodeURIComponent(url.hash.slice(1)).replace(/_/g, ' ')) !==
-        comparableHeading(languageHeading)
-    )
-      continue
-    const word = decodeURIComponent(url.pathname.slice('/wiki/'.length)).replace(/_/g, ' ')
-    if (word && !word.includes(':'))
-      variants.set(word, { word, relationship: 'redirect', url: url.toString() })
+    for (const table of japaneseSeeEntries(fragment, edition)) {
+      for (const target of table.targets) {
+        variants.set(target.word, {
+          word: target.word,
+          relationship: 'redirect',
+          url: `https://${edition}.wiktionary.org/wiki/${encodeURIComponent(target.word)}#Japanese`,
+        })
+      }
+    }
   }
   // Resolve invariant heading offsets once to avoid whole-page scans per block.
   const positionedSections = sections.map((section) => ({

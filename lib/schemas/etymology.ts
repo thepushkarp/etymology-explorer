@@ -201,6 +201,18 @@ export const WordEntrySchema = z
     entries: z.partialRecord(z.enum(SUPPORTED_LANGUAGE_CODES), EtymologyResultSchema),
     otherLanguages: z.array(z.string()),
     otherScripts: z.array(scriptTarget).optional(),
+    spellings: z
+      .array(
+        scriptTarget.and(
+          z.object({
+            kind: z.enum(['spelling', 'misspelling']),
+            sourceUrl: z.url(),
+            revisionId: z.union([z.number(), z.string()]).optional(),
+            verifiedAt: z.iso.datetime(),
+          })
+        )
+      )
+      .optional(),
     tracedAt: z.iso.datetime(),
     freshnessAt: z.iso.datetime().optional(),
     revision: z.number().int().nonnegative(),

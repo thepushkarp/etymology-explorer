@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import type { EtymologyResult, WordEntry } from './types'
+import type { SpellingProof } from './cache'
 import { CONFIG } from './config'
 import { etymologyResult } from './testSupport/etymologyResult'
 
@@ -28,6 +29,10 @@ const {
   getCachedEntry,
   getNegativeCache,
   upgradeLegacyEntry,
+  getCachedSpellingEntry,
+  mergeEntrySpellings,
+  spellingMetadata,
+  publishSpellingAliases,
 } = await import('./cache')
 const { scanTracedWords } = await import('./tracedWords')
 
@@ -59,6 +64,63 @@ beforeEach(() => {
 })
 
 describe('durable entries', () => {
+  test('spelling redirects require fresh source and terminal proof, membership, and language scope', async () => {
+    const verifiedAt = new Date(Date.now() - 1000).toISOString()
+    const proof: SpellingProof = {
+      word: 'つなみ',
+      targetWord: '津波',
+      language: 'ja',
+      kind: 'spelling',
+      sourceUrl: 'https://en.wiktionary.org/wiki/つなみ',
+      verifiedAt,
+      terminal: { word: '津波', sourceUrl: 'https://en.wiktionary.org/wiki/津波', verifiedAt },
+    }
+    const owner = mergeEntrySpellings(
+      entry(etymologyResult({ word: '津波', language: 'ja', definition: 'Tsunami.' })),
+      [spellingMetadata([proof])]
+    )
+    const values = new Map<string, unknown>()
+    currentRedis = fakeRedis({
+      get: mock(async (key: string) => values.get(key) ?? null),
+      set: mock(async (key: string, value: unknown) => {
+        values.set(key, structuredClone(value))
+        return 'OK'
+      }),
+    })
+    await cacheEntry(owner.word, owner)
+    await publishSpellingAliases(owner, [proof])
+    expect((await getCachedSpellingEntry('つなみ', 'ja'))?.entry.word).toBe('津波')
+    expect(revalidateTagMock).toHaveBeenCalledWith('etymology-word:つなみ', { expire: 0 })
+    expect((await getCachedSpellingEntry('つなみ'))?.word).toBe('津波')
+    values.delete('entry:v1:津波')
+    currentRedis.get.mockClear()
+    expect(await getCachedSpellingEntry('つなみ', 'ja')).toBeNull()
+    expect(currentRedis.get.mock.calls.some(([key]) => String(key).startsWith('etymology:'))).toBe(
+      false
+    )
+    values.set('entry:v1:津波', owner)
+    values.set('etymology:v2.7:つなみ', etymologyResult({ word: 'つなみ', language: 'en' }))
+    expect(await getCachedSpellingEntry('つなみ')).toBeNull()
+    expect((await getCachedSpellingEntry('つなみ', 'ja'))?.word).toBe('津波')
+    expect(await getCachedSpellingEntry('つなみ', 'en')).toBeNull()
+    values.set('entry:v1:津波', { ...owner, spellings: [] })
+    expect(await getCachedSpellingEntry('つなみ', 'ja')).toBeNull()
+    values.set('entry:v1:津波', owner)
+    const old = new Date(Date.now() - (CONFIG.sourceCacheTTL + 1) * 1000).toISOString()
+    values.set('entry-alias:v1:ja:つなみ', {
+      word: '津波',
+      revision: 1,
+      proofs: [{ ...proof, terminal: { ...proof.terminal, verifiedAt: old } }],
+    })
+    expect(await getCachedSpellingEntry('つなみ', 'ja')).toBeNull()
+    values.set('entry:v1:津波', {
+      ...owner,
+      spellings: owner.spellings!.map((spelling) => ({ ...spelling, verifiedAt: old })),
+    })
+    expect((await getCachedEntry('津波'))?.entry.spellings).toEqual([])
+    await cacheEntry('津波', { ...owner, spellings: [] })
+    expect(revalidateTagMock).toHaveBeenLastCalledWith('etymology-word:つなみ', { expire: 0 })
+  })
   test('keeps complete and incomplete traces for one year and invalidates one word tag', async () => {
     currentRedis = fakeRedis()
     const value = entry()

@@ -146,7 +146,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v7:{word}` with a distinct explicit-hint scope. Source-attested romanization offers survive no-result responses. Transient resolution failures and retraces with a durable entry never write absence markers.
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v11:<source>:<word>` for English, `src:v11:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v11:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v11:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v12:<source>:<word>` for English, `src:v12:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v12:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v12:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
 
 - **`lib/redis.ts`** - Shared Redis client factory using KV_REST_API_URL and KV_REST_API_TOKEN (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 and Exa requires functioning accounting (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -228,6 +228,19 @@ sections supply `WordEntry.otherScripts` offers, including one bounded explicit 
 they remain links alongside independent entries for the original spelling and in no-result responses.
 Only clicking a link marks trace intent. Foreign spellings are never guessed from a gloss or a Latin
 spelling alone.
+
+Japanese spelling identity requires a complete source-language section with one explicit redirect
+and a verified terminal entry. Shared readings, alternative-spelling lists, and romanizations alone
+cannot establish equivalence. `lib/entryIdentity.ts` follows bounded source redirects before taking
+the canonical word lock, sharing the trace's HTTP budget. The canonical `WordEntry` retains verified
+`spellings`; its per-language results still match `WordEntry.word`. Language-qualified alias pointers
+are published only after canonical persistence and expire with their source proof. The request proxy
+checks known aliases for word-page GET/HEAD requests and sends uncached temporary redirects without
+fetching sources. Word pages retain their cache-only ISR behavior.
+Latin borrowing entries retain their own language histories. A unique verified standard
+kana reading supplies audio for a single-history Japanese entry; misspellings never select audio.
+Existing entries without alias proof retain their saved contents until an explicit retrace establishes
+the relationship; pipeline revision changes make that retrace available without automatic LLM spend.
 
 ### Research Pipeline Limits
 

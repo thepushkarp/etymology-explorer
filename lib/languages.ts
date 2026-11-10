@@ -39,6 +39,7 @@ export interface LanguageDefinition {
     formHeading: RegExp
   }
   historyPrimary: 'native' | 'english'
+  spellingIdentity?: boolean
   wikipediaEdition?: string
   wikidataEntity?: string
   freeDictionary?: boolean
@@ -214,6 +215,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
       'SANSKRIT: distinguish source-attested words from grammatical roots marked √. Never present a root as an attested ancestor word. Preserve Vedic and Classical period distinctions when the sources make them.',
   },
   ja: {
+    spellingIdentity: true,
     code: 'ja',
     englishName: 'Japanese',
     nativeName: '日本語',

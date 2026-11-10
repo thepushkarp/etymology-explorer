@@ -1,15 +1,21 @@
 import { revalidateTag } from 'next/cache'
 import { after } from 'next/server'
-import type { EtymologyResult, ScriptTarget, WordEntry } from './types'
+import type { EntrySpelling, EtymologyResult, ScriptTarget, WordEntry } from './types'
 import { EtymologyResultSchema, WordEntrySchema } from './schemas/etymology'
 import { CONFIG } from './config'
 import { getRedis } from './redis'
 import { safeError } from './errorUtils'
 import { emitSecurityEvent } from './telemetry'
 import type { LanguageCode } from './languages'
-import { lexemeKey, SUPPORTED_LANGUAGE_CODES } from './languages'
+import {
+  candidateLanguages,
+  isLanguageCode,
+  lexemeKey,
+  SUPPORTED_LANGUAGE_CODES,
+} from './languages'
 import { canonicalizeWord } from './orthography'
 import { normalizeScriptTargets } from './scriptTargets'
+import { isValidWord } from './validation'
 
 /** Apply ±jitter to non-corpus TTLs to prevent synchronized cache stampedes. */
 function jitterTTL(ttl: number): number {
@@ -27,6 +33,229 @@ export const LEGACY_SCAN_PATTERNS = [
 ] as const
 const AUDIO_PREFIX = 'audio:v2:'
 const AUDIO_TTL = CONFIG.audioCacheTTL
+const SPELLING_ALIAS_PREFIX = 'entry-alias:v1:'
+export const MAX_SPELLING_REDIRECTS = 3
+
+export interface SpellingProof extends EntrySpelling {
+  targetWord: string
+  terminal: { word: string; sourceUrl: string; revisionId?: number | string; verifiedAt: string }
+}
+
+function freshSpelling(spelling: EntrySpelling): boolean {
+  const age = Date.now() - Date.parse(spelling.verifiedAt)
+  return age >= 0 && age <= CONFIG.sourceCacheTTL * 1000
+}
+
+function validProof(value: unknown): value is SpellingProof {
+  if (!value || typeof value !== 'object') return false
+  const proof = value as SpellingProof
+  if (
+    !isLanguageCode(proof.language) ||
+    !['spelling', 'misspelling'].includes(proof.kind) ||
+    typeof proof.word !== 'string' ||
+    typeof proof.targetWord !== 'string' ||
+    ![proof.word, proof.targetWord].every(
+      (word) =>
+        isValidWord(word) &&
+        canonicalizeWord(word) === word &&
+        candidateLanguages(word).includes(proof.language)
+    ) ||
+    typeof proof.verifiedAt !== 'string' ||
+    !freshSpelling(proof) ||
+    !proof.terminal ||
+    typeof proof.terminal.verifiedAt !== 'string' ||
+    !freshSpelling({ ...proof, verifiedAt: proof.terminal.verifiedAt }) ||
+    typeof proof.terminal.word !== 'string' ||
+    !isValidWord(proof.terminal.word) ||
+    canonicalizeWord(proof.terminal.word) !== proof.terminal.word ||
+    (proof.revisionId !== undefined && !['string', 'number'].includes(typeof proof.revisionId))
+  )
+    return false
+  try {
+    const url = new URL(proof.sourceUrl)
+    const terminal = new URL(proof.terminal.sourceUrl)
+    return [url, terminal].every(
+      (url) => url.protocol === 'https:' && !url.username && !url.password
+    )
+  } catch {
+    return false
+  }
+}
+
+function proofChain(
+  word: string,
+  target: string,
+  proofs: SpellingProof[],
+  language: LanguageCode
+): SpellingProof[] | null {
+  const chain: SpellingProof[] = []
+  const seen = new Set<string>()
+  while (word !== target) {
+    if (seen.has(word) || chain.length >= MAX_SPELLING_REDIRECTS) return null
+    seen.add(word)
+    const matches = proofs.filter(
+      (proof) =>
+        proof.language === language &&
+        proof.word === word &&
+        validProof(proof) &&
+        proof.terminal.word === target
+    )
+    if (matches.length !== 1) return null
+    chain.push(matches[0])
+    word = matches[0].targetWord
+  }
+  return chain.length ? chain : null
+}
+
+export function spellingMetadata(chain: SpellingProof[]): EntrySpelling {
+  const first = chain[0]
+  return {
+    word: first.word,
+    language: first.language,
+    kind: chain.some((proof) => proof.kind === 'misspelling') ? 'misspelling' : 'spelling',
+    sourceUrl: first.sourceUrl,
+    ...(first.revisionId !== undefined ? { revisionId: first.revisionId } : {}),
+    verifiedAt: new Date(
+      Math.min(
+        ...chain.flatMap((proof) => [
+          Date.parse(proof.verifiedAt),
+          Date.parse(proof.terminal.verifiedAt),
+        ])
+      )
+    ).toISOString(),
+  }
+}
+
+function sameSpellingProof(left: EntrySpelling, right: EntrySpelling): boolean {
+  return (
+    left.word === right.word &&
+    left.language === right.language &&
+    left.kind === right.kind &&
+    left.sourceUrl === right.sourceUrl &&
+    left.revisionId === right.revisionId &&
+    left.verifiedAt === right.verifiedAt
+  )
+}
+
+export function mergeEntrySpellings(entry: WordEntry, incoming: EntrySpelling[]): WordEntry {
+  const spellings = new Map<string, EntrySpelling>()
+  for (const spelling of [...(entry.spellings ?? []), ...incoming]) {
+    if (
+      spelling.word !== entry.word &&
+      isSpellingEntry(entry, spelling.language) &&
+      freshSpelling(spelling)
+    ) {
+      spellings.set(`${spelling.language}:${spelling.word}`, spelling)
+    }
+  }
+  const otherScripts = normalizeScriptTargets(entry.otherScripts).filter(
+    (target) => !spellings.has(`${target.language}:${target.word}`)
+  )
+  return {
+    ...entry,
+    spellings: [...spellings.values()],
+    ...(entry.otherScripts ? { otherScripts } : {}),
+  }
+}
+
+export function hasEntrySpellings(entry: WordEntry, spellings: EntrySpelling[]): boolean {
+  return spellings.every((spelling) =>
+    entry.spellings?.some((stored) => sameSpellingProof(stored, spelling))
+  )
+}
+
+export function isSpellingEntry(entry: WordEntry, language: LanguageCode): boolean {
+  const histories = entry.entries[language]?.histories
+  return (
+    histories?.length === 1 && histories[0].entryKind !== 'form' && !!histories[0].definition.trim()
+  )
+}
+
+export async function getCachedSpellingEntry(
+  word: string,
+  hint?: LanguageCode
+): Promise<{ word: string; language: LanguageCode; entry: WordEntry; stale: boolean } | null> {
+  const candidates = candidateLanguages(word)
+  const language = hint ?? (candidates.length === 1 ? candidates[0] : undefined)
+  if (!language || !candidates.includes(language)) return null
+  const redis = getRedis()
+  if (!redis) return null
+  const normalized = canonicalizeWord(word)
+  try {
+    const raw = await redis.get<{ word?: unknown; revision?: unknown; proofs?: unknown }>(
+      `${SPELLING_ALIAS_PREFIX}${lexemeKey(language, normalized)}`
+    )
+    if (
+      !raw ||
+      raw.revision !== 1 ||
+      typeof raw.word !== 'string' ||
+      !Array.isArray(raw.proofs) ||
+      raw.proofs.length > MAX_SPELLING_REDIRECTS ||
+      !raw.proofs.every(validProof)
+    )
+      return null
+    const chain = proofChain(normalized, raw.word, raw.proofs, language)
+    if (!chain) return null
+    if (!hint) {
+      const original = await getCachedEntry(normalized)
+      if (original?.entry.languages.some((code) => code !== language)) return null
+    }
+    const target = await getCachedEntry(raw.word, { durableOnly: true })
+    if (
+      !target ||
+      !isSpellingEntry(target.entry, language) ||
+      !hasEntrySpellings(target.entry, [spellingMetadata(chain)])
+    )
+      return null
+    const forward = await redis.get<{ word?: unknown }>(
+      `${SPELLING_ALIAS_PREFIX}${lexemeKey(language, raw.word)}`
+    )
+    if (forward && typeof forward.word === 'string' && forward.word !== raw.word) return null
+    return { word: raw.word, language, ...target }
+  } catch (error) {
+    console.error('[Cache] Spelling alias read failed:', safeError(error))
+    return null
+  }
+}
+
+export async function publishSpellingAliases(
+  entry: WordEntry,
+  proofs: SpellingProof[]
+): Promise<void> {
+  const redis = getRedis()
+  if (!redis) return
+  const published: string[] = []
+  for (const { word, language } of entry.spellings ?? []) {
+    if (!isSpellingEntry(entry, language)) continue
+    const chain = proofChain(word, entry.word, proofs, language)
+    if (!chain || !hasEntrySpellings(entry, [spellingMetadata(chain)])) continue
+    const ttl = Math.floor(
+      (CONFIG.sourceCacheTTL * 1000 -
+        (Date.now() - Date.parse(spellingMetadata(chain).verifiedAt))) /
+        1000
+    )
+    if (ttl <= 0) continue
+    try {
+      await redis.set(
+        `${SPELLING_ALIAS_PREFIX}${lexemeKey(language, word)}`,
+        { word: entry.word, revision: 1, proofs: chain },
+        { ex: ttl }
+      )
+      published.push(word)
+    } catch (error) {
+      console.error('[Cache] Spelling alias write failed:', safeError(error))
+    }
+  }
+  if (published.length) {
+    try {
+      after(() => {
+        for (const word of published) revalidateTag(etymologyWordTag(word), { expire: 0 })
+      })
+    } catch (error) {
+      console.warn('[Cache] Spelling page revalidation skipped:', safeError(error))
+    }
+  }
+}
 
 export function etymologyWordTag(word: string): string {
   return `etymology-word:${canonicalizeWord(word)}`
@@ -136,7 +365,8 @@ function entryIsStale(entry: WordEntry): boolean {
 
 /** Validate on read; freshness never removes a word from the durable corpus. */
 export async function getCachedEntry(
-  word: string
+  word: string,
+  options?: { durableOnly?: boolean }
 ): Promise<{ entry: WordEntry; stale: boolean } | null> {
   const redis = getRedis()
   if (!redis) return null
@@ -159,9 +389,11 @@ export async function getCachedEntry(
       }
       if (parsed.data.word !== normalized) return null
       const entry = parsed.data as WordEntry
+      if (entry.spellings) entry.spellings = entry.spellings.filter(freshSpelling)
       return { entry, stale: entryIsStale(entry) }
     }
 
+    if (options?.durableOnly) return null
     const legacy = await Promise.allSettled(
       SUPPORTED_LANGUAGE_CODES.map((language) =>
         redis.get(
@@ -214,7 +446,16 @@ export async function cacheEntry(
   if (!redis) throw new Error(`Could not store entry "${normalized}": Redis is not configured`)
   const stored =
     options?.incomplete === undefined ? entry : { ...entry, incomplete: options.incomplete }
+  const revalidationWords = new Set([normalized])
   try {
+    const previous = await redis.get<WordEntry>(`${ENTRY_PREFIX}${normalized}`)
+    for (const spelling of [
+      ...(Array.isArray(previous?.spellings) ? previous.spellings : []),
+      ...(stored.spellings ?? []),
+    ]) {
+      if (typeof spelling?.word === 'string' && isValidWord(spelling.word))
+        revalidationWords.add(canonicalizeWord(spelling.word))
+    }
     await redis.set(`${ENTRY_PREFIX}${normalized}`, stored, { ex: CONFIG.etymologyCacheTTL })
   } catch (error) {
     throw new Error(`Could not store entry "${normalized}": ${safeError(error)}`)
@@ -224,7 +465,9 @@ export async function cacheEntry(
   // flushes these deferred invalidations once that body completes; expire: 0
   // makes the next page load see the entry rather than a stale ISR miss.
   try {
-    after(() => revalidateTag(etymologyWordTag(normalized), { expire: 0 }))
+    after(() => {
+      for (const word of revalidationWords) revalidateTag(etymologyWordTag(word), { expire: 0 })
+    })
   } catch (error) {
     console.warn('[Cache] Word page revalidation skipped:', safeError(error))
   }
