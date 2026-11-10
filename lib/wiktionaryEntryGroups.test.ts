@@ -314,6 +314,16 @@ test('Japanese pronunciation redirects retain every primary entry and require wh
       'つなみ'
     )
   ).toBeUndefined()
+  for (const ignored of ['<!-- ignored -->', '<h3>Pronunciation</h3>']) {
+    expect(
+      extractWiktionarySpellingRedirect(
+        fixture.html + `<scr${ignored}ipt>An independent sense.</script>`,
+        fixture.sections,
+        'Japanese',
+        'つなみ'
+      )
+    ).toBeUndefined()
+  }
 })
 
 test('whole-entry form redirects require one explicit same-language spelling definition', () => {

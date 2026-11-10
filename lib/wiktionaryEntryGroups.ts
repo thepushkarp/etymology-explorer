@@ -379,8 +379,8 @@ export function extractWiktionarySpellingRedirect(
       if (element) outside = outside.slice(0, marker.index) + outside.slice(element.end)
     }
     outside = outside
-      .replace(/<!--[\s\S]*?-->/g, '')
-      .replace(/<h[1-6]\b[^>]*>[\s\S]*?<\/h[1-6]>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, ' ')
+      .replace(/<h[1-6]\b[^>]*>[\s\S]*?<\/h[1-6]>/gi, ' ')
     if (
       tables.length !== 1 ||
       table.targetCount !== 1 ||
