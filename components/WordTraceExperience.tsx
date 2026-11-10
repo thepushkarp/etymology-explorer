@@ -56,7 +56,7 @@ export function WordTraceExperience({
   const { progress, search } = useStreamingEtymology()
   const [selectedLanguage, setSelectedLanguage] = useState<LanguageCode>()
   const selected =
-    selectedLanguage ??
+    (progress.status === 'error' ? language : selectedLanguage) ??
     language ??
     progress.result?.languages[0] ??
     progress.languages[0] ??
@@ -90,14 +90,20 @@ export function WordTraceExperience({
   const tabs = (
     <LanguageTabs
       word={word}
-      languages={progress.languages.length ? progress.languages : (initialEntry?.languages ?? [])}
+      languages={
+        progress.status === 'error' && initialEntry
+          ? initialEntry.languages
+          : progress.languages.length
+            ? progress.languages
+            : (initialEntry?.languages ?? [])
+      }
       otherLanguages={
         progress.otherLanguages.length
           ? progress.otherLanguages
           : (initialEntry?.otherLanguages ?? [])
       }
       language={selected}
-      onSelect={started ? setSelectedLanguage : undefined}
+      onSelect={started && progress.status !== 'error' ? setSelectedLanguage : undefined}
     />
   )
   const start = () => search(word, language, { refresh: stale })
