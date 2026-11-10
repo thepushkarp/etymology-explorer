@@ -47,7 +47,8 @@ jobs:
           git push origin "$source_sha:refs/heads/beta"
 
           deployment_json="$(bunx vercel@59.16.0 deploy --target preview --yes --json \
-            --meta githubDeployment=1 --meta githubCommitRef=beta \
+            --build-env APP_CHANNEL=beta \
+            --meta githubDeployment=1 --meta githubCommitRef=main \
             --meta "githubCommitSha=$source_sha" --token="$VERCEL_TOKEN")"
           if ! deployment_url="$(jq -er '
             (.deployment // .)

@@ -55,7 +55,9 @@ version, using the `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` repo
 
 `.github/workflows/deploy-beta.yml` fast-forwards the `beta` mirror branch to the latest `main`
 commit on each `main` push, using `GITHUB_TOKEN` with `contents: write`, then remotely builds a
-Vercel Preview deployment with the production workflow's Vercel secrets and `beta` branch metadata.
+Vercel Preview deployment with the production workflow's Vercel secrets, `main` branch metadata,
+and `APP_CHANNEL=beta` at build time. The domain remains mapped to the `beta` Preview branch;
+the workflow assigns it explicitly only after confirming the deployed SHA is still current on `main`.
 Runs are serialized, skip superseded commits, and may be dispatched manually only from `main`. Keep
 `beta` free of independent commits; the workflow never force-pushes. Connect `beta.etymex.com` to the
 `beta` Preview branch so production releases cannot reassign it. `vercel.json` disables automatic
