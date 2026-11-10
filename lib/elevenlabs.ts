@@ -16,10 +16,10 @@ const StockVoiceCatalog = z.object({
   voices: z.array(
     z.object({
       voice_id: z.string().min(1),
-      category: z.string(),
-      labels: z.record(z.string(), z.string()).optional(),
-      verified_languages: z.array(z.object({ language: z.string() })).optional(),
-      high_quality_base_model_ids: z.array(z.string()).optional(),
+      category: z.string().nullish(),
+      labels: z.record(z.string(), z.string()).nullish(),
+      verified_languages: z.array(z.object({ language: z.string() })).nullish(),
+      high_quality_base_model_ids: z.array(z.string()).nullish(),
     })
   ),
   has_more: z.boolean(),

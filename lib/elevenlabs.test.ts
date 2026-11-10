@@ -71,6 +71,13 @@ test('a confirmed voice failure selects a language-matched female stock voice on
       return Response.json({
         has_more: false,
         voices: [
+          {
+            voice_id: 'missing-metadata',
+            category: null,
+            labels: null,
+            verified_languages: null,
+            high_quality_base_model_ids: null,
+          },
           { voice_id: 'male', category: 'premade', labels: { gender: 'male', language: 'ja' } },
           { voice_id: 'custom', category: 'cloned', labels: { gender: 'female', language: 'ja' } },
           {
