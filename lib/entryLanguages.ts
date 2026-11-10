@@ -11,6 +11,7 @@ import type { LexemeResearchSession } from './lexemeResearch'
 import { canonicalizeWord } from './orthography'
 import { cacheSource, getCachedWiktionaryToc, type WiktionaryToc } from './sourceCache'
 import { extractWiktionaryLanguage, fetchWiktionaryPage, wiktionaryPageToc } from './wiktionary'
+import { comparableHeading } from './wiktionaryEntryGroups'
 
 export interface EntryLanguages {
   languages: LanguageCode[]
@@ -93,10 +94,13 @@ async function resolveLanguages(
     const definition = LANGUAGES[language]
     return (
       language === hint ||
-      englishToc?.nonemptyHeadings.includes(definition.englishWiktionaryHeading) ||
+      englishToc?.nonemptyHeadings
+        .map(comparableHeading)
+        .includes(comparableHeading(definition.englishWiktionaryHeading)) ||
       native
         .find(([code]) => code === language)?.[1]
-        ?.nonemptyHeadings.includes(definition.nativeWiktionary?.heading ?? '')
+        ?.nonemptyHeadings.map(comparableHeading)
+        .includes(comparableHeading(definition.nativeWiktionary?.heading ?? ''))
     )
   })
   if (!languages.length && !hint && detectScripts(normalized).includes('Latin'))
@@ -105,11 +109,16 @@ async function resolveLanguages(
   if (hint && !languages.includes(hint)) languages.push(hint)
   languages.sort((a, b) => LANGUAGES[a].priority - LANGUAGES[b].priority)
   const supportedHeadings = new Set(
-    SUPPORTED_LANGUAGE_CODES.map((code) => LANGUAGES[code].englishWiktionaryHeading)
+    SUPPORTED_LANGUAGE_CODES.map((code) =>
+      comparableHeading(LANGUAGES[code].englishWiktionaryHeading)
+    )
   )
   return {
     languages,
-    otherLanguages: englishToc?.headings.filter((heading) => !supportedHeadings.has(heading)) ?? [],
+    otherLanguages:
+      englishToc?.headings.filter(
+        (heading) => !supportedHeadings.has(comparableHeading(heading))
+      ) ?? [],
     ...(incomplete ? { incomplete: true } : {}),
   }
 }

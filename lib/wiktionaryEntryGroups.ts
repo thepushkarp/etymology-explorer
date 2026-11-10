@@ -49,7 +49,7 @@ function cleanHeading(value: string): string {
     .trim()
 }
 
-function comparableHeading(value: string): string {
+export function comparableHeading(value: string): string {
   return cleanHeading(value)
     .normalize('NFKD')
     .replace(/\p{Diacritic}/gu, '')

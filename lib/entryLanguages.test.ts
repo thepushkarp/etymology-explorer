@@ -56,8 +56,9 @@ function session(onProgress?: (event: StreamEvent) => void) {
 test('resolution includes English sections, native-only entries, hints and ordered unsupported headings', async () => {
   const requests = serve((url) => {
     if (url.hostname === 'en.wiktionary.org')
-      return Response.json(page(['English', 'German', 'French', 'Latin']))
+      return Response.json(page(['English', 'German', 'Latin']))
     if (url.hostname === 'it.wiktionary.org') return Response.json(page(['Italiano']))
+    if (url.hostname === 'fr.wiktionary.org') return Response.json(page(['fran&#231;ais']))
     return new Response('', { status: 404 })
   })
   const shared = session()
