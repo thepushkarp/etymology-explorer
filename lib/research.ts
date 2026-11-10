@@ -81,10 +81,11 @@ function completeResearch(context: ResearchContext, budget: SourceFetchBudget): 
   }
   context.totalSourcesFetched = budget.attempts
   if (
-    !mainSourceRecords(context.mainWord).some(
+    hasCredibleMainSource(context) &&
+    (!mainSourceRecords(context.mainWord).some(
       (source) => sourceEvidenceRole(source) === 'etymology'
     ) ||
-    context.rootResearch.some((root) => !lexicalSourceRecords(rootSourceRecords(root)).length)
+      context.rootResearch.some((root) => !lexicalSourceRecords(rootSourceRecords(root)).length))
   ) {
     context.incompleteResearch = true
   }

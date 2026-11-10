@@ -913,7 +913,11 @@ describe('source rate limits are temporary failures', () => {
   test('genuine HTTP 404 absence remains a no-source result', async () => {
     respond(404)
     for (const language of ['en', 'fr'] as const) {
-      expect(hasCredibleMainSource(await conductAgenticResearch('bank', { language }))).toBe(false)
+      for (const word of ['bank', 'bank word']) {
+        const context = await conductAgenticResearch(word, { language })
+        expect(hasCredibleMainSource(context)).toBe(false)
+        expect(context.incompleteResearch).not.toBe(true)
+      }
     }
   })
 })
