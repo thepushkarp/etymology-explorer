@@ -47,7 +47,7 @@ export const faqs: FaqItem[] = [
   {
     question: 'Which languages can I explore?',
     answer:
-      'Etymology Explorer supports nine languages: English, Italian, Spanish, French, Portuguese, Hindi, Urdu, Sanskrit, and Japanese. Enter Hindi and Sanskrit in Devanagari, Urdu in Arabic script, and Japanese in kanji or kana. Explanations stay in English, with source-backed transliterations where available. Japanese histories use English Wiktionary with native-edition context and supplementary JMdict lexical data via Jisho. Japanese word-origin labels appear only when supported by sources. Pronunciation audio is generated for the selected word and language, independently of a history’s displayed IPA. Audio is available for Hindi, Urdu, and Japanese; Sanskrit audio and usage charts for these four languages are unavailable.',
+      'Etymology Explorer supports nine languages: English, Italian, Spanish, French, Portuguese, Hindi, Urdu, Sanskrit, and Japanese. Enter Hindi and Sanskrit in Devanagari, Urdu in Arabic script, and Japanese in kanji or kana. Explanations stay in English, with source-backed transliterations where available. Japanese histories use English Wiktionary with native-edition context and supplementary JMdict lexical data via Jisho. Japanese word-origin labels appear only when supported by sources. Pronunciation audio is generated for the selected word and language, independently of a history’s displayed IPA. Audio is available for Hindi, Urdu, and Japanese. Sanskrit entries offer a labelled Hindi reading of the Devanagari spelling. Usage charts for these four languages are unavailable.',
     searchExample: 'पानी',
   },
 ]

@@ -208,6 +208,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     wikipediaEdition: 'sa',
     wikidataEntity: 'Q11059',
     ngramCorpus: null,
+    ttsLanguageCode: 'hi',
     particles: ['च', 'वा'],
     promptNotes:
       'SANSKRIT: distinguish source-attested words from grammatical roots marked √. Never present a root as an attested ancestor word. Preserve Vedic and Classical period distinctions when the sources make them.',

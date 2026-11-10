@@ -9,7 +9,7 @@ import { CONFIG } from '@/lib/config'
 import { LANGUAGES, lexemeKey, parseLanguageCode } from '@/lib/languages'
 import { incrLanguageCounter } from '@/lib/counters'
 
-// TTS generation has a 15s timeout, plus cache round-trips and waiter polling.
+// A configured voice and one stock fallback each have a 15s timeout; catalog lookup is bounded.
 export const maxDuration = 60
 
 export async function GET(request: NextRequest) {
@@ -51,10 +51,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          'Pronunciation service not configured. Set ELEVENLABS_API_KEY and ' +
-          'ELEVENLABS_VOICE_ID to a voice available in your My Voices list. ' +
-          'Free-tier accounts cannot use Voice Library voices via the API.',
+        error: 'Pronunciation service not configured. Set ELEVENLABS_API_KEY.',
       },
       { status: 503 }
     )

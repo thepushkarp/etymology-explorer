@@ -94,13 +94,8 @@ FORCE_CACHE_ONLY=false
 RATE_LIMIT_ENABLED=true
 ```
 
-`ELEVENLABS_VOICE_ID` must be a voice available to your account in `My Voices`.
-Free-tier accounts cannot use Voice Library/community voices through the API.
-Pronunciation requests pass the selected ISO 639-1 `language_code` to `eleven_v4` for
-language selection and text normalization. [ElevenLabs lists Hindi and Urdu support](https://elevenlabs.io/docs/overview/models); Sanskrit pronunciation is unavailable.
-Audio is generated from the headword and selected language, independently of a selected history's displayed IPA.
-Accent still depends on the configured voice;
-`pt` does not select a Brazilian or European accent.
+`ELEVENLABS_API_KEY` enables pronunciation. Optional `ELEVENLABS_VOICE_ID` is the preferred voice for every language. If that voice is missing or the provider confirms it is inaccessible, the app selects one female premade stock voice from the [official catalog](https://elevenlabs.io/docs/api-reference/voices/search), preferring target-language labels or verified-language metadata, then multilingual capability. Authentication, quota, rate-limit, and general server errors do not trigger a voice retry.
+Pronunciation requests pass the speech language’s ISO 639-1 `language_code` to `eleven_v4`. Sanskrit entries keep their lexical identity and offer a labelled Hindi reading of their Devanagari spelling, rather than a claim of classical Sanskrit pronunciation. Audio is generated from the headword, independently of a selected history’s displayed IPA; voice quality and regional accent are not guaranteed by catalog metadata.
 
 See `.env.example` for full documentation.
 

@@ -10,6 +10,7 @@ plain-text bullet under a `###` group. `Unreleased` stays out of the dialog.
 
 ### Added
 
+- Hear a labelled Hindi reading of Sanskrit Devanagari, with female stock voice fallback when the preferred voice is unavailable.
 - Follow attested lineage forms, source-listed spelling counterparts, and romanization links across supported languages.
 - Explore Japanese words with source-backed histories, word-origin labels, Japanese typography, and credited JMdict lexical context.
 - Explore Hindi, Urdu, and Sanskrit words in their native scripts, with source-backed transliterations, language tabs, and curated discovery words.

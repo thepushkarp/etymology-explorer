@@ -142,7 +142,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   persists the complete clip before releasing the lock, keeping cleanup alive on serverless
   runtimes. Concurrent listeners poll at `audioWaiterPollIntervalMs` (250 ms); cached clips
   remain available under budget pressure and retain the one-year HTTP cache lifetime.
-  The configured `eleven_v4` model supports Hindi and Urdu, as listed in the [ElevenLabs models documentation](https://elevenlabs.io/docs/overview/models). Sanskrit has no pronunciation capability; Hindi, Urdu, and Sanskrit have no ngram corpus.
+  The `eleven_v4` model receives the speech language code; Sanskrit retains `sa` lexical/cache/lock identity but uses `hi` speech, labelled as a Hindi reading. The configured voice is preferred for every language. Missing voice configuration or precise voice-specific provider errors permit one female premade stock voice selected from the [official catalog](https://elevenlabs.io/docs/api-reference/voices/search), ranked by language metadata before multilingual capability. Auth, quota, rate-limit, and general server failures never trigger that retry. Primary and fallback synthesis each have a 15-second timeout, plus a five-second catalog lookup, within the route’s 60-second duration. Hindi, Urdu, Sanskrit, and Japanese have no ngram corpus.
 
 - **`lib/counters.ts`** - Best-effort monthly INCR counters (cache_hit / cache_miss / error), exposed via `/api/admin/stats`
 
@@ -340,7 +340,7 @@ When adding UI: _"Would this feel at home in a beautifully typeset etymology dic
 | `/api/etymology`     | GET    | Main synthesis - `?word=X`; optional `?stream=true` for SSE (server-side API key) |
 | `/api/suggestions`   | GET    | Autocomplete + typo suggestions - `?q=word`                                       |
 | `/api/random-word`   | GET    | Random GRE word (crypto randomness)                                               |
-| `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, 15s timeout)                                |
+| `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, bounded voice fallback)                     |
 | `/api/ngram`         | GET    | Google Books ngram usage data - `?word=word`                                      |
 | `/api/health`        | GET    | Liveness check                                                                    |
 | `/api/changelog`     | GET    | Released versions parsed from `CHANGELOG.md` (prerendered at build)               |

@@ -137,6 +137,15 @@ describe('EtymologyCard', () => {
     expect(withoutMetadata).not.toContain('EDRDG')
   })
 
+  test('labels Sanskrit speech as a Hindi reading without changing lexical identity', () => {
+    const markup = renderToStaticMarkup(
+      <EtymologyCard result={{ ...result('en'), language: 'sa', word: 'धर्म' }} />
+    )
+    expect(markup).toContain('lang="sa" dir="auto"')
+    expect(markup).toContain('aria-label="Play Hindi reading of धर्म"')
+    expect(markup).toContain('title="Listen to Hindi reading (p)"')
+  })
+
   test('omits examples for entries cached before they existed', () => {
     const markup = renderToStaticMarkup(<EtymologyCard result={result('en')} />)
     expect(markup).not.toContain('id="entry-examples"')

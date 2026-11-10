@@ -283,10 +283,14 @@ describe('independent negative and audio caches', () => {
     expect(await getCachedAudio(' NICE ')).toBe('audio')
     await cacheAudio('nice', 'audio')
     await cacheAudio('sale', 'italian', 'it')
+    await cacheAudio('धर्म', 'hindi', 'hi')
+    await cacheAudio('धर्म', 'hindi reading', 'sa')
     expect(currentRedis.get).toHaveBeenCalledWith('audio:v2:nice')
     expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
       'audio:v2:nice',
       'audio:v2:it:sale',
+      'audio:v2:hi:धर्म',
+      'audio:v2:sa:धर्म',
     ])
   })
 })
