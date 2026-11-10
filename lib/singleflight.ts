@@ -174,7 +174,6 @@ export async function markLockFailure(
   }
 }
 
-/** Read validated holder-failure metadata, preserving the original message. */
 export async function getLockFailure(
   lockKey: string,
   client: SingleflightRedis | null = getRedis()
