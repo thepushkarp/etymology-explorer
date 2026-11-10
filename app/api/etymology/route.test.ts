@@ -23,8 +23,19 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     expect(code, stdout + stderr).toBe(0)
   }, 30_000)
 } else {
+  const { mergeEntrySpellings, hasEntrySpellings, isSpellingEntry } = await import('@/lib/cache')
   let saved: { entry: WordEntry; stale: boolean } | null = null
-  let read: (() => typeof saved) | undefined
+  let read: ((word: string) => typeof saved) | undefined
+  let identityTarget: string | undefined
+  let identityIncomplete = false
+  let aliasHit: { entry: WordEntry; stale: boolean } | null = null
+  let resultWord = 'chat'
+  let exclusiveLock = false
+  let held = false
+  let synthesisGate: Promise<void> | undefined
+  let onLockAttempt: ((busy: boolean) => void) | undefined
+  let onSynthesisStarted: (() => void) | undefined
+  let costMode = 'normal'
   let languages: LanguageCode[] = ['en', 'fr']
   let otherScripts: ScriptTarget[] = []
   let resolutionIncomplete = false
@@ -49,10 +60,12 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     reads: 0,
     researchLanguages: [] as LanguageCode[],
     failureMetadata: undefined as unknown,
+    published: 0,
+    identity: 0,
   }
   const usage = { inputTokens: 10, outputTokens: 5 }
   const result = (language: LanguageCode): EtymologyResult =>
-    etymologyResult({ word: 'chat', language, definition: `new ${language}` })
+    etymologyResult({ word: resultWord, language, definition: `new ${language}` })
   const entry = (): WordEntry => ({
     word: 'chat',
     languages: ['en', 'fr'],
@@ -76,9 +89,17 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     },
   }))
   mock.module('@/lib/cache', () => ({
-    getCachedEntry: async () => {
+    getCachedEntry: async (word: string) => {
       calls.reads++
-      return read ? read() : saved
+      return read ? read(word) : saved?.entry.word === word ? saved : null
+    },
+    getCachedSpellingEntry: async () =>
+      aliasHit && { ...aliasHit, word: aliasHit.entry.word, language: 'ja' },
+    mergeEntrySpellings,
+    hasEntrySpellings,
+    isSpellingEntry,
+    publishSpellingAliases: async () => {
+      calls.published++
     },
     cacheEntry: async (_word: string, value: WordEntry) => {
       calls.writes++
@@ -99,8 +120,30 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
       if (!saved) negatives.set(hint, offers?.length ? { otherScripts: offers } : {})
     },
   }))
+  mock.module('@/lib/entryIdentity', () => ({
+    resolveEntryIdentity: async (word: string) => {
+      calls.identity++
+      if (!identityTarget || word === identityTarget)
+        return { word, spellings: [], proofs: [], incomplete: identityIncomplete }
+      resultWord = identityTarget
+      return {
+        word: identityTarget,
+        language: 'ja',
+        proofs: [],
+        spellings: [
+          {
+            word,
+            language: 'ja',
+            kind: 'spelling',
+            sourceUrl: 'https://en.wiktionary.org/wiki/' + encodeURIComponent(word),
+            verifiedAt: new Date(Date.now()).toISOString(),
+          },
+        ],
+      }
+    },
+  }))
   mock.module('@/lib/costGuard', () => ({
-    getCostMode: async () => 'normal',
+    getCostMode: async () => costMode,
     recordSpend: async (value: unknown) => {
       calls.spend.push(value)
     },
@@ -112,11 +155,16 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
   mock.module('@/lib/singleflight', () => ({
     tryAcquireLock: async (key: string) => {
       calls.locks.push(key)
-      return lock === 'busy' ? { status: 'busy' } : { status: 'acquired', token: 'token' }
+      const busy = lock === 'busy' || (exclusiveLock && held)
+      onLockAttempt?.(busy)
+      if (busy) return { status: 'busy' }
+      held = true
+      return { status: 'acquired', token: 'token' }
     },
     startLockHeartbeat: () => () => {},
     releaseLock: async () => {
       calls.released++
+      held = false
     },
     markLockFailure: async (_key: string, metadata: unknown) => {
       calls.failureMetadata = metadata
@@ -156,6 +204,8 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     getLlmUsageFromError: (error: unknown) => (error as { usage?: unknown })?.usage,
     synthesizeFromResearch: async (context: { language: LanguageCode }) => {
       calls.synthesis++
+      onSynthesisStarted?.()
+      await synthesisGate
       if (context.language === failLanguage) {
         throw Object.assign(new Error('Schema validation failed'), { usage })
       }
@@ -163,12 +213,26 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     },
   }))
   const { GET } = await import('./route')
-  const get = (query = '', signal?: AbortSignal) =>
-    GET(new NextRequest('http://localhost/api/etymology?word=chat' + query, { signal }))
+  const get = (query = '', signal?: AbortSignal, word = 'chat') =>
+    GET(
+      new NextRequest('http://localhost/api/etymology?word=' + encodeURIComponent(word) + query, {
+        signal,
+      })
+    )
 
   beforeEach(() => {
     saved = null
     read = undefined
+    identityTarget = undefined
+    identityIncomplete = false
+    aliasHit = null
+    resultWord = 'chat'
+    exclusiveLock = held = false
+    synthesisGate = undefined
+    onLockAttempt = onSynthesisStarted = undefined
+    costMode = 'normal'
+    calls.identity = 0
+    calls.published = 0
     languages = ['en', 'fr']
     otherScripts = []
     resolutionIncomplete = false
@@ -193,6 +257,101 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     calls.researchLanguages = []
     calls.failureMetadata = undefined
     negatives.clear()
+  })
+
+  test('cached aliases precede absence and concurrent spellings share the canonical lock', async () => {
+    resultWord = '津波'
+    const canonical: WordEntry = {
+      ...entry(),
+      word: resultWord,
+      languages: ['ja'],
+      entries: { ja: result('ja') },
+    }
+    aliasHit = { entry: canonical, stale: false }
+    negatives.set('ja', {})
+    const warm = await get('&language=ja&stream=true', undefined, 'つなみ')
+    const events = (await warm.text())
+      .split('\n\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line.slice(6)))
+    expect(events.map((event) => event.type)).toEqual(['entry_identity', 'result'])
+    expect(events[0].word).toBe('津波')
+    expect(calls.negative).toEqual([])
+    expect(calls.research).toBe(0)
+
+    aliasHit = null
+    for (const mode of ['normal', 'cache_only']) {
+      costMode = mode
+      expect((await get('&language=ja', undefined, 'つなみ')).status).toBe(404)
+    }
+    expect(calls.identity).toBe(0)
+    costMode = 'normal'
+    negatives.clear()
+    identityTarget = '津波'
+    languages = ['ja']
+    saved = { entry: canonical, stale: true }
+    lock = 'busy'
+    const waiting = Promise.withResolvers<void>()
+    onLockAttempt = (busy) => {
+      if (busy) waiting.resolve()
+    }
+    const now = Date.now()
+    const clock = spyOn(Date, 'now').mockReturnValue(now)
+    try {
+      const refresh = get('&language=ja&refresh=1', undefined, '津波')
+      await waiting.promise
+      onLockAttempt = undefined
+      lock = 'acquired'
+      expect((await get('&language=ja', undefined, 'つなみ')).status).toBe(200)
+      expect(saved!.entry.tracedAt).toBe(canonical.tracedAt)
+      clock.mockReturnValue(now + 1000)
+      expect((await refresh).status).toBe(429)
+    } finally {
+      clock.mockRestore()
+    }
+    const ambiguous = structuredClone(canonical)
+    ambiguous.entries.ja!.histories.push({ ...ambiguous.entries.ja!.histories[0], id: 'other' })
+    let canonicalReads = 0
+    read = (word) =>
+      word === canonical.word
+        ? { entry: ++canonicalReads === 1 ? canonical : ambiguous, stale: true }
+        : null
+    const conflict = await get('&language=ja', undefined, 'つなみ')
+    expect(conflict.status).toBe(409)
+    expect((await conflict.json()).data.otherScripts).toEqual([{ word: '津波', language: 'ja' }])
+    read = undefined
+    saved = null
+    exclusiveLock = true
+    let release!: () => void
+    synthesisGate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const synthesizing = Promise.withResolvers<void>()
+    const contended = Promise.withResolvers<void>()
+    onSynthesisStarted = synthesizing.resolve
+    onLockAttempt = (busy) => {
+      if (busy) contended.resolve()
+    }
+    const concurrentClock = spyOn(Date, 'now').mockReturnValue(Date.now())
+    let results: Response[]
+    try {
+      const first = get('&language=ja', undefined, 'つなみ')
+      const second = get('&language=ja', undefined, 'ツナミ')
+      await Promise.all([synthesizing.promise, contended.promise])
+      onLockAttempt = onSynthesisStarted = undefined
+      release()
+      results = await Promise.all([first, second])
+    } finally {
+      concurrentClock.mockRestore()
+    }
+    expect(results.map((response) => response.status)).toEqual([200, 200])
+    expect(new Set(calls.locks)).toEqual(new Set(['lock:etymology:津波']))
+    expect(calls.synthesis).toBe(1)
+    expect(saved!.entry.word).toBe('津波')
+    expect(saved!.entry.spellings?.map((spelling) => spelling.word).sort()).toEqual([
+      'つなみ',
+      'ツナミ',
+    ])
   })
 
   test('partial refresh keeps the failed language and its original freshness', async () => {
@@ -240,7 +399,9 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     original.languages = ['en']
     delete original.entries.fr
     saved = { entry: original, stale: false }
+    costMode = 'cache_only'
     expect((await get('&language=fr')).status).toBe(404)
+    expect(calls.identity).toBe(0)
     expect(calls.research).toBe(0)
     expect(calls.spend).toHaveLength(0)
   })
@@ -287,7 +448,15 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     languages = []
     resolutionIncomplete = true
     expect((await get()).status).toBe(500)
+    resolutionIncomplete = false
+    identityIncomplete = true
+    expect((await get()).status).toBe(500)
     expect(calls.negative.some((item) => (item as string[])[0] === 'write')).toBe(false)
+    languages = ['ja']
+    resultWord = '電話'
+    const response = await get('&language=ja', undefined, resultWord)
+    expect(response.status).toBe(200)
+    expect((await response.json()).data.incomplete).toBe(true)
   })
   test('refresh waiters ignore the prior cached generation', async () => {
     const original = entry()

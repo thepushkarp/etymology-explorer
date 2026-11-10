@@ -5,7 +5,9 @@ import {
   cleanWiktionaryHtml,
   extractWiktionaryEntryGroups,
   extractWiktionaryRomanizations,
+  extractWiktionarySpellingRedirect,
   extractWiktionaryVariants,
+  isWiktionarySpellingLemma,
   type WiktionaryTocSection,
 } from './wiktionaryEntryGroups'
 
@@ -124,7 +126,7 @@ test('Japanese publisher spelling tables retain only their labelled history targ
   const unrelated =
     '<table><tr><th>Related terms</th></tr><tr><td><span lang="ja"><a href="/wiki/食パン#Japanese">食パン</a></span></td></tr></table>'
   const redirectDefinitions =
-    '<table class="ja-see"><tr><td><b>For pronunciation and definitions of パン – see the following entry.</b></td><td><span lang="ja"><a href="/wiki/ぱん#Japanese">ぱん</a></span></td></tr><tr><td><span lang="ja"><a href="/wiki/無関係#Japanese">無関係</a></span></td></tr></table>'
+    '<table class="ja-see"><tr><td><b>For pronunciation and definitions of パン – see the following entry.</b></td><td><span lang="ja">【<a href="/wiki/ぱん#Japanese">ぱん</a>】</span></td></tr><tr><td><span lang="ja"><a href="/wiki/無関係#Japanese">無関係</a></span></td></tr></table>'
   const html = `<h2 id="Japanese">Japanese</h2><h3 id="E1">Etymology 1</h3>${table('麵麭')}${headword}${unrelated}${redirectDefinitions}<h3 id="E2">Etymology 2</h3>${table('麺包')}${headword}`
   expect(
     extractWiktionaryEntryGroups(html, sections, 'Japanese', /^Etymology/, 'パン').map(
@@ -206,6 +208,30 @@ test('recorded ruby annotations preserve headword and component spelling identit
     tsunami.word
   )
   expect(compound.relations?.map(({ target }) => target.word)).toEqual(['津', '波'])
+  const lemma = tsunami.html + '<ol><li>A tsunami, a tidal wave.</li></ol>'
+  expect(isWiktionarySpellingLemma(lemma, tsunami.sections, 'Japanese', '津波', '津波')).toBe(true)
+  for (const [html, requested, resolved] of [
+    [lemma, '津波', '津浪'],
+    [lemma, 'つなみ', 'つなみ'],
+    [
+      lemma.replace(
+        '<ol>',
+        '<ol><li><span class="form-of-definition">form of another word</span></li>'
+      ),
+      '津波',
+      '津波',
+    ],
+    [lemma + '<p><strong class="headword" lang="ja">津波</strong></p>', '津波', '津波'],
+    [lemma + '<h3>Etymology 2</h3>', '津波', '津波'],
+  ]) {
+    expect(isWiktionarySpellingLemma(html, tsunami.sections, 'Japanese', requested, resolved)).toBe(
+      false
+    )
+  }
+  const reading = japaneseFixtures['ja-tsunami-reading']
+  expect(
+    isWiktionarySpellingLemma(reading.html, reading.sections, 'Japanese', 'つなみ', 'つなみ')
+  ).toBe(false)
 })
 
 test('term formulas in definitions do not become entry etymology relations', () => {
@@ -249,7 +275,7 @@ test('rejected analyses and quoted comparisons do not establish component relati
   ).toBeUndefined()
 })
 
-test('Japanese pronunciation redirects follow the primary entry and retain language boundaries', () => {
+test('Japanese pronunciation redirects retain every primary entry and require whole-section identity', () => {
   const fixture = japaneseFixtures['ja-tsunami-reading']
   expect(extractWiktionaryVariants(fixture.html, fixture.sections, 'Japanese')).toEqual([
     {
@@ -259,6 +285,66 @@ test('Japanese pronunciation redirects follow the primary entry and retain langu
     },
   ])
   expect(extractWiktionaryVariants(fixture.html, fixture.sections, 'English')).toEqual([])
+  expect(
+    extractWiktionarySpellingRedirect(fixture.html, fixture.sections, 'Japanese', 'つなみ')
+  ).toEqual({ word: '津波', language: 'ja', kind: 'spelling' })
+  const ambiguous = fixture.html.replace(
+    '</td></tr></tbody></table>',
+    '</td></tr><tr><td><span lang="ja">【<a href="/wiki/橋#Japanese">橋</a>】</span></td></tr></tbody></table>'
+  )
+  expect(
+    extractWiktionaryVariants(ambiguous, fixture.sections, 'Japanese').map(({ word }) => word)
+  ).toEqual(['津波', '橋'])
+  expect(
+    extractWiktionarySpellingRedirect(ambiguous, fixture.sections, 'Japanese', 'つなみ')
+  ).toBeUndefined()
+  const ambiguousBracket = fixture.html.replace(
+    '</a>】',
+    '</a><a href="/wiki/橋#Japanese">橋</a>】'
+  )
+  expect(
+    extractWiktionarySpellingRedirect(ambiguousBracket, fixture.sections, 'Japanese', 'つなみ')
+  ).toBeUndefined()
+  expect(
+    extractWiktionarySpellingRedirect(
+      fixture.html +
+        '<p><strong class="headword" lang="ja">つなみ</strong></p><ol><li>An independent sense.</li></ol>',
+      fixture.sections,
+      'Japanese',
+      'つなみ'
+    )
+  ).toBeUndefined()
+  for (const ignored of ['<!-- ignored -->', '<h3>Pronunciation</h3>']) {
+    expect(
+      extractWiktionarySpellingRedirect(
+        fixture.html + `<scr${ignored}ipt>An independent sense.</script>`,
+        fixture.sections,
+        'Japanese',
+        'つなみ'
+      )
+    ).toBeUndefined()
+  }
+})
+
+test('whole-entry form redirects require one explicit same-language spelling definition', () => {
+  const sections = [{ index: '1', line: 'Japanese', anchor: 'Japanese', hLevel: 2, number: '1' }]
+  const html =
+    '<h2 id="Japanese">Japanese</h2><p><strong class="headword" lang="ja">こんにちわ</strong></p><ol><li><span class="form-of-definition">misspelling of <span class="form-of-definition-link"><i lang="ja"><a href="/wiki/こんにちは#Japanese">こんにちは</a></i></span></span></li></ol>'
+  expect(extractWiktionarySpellingRedirect(html, sections, 'Japanese', 'こんにちわ')).toEqual({
+    word: 'こんにちは',
+    language: 'ja',
+    kind: 'misspelling',
+  })
+  for (const invalid of [
+    html.replace('</ol>', '<li>An independent meaning.</li></ol>'),
+    html.replace('misspelling of', 'related to'),
+    html.replace('lang="ja"><a', 'lang="hi"><a'),
+    html.replace('<p>', '<h3>Etymology 1</h3><h3>Etymology 2</h3><p>'),
+  ]) {
+    expect(
+      extractWiktionarySpellingRedirect(invalid, sections, 'Japanese', 'こんにちわ')
+    ).toBeUndefined()
+  }
 })
 
 describe('extractWiktionaryEntryGroups', () => {

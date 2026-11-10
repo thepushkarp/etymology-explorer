@@ -11,6 +11,7 @@ Try it out at [etymex.com](https://etymex.com)
 - **Automatic Language Discovery**: One spelling opens English, Italian, Spanish, French, Portuguese, Hindi, Urdu, Sanskrit, and Japanese histories together in language tabs; a manual language hint also finds specialist-only entries. Explanations are English, with translated examples in the word's own language
 - **Native Scripts**: Search Hindi and Sanskrit in Devanagari, Urdu in Arabic script, and Japanese in kanji or kana, with source-backed transliterations and right-to-left Urdu text
 - **Cross-language Links**: Open attested lineage forms and each history's source-listed spelling counterparts. Explicit Wiktionary romanizations offer links to native spellings while preserving entries for the original spelling; only clicking a link starts a new trace
+- **Shared Spelling Entries**: Unambiguous Japanese dictionary redirects share one entry, cache, and canonical URL. Linked spellings retain misspelling labels; homophones and independent borrowed-word entries remain separate
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
 - **Part of Speech Tags**: See grammatical categories (noun/verb/adjective) with alternate pronunciations for words like "record"
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
@@ -95,7 +96,7 @@ RATE_LIMIT_ENABLED=true
 ```
 
 `ELEVENLABS_API_KEY` enables pronunciation. Optional `ELEVENLABS_VOICE_ID` is the preferred voice for every language. If that voice is missing or the provider confirms it is inaccessible, the app selects one female premade stock voice from the [official catalog](https://elevenlabs.io/docs/api-reference/voices/search), preferring target-language labels or verified-language metadata, then multilingual capability. Authentication, quota, rate-limit, and general server errors do not trigger a voice retry.
-Pronunciation requests pass the speech language’s ISO 639-1 `language_code` to `eleven_v4`. Sanskrit entries keep their lexical identity and offer a labelled Hindi reading of their Devanagari spelling, rather than a claim of classical Sanskrit pronunciation. Audio is generated from the headword, independently of a selected history’s displayed IPA; voice quality and regional accent are not guaranteed by catalog metadata.
+Pronunciation requests pass the speech language’s ISO 639-1 `language_code` to `eleven_v4`. Sanskrit entries keep their lexical identity and offer a labelled Hindi reading of their Devanagari spelling, rather than a claim of classical Sanskrit pronunciation. Audio uses a unique verified kana reading for a Japanese entry with one history when available, otherwise the headword, independently of the displayed IPA; voice quality and regional accent are not guaranteed by catalog metadata.
 
 See `.env.example` for full documentation.
 

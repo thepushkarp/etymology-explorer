@@ -290,8 +290,8 @@ test('romanization offers retain English, follow one explicit written-form redir
       const response = page(['Japanese'], 'つなみ')
       response.parse.text =
         '<h2 id="language-0">Japanese</h2><table class="wikitable ja-see"><tr><td>' +
-        '<b>For pronunciation and definitions of つなみ – see the following entry.</b></td></tr>' +
-        '<tr><td><a href="/wiki/津波#Japanese">津波</a></td><td>' +
+        '<b>For pronunciation and definitions of <span lang="ja">つなみ</span> – see the following entry.</b></td></tr>' +
+        '<tr><td><span lang="ja">【<a href="/wiki/津波#Japanese">津波</a>】</span></td><td>' +
         '<a href="/wiki/海嘯#Japanese">海嘯</a> in another definition</td></tr></table>'
       return Response.json(response)
     })

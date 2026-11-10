@@ -19,6 +19,7 @@ interface EtymologyCardProps {
   usageUnavailable?: boolean
   actions?: ReactNode
   subheader?: ReactNode
+  pronunciationWord?: string
 }
 
 export function EtymologyCard({
@@ -27,6 +28,7 @@ export function EtymologyCard({
   usageUnavailable = false,
   actions,
   subheader,
+  pronunciationWord,
 }: EtymologyCardProps) {
   const isEnglish = result.language === 'en'
   const hasAncestry = result.ancestryGraph.branches.length > 0
@@ -34,7 +36,13 @@ export function EtymologyCard({
 
   return (
     <article aria-busy={pending}>
-      <EntryHeader result={result} actions={actions} subheader={subheader} pending={pending} />
+      <EntryHeader
+        result={result}
+        actions={actions}
+        subheader={subheader}
+        pending={pending}
+        pronunciationWord={pronunciationWord}
+      />
 
       {(hasAncestry || pending) && (
         <Section id="entry-ancestry" title="Lineage">

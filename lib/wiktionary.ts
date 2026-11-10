@@ -6,7 +6,9 @@ import {
   extractWiktionaryEntryGroups,
   extractWiktionaryLanguageText,
   extractWiktionaryRomanizations,
+  extractWiktionarySpellingRedirect,
   extractWiktionaryVariants,
+  isWiktionarySpellingLemma,
   type WiktionaryTocSection,
 } from './wiktionaryEntryGroups'
 import { fetchWithTimeout } from './fetchUtils'
@@ -23,6 +25,7 @@ export interface WiktionaryPage {
   html: string
   sections: WiktionaryTocSection[]
   revid?: number
+  fetchedAt?: string
 }
 
 export interface WiktionaryFetchOptions {
@@ -129,6 +132,7 @@ export function fetchWiktionaryPage(
           html: page.text,
           sections: page.tocdata.sections,
           revid: page.revid,
+          fetchedAt: new Date().toISOString(),
         }
         await cacheWiktionaryToc(normalizedWord, edition, wiktionaryPageToc(result))
         return result
@@ -202,9 +206,28 @@ export function extractWiktionaryLanguage(
       { title: page.title, edition }
     ),
     variants,
+    ...(edition === 'en' && language && LANGUAGES[language].spellingIdentity
+      ? {
+          spellingRedirect: extractWiktionarySpellingRedirect(
+            page.html,
+            page.sections,
+            heading,
+            page.requestedWord,
+            edition
+          ),
+          spellingLemma: isWiktionarySpellingLemma(
+            page.html,
+            page.sections,
+            heading,
+            page.requestedWord,
+            page.title
+          ),
+        }
+      : {}),
     requestedWord: page.requestedWord,
     resolvedWord: page.title,
     revisionId: page.revid,
+    retrieval: { method: 'direct', retrievedAt: page.fetchedAt ?? new Date().toISOString() },
     ...(language ? { language } : {}),
   }
 }

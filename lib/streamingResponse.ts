@@ -27,11 +27,18 @@ function serializeEvent(event: StreamEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`
 }
 
-export function streamResultResponse(result: WordEntry, headers?: HeadersInit): Response {
-  return new Response(serializeEvent({ type: 'result', data: result }), {
-    status: 200,
-    headers: buildHeaders(headers),
-  })
+export function streamResultResponse(
+  result: WordEntry,
+  headers?: HeadersInit,
+  identity?: Extract<StreamEvent, { type: 'entry_identity' }>
+): Response {
+  return new Response(
+    (identity ? serializeEvent(identity) : '') + serializeEvent({ type: 'result', data: result }),
+    {
+      status: 200,
+      headers: buildHeaders(headers),
+    }
+  )
 }
 
 export function streamErrorResponse(

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { parseLanguageCode } from '@/lib/languages'
 import { getRecentSearches, recordRecentSearch } from '@/lib/recentSearches'
 import { isValidWord } from '@/lib/validation'
+import { getCachedSpellingEntry } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json({ success: false, error: 'Invalid search' }, { status: 400, headers })
   }
-  const recorded = await recordRecentSearch(input.word)
+  const alias = await getCachedSpellingEntry(input.word)
+  const recorded = await recordRecentSearch(alias?.word ?? input.word)
   return NextResponse.json({ success: true, data: { recorded } }, { headers })
 }

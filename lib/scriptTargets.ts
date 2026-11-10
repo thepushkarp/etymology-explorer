@@ -1,6 +1,31 @@
 import { candidateLanguages, isLanguageCode } from './languages'
 import { canonicalizeWord, isValidWord } from './validation'
-import type { ScriptTarget } from './types'
+import type { EntrySpelling, ScriptTarget } from './types'
+import type { LanguageCode } from './languages'
+
+/** A unique attested kana reading avoids an ambiguous kanji reading in TTS. */
+export function spellingPronunciation(
+  language: LanguageCode,
+  spellings: EntrySpelling[] = []
+): string | undefined {
+  if (language !== 'ja') return undefined
+  const readings = spellings
+    .filter(
+      (spelling) =>
+        spelling.language === language &&
+        spelling.kind === 'spelling' &&
+        /^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(spelling.word)
+    )
+    .map((spelling) => spelling.word)
+  const unique = new Set(
+    readings.map((word) =>
+      word
+        .normalize('NFC')
+        .replace(/[ァ-ヶ]/gu, (character) => String.fromCodePoint(character.codePointAt(0)! - 0x60))
+    )
+  )
+  return unique.size === 1 ? readings[0] : undefined
+}
 
 /** Cache and transport metadata must remain valid navigation targets. */
 export function normalizeScriptTargets(value: unknown): ScriptTarget[] {

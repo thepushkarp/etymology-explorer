@@ -7,7 +7,18 @@ import { resolveEntryLanguages } from '@/lib/entryLanguages'
 import { SourceFetchBudget } from '@/lib/sourceFetchBudget'
 import { getSuggestions } from '@/lib/spellcheck'
 import { getQuirkyMessage } from '@/lib/prompts'
-import { getCachedEntry, cacheEntry, getNegativeCache, cacheNegative } from '@/lib/cache'
+import {
+  getCachedEntry,
+  cacheEntry,
+  getNegativeCache,
+  cacheNegative,
+  getCachedSpellingEntry,
+  mergeEntrySpellings,
+  hasEntrySpellings,
+  publishSpellingAliases,
+  isSpellingEntry,
+} from '@/lib/cache'
+import { resolveEntryIdentity } from '@/lib/entryIdentity'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { getCostMode, recordSpend } from '@/lib/costGuard'
 import {
@@ -29,6 +40,13 @@ import { normalizeScriptTargets } from '@/lib/scriptTargets'
 
 export const maxDuration = 300
 const IN_PROGRESS_MESSAGE = 'Request in progress, please retry in a few seconds.'
+class EntryIdentityConflict extends Error {}
+
+function classifyRouteError(error: unknown) {
+  return error instanceof EntryIdentityConflict
+    ? { message: error.message, status: 409, streamErrorType: 'unknown' as const }
+    : classifyApiError(error)
+}
 type Outcome =
   | { kind: 'result'; result: WordEntry }
   | { kind: 'no_sources'; otherScripts?: ScriptTarget[] }
@@ -55,6 +73,13 @@ export async function GET(request: NextRequest) {
   const shouldStream = request.nextUrl.searchParams.get('stream') === 'true'
   const respond = createResponseAdapter(shouldStream)
   let knownOffers: ScriptTarget[] = []
+  const requireSpellingEntry = (entry: WordEntry, language: LanguageCode) => {
+    if (isSpellingEntry(entry, language)) return
+    knownOffers = normalizeScriptTargets([...knownOffers, { word: entry.word, language }])
+    throw new EntryIdentityConflict(
+      `The saved entry for “${entry.word}” cannot safely be combined with this spelling. Open it to explore its word histories or retrace it when the option is available.`
+    )
+  }
   try {
     try {
       getEnv()
@@ -66,15 +91,19 @@ export async function GET(request: NextRequest) {
     }
     const word = request.nextUrl.searchParams.get('word')
     const rawHint = request.nextUrl.searchParams.get('language')
-    const hint = rawHint === null ? undefined : parseLanguageCode(rawHint)
+    let hint = rawHint === null ? undefined : parseLanguageCode(rawHint)
     if (hint === null) return respond.error('Unsupported language', { status: 400 })
     if (!word) return respond.error('Word is required', { status: 400 })
-    const normalizedWord = canonicalizeWord(word)
+    const requestedWord = canonicalizeWord(word)
+    let normalizedWord = requestedWord
     if (!normalizedWord) return respond.error(getQuirkyMessage('empty'), { status: 400 })
     if (!isValidWord(normalizedWord)) {
       return respond.error(getQuirkyMessage('nonsense'), { status: 400, errorType: 'nonsense' })
     }
-    if (hint) after(() => incrLanguageCounter(hint, 'request'))
+    if (hint) {
+      const requestLanguage = hint
+      after(() => incrLanguageCounter(requestLanguage, 'request'))
+    }
     const noSources = (otherScripts?: ScriptTarget[]) => {
       const suggestions = !hint || hint === 'en' ? getSuggestions(normalizedWord) : []
       const offers = normalizeScriptTargets([...knownOffers, ...(otherScripts ?? [])])
@@ -90,11 +119,26 @@ export async function GET(request: NextRequest) {
         }
       )
     }
-    const cached = await getCachedEntry(normalizedWord)
-    const oldEntry = cached?.entry
+    const alias = await getCachedSpellingEntry(requestedWord, hint)
+    if (alias) {
+      normalizedWord = alias.word
+      hint = alias.language
+    }
+    let cached = alias ?? (await getCachedEntry(normalizedWord))
+    let oldEntry = cached?.entry
+    let identity: Extract<StreamEvent, { type: 'entry_identity' }> | undefined = alias
+      ? {
+          type: 'entry_identity',
+          word: normalizedWord,
+          requestedWord,
+          language: alias.language,
+          spellings: alias.entry.spellings,
+        }
+      : undefined
     knownOffers = normalizeScriptTargets(oldEntry?.otherScripts)
-    const refresh = request.nextUrl.searchParams.get('refresh') === '1' && cached?.stale === true
-    const missingHint = !!hint && !oldEntry?.entries[hint]
+    const requestedRefresh = request.nextUrl.searchParams.get('refresh') === '1'
+    let refresh = requestedRefresh && cached?.stale === true
+    let missingHint = !!hint && !oldEntry?.entries[hint]
     if (oldEntry && !refresh) {
       if (!missingHint) {
         emitSecurityEvent({
@@ -103,16 +147,15 @@ export async function GET(request: NextRequest) {
           detail: { word: normalizedWord, language: hint },
         })
         after(() => incrCounter('cache_hit'))
-        return respond.result(oldEntry, { cached: true })
+        return respond.result(oldEntry, { cached: true, identity })
       }
       if (hint && oldEntry.attemptedLanguages?.includes(hint)) return noSources(knownOffers)
     }
+    const requestedNegative =
+      !alias && !refresh ? await getNegativeCache(requestedWord, hint) : null
+    if (requestedNegative) return noSources(requestedNegative.otherScripts)
     // Automatic absence cannot exclude a specialist-only explicitly hinted entry.
-    const [negative, costMode] = await Promise.all([
-      getNegativeCache(normalizedWord, hint),
-      getCostMode(),
-    ])
-    if (negative && !refresh) return noSources(negative.otherScripts)
+    const costMode = await getCostMode()
     if (costMode === 'cache_only') {
       emitSecurityEvent({
         type: 'budget_check',
@@ -124,6 +167,46 @@ export async function GET(request: NextRequest) {
         { status: 503, errorType: 'budget', headers: { 'X-Protection-Mode': costMode } }
       )
     }
+    const budget = new SourceFetchBudget(CONFIG.maxEntryFetches)
+    let emitProgress: ((event: StreamEvent) => void) | undefined
+    const session = createLexemeResearchSession({
+      signal: request.signal,
+      budget,
+      onProgress: (event) => emitProgress?.(event),
+    })
+    const resolvedIdentity = await resolveEntryIdentity(
+      requestedWord,
+      session,
+      hint,
+      alias ? undefined : oldEntry
+    )
+    if (resolvedIdentity.language) {
+      normalizedWord = resolvedIdentity.word
+      hint = resolvedIdentity.language
+      cached = await getCachedEntry(normalizedWord)
+      oldEntry = cached?.entry
+      if (oldEntry?.entries[hint]) requireSpellingEntry(oldEntry, hint)
+      refresh = requestedRefresh && cached?.stale === true
+      missingHint = !oldEntry?.entries[hint]
+      knownOffers = normalizeScriptTargets(oldEntry?.otherScripts)
+      identity = {
+        type: 'entry_identity',
+        word: normalizedWord,
+        requestedWord,
+        language: hint,
+        spellings: resolvedIdentity.spellings,
+      }
+    }
+    if (
+      hint &&
+      !oldEntry?.entries[hint] &&
+      !refresh &&
+      oldEntry?.attemptedLanguages?.includes(hint)
+    )
+      return noSources(knownOffers)
+    const negative = await getNegativeCache(normalizedWord, hint)
+    if (negative && !refresh && !(hint && oldEntry?.entries[hint]))
+      return noSources(negative.otherScripts)
     const lockKey = `lock:etymology:${normalizedWord}`
     const acquisition = await tryAcquireLock(lockKey)
     if (acquisition.status === 'unavailable' || acquisition.status === 'error') {
@@ -133,11 +216,22 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const registerSpellings = async (entry: WordEntry): Promise<WordEntry> => {
+      if (!resolvedIdentity.spellings.length) return entry
+      if (resolvedIdentity.language) requireSpellingEntry(entry, resolvedIdentity.language)
+      const merged = mergeEntrySpellings(entry, resolvedIdentity.spellings)
+      if (!hasEntrySpellings(entry, resolvedIdentity.spellings))
+        await cacheEntry(normalizedWord, merged)
+      await publishSpellingAliases(merged, resolvedIdentity.proofs)
+      return merged
+    }
+
     const runHolder = async (
       token: string,
       emit?: (event: StreamEvent) => void
     ): Promise<Outcome> => {
       const stopHeartbeat = startLockHeartbeat(lockKey, token)
+      emitProgress = emit
       try {
         request.signal.throwIfAborted()
         // Merge the latest durable generation after acquiring the word lock.
@@ -147,19 +241,16 @@ export async function GET(request: NextRequest) {
           (!hint || latest.entries[hint]) &&
           (!refresh || latest.tracedAt !== oldEntry?.tracedAt)
         ) {
-          return { kind: 'result', result: latest }
+          return { kind: 'result', result: await registerSpellings(latest) }
         }
         knownOffers = normalizeScriptTargets(latest?.otherScripts ?? knownOffers)
         if (hint && !refresh && latest?.attemptedLanguages?.includes(hint)) {
           return { kind: 'no_sources', otherScripts: knownOffers }
         }
-        const budget = new SourceFetchBudget(CONFIG.maxEntryFetches)
-        const session = createLexemeResearchSession({
-          signal: request.signal,
-          budget,
-          onProgress: emit,
-        })
-        const resolved = await resolveEntryLanguages(normalizedWord, session, hint)
+        const resolved = await budget.runLimited(
+          Math.max(0, CONFIG.maxTotalFetches - budget.attempts),
+          () => resolveEntryLanguages(normalizedWord, session, hint)
+        )
         knownOffers = normalizeScriptTargets([...knownOffers, ...(resolved.otherScripts ?? [])])
         const languages =
           latest && missingHint && !refresh && hint
@@ -206,6 +297,7 @@ export async function GET(request: NextRequest) {
               if (usage) await recordSpend(usage)
               throw error
             }
+            if (resolvedIdentity.incomplete) research.incompleteResearch = true
             // Root extraction can spend before the whole-word admission check.
             if (research.llmUsage) await recordSpend(research.llmUsage)
             if (research.incompleteResearch) incompleteLanguages.add(language)
@@ -257,12 +349,12 @@ export async function GET(request: NextRequest) {
             emit?.({
               type: 'language_failed',
               language,
-              message: classifyApiError(outcome.reason).message,
+              message: classifyRouteError(outcome.reason).message,
             })
           }
         })
         if (!successfulLanguages.size && failures.length) throw failures[0]
-        if (!successfulLanguages.size && resolved.incomplete)
+        if (!successfulLanguages.size && (resolved.incomplete || resolvedIdentity.incomplete))
           throw new Error('Language resolution incomplete; source availability is unknown')
         if (!successfulLanguages.size && !latest) {
           await cacheNegative(normalizedWord, 'no_sources', hint, knownOffers)
@@ -273,31 +365,38 @@ export async function GET(request: NextRequest) {
         const retained = latest?.languages.some((language) => !successfulLanguages.has(language))
         const incomplete =
           !!resolved.incomplete ||
+          !!resolvedIdentity.incomplete ||
           failures.length > 0 ||
           incompleteLanguages.size > 0 ||
           !!(retained && latest?.incomplete)
-        const result: WordEntry = {
-          word: normalizedWord,
-          languages: (Object.keys(entries) as LanguageCode[]).sort(
-            (a, b) => LANGUAGES[a].priority - LANGUAGES[b].priority
-          ),
-          entries,
-          otherLanguages: [
-            ...new Set([...(latest?.otherLanguages ?? []), ...resolved.otherLanguages]),
-          ],
-          ...(knownOffers.length ? { otherScripts: knownOffers } : {}),
-          tracedAt: new Date(
-            Math.max(Date.now(), (Date.parse(latest?.tracedAt ?? '') || 0) + 1)
-          ).toISOString(),
-          ...(retained && latest ? { freshnessAt: latest.freshnessAt ?? latest.tracedAt } : {}),
-          revision:
-            retained && latest
-              ? Math.min(latest.revision, CONFIG.pipelineRevision)
-              : CONFIG.pipelineRevision,
-          attemptedLanguages: [...attempted],
-          ...(incomplete ? { incomplete: true } : {}),
-        }
+        const result: WordEntry = mergeEntrySpellings(
+          {
+            word: normalizedWord,
+            languages: (Object.keys(entries) as LanguageCode[]).sort(
+              (a, b) => LANGUAGES[a].priority - LANGUAGES[b].priority
+            ),
+            entries,
+            otherLanguages: [
+              ...new Set([...(latest?.otherLanguages ?? []), ...resolved.otherLanguages]),
+            ],
+            ...(knownOffers.length ? { otherScripts: knownOffers } : {}),
+            tracedAt: new Date(
+              Math.max(Date.now(), (Date.parse(latest?.tracedAt ?? '') || 0) + 1)
+            ).toISOString(),
+            ...(retained && latest ? { freshnessAt: latest.freshnessAt ?? latest.tracedAt } : {}),
+            revision:
+              retained && latest
+                ? Math.min(latest.revision, CONFIG.pipelineRevision)
+                : CONFIG.pipelineRevision,
+            attemptedLanguages: [...attempted],
+            ...(incomplete ? { incomplete: true } : {}),
+            spellings: latest?.spellings,
+          },
+          resolvedIdentity.spellings
+        )
         await cacheEntry(normalizedWord, result, { incomplete })
+        if (resolvedIdentity.language) requireSpellingEntry(result, resolvedIdentity.language)
+        await publishSpellingAliases(result, resolvedIdentity.proofs)
         emitSecurityEvent({
           type: 'cache_miss',
           timestamp: Date.now(),
@@ -319,7 +418,7 @@ export async function GET(request: NextRequest) {
       } catch (error) {
         if (!request.signal.aborted)
           await markLockFailure(lockKey, {
-            message: classifyApiError(error).message,
+            message: classifyRouteError(error).message,
             ...(knownOffers.length ? { otherScripts: knownOffers } : {}),
           })
         throw error
@@ -337,10 +436,27 @@ export async function GET(request: NextRequest) {
       while (Date.now() - started < maximum) {
         await sleep(CONFIG.singleflight.waiterPollIntervalMs, request.signal)
         const next = await getCachedEntry(normalizedWord)
+        if (
+          !refresh &&
+          next?.entry.entries[hint ?? next.entry.languages[0]] &&
+          resolvedIdentity.spellings.length &&
+          !hasEntrySpellings(next.entry, resolvedIdentity.spellings)
+        ) {
+          const registration = await tryAcquireLock(lockKey)
+          if (registration.status === 'acquired') return runHolder(registration.token, emit)
+        }
         // Refresh waiters must observe a new generation of the durable entry.
-        if (next && next.entry.tracedAt !== oldEntry?.tracedAt) {
-          if (!hint || next.entry.entries[hint]) return { kind: 'result', result: next.entry }
-          if (next.entry.attemptedLanguages?.includes(hint))
+        if (next && (!refresh || next.entry.tracedAt !== oldEntry?.tracedAt)) {
+          if (
+            (!hint || next.entry.entries[hint]) &&
+            hasEntrySpellings(next.entry, resolvedIdentity.spellings)
+          ) {
+            if (resolvedIdentity.language)
+              requireSpellingEntry(next.entry, resolvedIdentity.language)
+            await publishSpellingAliases(next.entry, resolvedIdentity.proofs)
+            return { kind: 'result', result: next.entry }
+          }
+          if (hint && !next.entry.entries[hint] && next.entry.attemptedLanguages?.includes(hint))
             return { kind: 'no_sources', otherScripts: next.entry.otherScripts }
         }
         const negative = !refresh ? await getNegativeCache(normalizedWord, hint) : null
@@ -372,6 +488,7 @@ export async function GET(request: NextRequest) {
             }
           }
           try {
+            if (identity) emit(identity)
             const outcome =
               acquisition.status === 'acquired'
                 ? await runHolder(acquisition.token, emit)
@@ -393,7 +510,7 @@ export async function GET(request: NextRequest) {
           } catch (error) {
             if (!request.signal.aborted) {
               await incrCounter('error')
-              const classified = classifyApiError(error)
+              const classified = classifyRouteError(error)
               emit({
                 type: 'error',
                 message: classified.message,
@@ -435,13 +552,14 @@ export async function GET(request: NextRequest) {
       })
     return respond.result(outcome.result, {
       cached: false,
+      identity,
       headers: { 'X-Protection-Mode': costMode },
     })
   } catch (error) {
     if (request.signal.aborted) return new Response(null, { status: 499 })
     console.error('Etymology API error:', safeError(error))
     await incrCounter('error')
-    const classified = classifyApiError(error)
+    const classified = classifyRouteError(error)
     return respond.error(classified.message, {
       status: classified.status,
       errorType: classified.streamErrorType,

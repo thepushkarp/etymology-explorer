@@ -10,6 +10,7 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Added
 
+- Open one Japanese entry through dictionary-confirmed spelling variants, with linked spellings and preserved misspelling labels.
 - See unreleased changes in the beta changelog, with the beta build identified in the header.
 - Preview the latest main changes at beta.etymex.com while production remains release-only.
 - Follow dictionary and Exa retrieval activity as research expands to components, variants, and ancestors, including during retraces.

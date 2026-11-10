@@ -299,6 +299,13 @@ export interface EtymologyResult extends HistoryEntryFields {
   }
 }
 
+export interface EntrySpelling extends ScriptTarget {
+  kind: 'spelling' | 'misspelling'
+  sourceUrl: string
+  revisionId?: number | string
+  verifiedAt: string
+}
+
 /** Durable same-spelling entry. Freshness never removes its corpus identity. */
 export interface WordEntry {
   word: string
@@ -306,6 +313,7 @@ export interface WordEntry {
   entries: Partial<Record<LanguageCode, EtymologyResult>>
   otherLanguages: string[]
   otherScripts?: ScriptTarget[]
+  spellings?: EntrySpelling[]
   tracedAt: string
   /** Oldest retained research timestamp; tracedAt identifies the merged generation. */
   freshnessAt?: string
@@ -352,6 +360,8 @@ export interface SourceData {
   resolvedWord?: string
   language?: LanguageCode
   variants?: Array<{ word: string; relationship: 'spelling-variant' | 'redirect'; url: string }>
+  spellingRedirect?: ScriptTarget & { kind: 'spelling' | 'misspelling' }
+  spellingLemma?: boolean
   revisionId?: number | string
   sourceFamily?: SourceFamilyId
   sourceEntryId?: string
@@ -494,6 +504,13 @@ export interface SecurityTelemetryEvent {
  * Emitted during the research and synthesis pipeline to provide real-time progress
  */
 export type StreamEvent = { language?: LanguageCode; activityId?: string } & (
+  | {
+      type: 'entry_identity'
+      word: string
+      language: LanguageCode
+      requestedWord: string
+      spellings?: EntrySpelling[]
+    }
   | { type: 'source_started'; source: string }
   | {
       type: 'source_complete'

@@ -2,14 +2,25 @@
 
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
-import { StreamEvent } from '@/lib/types'
+import { StreamEvent, type WordEntry } from '@/lib/types'
 import { initialStreamState, streamReducer } from '@/lib/streamReducer'
-import type { LanguageCode } from '@/lib/languages'
+import { wordPagePath, type LanguageCode } from '@/lib/languages'
 import { normalizeScriptTargets } from '@/lib/scriptTargets'
 import { recordRecentSearchIntent } from '@/lib/recentSearchClient'
 
 const MAX_RETRIES = 2
 const RETRY_BASE_DELAY_MS = 600
+
+function finishEntry(word: string, result: WordEntry, hint?: LanguageCode): void {
+  if (
+    result.word !== word &&
+    [wordPagePath(word), wordPagePath(word, hint)].includes(window.location.pathname)
+  ) {
+    const language = hint && result.entries[hint] ? hint : result.languages[0]
+    window.history.replaceState(null, '', wordPagePath(result.word, language))
+  }
+  void recordRecentSearchIntent(result.word)
+}
 
 /**
  * Streaming etymology search over SSE. All progress state lives in the pure
@@ -17,7 +28,7 @@ const RETRY_BASE_DELAY_MS = 600
  * EventSource lifecycle, reconnection with backoff, and the non-streaming
  * fallback fetch.
  */
-export function useStreamingEtymology(defaultHint?: LanguageCode) {
+export function useStreamingEtymology(defaultHint?: LanguageCode, routeWord?: string) {
   const [progress, dispatch] = useReducer(streamReducer, initialStreamState)
 
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -25,48 +36,51 @@ export function useStreamingEtymology(defaultHint?: LanguageCode) {
   const activeRequestRef = useRef(0)
   const completedRequestRef = useRef<number | null>(null)
 
-  const fallbackFetch = useCallback(async (word: string, requestId: number, url: string) => {
-    try {
-      const controller = new AbortController()
-      fallbackControllerRef.current = controller
-      const response = await fetch(url, { signal: controller.signal })
-      const payload = await response.json()
+  const fallbackFetch = useCallback(
+    async (word: string, requestId: number, url: string, hint?: LanguageCode) => {
+      try {
+        const controller = new AbortController()
+        fallbackControllerRef.current = controller
+        const response = await fetch(url, { signal: controller.signal })
+        const payload = await response.json()
 
-      if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
-        return
+        if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
+          return
 
-      if (!response.ok || !payload.success || !payload.data) {
+        if (!response.ok || !payload.success || !payload.data) {
+          completedRequestRef.current = requestId
+          const otherScripts = normalizeScriptTargets(payload.data?.otherScripts)
+          dispatch({
+            type: 'fallback_error',
+            error: {
+              type: 'network-error',
+              message: payload.error ?? 'Search failed',
+              suggestions: [],
+              ...(otherScripts.length ? { otherScripts } : {}),
+            },
+          })
+          return
+        }
+
+        dispatch({ type: 'fallback_success', result: payload.data })
         completedRequestRef.current = requestId
-        const otherScripts = normalizeScriptTargets(payload.data?.otherScripts)
+        finishEntry(routeWord ?? word, payload.data, hint)
+      } catch {
+        if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
+          return
+        completedRequestRef.current = requestId
         dispatch({
           type: 'fallback_error',
           error: {
             type: 'network-error',
-            message: payload.error ?? 'Search failed',
+            message: 'Unable to load etymology right now',
             suggestions: [],
-            ...(otherScripts.length ? { otherScripts } : {}),
           },
         })
-        return
       }
-
-      dispatch({ type: 'fallback_success', result: payload.data })
-      completedRequestRef.current = requestId
-      void recordRecentSearchIntent(word)
-    } catch {
-      if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
-        return
-      completedRequestRef.current = requestId
-      dispatch({
-        type: 'fallback_error',
-        error: {
-          type: 'network-error',
-          message: 'Unable to load etymology right now',
-          suggestions: [],
-        },
-      })
-    }
-  }, [])
+    },
+    [routeWord]
+  )
 
   useEffect(() => {
     return () => {
@@ -94,7 +108,7 @@ export function useStreamingEtymology(defaultHint?: LanguageCode) {
       activeRequestRef.current = requestId
 
       fallbackControllerRef.current?.abort()
-      dispatch({ type: 'search_started' })
+      dispatch({ type: 'search_started', word: trimmed })
       const params = new URLSearchParams({ word: trimmed })
       if (hint) params.set('language', hint)
       if (options?.refresh) params.set('refresh', '1')
@@ -128,7 +142,7 @@ export function useStreamingEtymology(defaultHint?: LanguageCode) {
         } else if (source && attempt < MAX_RETRIES) {
           window.setTimeout(() => connect(attempt + 1), RETRY_BASE_DELAY_MS * Math.pow(2, attempt))
         } else {
-          void fallbackFetch(trimmed, requestId, fallbackUrl)
+          void fallbackFetch(trimmed, requestId, fallbackUrl, hint)
         }
       }
 
@@ -167,7 +181,7 @@ export function useStreamingEtymology(defaultHint?: LanguageCode) {
               eventSource.close()
               eventSourceRef.current = null
               if (streamEvent.type === 'result') {
-                void recordRecentSearchIntent(trimmed)
+                finishEntry(routeWord ?? trimmed, streamEvent.data, hint)
               }
             }
           } catch {
@@ -179,7 +193,7 @@ export function useStreamingEtymology(defaultHint?: LanguageCode) {
 
       connect(0)
     },
-    [fallbackFetch, defaultHint]
+    [fallbackFetch, defaultHint, routeWord]
   )
 
   return {

@@ -34,6 +34,17 @@ const RESULT: WordEntry = {
 }
 
 describe('search_started', () => {
+  test('canonical identity survives reconnects and is cleared for a new search', () => {
+    const state = run([
+      { type: 'search_started' },
+      ...events({ type: 'entry_identity', word: '津波', requestedWord: 'つなみ', language: 'ja' }),
+      { type: 'stream_reconnecting' },
+    ])
+    expect(state.identity?.word).toBe('津波')
+    expect(state.identity?.language).toBe('ja')
+    expect(streamReducer(state, { type: 'search_started' }).identity).toBeUndefined()
+  })
+
   test('starts empty so source events define the providers for every language', () => {
     const state = run([{ type: 'search_started' }])
 
