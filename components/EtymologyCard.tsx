@@ -1,8 +1,6 @@
 import type { ReactNode } from 'react'
-import type { DisplayEtymologyResult } from '@/lib/types'
-import type { BetaLanguageCode } from '@/lib/languages'
+import type { EtymologyEntry } from '@/lib/types'
 import { StoryText } from '@/components/etymology-card/StoryText'
-import { resultLabels, type ResultLocale } from '@/lib/resultLocalization'
 import { AncestryTree } from './AncestryTree'
 import { ContextSection } from './etymology-card/ContextSection'
 import { EntryHeader } from './etymology-card/EntryHeader'
@@ -15,10 +13,9 @@ import { ScholarlyReferences, SourcesSection } from './etymology-card/SourcesSec
 import { UsageSection } from './etymology-card/UsageSection'
 
 interface EtymologyCardProps {
-  result: DisplayEtymologyResult
+  result: EtymologyEntry
   /** Streaming: sections that have not arrived yet render as placeholders. */
   pending?: boolean
-  contentLocale?: ResultLocale
   usageUnavailable?: boolean
   actions?: ReactNode
   subheader?: ReactNode
@@ -27,13 +24,11 @@ interface EtymologyCardProps {
 export function EtymologyCard({
   result,
   pending = false,
-  contentLocale = 'en',
   usageUnavailable = false,
   actions,
   subheader,
 }: EtymologyCardProps) {
   const isEnglish = result.language === 'en'
-  const labels = resultLabels(result.language, contentLocale)
   const hasAncestry = result.ancestryGraph.branches.length > 0
   const wikipedia = result.rawSources?.wikipedia
 
@@ -42,7 +37,7 @@ export function EtymologyCard({
       <EntryHeader result={result} actions={actions} subheader={subheader} pending={pending} />
 
       {(hasAncestry || pending) && (
-        <Section id="entry-ancestry" title={labels.ancestry}>
+        <Section id="entry-ancestry" title="Lineage">
           {hasAncestry ? (
             <AncestryTree
               graph={result.ancestryGraph}
@@ -57,7 +52,7 @@ export function EtymologyCard({
       )}
 
       {(result.lore || pending) && (
-        <Section id="entry-story" title={labels.story}>
+        <Section id="entry-story" title="The story">
           {result.lore ? (
             <StoryText text={result.lore} />
           ) : (
@@ -67,31 +62,26 @@ export function EtymologyCard({
       )}
 
       {(result.examples?.length || pending) && (
-        <Section id="entry-examples" title={labels.examples}>
+        <Section id="entry-examples" title="In use">
           {result.examples?.length ? (
-            <ExamplesList examples={result.examples} />
+            <ExamplesList examples={result.examples} language={result.language} />
           ) : (
             <Skeleton widths={['w-10/12', 'w-8/12']} />
           )}
         </Section>
       )}
 
-      <UsageSection
-        ngram={result.ngram}
-        unavailable={usageUnavailable}
-        title={labels.usage}
-        unavailableMessage={labels.usageUnavailable}
-      />
+      <UsageSection ngram={result.ngram} unavailable={usageUnavailable} />
 
       {result.modernUsage?.hasSlangMeaning && (
-        <ModernUsageSection modernUsage={result.modernUsage} title={labels.modernUsage} />
+        <ModernUsageSection modernUsage={result.modernUsage} />
       )}
 
-      {result.suggestions && (
-        <RelatedWordsSection suggestions={result.suggestions} title={labels.related} />
-      )}
+      {/* Suggestion strings carry no language identity, and word links resolve
+          to English pages, so only English entries can offer them as links. */}
+      {isEnglish && result.suggestions && <RelatedWordsSection suggestions={result.suggestions} />}
 
-      <KinSection roots={result.roots} linkable={isEnglish} title={labels.kin} />
+      <KinSection roots={result.roots} linkable={isEnglish} />
 
       {wikipedia && (
         <ContextSection
@@ -100,14 +90,9 @@ export function EtymologyCard({
         />
       )}
 
-      <SourcesSection sources={result.sources} title={labels.sources} />
+      <SourcesSection sources={result.sources} />
 
-      {!isEnglish && !pending && (
-        <ScholarlyReferences
-          language={result.language as BetaLanguageCode}
-          title={labels.references}
-        />
-      )}
+      {!pending && <ScholarlyReferences language={result.language} />}
     </article>
   )
 }

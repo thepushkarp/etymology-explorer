@@ -8,17 +8,8 @@
  * there is no growing event array to rebuild from on every render.
  */
 
-import type {
-  BetaEtymologyResult,
-  BilingualText,
-  DisplayEtymologyResult,
-  EnglishEtymologyResult,
-  EtymologyResult,
-  StreamEvent,
-  SourceOutcome,
-} from './types'
+import type { EtymologyEntry, EtymologyResult, StreamEvent, SourceOutcome } from './types'
 import type { LanguageCode } from './languages'
-import { localizeResult } from './resultLocalization'
 import { StreamingUiError, toStreamingUiError } from './streamingError'
 import { sourceKey, sourceLabel } from './sourceLabels'
 
@@ -56,22 +47,19 @@ export const SECTION_KEYS = [
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 /** Progressive slice of the final result, hydrated one section at a time */
-export type PartialEtymology = Partial<Pick<EnglishEtymologyResult, SectionKey>>
-
-const EMPTY_BILINGUAL_TEXT: BilingualText = { en: '', local: '' }
+export type PartialEtymology = Partial<Pick<EtymologyResult, SectionKey>>
 
 /**
- * Project the streamed sections onto a full display result, defaulting every
- * not-yet-arrived field to an empty value. Beta sections carry bilingual prose,
- * so they get paired empty text and the same projection as completed results.
+ * Project the streamed sections onto a renderable entry, defaulting every
+ * not-yet-arrived field to an empty value.
  */
 export function toPartialResult(
   word: string,
   sections: PartialEtymology,
   language: LanguageCode = 'en'
-): DisplayEtymologyResult {
-  const partial: EnglishEtymologyResult = {
-    language: 'en',
+): EtymologyEntry {
+  return {
+    language,
     word: sections.word ?? word,
     pronunciation: sections.pronunciation ?? '',
     definition: sections.definition ?? '',
@@ -84,15 +72,6 @@ export function toPartialResult(
     suggestions: sections.suggestions,
     modernUsage: sections.modernUsage,
   }
-  if (language === 'en') return localizeResult(partial, 'en')
-
-  const betaPartial = {
-    ...partial,
-    language,
-    definition: sections.definition ?? EMPTY_BILINGUAL_TEXT,
-    lore: sections.lore ?? EMPTY_BILINGUAL_TEXT,
-  } as unknown as BetaEtymologyResult
-  return localizeResult(betaPartial, 'local')
 }
 
 export interface StreamState {

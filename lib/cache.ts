@@ -7,13 +7,13 @@ import { canonicalizeWord } from './orthography'
 import { revalidateTag } from 'next/cache'
 import { after } from 'next/server'
 import { EtymologyResult } from './types'
-import { CachedEtymologyResultSchema } from './schemas/etymology'
+import { EtymologyResultSchema } from './schemas/etymology'
 import { CONFIG } from './config'
 import { getRedis } from './redis'
 import { safeError } from './errorUtils'
 import { emitSecurityEvent } from './telemetry'
 import type { LanguageCode } from './languages'
-import { isBetaLanguage, lexemeKey, parseLanguageCode } from './languages'
+import { lexemeKey, parseLanguageCode } from './languages'
 
 /** Apply ±jitter to a TTL to prevent synchronized cache stampedes */
 function jitterTTL(ttl: number): number {
@@ -54,7 +54,7 @@ export function lexemeFromEtymologyCacheKey(
     if (separator <= 0) return null
 
     const language = parseLanguageCode(suffix.slice(0, separator))
-    if (!language || !isBetaLanguage(language)) return null
+    if (!language || language === 'en') return null
     return { language, word: suffix.slice(separator + 1) }
   }
 
@@ -85,7 +85,7 @@ export async function getCachedEtymology(
     if (!raw) return null
 
     // Validate against current schema - treats invalid data as cache miss
-    const parsed = CachedEtymologyResultSchema.safeParse(raw)
+    const parsed = EtymologyResultSchema.safeParse(raw)
     if (!parsed.success) {
       console.warn(
         `[Cache] Schema mismatch for "${word}":`,
@@ -100,14 +100,13 @@ export async function getCachedEtymology(
     }
 
     const result = parsed.data as EtymologyResult
-    const resultLanguage = result.language ?? 'en'
-    if (resultLanguage !== language || canonicalizeWord(result.word) !== canonicalizeWord(word)) {
+    if (result.language !== language || canonicalizeWord(result.word) !== canonicalizeWord(word)) {
       console.warn(
-        `[Cache] Language mismatch for "${word}": requested ${language}, cached ${resultLanguage}`
+        `[Cache] Language mismatch for "${word}": requested ${language}, cached ${result.language}`
       )
       return null
     }
-    return result.language ? result : { ...result, language: 'en' }
+    return result
   } catch (error) {
     console.error('[Cache] Etymology get error:', safeError(error))
     return null // Fail open - continue without cache
@@ -123,7 +122,7 @@ export async function getCachedEtymology(
 export async function cacheEtymology(
   word: string,
   result: EtymologyResult,
-  language: LanguageCode = result.language ?? 'en',
+  language: LanguageCode = result.language,
   options?: { incomplete?: boolean }
 ): Promise<void> {
   const redis = getRedis()
@@ -208,7 +207,7 @@ export async function cacheAudio(
 
 function audioKey(word: string, language: LanguageCode): string {
   const normalized = canonicalizeWord(word)
-  // Preserve the established English namespace; only beta languages need a
+  // Preserve the established English namespace; only other languages need a
   // qualifier to prevent same-spelling pronunciations from colliding.
   return language === 'en'
     ? `${AUDIO_PREFIX}${normalized}`

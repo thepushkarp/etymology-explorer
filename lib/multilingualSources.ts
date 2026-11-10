@@ -2,7 +2,7 @@ import { canonicalizeWord } from './orthography'
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
 import { fetchWithTimeout } from './fetchUtils'
-import { LANGUAGES, type BetaLanguageCode, type LanguageCode } from './languages'
+import { LANGUAGES, type LanguageCode } from './languages'
 import { cacheSource, getCachedSource, type CacheableSource } from './sourceCache'
 import type { SourceData } from './types'
 import {
@@ -12,6 +12,9 @@ import {
   extractWiktionaryVariants,
   type WiktionaryTocSection,
 } from './wiktionaryEntryGroups'
+
+/** Languages researched through their own Wiktionary edition and lexical sources. */
+type NonEnglishLanguage = Exclude<LanguageCode, 'en'>
 
 type TocSection = WiktionaryTocSection
 
@@ -28,8 +31,8 @@ interface ParseResponse {
 
 async function fetchWiktionaryEdition(
   word: string,
-  language: BetaLanguageCode,
-  edition: 'en' | BetaLanguageCode,
+  language: NonEnglishLanguage,
+  edition: 'en' | NonEnglishLanguage,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
   const config = LANGUAGES[language]
@@ -111,7 +114,7 @@ async function fetchWiktionaryEdition(
 
 export function fetchEnglishWiktionaryLanguage(
   word: string,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguage,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
   return fetchWiktionaryEdition(word, language, 'en', signal)
@@ -119,7 +122,7 @@ export function fetchEnglishWiktionaryLanguage(
 
 export function fetchNativeWiktionary(
   word: string,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguage,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
   return fetchWiktionaryEdition(word, language, language, signal)
@@ -168,7 +171,7 @@ export async function fetchFreeDictionaryApi(
   }
 }
 
-const WIKIDATA_LANGUAGE_ENTITY: Record<BetaLanguageCode, string> = {
+const WIKIDATA_LANGUAGE_ENTITY: Record<NonEnglishLanguage, string> = {
   it: 'Q652',
   es: 'Q1321',
   fr: 'Q150',
@@ -219,7 +222,7 @@ function compactWikidataLexeme(entity: WikidataLexemeEntity) {
 
 function isRequestedLanguageText(
   text: WikidataMonolingualText,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguage,
   normalizedWord: string
 ): boolean {
   if (typeof text?.language !== 'string' || typeof text.value !== 'string') return false
@@ -229,7 +232,7 @@ function isRequestedLanguageText(
 
 function isMatchingLexeme(
   entity: WikidataLexemeEntity,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguage,
   normalizedWord: string
 ): entity is WikidataLexemeEntity & { id: string } {
   if (
@@ -253,7 +256,7 @@ function isMatchingLexeme(
 
 export async function fetchWikidataLexeme(
   word: string,
-  language: BetaLanguageCode,
+  language: NonEnglishLanguage,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
   const cached = await getCachedSource('wikidataLexeme', word, undefined, language)

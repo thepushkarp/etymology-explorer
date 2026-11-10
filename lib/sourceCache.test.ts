@@ -64,7 +64,7 @@ describe('source cache', () => {
     expect(await getCachedSource('wiktionary', 'telephone', store)).toBeNull()
   })
 
-  test('same-spelling beta lexemes use language-qualified source keys', async () => {
+  test('same-spelling lexemes in other languages use language-qualified source keys', async () => {
     const store = createStore()
     await cacheSource('wiktionaryNative', 'sale', DATA, store, 'it')
     await cacheSource('wiktionaryNative', 'sale', DATA, store, 'fr')

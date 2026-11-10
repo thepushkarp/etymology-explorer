@@ -1,27 +1,15 @@
 import { canonicalizeWord, sameSpelling } from './orthography'
 import {
-  AncestryGraph,
   EtymologyResult,
   LlmUsage,
   SourceReference,
   ResearchContext,
-  ModernUsage,
-  ResultText,
   LexicalHistory,
 } from './types'
-import {
-  SYSTEM_PROMPT,
-  buildBetaSystemPrompt,
-  buildBetaUserPrompt,
-  buildRichUserPrompt,
-} from './prompts'
+import { buildSystemPrompt, buildUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph, pruneUngroundedStages } from './etymologyEnricher'
-import {
-  BetaEtymologyResultSchema,
-  EnglishHistoryEtymologyResultSchema,
-  EtymologyResultSchema,
-} from './schemas/etymology'
+import { EtymologyResultSchema } from './schemas/etymology'
 import { stripNullsDeep } from './schemas/llm-schema'
 import { createSectionScanner } from './sectionScanner'
 import { CONFIG } from './config'
@@ -33,7 +21,7 @@ import {
   extractUsage,
   streamOpenRouterResponse,
 } from './openrouterResponses'
-import { LANGUAGES, type LanguageCode } from './languages'
+import type { LanguageCode } from './languages'
 import {
   lexicalSourceRecords,
   mainSourceRecords,
@@ -288,12 +276,11 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
     return
   }
 
-  // Beta research deliberately excludes slang-only English sources.
-  if (result.language && result.language !== 'en') {
+  // Research for other languages deliberately excludes slang-only English sources.
+  if (result.language !== 'en') {
     result.modernUsage = { hasSlangMeaning: false }
     return
   }
-  const englishUsage = modernUsage as ModernUsage<string>
 
   const supplementalSignals = getSupplementalSourceSignals(researchContext)
   const hasSupplementalSlangEvidence =
@@ -304,15 +291,15 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
   }
 
   const compact = (value: string) => value.replace(/\s+/g, ' ').trim()
-  const slangDefinition = englishUsage.slangDefinition ? compact(englishUsage.slangDefinition) : ''
-  const popularizedBy = englishUsage.popularizedBy ? compact(englishUsage.popularizedBy) : ''
+  const slangDefinition = modernUsage.slangDefinition ? compact(modernUsage.slangDefinition) : ''
+  const popularizedBy = modernUsage.popularizedBy ? compact(modernUsage.popularizedBy) : ''
   const contexts = dedupeStrings(
-    (englishUsage.contexts ?? [])
+    (modernUsage.contexts ?? [])
       .map(compact)
       .filter((context) => context.length >= 3 && context.length <= 50)
   ).slice(0, 4)
   const notableReferences = dedupeStrings(
-    (englishUsage.notableReferences ?? [])
+    (modernUsage.notableReferences ?? [])
       .map(compact)
       .filter((reference) => reference.length >= 6 && reference.length <= 140)
   ).slice(0, 3)
@@ -344,8 +331,6 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
 interface SynthesisOptions {
   model?: string
   signal?: AbortSignal
-  language?: LanguageCode
-  sourceHistories?: boolean
   /**
    * Selects streaming transport and publishes validated entry fields once.
    * Source-defined primary-history fields can arrive before the complete
@@ -357,36 +342,28 @@ interface SynthesisOptions {
 }
 
 type LlmCallOptions = SynthesisOptions & {
+  language: LanguageCode
   onHistory?: (history: unknown) => void
 }
 
 async function callLlm(
   userPrompt: string,
-  options?: LlmCallOptions
+  options: LlmCallOptions
 ): Promise<{
   text: string
   usage: LlmUsage
 }> {
-  const language = options?.language ?? 'en'
-  const request = buildSynthesisRequest(
-    userPrompt,
-    options?.model,
-    language,
-    options?.sourceHistories
-  )
-  request.instructions =
-    language === 'en'
-      ? SYSTEM_PROMPT
-      : buildBetaSystemPrompt(LANGUAGES[language].englishName, language)
-  const onSection = options?.onSection
+  const request = buildSynthesisRequest(userPrompt, options.model)
+  request.instructions = buildSystemPrompt(options.language)
+  const onSection = options.onSection
 
   try {
     if (!onSection) {
-      const response = await createOpenRouterResponse(request, CONFIG.timeouts.llm, options?.signal)
+      const response = await createOpenRouterResponse(request, CONFIG.timeouts.llm, options.signal)
       return { text: extractOutputText(response), usage: extractUsage(response) }
     }
 
-    const onHistory = options?.onHistory
+    const onHistory = options.onHistory
     const scanner = createSectionScanner(
       (section, data) => onSection(section, stripNullsDeep(data)),
       onHistory
@@ -404,7 +381,7 @@ async function callLlm(
         scanner.push(token)
       },
       CONFIG.timeouts.llm,
-      options?.signal
+      options.signal
     )
 
     assertCompleteResponse(response)
@@ -417,7 +394,7 @@ async function callLlm(
 
     return { text: streamedText, usage: extractUsage(response) }
   } catch (error) {
-    if (options?.signal?.aborted) {
+    if (options.signal?.aborted) {
       throw error // caller-initiated cancellation, not a timeout
     }
     if (isAbortLikeError(error)) {
@@ -429,7 +406,7 @@ async function callLlm(
 
 async function generateEtymologyResponse(
   userPrompt: string,
-  options?: LlmCallOptions,
+  options: LlmCallOptions,
   malformedAttemptLimit?: number
 ): Promise<{
   result: EtymologyResult
@@ -440,7 +417,7 @@ async function generateEtymologyResponse(
   // keeps one retry as a safety net; the streaming path fails fast — its
   // section events are already on the wire and cannot be retracted.
   const maxAttempts =
-    malformedAttemptLimit ?? (options?.onSection ? 1 : CONFIG.retries.malformedOutputRetries + 1)
+    malformedAttemptLimit ?? (options.onSection ? 1 : CONFIG.retries.malformedOutputRetries + 1)
   let lastMalformedError: MalformedModelOutputError | null = null
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -489,9 +466,8 @@ async function generateEtymologyResponse(
     : new Error('Failed to parse LLM response after retries')
 }
 
-export function isRecoverableBetaValidationError(error: unknown, language: LanguageCode): boolean {
+export function isRecoverableValidationError(error: unknown): boolean {
   return (
-    language !== 'en' &&
     error instanceof Error &&
     error.message.startsWith('Schema validation failed:') &&
     !isAbortLikeError(error)
@@ -550,7 +526,7 @@ function sameStrings(left: string[], right: string[]): boolean {
 }
 
 /** Reject cross-history topology before any evidence-bearing section is published. */
-function validateHistoryGraph(history: LexicalHistory<ResultText>, context: ResearchContext): void {
+function validateHistoryGraph(history: LexicalHistory, context: ResearchContext): void {
   const entry = context.entryContexts?.find((candidate) => candidate.id === history.id)
   if (!entry) throw new Error('Schema validation failed: source history context is missing')
   const graph = history.ancestryGraph
@@ -612,19 +588,7 @@ function validateHistoryGraph(history: LexicalHistory<ResultText>, context: Rese
   }
 }
 
-function finalizeHistories(
-  result: Pick<
-    LexicalHistory<ResultText>,
-    | 'pronunciation'
-    | 'definition'
-    | 'roots'
-    | 'ancestryGraph'
-    | 'lore'
-    | 'examples'
-    | 'partsOfSpeech'
-  > & { primaryHistoryId: string; histories: LexicalHistory<ResultText>[] },
-  researchContext: ResearchContext
-): void {
+function finalizeHistories(result: EtymologyResult, researchContext: ResearchContext): void {
   const candidates = researchContext.lexicalGraph?.histories ?? []
   if (candidates.length === 0) {
     throw new Error('Schema validation failed: research has no entry histories')
@@ -718,41 +682,14 @@ export function finalizeResult(
       `Schema validation failed: synthesis changed requested spelling "${requestedWord}" to "${result.word}"`
     )
   }
-  if ((result.language ?? 'en') !== (researchContext.language ?? 'en')) {
+  if (result.language !== (researchContext.language ?? 'en')) {
     throw new Error('Schema validation failed: synthesis changed requested language')
   }
   sanitizeModernUsage(result, researchContext)
-
-  if (
-    researchContext.lexicalGraph?.histories.length ||
-    (researchContext.language && researchContext.language !== 'en')
-  ) {
-    finalizeHistories(
-      result as EtymologyResult & {
-        primaryHistoryId: string
-        histories: LexicalHistory<ResultText>[]
-      },
-      researchContext
-    )
-  } else {
-    const graph = result.ancestryGraph as AncestryGraph<ResultText>
-    enrichAncestryGraph(graph, researchContext.parsedChains ?? [])
-    const pruned = pruneUngroundedStages(graph)
-    if (pruned > 0) {
-      console.warn(
-        `[LLM] Pruned ${pruned} ungrounded reconstructed stage(s) for "${researchContext.mainWord.word}"`
-      )
-    }
-  }
-
+  finalizeHistories(result, researchContext)
   attachSources(result, researchContext)
 
-  const validated =
-    researchContext.language && researchContext.language !== 'en'
-      ? BetaEtymologyResultSchema.safeParse(result)
-      : researchContext.lexicalGraph?.histories.length
-        ? EnglishHistoryEtymologyResultSchema.safeParse(result)
-        : EtymologyResultSchema.safeParse(result)
+  const validated = EtymologyResultSchema.safeParse(result)
   if (!validated.success) {
     const issue = validated.error.issues[0]
     console.error(
@@ -769,29 +706,25 @@ export async function synthesizeFromResearch(
   researchContext: ResearchContext,
   options?: SynthesisOptions
 ): Promise<SynthesisResult> {
-  const researchData = buildResearchPrompt(researchContext)
   const language = researchContext.language ?? 'en'
-  const userPrompt =
-    language === 'en'
-      ? buildRichUserPrompt(researchContext.mainWord.word, researchData)
-      : buildBetaUserPrompt(
-          researchContext.mainWord.word,
-          LANGUAGES[language].englishName,
-          language,
-          researchData
-        )
+  const userPrompt = buildUserPrompt(
+    researchContext.mainWord.word,
+    language,
+    buildResearchPrompt(researchContext)
+  )
 
   const totalUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
-  const sourceHistories = Boolean(researchContext.lexicalGraph?.histories.length)
-  const maxValidationAttempts = language === 'en' ? 1 : 2
+  // A post-processing validation failure retries once, as a unary call: the
+  // streamed sections of the first attempt cannot be retracted, so the retry
+  // only replaces them through the terminal result.
+  const maxValidationAttempts = 2
 
   for (let attempt = 0; attempt < maxValidationAttempts; attempt += 1) {
     try {
-      const heldSections = ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources']
       const pendingSections = new Map<string, unknown>()
       const publishedSections = new Set<string>()
       let wordVerified = false
-      let languageVerified = language === 'en'
+      let languageVerified = false
       let identityError: Error | undefined
       let pendingPrimaryHistory: unknown
       const entryFields = [
@@ -848,20 +781,19 @@ export async function synthesizeFromResearch(
           identityError = error instanceof Error ? error : new Error(String(error))
         }
       }
-      const onHistory =
-        options?.onSection && sourceHistories
-          ? (history: unknown) => {
-              if (
-                history &&
-                typeof history === 'object' &&
-                'id' in history &&
-                history.id === researchContext.lexicalGraph?.histories[0]?.id
-              ) {
-                pendingPrimaryHistory = history
-                publishPrimary()
-              }
+      const onHistory = options?.onSection
+        ? (history: unknown) => {
+            if (
+              history &&
+              typeof history === 'object' &&
+              'id' in history &&
+              history.id === researchContext.lexicalGraph?.histories[0]?.id
+            ) {
+              pendingPrimaryHistory = history
+              publishPrimary()
             }
-          : undefined
+          }
+        : undefined
       const onSection = options?.onSection
         ? (section: string, data: unknown) => {
             if (section === 'word') {
@@ -881,56 +813,46 @@ export async function synthesizeFromResearch(
             }
             if (identityError) return
             pendingSections.set(section, data)
-            if (sourceHistories && wordVerified && languageVerified) {
-              if (language !== 'en') publish('language', language)
-              publish('word', researchContext.mainWord.word)
-              publishPrimary()
-              if (identityError) return
-              if (
-                !publishedSections.has('histories') &&
-                pendingSections.has('histories') &&
-                pendingSections.has('primaryHistoryId')
-              ) {
-                try {
-                  // The history contains every entry field. Reuse the terminal
-                  // identity, evidence and schema checks before publishing it.
-                  const primary = finalizeResult(
-                    {
-                      word: researchContext.mainWord.word,
-                      language,
-                      primaryHistoryId: pendingSections.get('primaryHistoryId'),
-                      histories: pendingSections.get('histories'),
-                      sources: [],
-                    } as unknown as EtymologyResult,
-                    researchContext,
-                    'streaming'
-                  )
-                  for (const name of ['primaryHistoryId', 'histories']) {
-                    publish(name, (primary as unknown as Record<string, unknown>)[name])
-                  }
-                  publishEntry(primary)
-                } catch (error) {
-                  // Drain the provider response even on validation failure so
-                  // its completed usage is included in the failed request.
-                  identityError = error instanceof Error ? error : new Error(String(error))
-                }
-              }
-              return
-            }
+            if (!wordVerified || !languageVerified) return
+            publish('language', language)
+            publish('word', researchContext.mainWord.word)
+            publishPrimary()
+            if (identityError) return
             if (
-              wordVerified &&
-              languageVerified &&
-              !heldSections.some((name) => pendingSections.has(name))
+              !publishedSections.has('histories') &&
+              pendingSections.has('histories') &&
+              pendingSections.has('primaryHistoryId')
             ) {
-              for (const [name, value] of pendingSections) options.onSection?.(name, value)
-              pendingSections.clear()
+              try {
+                // The history contains every entry field. Reuse the terminal
+                // identity, evidence and schema checks before publishing it.
+                const primary = finalizeResult(
+                  {
+                    word: researchContext.mainWord.word,
+                    language,
+                    primaryHistoryId: pendingSections.get('primaryHistoryId'),
+                    histories: pendingSections.get('histories'),
+                    sources: [],
+                  } as unknown as EtymologyResult,
+                  researchContext,
+                  'streaming'
+                )
+                for (const name of ['primaryHistoryId', 'histories']) {
+                  publish(name, (primary as unknown as Record<string, unknown>)[name])
+                }
+                publishEntry(primary)
+              } catch (error) {
+                // Drain the provider response even on validation failure so
+                // its completed usage is included in the failed request.
+                identityError = error instanceof Error ? error : new Error(String(error))
+              }
             }
           }
         : undefined
       const attemptOptions =
         attempt === 0
-          ? { ...options, language, sourceHistories, onSection, onHistory }
-          : { signal: options?.signal, language, sourceHistories }
+          ? { ...options, language, onSection, onHistory }
+          : { model: options?.model, signal: options?.signal, language }
       const generated = await generateEtymologyResponse(
         userPrompt,
         attemptOptions,
@@ -958,12 +880,9 @@ export async function synthesizeFromResearch(
         addUsage(totalUsage, errorUsage)
       }
 
-      if (
-        attempt < maxValidationAttempts - 1 &&
-        isRecoverableBetaValidationError(error, language)
-      ) {
+      if (attempt < maxValidationAttempts - 1 && isRecoverableValidationError(error)) {
         console.warn(
-          '[LLM] Retrying beta synthesis after validation failure',
+          '[LLM] Retrying synthesis after validation failure',
           JSON.stringify({ word: researchContext.mainWord.word, language })
         )
         continue
@@ -979,5 +898,5 @@ export async function synthesizeFromResearch(
     }
   }
 
-  throw new Error('Beta synthesis exhausted its validation attempts')
+  throw new Error('Synthesis exhausted its validation attempts')
 }

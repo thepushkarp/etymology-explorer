@@ -12,7 +12,7 @@ Users search for a word or phrase in English, Italian, Spanish, French, or Portu
 2. Pre-parses source-local etymological chains and keeps independent lexical histories and evidence scopes.
 3. Expands explicit source spelling variants/redirects, up to four useful independent phrase components, and up to four unique attested ancestors in their own language in a shared wave, followed by up to four linked variant discoveries. English also retains CPU-first root extraction (LLM fallback only when necessary) and related-page expansion.
 4. Retains complete extracted source text and full Wikipedia article extracts in the synthesis bundle; there are no per-source character caps or prompt clipping.
-5. Sends the enriched bundle to OpenRouter's Responses API using `openai/gpt-6-luna` with low reasoning effort and strict structured output.
+5. Sends the enriched bundle to OpenRouter's Responses API using `openai/gpt-6-luna` with low reasoning effort and strict structured output. Every language shares one schema and one prompt builder, and every entry is written in English; only the usage examples are in the word's own language, each with an English translation (none for English words).
 6. Matches ancestry stages to scoped evidence, assigns confidence, and prunes unsupported lineage claims. Component evidence cannot establish the whole phrase's origin.
 
 The primary Wiktionary edition defines source-local history boundaries, with Etymonline as the English fallback and source-defined specialist entries as further fallbacks; complete secondary sources remain independent context without invented history alignment. Each history has its own selectable story and lineage, with compound branches kept within that history. Wikipedia and community context cannot establish ancestry. Components alone cannot admit a phrase.
@@ -108,7 +108,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/exa.ts` / `lib/exaBudget.ts`** - Optional publisher retrieval and targeted discovery with a separate $10 UTC-month allowance. Atomic preflight tariff reservations fail closed for Exa when Redis is unavailable. Unknown charges remain reserved; provider estimates do not authorize refunds. Each trace permits two searches, eight Contents pages, and five API calls; full text is validated against exact publisher identity and entry boundaries. Exa is a retrieval method, never an independent evidence family. A dedicated key should also carry a $10 provider-side billing-period budget.
 
-- **`lib/recentSearches.ts`** - Atomic per-language lists of the latest 20 distinct successful searches. GET `/api/recent-searches` samples four; POST records only server-validated cached results and localized previews. Explicit navigation and completed traces record searches; prefetching and passive loads do not. The static homepage fills gaps from curated words.
+- **`lib/recentSearches.ts`** - Atomic per-language lists of the latest 20 distinct successful searches. GET `/api/recent-searches` samples four; POST records only server-validated cached results and their previews. Explicit navigation and completed traces record searches; prefetching and passive loads do not. The static homepage fills gaps from curated words.
 
 - **`lib/costGuard.ts`** - Monthly USD budget enforcement via pipelined Redis INCRBYFLOAT + EXPIRE NX:
   - Normal mode (0-90% of budget): allow uncached requests
@@ -226,17 +226,22 @@ and the output is guaranteed-shape JSON.
 
 - `lib/schemas/llm-schema.ts` - Strict-mode JSON Schema sent to the LLM. Every property is
   required, `additionalProperties: false` everywhere, optionality expressed as null unions, and
-  top-level properties declared in **render order** (word → sources) — strict mode emits keys in
-  schema order, which the section scanner and progressive rendering depend on.
-  English and beta-language entries can render the primary history's projection after the
-  server validates its identity, bilingual shape, and scoped ancestry, while shared fields
-  continue streaming.
-- `lib/schemas/etymology.ts` - Zod schema for cache validation. Uses `.passthrough()` for forward compat.
+  top-level properties declared in **render order** (language → sources) — strict mode emits keys
+  in schema order, which the section scanner and progressive rendering depend on. One schema
+  serves every language: `language` and `word` identify the entry, then the source-defined
+  `histories`, then the primary history's projection and the entry-wide fields. Entries can
+  render the primary history's projection after the server validates its identity and scoped
+  ancestry, while shared fields continue streaming.
+- `lib/schemas/etymology.ts` - The single Zod result schema for cache validation and
+  finalization. Uses `.passthrough()` for forward compat; requires `language`, `primaryHistoryId`
+  and at least one history, so entries cached in an older shape (including paired
+  `{ en, local }` prose) fail validation and read as a cache miss.
 - **Usage examples**: every entry and every history carries exactly two contrasting `examples`
-  (strict `minItems`/`maxItems` 2), rendered after the story. Beta examples are `{ en, local }`
-  pairs where `local` is the selected-language sentence and `en` its translation; display always
-  shows the local sentence and adds the translation as a gloss in the English locale. Zod keeps
-  the field optional so entries cached before it existed stay valid and simply omit the section.
+  (strict `minItems`/`maxItems` 2), rendered after the story. Each is `{ text, translation }`:
+  `text` is a sentence in the word's own language and `translation` its English gloss, null for
+  English words; Zod rejects a translation on an English example and a missing one elsewhere.
+  Zod keeps the field optional so entries cached before it existed stay valid and simply omit
+  the section.
 - **Sync is enforced mechanically**: `lib/schemas/llm-schema.test.ts` walks both schemas and fails
   on drift (key sets, required lists, null unions, leaf types). Post-processing fields
   (confidence, evidence, isReconstructed, source url/word) are exempted explicitly in that test.
@@ -247,13 +252,15 @@ and the output is guaranteed-shape JSON.
    from `lib/prompts.ts` (content/grounding rules only — shape is enforced by the schema)
 2. Transport: passing an `onSection` callback streams the response. The scanner reports closed
    top-level fields and complete history objects. A primary history can project entry fields
-   after the normal identity, bilingual, and scoped-evidence checks; complete history metadata
+   after the normal identity and scoped-evidence checks; complete history metadata
    waits for the full collection to validate. Entry fields publish once. Omitting the callback
    makes a unary call.
 3. Parse: `parseGeneratedJson` fallback parse, then `stripNullsDeep` converts strict-mode nulls
    back to absent fields before sanitizers and Zod validation
-4. Retry: malformed output retries once on the unary path, never on the streaming path
-   (sections already on the wire cannot be retracted)
+4. Retry: malformed output retries once on the unary path, never within the streaming transport
+   (sections already on the wire cannot be retracted). A post-processing validation failure
+   (`Schema validation failed: …`) retries the whole synthesis once as a unary call, for every
+   language; usage from both attempts is recorded.
 
 ### State Management
 
@@ -375,6 +382,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 - `app/word/[...segments]/page.tsx` - Cache-only SSR word pages (import graph must exclude research/LLM)
 - `app/word/import-graph.test.ts` - Enforces the no-LLM-in-module-graph budget invariant
 - `components/EntryView.tsx` - Client shell for a finished entry (cached page or completed trace)
+- `lib/resultHistories.ts` - Projects a result onto one of its histories and lists the history choices
 - `components/WordTraceExperience.tsx` - Live streaming trace UI for uncached word pages
 - `components/EtymologyCard.tsx` - Entry layout; `pending` renders skeletons until each synthesis_section lands
 - `components/AncestryTree.tsx` - Lineage tree: CSS-laid-out nodes, edges measured from the DOM into an SVG overlay, draggable nodes (mouse drag; touch press-and-hold), one shared details panel

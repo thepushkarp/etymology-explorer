@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import type { EtymologyResult } from './types'
+import { etymologyResult } from './testSupport/etymologyResult'
 
 /**
  * New-cache path: storing a freshly synthesized result must revalidate the
@@ -43,15 +44,12 @@ const {
   lexemeFromEtymologyCacheKey,
 } = await import('./cache')
 
-const RESULT: EtymologyResult = {
+const RESULT: EtymologyResult = etymologyResult({
   word: 'nice',
   pronunciation: '/naɪs/',
   definition: 'Pleasant; agreeable.',
-  roots: [],
-  ancestryGraph: { branches: [] },
   lore: 'From Latin nescius, ignorant.',
-  sources: [],
-}
+})
 
 function fakeRedis(overrides: Partial<FakeRedis> = {}): FakeRedis {
   return {
@@ -120,36 +118,17 @@ describe('cacheEtymology word-page revalidation', () => {
     expect(currentRedis.set).toHaveBeenCalledTimes(1)
   })
 
-  test('isolates same-spelling beta result and audio keys by language', async () => {
+  test('isolates same-spelling result and audio keys by language', async () => {
     currentRedis = fakeRedis()
-    const betaResult: EtymologyResult = {
+    const italianResult = etymologyResult({
       language: 'it',
       word: 'sale',
       pronunciation: '/ˈsa.le/',
-      definition: { en: 'salt', local: 'sale' },
-      roots: [],
-      ancestryGraph: { branches: [] },
-      lore: { en: 'Salt has an old story.', local: 'Il sale ha una storia antica.' },
-      sources: [],
-      primaryHistoryId: 'it:sale:main',
-      histories: [
-        {
-          id: 'it:sale:main',
-          label: { en: 'salt', local: 'sale' },
-          entryKind: 'lemma',
-          queryNodeId: 'query:it:sale:main',
-          lemmaNodeId: 'query:it:sale:main',
-          evidenceScopeIds: ['wiktionaryNative:sale:main'],
-          pronunciation: '/ˈsa.le/',
-          definition: { en: 'salt', local: 'sale' },
-          roots: [],
-          ancestryGraph: { branches: [] },
-          lore: { en: 'Salt has an old story.', local: 'Il sale ha una storia antica.' },
-        },
-      ],
-    }
+      definition: 'salt',
+      lore: 'Salt has an old story.',
+    })
 
-    await cacheEtymology('sale', betaResult, 'it')
+    await cacheEtymology('sale', italianResult, 'it')
     await cacheAudio('sale', 'audio-it', 'it')
     await cacheAudio('sale', 'audio-fr', 'fr')
 
@@ -161,7 +140,7 @@ describe('cacheEtymology word-page revalidation', () => {
     expect(revalidateTagMock).toHaveBeenCalledWith('etymology-word:it:sale', { expire: 0 })
   })
 
-  test('keeps the established English audio key while qualifying beta languages', async () => {
+  test('keeps the established English audio key while qualifying other languages', async () => {
     currentRedis = fakeRedis({ get: mock(async () => 'audio-en') })
 
     expect(await getCachedAudio('  NiCe ', 'en')).toBe('audio-en')
@@ -173,7 +152,7 @@ describe('cacheEtymology word-page revalidation', () => {
     })
   })
 
-  test('decodes English and beta result keys from the shared sitemap scan', () => {
+  test('decodes English and other-language result keys from the shared sitemap scan', () => {
     expect(ETYMOLOGY_SCAN_PATTERN).toBe('etymology:*')
     expect(lexemeFromEtymologyCacheKey('etymology:v2.7:sale')).toEqual({
       language: 'en',
@@ -188,8 +167,19 @@ describe('cacheEtymology word-page revalidation', () => {
     expect(lexemeFromEtymologyCacheKey('etymology:beta:v8:it:sale')).toBeNull()
   })
 
-  test('never returns an English object from a beta cache key', async () => {
+  test('never returns an English object from another language cache key', async () => {
     currentRedis = fakeRedis({ get: mock(async () => RESULT) })
+    expect(await getCachedEtymology('sale', 'it')).toBeNull()
+  })
+
+  test('reads an entry cached with paired English and local prose as a miss', async () => {
+    const paired = {
+      ...etymologyResult({ language: 'it', word: 'sale', definition: 'salt', lore: 'Story.' }),
+      definition: { en: 'salt', local: 'sale' },
+      lore: { en: 'Salt has an old story.', local: 'Il sale ha una storia antica.' },
+      examples: [{ en: 'Pass the salt.', local: 'Passami il sale.' }],
+    }
+    currentRedis = fakeRedis({ get: mock(async () => paired) })
     expect(await getCachedEtymology('sale', 'it')).toBeNull()
   })
 })

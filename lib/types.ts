@@ -1,15 +1,8 @@
 import type { ParsedEtymChain } from './etymologyParser'
-import type { BetaLanguageCode, LanguageCode } from './languages'
+import type { LanguageCode } from './languages'
 import type { WiktionaryEntryGroup } from './wiktionaryEntryGroups'
 import type { SourceProviderId, SourceFamilyId } from './sourceProviders'
 export type { SourceProviderId, SourceFamilyId } from './sourceProviders'
-
-export interface BilingualText {
-  en: string
-  local: string
-}
-
-export type ResultText = string | BilingualText
 
 export interface LexemeRef {
   word: string
@@ -88,10 +81,10 @@ export interface LexicalResearchGraph {
  * A single etymological root component of a word
  * Words can have 1 to many roots (e.g., "cat" has 1, "telephone" has 2, "autobiography" has 3)
  */
-export interface Root<Text extends ResultText = string> {
+export interface Root {
   root: string // e.g., "fides"
   origin: string // e.g., "Latin"
-  meaning: Text // e.g., "faith, trust"
+  meaning: string // e.g., "faith, trust"
   relatedWords: string[] // e.g., ["fidelity", "confide", "diffident"]
   ancestorRoots?: string[] // Older forms (e.g., PIE *bheid- for "fides")
   descendantWords?: string[] // Modern derivatives in other languages
@@ -128,10 +121,10 @@ export type StageConfidence = 'high' | 'medium' | 'low'
 /**
  * A stage in a single branch of the word's etymological ancestry
  */
-export interface AncestryStage<Text extends ResultText = string> {
+export interface AncestryStage {
   stage: string // Language/period: "Proto-Indo-European", "Greek", "Latin", etc.
   form: string // The word form at this stage
-  note: Text // Brief annotation about meaning/context at this stage
+  note: string // Brief annotation about meaning/context at this stage
   isReconstructed?: boolean // true for PIE/*-prefixed forms
   confidence?: StageConfidence // assigned by enricher post-LLM
   evidence?: StageEvidence[] // source snippets supporting this stage
@@ -141,18 +134,18 @@ export interface AncestryStage<Text extends ResultText = string> {
  * A branch representing one root's evolution through time
  * Multiple branches can exist for compound words and merge together
  */
-export interface AncestryBranch<Text extends ResultText = string> {
+export interface AncestryBranch {
   root: string // The root this branch traces (e.g., "tele", "phone")
-  stages: AncestryStage<Text>[] // Evolution stages for this root
+  stages: AncestryStage[] // Evolution stages for this root
 }
 
 /**
  * Convergence point where multiple branches share a common PIE ancestor
  * Used to visualize how seemingly unrelated words connect at deep history
  */
-export interface ConvergencePoint<Text extends ResultText = string> {
+export interface ConvergencePoint {
   pieRoot: string // The shared Proto-Indo-European root
-  meaning: Text // What the PIE root meant
+  meaning: string // What the PIE root meant
   branchIndices: number[] // Which branches (by index) share this ancestor
 }
 
@@ -160,15 +153,15 @@ export interface ConvergencePoint<Text extends ResultText = string> {
  * Graph-based ancestry showing how roots evolved and merged
  * Supports: single roots, compound words with merging branches, post-merge evolution
  */
-export interface AncestryGraph<Text extends ResultText = string> {
-  branches: AncestryBranch<Text>[] // Independent evolution paths for each root
-  convergencePoints?: ConvergencePoint<Text>[] // Where branches share deep PIE ancestors
+export interface AncestryGraph {
+  branches: AncestryBranch[] // Independent evolution paths for each root
+  convergencePoints?: ConvergencePoint[] // Where branches share deep PIE ancestors
   mergePoint?: {
     // Where branches combine (for compound words)
     form: string // The combined form
-    note: Text // Context about the combination
+    note: string // Context about the combination
   }
-  postMerge?: AncestryStage<Text>[] // Evolution after merge (optional)
+  postMerge?: AncestryStage[] // Evolution after merge (optional)
 }
 
 /**
@@ -189,9 +182,9 @@ export type PartOfSpeech =
  * Definition for a specific part of speech
  * Useful for words like "record" that have different pronunciations per POS
  */
-export interface POSDefinition<Text extends ResultText = string> {
+export interface POSDefinition {
   pos: PartOfSpeech
-  definition: Text
+  definition: string
   pronunciation?: string // If different per POS (e.g., "REcord" vs "reCORD")
 }
 
@@ -210,12 +203,12 @@ export interface WordSuggestions {
  * Modern and slang usage context
  * Captures contemporary meanings that may differ from etymological origins
  */
-export interface ModernUsage<Text extends ResultText = string> {
+export interface ModernUsage {
   hasSlangMeaning: boolean
-  slangDefinition?: Text
-  popularizedBy?: Text // e.g., "popularized by TikTok in 2020s"
-  contexts?: Text[] // e.g., ["LGBTQ+ community", "internet culture"]
-  notableReferences?: Text[] // Famous uses in media/literature
+  slangDefinition?: string
+  popularizedBy?: string // e.g., "popularized by TikTok in 2020s"
+  contexts?: string[] // e.g., ["LGBTQ+ community", "internet culture"]
+  notableReferences?: string[] // Famous uses in media/literature
 }
 
 export interface NgramResult {
@@ -236,26 +229,49 @@ export interface LlmUsage {
 }
 
 /**
- * Complete etymology result for a word
+ * A usage sentence in the word's own language. `translation` is its English
+ * gloss and is absent for English words.
  */
-export interface EtymologyResultBase<Language extends LanguageCode, Text extends ResultText> {
-  language: Language
-  word: string
+export interface UsageExample {
+  text: string
+  translation?: string
+}
+
+/** The entry fields each lexical history carries; the result projects its primary history. */
+interface HistoryEntryFields {
   pronunciation: string // IPA, e.g., "/pərˈfɪdiəs/"
-  definition: Text // Brief definition
-  roots: Root<Text>[] // 1 to many roots depending on word composition
-  ancestryGraph: AncestryGraph<Text> // Graph showing how roots evolved and merged
-  lore: Text // 4-6 sentence revelationary narrative with "aha" moments
-  /**
-   * Two contrasting example sentences for this entry. Beta prose pairs the
-   * selected-language sentence (`local`) with its English translation (`en`).
-   * Absent on entries cached before the field existed.
-   */
-  examples?: Text[]
+  definition: string // Brief definition
+  roots: Root[] // 1 to many roots depending on word composition
+  ancestryGraph: AncestryGraph // Graph showing how roots evolved and merged
+  lore: string // 4-6 sentence revelationary narrative with "aha" moments
+  /** Two contrasting example sentences. Absent on entries cached before the field existed. */
+  examples?: UsageExample[]
+  partsOfSpeech?: POSDefinition[] // Definitions per grammatical category
+}
+
+/** One independently selectable lexical history for a same-spelling query. */
+export interface LexicalHistory extends HistoryEntryFields {
+  id: string
+  label: string
+  entryKind: 'lemma' | 'form' | 'unresolved'
+  queryNodeId: string
+  lemmaNodeId: string
+  formOf?: LexemeRef
+  evidenceScopeIds: string[]
+}
+
+/**
+ * Complete etymology result for a word. Every prose field is English; only
+ * `examples[].text` is written in the word's own language.
+ */
+export interface EtymologyResult extends HistoryEntryFields {
+  language: LanguageCode
+  word: string
+  primaryHistoryId: string
+  histories: LexicalHistory[]
   sources: SourceReference[]
-  partsOfSpeech?: POSDefinition<Text>[] // Definitions per grammatical category
   suggestions?: WordSuggestions // Related words for vocabulary building
-  modernUsage?: ModernUsage<Text> // Contemporary/slang meanings
+  modernUsage?: ModernUsage // Contemporary/slang meanings
   ngram?: NgramResult
   rawSources?: {
     wikipedia?: string
@@ -263,43 +279,11 @@ export interface EtymologyResultBase<Language extends LanguageCode, Text extends
   }
 }
 
-/** One independently selectable lexical history for a same-spelling query. */
-export interface LexicalHistory<Text extends ResultText> {
-  id: string
-  label: Text
-  entryKind: 'lemma' | 'form' | 'unresolved'
-  queryNodeId: string
-  lemmaNodeId: string
-  formOf?: LexemeRef
-  evidenceScopeIds: string[]
-  pronunciation: string
-  definition: Text
-  roots: Root<Text>[]
-  ancestryGraph: AncestryGraph<Text>
-  lore: Text
-  examples?: Text[]
-  partsOfSpeech?: POSDefinition<Text>[]
-}
-
-export type EnglishEtymologyResult = Omit<EtymologyResultBase<'en', string>, 'language'> & {
-  /** Legacy cache entries predate language identity; absence always means English. */
-  language?: 'en'
-  primaryHistoryId?: string
-  histories?: LexicalHistory<string>[]
-}
-export type BetaEtymologyResult = EtymologyResultBase<BetaLanguageCode, BilingualText> & {
-  primaryHistoryId: string
-  histories: LexicalHistory<BilingualText>[]
-}
-export type EtymologyResult = EnglishEtymologyResult | BetaEtymologyResult
-/** A rendered usage example; `translation` glosses a foreign-language sentence. */
-export interface DisplayUsageExample {
-  text: string
-  translation?: string
-}
-export type DisplayEtymologyResult = Omit<EtymologyResultBase<LanguageCode, string>, 'examples'> & {
-  examples?: DisplayUsageExample[]
-}
+/**
+ * The fields an entry renders: a result projected onto one of its histories,
+ * or the sections of a streaming synthesis received so far.
+ */
+export type EtymologyEntry = Omit<EtymologyResult, 'primaryHistoryId' | 'histories'>
 
 /**
  * API response wrapper

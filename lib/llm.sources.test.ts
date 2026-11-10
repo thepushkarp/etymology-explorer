@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { finalizeResult } from './llm'
+import { scopeEnglishHistories } from './research'
+import { etymologyResult } from './testSupport/etymologyResult'
 import { EtymologyResultSchema } from './schemas/etymology'
 import { SOURCE_PROVIDER_IDS, sourceFamily, type SourceProviderId } from './sourceProviders'
 import { lexicalSourceRecords, mainSourceRecords } from './researchSources'
@@ -13,18 +15,24 @@ function record(
   return { provider, sourceFamily: sourceFamily(provider), data: { text, url } }
 }
 
+const ENTRY = {
+  word: 'nice',
+  pronunciation: '/naɪs/',
+  definition: 'Pleasant.',
+  lore: 'Origin uncertain.',
+}
+
+/** Scope the research's histories, then finalize a synthesis that covers each of them. */
+function finalize(context: ResearchContext): EtymologyResult {
+  scopeEnglishHistories(context)
+  return finalizeResult(etymologyResult(ENTRY, context), context, 'standard')
+}
+
 function fixture(): { result: EtymologyResult; context: ResearchContext } {
   return {
-    result: {
-      word: 'nice',
-      pronunciation: '/naɪs/',
-      definition: 'Pleasant.',
-      lore: 'Origin uncertain.',
-      roots: [],
-      ancestryGraph: { branches: [] },
-      sources: [],
-    },
+    result: etymologyResult(ENTRY),
     context: {
+      language: 'en',
       mainWord: { word: 'nice', etymonline: null, wiktionary: null },
       rootResearch: [],
       relatedResearch: [],
@@ -36,7 +44,7 @@ function fixture(): { result: EtymologyResult; context: ResearchContext } {
 
 describe('canonical research sources', () => {
   test('attributes query, ancestor, and related publishers with entry URLs and independent families', () => {
-    const { result, context } = fixture()
+    const { context } = fixture()
     const sharedPortal = 'https://www.cnrtl.fr/etymologie/nice'
     context.mainWord.sources = [record('tlfi', sharedPortal), record('littre', sharedPortal)]
     const historical = record('bosworthToller', 'https://bosworthtoller.com/28714')
@@ -71,7 +79,7 @@ describe('canonical research sources', () => {
         etymonlineData: null,
       },
     ]
-    const finalized = finalizeResult(result, context, 'standard')
+    const finalized = finalize(context)
     expect(finalized.sources.map(({ name }) => name)).toEqual([
       'tlfi',
       'littre',
@@ -88,19 +96,19 @@ describe('canonical research sources', () => {
   })
 
   test('canonical collections override named projections and duplicate retrievals add no citation', () => {
-    const { result, context } = fixture()
+    const { context } = fixture()
     context.mainWord.etymonline = {
       text: 'Stale projection.',
       url: 'https://www.etymonline.com/word/nice',
     }
     context.mainWord.sources = []
     expect(mainSourceRecords(context.mainWord)).toEqual([])
-    expect(finalizeResult(result, context, 'standard').sources).toEqual([{ name: 'synthesized' }])
+    expect(finalize(context).sources).toEqual([{ name: 'synthesized' }])
     const direct = record('etymonline', 'https://www.etymonline.com/word/nice')
     const recovered = structuredClone(direct)
     recovered.data.retrieval = { method: 'exa', retrievedAt: '2026-11-04T00:00:00Z' }
     context.mainWord.sources = [direct, recovered]
-    expect(finalizeResult(result, context, 'standard').sources).toHaveLength(1)
+    expect(finalize(context).sources).toHaveLength(1)
   })
 
   test('encyclopedia and senses-only evidence cannot masquerade as etymology', () => {

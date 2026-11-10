@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test'
 import type { EtymologyResult } from '@/lib/types'
+import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 
 let cachedResult: EtymologyResult | null = null
 
@@ -17,7 +18,7 @@ mock.module('next/cache', () => ({
 
 const { generateMetadata } = await import('./[...segments]/page')
 
-const fixture: EtymologyResult = {
+const fixture: EtymologyResult = etymologyResult({
   word: 'perfidious',
   pronunciation: '/pərˈfɪdiəs/',
   definition: 'Deceitful and untrustworthy; treacherous in matters of faith.',
@@ -34,14 +35,14 @@ const fixture: EtymologyResult = {
   sources: [
     { name: 'etymonline', url: 'https://www.etymonline.com/word/perfidious', word: 'perfidious' },
   ],
-}
+})
 
 function paramsFor(word: string) {
   return { params: Promise.resolve({ segments: [word] }) }
 }
 
 describe('/word/[word] generateMetadata', () => {
-  test('uncached English and beta-language phrases have canonical noindex pages', async () => {
+  test('uncached English and other-language phrases have canonical noindex pages', async () => {
     cachedResult = null
     const english = await generateMetadata(paramsFor(' Red%20%20Herring '))
     expect(english.alternates?.canonical).toBe('/word/red%20herring')

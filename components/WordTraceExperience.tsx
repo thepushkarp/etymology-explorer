@@ -70,7 +70,6 @@ export function WordTraceExperience({ word, language = 'en' }: WordTraceExperien
           <EtymologyCard
             result={partial}
             pending={progress.status === 'loading'}
-            contentLocale={language === 'en' ? 'en' : 'local'}
             subheader={
               progress.status === 'idle' ? (
                 <TraceGate onStart={() => search(word)} />

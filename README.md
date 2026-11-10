@@ -8,7 +8,7 @@ Try it out at [etymex.com](https://etymex.com)
 
 - **Public Mode**: No client-side API keys needed — uses a server-side LLM with rate limiting, caching, and budget controls
 - **Grounded Etymology**: Source-backed confidence scoring (high/medium/low) for each ancestral stage
-- **Romance-language Beta**: Explicit Italian, Spanish, French, and neutral Portuguese lookup with paired local/English prose and no spelling-based language inference
+- **Romance Languages**: Explicit Italian, Spanish, French, and Portuguese lookup with no spelling-based language inference, explained in English with usage examples in the word's own language and their English translations
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
 - **Part of Speech Tags**: See grammatical categories (noun/verb/adjective) with alternate pronunciations for words like "record"
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
@@ -17,7 +17,7 @@ Try it out at [etymex.com](https://etymex.com)
 - **Modern Usage**: Supplemental community usage gated by source significance from Incel Wiki extracts
 - **Pronunciation Audio**: Listen to word pronunciations powered by ElevenLabs
 - **Random Word**: Open a random word to expand your vocabulary
-- **Recently Explored**: Four random selections from the latest 20 successful searches in each language, with localized previews and curated fallback words
+- **Recently Explored**: Four random selections from the latest 20 successful searches in each language, with previews and curated fallback words
 - **Specialist Dictionaries**: General and language-specific evidence for query words, components, variants, and ancestors
 - **Structured Outputs**: Guaranteed valid JSON via OpenRouter `json_schema` strict mode
 - **Streaming UI**: Optional `?stream=true` server-sent events for source progress,

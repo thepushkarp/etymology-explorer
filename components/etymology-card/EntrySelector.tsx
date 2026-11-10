@@ -1,18 +1,18 @@
 'use client'
 
 import { useRef, type KeyboardEvent } from 'react'
-import type { DisplayHistoryChoice } from '@/lib/resultLocalization'
+import type { HistoryChoice } from '@/lib/resultHistories'
 
 interface EntrySelectorProps {
   word: string
-  entries: DisplayHistoryChoice[]
+  entries: HistoryChoice[]
   activeEntryId: string
   onChange: (entryId: string) => void
 }
 
 const ROMAN_NUMERALS = ['I', 'II', 'III', 'IV']
 
-function metadata(entry: DisplayHistoryChoice): string {
+function metadata(entry: HistoryChoice): string {
   if (entry.formOf) return `form of ${entry.formOf.word}`
   if (entry.partsOfSpeech.length > 0) return entry.partsOfSpeech.join(' · ')
   return entry.entryKind === 'unresolved' ? 'distinct history' : entry.entryKind

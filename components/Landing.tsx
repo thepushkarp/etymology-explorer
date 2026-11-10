@@ -13,7 +13,6 @@ import {
   type RecentSearchPreview,
 } from '@/lib/recentSearchPreview'
 import {
-  BETA_SYMBOL,
   LANGUAGES,
   parseLanguageCode,
   SUPPORTED_LANGUAGE_CODES,
@@ -110,7 +109,6 @@ export function Landing() {
                 {SUPPORTED_LANGUAGE_CODES.map((code) => (
                   <option key={code} value={code}>
                     {LANGUAGES[code].nativeName}
-                    {LANGUAGES[code].beta ? ` ${BETA_SYMBOL}` : ''}
                   </option>
                 ))}
               </select>

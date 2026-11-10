@@ -1,16 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { z } from 'zod'
-import {
-  BETA_ETYMOLOGY_LLM_SCHEMA,
-  ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA,
-  ETYMOLOGY_LLM_SCHEMA,
-  stripNullsDeep,
-} from '@/lib/schemas/llm-schema'
-import {
-  BetaEtymologyResultSchema,
-  EnglishHistoryEtymologyResultSchema,
-  EtymologyResultSchema,
-} from '@/lib/schemas/etymology'
+import { ETYMOLOGY_LLM_SCHEMA, stripNullsDeep } from '@/lib/schemas/llm-schema'
+import { EtymologyResultSchema } from '@/lib/schemas/etymology'
 
 /**
  * Zod keys the LLM must NOT generate: enrichment fields assigned by
@@ -188,6 +179,74 @@ function driftFailures(llmSchema: JsonSchemaNode): string[] {
   return failures
 }
 
+/** A synthesis response exactly as strict mode emits it, nulls included. */
+function strictModeResult() {
+  const entry = {
+    pronunciation: '/brɛd/',
+    definition: 'staple baked food',
+    ancestryGraph: {
+      branches: [
+        {
+          root: 'bread',
+          stages: [{ stage: 'Old English', form: 'brēad', note: 'morsel, crumb' }],
+        },
+      ],
+      convergencePoints: null,
+      mergePoint: null,
+      postMerge: null,
+    },
+    roots: [
+      {
+        root: 'bread',
+        origin: 'Old English',
+        meaning: 'piece of food',
+        relatedWords: ['breadth'],
+        ancestorRoots: null,
+        descendantWords: null,
+      },
+    ],
+    lore: 'A fixture lore line.',
+    examples: [
+      { text: 'She baked bread before dawn.', translation: null },
+      { text: 'Bread and salt welcomed the guests.', translation: null },
+    ],
+    partsOfSpeech: [{ pos: 'noun', definition: 'baked food', pronunciation: null }],
+  }
+  return {
+    language: 'en',
+    word: 'bread',
+    primaryHistoryId: 'history:en:bread:1',
+    histories: [
+      {
+        id: 'history:en:bread:1',
+        label: 'baked food',
+        entryKind: 'lemma',
+        queryNodeId: 'query:history:en:bread:1',
+        lemmaNodeId: 'query:history:en:bread:1',
+        formOf: null,
+        evidenceScopeIds: ['scope:en:bread:1'],
+        ...structuredClone(entry),
+      },
+    ],
+    ...entry,
+    suggestions: {
+      synonyms: ['loaf'],
+      antonyms: [],
+      homophones: ['bred'],
+      easilyConfusedWith: [],
+      seeAlso: ['dough'],
+    },
+    modernUsage: {
+      hasSlangMeaning: false,
+      slangDefinition: null,
+      popularizedBy: null,
+      contexts: null,
+      notableReferences: null,
+    },
+    sources: [{ name: 'etymonline' }],
+  }
+}
+
 describe('ETYMOLOGY_LLM_SCHEMA sync with Zod schema', () => {
   test('llm-schema matches the Zod cache schema (no drift)', () => {
     expect(driftFailures(ETYMOLOGY_LLM_SCHEMA as JsonSchemaNode)).toEqual([])
@@ -195,7 +254,10 @@ describe('ETYMOLOGY_LLM_SCHEMA sync with Zod schema', () => {
 
   test('top-level properties are declared in render order', () => {
     expect(Object.keys(ETYMOLOGY_LLM_SCHEMA.properties)).toEqual([
+      'language',
       'word',
+      'primaryHistoryId',
+      'histories',
       'pronunciation',
       'definition',
       'ancestryGraph',
@@ -270,125 +332,14 @@ describe('stripNullsDeep', () => {
   })
 
   test('a strict-mode shaped result validates against the Zod schema after stripping', () => {
-    const llmShaped = {
-      word: 'bread',
-      pronunciation: '/brɛd/',
-      definition: 'staple baked food',
-      ancestryGraph: {
-        branches: [
-          {
-            root: 'bread',
-            stages: [{ stage: 'Old English', form: 'brēad', note: 'morsel, crumb' }],
-          },
-        ],
-        convergencePoints: null,
-        mergePoint: null,
-        postMerge: null,
-      },
-      roots: [
-        {
-          root: 'bread',
-          origin: 'Old English',
-          meaning: 'piece of food',
-          relatedWords: ['breadth'],
-          ancestorRoots: null,
-          descendantWords: null,
-        },
-      ],
-      lore: 'A fixture lore line.',
-      partsOfSpeech: [{ pos: 'noun', definition: 'baked food', pronunciation: null }],
-      suggestions: {
-        synonyms: ['loaf'],
-        antonyms: [],
-        homophones: ['bred'],
-        easilyConfusedWith: [],
-        seeAlso: ['dough'],
-      },
-      modernUsage: {
-        hasSlangMeaning: false,
-        slangDefinition: null,
-        popularizedBy: null,
-        contexts: null,
-        notableReferences: null,
-      },
-      sources: [{ name: 'etymonline' }],
-    }
-
-    const stripped = stripNullsDeep(llmShaped)
-    const parsed = EtymologyResultSchema.safeParse(stripped)
-    expect(parsed.success).toBe(true)
-  })
-})
-
-describe('BETA_ETYMOLOGY_LLM_SCHEMA histories', () => {
-  test('declares source histories before their compatibility projection', () => {
-    const properties = BETA_ETYMOLOGY_LLM_SCHEMA.properties as Record<string, unknown>
-    expect(Object.keys(properties)).toEqual([
-      'language',
-      'word',
-      'primaryHistoryId',
-      'histories',
-      'pronunciation',
-      'definition',
-      'ancestryGraph',
-      'roots',
-      'lore',
-      'examples',
-      'partsOfSpeech',
-      'suggestions',
-      'modernUsage',
-      'sources',
-    ])
-  })
-
-  test('Zod rejects a history without both prose languages', () => {
-    const valid = {
-      language: 'it',
-      word: 'vite',
-      primaryHistoryId: 'vine',
-      histories: [
-        {
-          id: 'vine',
-          label: { en: 'vine', local: 'pianta' },
-          entryKind: 'lemma',
-          queryNodeId: 'query:vine',
-          lemmaNodeId: 'query:vine',
-          evidenceScopeIds: ['native:vite:vine'],
-          pronunciation: '/vite/',
-          definition: { en: 'vine', local: 'pianta' },
-          ancestryGraph: { branches: [] },
-          roots: [],
-          lore: { en: 'A vine history.', local: 'Una storia della vite.' },
-          partsOfSpeech: [],
-        },
-      ],
-      pronunciation: '/vite/',
-      definition: { en: 'vine', local: 'pianta' },
-      ancestryGraph: { branches: [] },
-      roots: [],
-      lore: { en: 'A vine history.', local: 'Una storia della vite.' },
-      partsOfSpeech: [],
-      suggestions: {},
-      modernUsage: { hasSlangMeaning: false },
-      sources: [],
-    }
-    expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(true)
-    valid.histories = Array.from({ length: 6 }, (_, index) => ({
-      ...valid.histories[0],
-      id: index === 0 ? 'vine' : `history-${index}`,
-    }))
-    expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(true)
-    valid.histories[0].label = { en: 'vine' } as { en: string; local: string }
-    expect(BetaEtymologyResultSchema.safeParse(valid).success).toBe(false)
+    const stripped = stripNullsDeep(strictModeResult())
+    expect(EtymologyResultSchema.safeParse(stripped).success).toBe(true)
   })
 })
 
 describe('usage examples', () => {
   test('every entry and history requires exactly two examples', () => {
-    const histories = (BETA_ETYMOLOGY_LLM_SCHEMA.properties as Record<string, JsonSchemaNode>)
-      .histories.items as JsonSchemaNode & {
-      properties: Record<string, JsonSchemaNode & { minItems?: number; maxItems?: number }>
-    }
+    const histories = ETYMOLOGY_LLM_SCHEMA.properties.histories.items
     for (const node of [
       ETYMOLOGY_LLM_SCHEMA.properties.examples,
       histories.properties.examples,
@@ -399,41 +350,20 @@ describe('usage examples', () => {
     expect(histories.required).toContain('examples')
   })
 
-  test('beta examples pair the local sentence with its English translation', () => {
-    const examples = (BETA_ETYMOLOGY_LLM_SCHEMA.properties as Record<string, JsonSchemaNode>)
-      .examples
-    expect(examples.items?.required).toEqual(['en', 'local'])
+  test('each example is a sentence with a nullable English translation', () => {
+    const items = ETYMOLOGY_LLM_SCHEMA.properties.examples.items
+    expect(items.required).toEqual(['text', 'translation'])
+    expect(items.properties.translation.type).toEqual(['string', 'null'])
   })
 
   test('entries cached before examples existed remain valid', () => {
-    const legacy = {
-      word: 'fede',
-      pronunciation: '/ˈfe.de/',
-      definition: 'faith',
-      roots: [],
-      ancestryGraph: { branches: [] },
-      lore: 'A history of trust.',
-      sources: [],
+    const legacy = stripNullsDeep(strictModeResult()) as Record<string, unknown> & {
+      histories: Array<Record<string, unknown>>
     }
+    delete legacy.examples
+    delete legacy.histories[0].examples
     expect(EtymologyResultSchema.safeParse(legacy).success).toBe(true)
-    expect(
-      EtymologyResultSchema.safeParse({ ...legacy, examples: ['One.', 'Two.', 'Three.'] }).success
-    ).toBe(false)
-  })
-})
-
-describe('ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA sync with Zod schema', () => {
-  test('source histories share strict shape and retain English prose strings', () => {
-    const failures: string[] = []
-    collectDrift(
-      EnglishHistoryEtymologyResultSchema as unknown as z.ZodType,
-      ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA as JsonSchemaNode,
-      '',
-      failures
-    )
-    expect(failures).toEqual([])
-    expect(
-      Object.keys(ENGLISH_HISTORY_ETYMOLOGY_LLM_SCHEMA.properties as object).slice(0, 4)
-    ).toEqual(['word', 'primaryHistoryId', 'histories', 'pronunciation'])
+    legacy.examples = [{ text: 'One.' }, { text: 'Two.' }, { text: 'Three.' }]
+    expect(EtymologyResultSchema.safeParse(legacy).success).toBe(false)
   })
 })

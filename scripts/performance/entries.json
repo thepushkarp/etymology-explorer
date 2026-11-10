@@ -1,6 +1,141 @@
 {
   "etymology:v2.7:nice": {
+    "language": "en",
     "word": "nice",
+    "primaryHistoryId": "history:en:nice:1",
+    "histories": [
+      {
+        "id": "history:en:nice:1",
+        "label": "Pleasant, agreeable, or kind; formerly foolish",
+        "entryKind": "lemma",
+        "queryNodeId": "query:history:en:nice:1",
+        "lemmaNodeId": "query:history:en:nice:1",
+        "evidenceScopeIds": ["scope:en:nice:1"],
+        "pronunciation": "/naɪs/",
+        "definition": "Pleasant, agreeable, or kind; formerly foolish",
+        "roots": [
+          {
+            "root": "ne",
+            "origin": "Proto-Indo-European",
+            "meaning": "Not; negation",
+            "relatedWords": ["ne", "nay", "否"],
+            "ancestorRoots": ["*ne-"],
+            "descendantWords": ["Latin ne", "French ne", "Russian не"]
+          },
+          {
+            "root": "scire",
+            "origin": "Latin",
+            "meaning": "To know",
+            "relatedWords": ["science", "conscience", "omniscient", "prescience", "nescient"],
+            "descendantWords": ["science", "scientific", "conscious", "omniscient", "prescient"]
+          }
+        ],
+        "ancestryGraph": {
+          "branches": [
+            {
+              "root": "ne",
+              "stages": [
+                {
+                  "stage": "Latin",
+                  "form": "ne",
+                  "note": "Negative particle meaning “not”",
+                  "isReconstructed": false,
+                  "confidence": "low"
+                },
+                {
+                  "stage": "Latin",
+                  "form": "nescius",
+                  "note": "Joined with the knowing root to form “ignorant, unaware”",
+                  "isReconstructed": false,
+                  "confidence": "medium",
+                  "evidence": [
+                    {
+                      "source": "etymonline",
+                      "snippet": "from Latin nescius \"ignorant, unaware,\" literally \"not-knowing,\""
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "root": "scire",
+              "stages": [
+                {
+                  "stage": "Latin",
+                  "form": "scire",
+                  "note": "Verb meaning “to know”; source of the stem in nescius",
+                  "isReconstructed": false,
+                  "confidence": "low"
+                },
+                {
+                  "stage": "Latin",
+                  "form": "sciens",
+                  "note": "“Knowing, intelligent, skilled,” from the same verb",
+                  "isReconstructed": false,
+                  "confidence": "low"
+                }
+              ]
+            }
+          ],
+          "mergePoint": {
+            "form": "nescius",
+            "note": "Latin ne- “not” + the stem of scire “to know”: literally “not-knowing.”"
+          },
+          "postMerge": [
+            {
+              "stage": "Old French",
+              "form": "nice",
+              "note": "“Careless, clumsy, weak, simple, foolish”",
+              "isReconstructed": false,
+              "confidence": "medium",
+              "evidence": [
+                {
+                  "source": "etymonline",
+                  "snippet": "from Old French nice (12c.) \"careless, clumsy; weak; poor, needy; simple, stupid, silly, foolish,\""
+                }
+              ]
+            },
+            {
+              "stage": "Middle English",
+              "form": "nice",
+              "note": "Late 13th-century adjective meaning “foolish, ignorant, frivolous”",
+              "isReconstructed": false,
+              "confidence": "medium",
+              "evidence": [
+                {
+                  "source": "etymonline",
+                  "snippet": "from Old French nice (12c.) \"careless, clumsy; weak; poor, needy; simple, stupid, silly, foolish,\""
+                }
+              ]
+            },
+            {
+              "stage": "Modern English",
+              "form": "nice",
+              "note": "Meanings gradually shifted through “fussy,” “precise,” and “dainty” to “agreeable” and “kind.”",
+              "isReconstructed": false,
+              "confidence": "medium",
+              "evidence": [
+                {
+                  "source": "etymonline",
+                  "snippet": "from Old French nice (12c.) \"careless, clumsy; weak; poor, needy; simple, stupid, silly, foolish,\""
+                }
+              ]
+            }
+          ]
+        },
+        "lore": "Once, calling someone nice was closer to calling them an idiot than complimenting their manners. Latin nescius meant “not-knowing,” built from ne, “not,” and scire, “to know”—the same knowing family that eventually gave English science. Old French inherited nice, and by the late 13th century English speakers used it for people who were foolish, ignorant, or simply silly. Then the word wandered through “timid,” “fussy,” “dainty,” and “precise,” acquiring so many delicate meanings that Jane Austen joked in Northanger Abbey (1803) that nice “does for everything.” By 1830 it could describe a kind person, while today it is often a mild all-purpose compliment—an astonishing journey from “you don’t know much” to “that was nice.”",
+        "partsOfSpeech": [
+          {
+            "pos": "adjective",
+            "definition": "Pleasant, satisfactory, friendly, attractive, or respectable"
+          },
+          {
+            "pos": "interjection",
+            "definition": "Used to express approval or praise for something well done"
+          }
+        ]
+      }
+    ],
     "pronunciation": "/naɪs/",
     "definition": "Pleasant, agreeable, or kind; formerly foolish",
     "roots": [
@@ -185,24 +320,17 @@
       "notableReferences": [
         "Urban Dictionary entries use nice as a conversational filler and as a reaction to the number 69."
       ]
-    },
-    "language": "en"
+    }
   },
   "etymology:beta:v9:fr:fenêtre": {
     "word": "fenêtre",
     "pronunciation": "/naɪs/",
-    "definition": {
-      "en": "window",
-      "local": "window"
-    },
+    "definition": "window",
     "roots": [
       {
         "root": "ne",
         "origin": "Proto-Indo-European",
-        "meaning": {
-          "en": "Not; negation",
-          "local": "Not; negation"
-        },
+        "meaning": "Not; negation",
         "relatedWords": ["ne", "nay", "否"],
         "ancestorRoots": ["*ne-"],
         "descendantWords": ["Latin ne", "French ne", "Russian не"]
@@ -210,18 +338,12 @@
       {
         "root": "scire",
         "origin": "Latin",
-        "meaning": {
-          "en": "To know",
-          "local": "To know"
-        },
+        "meaning": "To know",
         "relatedWords": ["science", "conscience", "omniscient", "prescience", "nescient"],
         "descendantWords": ["science", "scientific", "conscious", "omniscient", "prescient"]
       }
     ],
-    "lore": {
-      "en": "Once, calling someone nice was closer to calling them an idiot than complimenting their manners. Latin nescius meant “not-knowing,” built from ne, “not,” and scire, “to know”—the same knowing family that eventually gave English science. Old French inherited nice, and by the late 13th century English speakers used it for people who were foolish, ignorant, or simply silly. Then the word wandered through “timid,” “fussy,” “dainty,” and “precise,” acquiring so many delicate meanings that Jane Austen joked in Northanger Abbey (1803) that nice “does for everything.” By 1830 it could describe a kind person, while today it is often a mild all-purpose compliment—an astonishing journey from “you don’t know much” to “that was nice.”",
-      "local": "Once, calling someone nice was closer to calling them an idiot than complimenting their manners. Latin nescius meant “not-knowing,” built from ne, “not,” and scire, “to know”—the same knowing family that eventually gave English science. Old French inherited nice, and by the late 13th century English speakers used it for people who were foolish, ignorant, or simply silly. Then the word wandered through “timid,” “fussy,” “dainty,” and “precise,” acquiring so many delicate meanings that Jane Austen joked in Northanger Abbey (1803) that nice “does for everything.” By 1830 it could describe a kind person, while today it is often a mild all-purpose compliment—an astonishing journey from “you don’t know much” to “that was nice.”"
-    },
+    "lore": "Once, calling someone nice was closer to calling them an idiot than complimenting their manners. Latin nescius meant “not-knowing,” built from ne, “not,” and scire, “to know”—the same knowing family that eventually gave English science. Old French inherited nice, and by the late 13th century English speakers used it for people who were foolish, ignorant, or simply silly. Then the word wandered through “timid,” “fussy,” “dainty,” and “precise,” acquiring so many delicate meanings that Jane Austen joked in Northanger Abbey (1803) that nice “does for everything.” By 1830 it could describe a kind person, while today it is often a mild all-purpose compliment—an astonishing journey from “you don’t know much” to “that was nice.”",
     "sources": [
       {
         "name": "etymonline",
@@ -277,20 +399,14 @@
             {
               "stage": "Latin",
               "form": "ne",
-              "note": {
-                "en": "Negative particle meaning “not”",
-                "local": "Negative particle meaning “not”"
-              },
+              "note": "Negative particle meaning “not”",
               "isReconstructed": false,
               "confidence": "low"
             },
             {
               "stage": "Latin",
               "form": "nescius",
-              "note": {
-                "en": "Joined with the knowing root to form “ignorant, unaware”",
-                "local": "Joined with the knowing root to form “ignorant, unaware”"
-              },
+              "note": "Joined with the knowing root to form “ignorant, unaware”",
               "isReconstructed": false,
               "confidence": "medium",
               "evidence": [
@@ -308,20 +424,14 @@
             {
               "stage": "Latin",
               "form": "scire",
-              "note": {
-                "en": "Verb meaning “to know”; source of the stem in nescius",
-                "local": "Verb meaning “to know”; source of the stem in nescius"
-              },
+              "note": "Verb meaning “to know”; source of the stem in nescius",
               "isReconstructed": false,
               "confidence": "low"
             },
             {
               "stage": "Latin",
               "form": "sciens",
-              "note": {
-                "en": "“Knowing, intelligent, skilled,” from the same verb",
-                "local": "“Knowing, intelligent, skilled,” from the same verb"
-              },
+              "note": "“Knowing, intelligent, skilled,” from the same verb",
               "isReconstructed": false,
               "confidence": "low"
             }
@@ -341,31 +451,19 @@
     "histories": [
       {
         "id": "history-1",
-        "label": {
-          "en": "Window",
-          "local": "Window"
-        },
+        "label": "Window",
         "entryKind": "lemma",
         "queryNodeId": "fr:fenêtre",
         "lemmaNodeId": "fr:fenêtre",
         "evidenceScopeIds": ["source-1"],
         "pronunciation": "/naɪs/",
-        "definition": {
-          "en": "window",
-          "local": "window"
-        },
-        "lore": {
-          "en": "Once, calling someone nice was closer to calling them an idiot than complimenting their manners. Latin nescius meant “not-knowing,” built from ne, “not,” and scire, “to know”—the same knowing family that eventually gave English science. Old French inherited nice, and by the late 13th century English speakers used it for people who were foolish, ignorant, or simply silly. Then the word wandered through “timid,” “fussy,” “dainty,” and “precise,” acquiring so many delicate meanings that Jane Austen joked in Northanger Abbey (1803) that nice “does for everything.” By 1830 it could describe a kind person, while today it is often a mild all-purpose compliment—an astonishing journey from “you don’t know much” to “that was nice.”",
-          "local": "Once, calling someone nice was closer to calling them an idiot than complimenting their manners. Latin nescius meant “not-knowing,” built from ne, “not,” and scire, “to know”—the same knowing family that eventually gave English science. Old French inherited nice, and by the late 13th century English speakers used it for people who were foolish, ignorant, or simply silly. Then the word wandered through “timid,” “fussy,” “dainty,” and “precise,” acquiring so many delicate meanings that Jane Austen joked in Northanger Abbey (1803) that nice “does for everything.” By 1830 it could describe a kind person, while today it is often a mild all-purpose compliment—an astonishing journey from “you don’t know much” to “that was nice.”"
-        },
+        "definition": "window",
+        "lore": "Once, calling someone nice was closer to calling them an idiot than complimenting their manners. Latin nescius meant “not-knowing,” built from ne, “not,” and scire, “to know”—the same knowing family that eventually gave English science. Old French inherited nice, and by the late 13th century English speakers used it for people who were foolish, ignorant, or simply silly. Then the word wandered through “timid,” “fussy,” “dainty,” and “precise,” acquiring so many delicate meanings that Jane Austen joked in Northanger Abbey (1803) that nice “does for everything.” By 1830 it could describe a kind person, while today it is often a mild all-purpose compliment—an astonishing journey from “you don’t know much” to “that was nice.”",
         "roots": [
           {
             "root": "ne",
             "origin": "Proto-Indo-European",
-            "meaning": {
-              "en": "Not; negation",
-              "local": "Not; negation"
-            },
+            "meaning": "Not; negation",
             "relatedWords": ["ne", "nay", "否"],
             "ancestorRoots": ["*ne-"],
             "descendantWords": ["Latin ne", "French ne", "Russian не"]
@@ -373,10 +471,7 @@
           {
             "root": "scire",
             "origin": "Latin",
-            "meaning": {
-              "en": "To know",
-              "local": "To know"
-            },
+            "meaning": "To know",
             "relatedWords": ["science", "conscience", "omniscient", "prescience", "nescient"],
             "descendantWords": ["science", "scientific", "conscious", "omniscient", "prescient"]
           }
@@ -389,20 +484,14 @@
                 {
                   "stage": "Latin",
                   "form": "ne",
-                  "note": {
-                    "en": "Negative particle meaning “not”",
-                    "local": "Negative particle meaning “not”"
-                  },
+                  "note": "Negative particle meaning “not”",
                   "isReconstructed": false,
                   "confidence": "low"
                 },
                 {
                   "stage": "Latin",
                   "form": "nescius",
-                  "note": {
-                    "en": "Joined with the knowing root to form “ignorant, unaware”",
-                    "local": "Joined with the knowing root to form “ignorant, unaware”"
-                  },
+                  "note": "Joined with the knowing root to form “ignorant, unaware”",
                   "isReconstructed": false,
                   "confidence": "medium",
                   "evidence": [
@@ -420,20 +509,14 @@
                 {
                   "stage": "Latin",
                   "form": "scire",
-                  "note": {
-                    "en": "Verb meaning “to know”; source of the stem in nescius",
-                    "local": "Verb meaning “to know”; source of the stem in nescius"
-                  },
+                  "note": "Verb meaning “to know”; source of the stem in nescius",
                   "isReconstructed": false,
                   "confidence": "low"
                 },
                 {
                   "stage": "Latin",
                   "form": "sciens",
-                  "note": {
-                    "en": "“Knowing, intelligent, skilled,” from the same verb",
-                    "local": "“Knowing, intelligent, skilled,” from the same verb"
-                  },
+                  "note": "“Knowing, intelligent, skilled,” from the same verb",
                   "isReconstructed": false,
                   "confidence": "low"
                 }

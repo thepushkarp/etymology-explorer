@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react'
-import type { DisplayEtymologyResult } from '@/lib/types'
-import { BETA_SYMBOL } from '@/lib/languages'
+import type { EtymologyEntry } from '@/lib/types'
 import { PronunciationButton } from '../PronunciationButton'
 import { Skeleton } from './Section'
 
 interface EntryHeaderProps {
-  result: DisplayEtymologyResult
+  result: EtymologyEntry
   actions?: ReactNode
   subheader?: ReactNode
   pending?: boolean
@@ -20,7 +19,7 @@ function shortenOrigin(origin: string): string {
 }
 
 /** One-line gloss of the word's parts, e.g. "From Latin fenestra (window)." */
-function originHook(result: DisplayEtymologyResult): string | null {
+function originHook(result: EtymologyEntry): string | null {
   const meaningful = result.roots.filter((root) => !root.root.startsWith('-')).slice(0, 3)
   if (meaningful.length === 0) return null
   const parts = meaningful.map(
@@ -40,11 +39,6 @@ export function EntryHeader({ result, actions, subheader, pending }: EntryHeader
         <h1 className="min-w-0 break-words font-serif text-[clamp(2.75rem,11vw,4.5rem)] leading-none tracking-tight text-ink">
           {result.word}
         </h1>
-        {result.language !== 'en' && (
-          <span aria-label="Beta" title="Beta language" className="font-serif text-lg text-accent">
-            {BETA_SYMBOL}
-          </span>
-        )}
         {actions && <div className="ml-auto self-center">{actions}</div>}
       </div>
 

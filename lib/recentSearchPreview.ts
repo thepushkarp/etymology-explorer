@@ -1,5 +1,6 @@
-import type { EtymologyResult, ResultText } from './types'
+import type { EtymologyResult } from './types'
 import type { LanguageCode } from './languages'
+import { historyEntry } from './resultHistories'
 import { canonicalizeWord, isValidWord } from './validation'
 
 export interface RecentSearchPreview {
@@ -11,21 +12,14 @@ export const RECENT_SEARCH_POOL_SIZE = 20
 export const RECENT_SEARCH_DISPLAY_COUNT = 4
 const TEASER_LENGTH = 120
 
-function localizedText(text: ResultText | undefined, language: LanguageCode): string {
-  if (typeof text === 'string') return language === 'en' ? text : ''
-  return (language === 'en' ? text?.en : text?.local) ?? ''
-}
-
 export function recentSearchPreview(
   result: EtymologyResult,
   language: LanguageCode
 ): RecentSearchPreview | null {
-  if ((result.language ?? 'en') !== language || !isValidWord(result.word)) return null
-  const primary = result.histories?.find((history) => history.id === result.primaryHistoryId)
-  const lore = localizedText(primary?.lore ?? result.lore, language)
-    .replace(/\s+/gu, ' ')
-    .trim()
-  let teaser = lore || localizedText(primary?.definition ?? result.definition, language).trim()
+  if (result.language !== language || !isValidWord(result.word)) return null
+  const primary = historyEntry(result)
+  const lore = primary.lore.replace(/\s+/gu, ' ').trim()
+  let teaser = lore || primary.definition.trim()
   teaser = teaser
     .replace(/(\*\*|__|\*|_)(?=\S)([^*_]*?\S)\1(?![\p{L}\p{N}])/gu, '$2')
     .replace(/\s+/gu, ' ')

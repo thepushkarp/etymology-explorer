@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { EtymologyCard } from './EtymologyCard'
-import type { DisplayEtymologyResult } from '@/lib/types'
+import type { EtymologyEntry } from '@/lib/types'
 
-function result(language: 'en' | 'it'): DisplayEtymologyResult {
+function result(language: 'en' | 'it'): EtymologyEntry {
   return {
     language,
     word: 'fede',
@@ -31,14 +31,16 @@ describe('EtymologyCard', () => {
   test('links English kin to word pages', () => {
     const markup = renderToStaticMarkup(<EtymologyCard result={result('en')} />)
     expect(markup).toContain('href="/word/fidelity"')
-    expect(markup).not.toContain('β')
   })
 
-  test('marks beta entries and keeps their untagged kin as plain text', () => {
-    const markup = renderToStaticMarkup(<EtymologyCard result={result('it')} />)
-    expect(markup).toContain('β')
+  test('writes other-language entries in English and keeps their untagged kin as plain text', () => {
+    const entry = { ...result('it'), suggestions: { synonyms: ['fiducia'] } }
+    const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
+    expect(markup).toContain('Words from the same roots')
     expect(markup).toContain('<span>fidelity</span>')
     expect(markup).not.toContain('href="/word/fidelity"')
+    expect(markup).not.toContain('fiducia')
+    expect(markup).toContain('Further scholarly references')
   })
 
   test('sets usage examples after the story', () => {
@@ -60,6 +62,7 @@ describe('EtymologyCard', () => {
       examples: [{ text: 'Ha perso la fede.', translation: 'They lost their faith.' }],
     }
     const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
+    expect(markup).toContain('lang="it"')
     expect(markup).toContain('Ha perso la fede.')
     expect(markup).toContain('They lost their faith.')
   })

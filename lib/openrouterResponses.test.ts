@@ -25,16 +25,14 @@ describe('openrouterResponses', () => {
     expect('temperature' in request).toBe(false)
   })
 
-  test('selects the strict paired-prose schema for an explicit beta language', () => {
-    const request = buildSynthesisRequest('Analizza casa', undefined, 'it')
-    const format = request.text.format
-    expect(format.type).toBe('json_schema')
+  test('sends one language-tagged schema with plain English prose', () => {
+    const format = buildSynthesisRequest('Analizza casa').text.format
     if (format.type !== 'json_schema') throw new Error('expected json schema')
     const schema = format.schema as {
-      properties: { language: { enum: string[] }; definition: { properties: object } }
+      properties: { language: { enum: string[] }; definition: { type: string } }
     }
-    expect(schema.properties.language.enum).toContain('it')
-    expect(Object.keys(schema.properties.definition.properties)).toEqual(['en', 'local'])
+    expect(schema.properties.language.enum).toEqual(['en', 'it', 'es', 'fr', 'pt'])
+    expect(schema.properties.definition.type).toBe('string')
   })
 
   test('buildSynthesisRequest adapts reasoning to model capabilities', () => {

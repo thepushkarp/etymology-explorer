@@ -2,22 +2,19 @@ import { canonicalizeWord } from './orthography'
 export const SUPPORTED_LANGUAGE_CODES = ['en', 'it', 'es', 'fr', 'pt'] as const
 
 export type LanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number]
-export type BetaLanguageCode = Exclude<LanguageCode, 'en'>
-
-export const BETA_SYMBOL = 'β'
 
 export interface LanguageDefinition {
   code: LanguageCode
   englishName: string
   nativeName: string
-  nativeEtymologyLabel: string
-  beta: boolean
   wiktionaryEdition: string
   englishWiktionaryHeading: string
   nativeWiktionaryHeading: string
   etymologyHeading: RegExp
   formHeading: RegExp
   ngramCorpus: string | null
+  /** Language-specific synthesis rules appended to the system prompt. */
+  promptNotes?: string
 }
 
 export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
@@ -25,8 +22,6 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'en',
     englishName: 'English',
     nativeName: 'English',
-    nativeEtymologyLabel: 'etymology',
-    beta: false,
     wiktionaryEdition: 'en',
     englishWiktionaryHeading: 'English',
     nativeWiktionaryHeading: 'English',
@@ -38,8 +33,6 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'it',
     englishName: 'Italian',
     nativeName: 'Italiano',
-    nativeEtymologyLabel: 'etimologia',
-    beta: true,
     wiktionaryEdition: 'it',
     englishWiktionaryHeading: 'Italian',
     nativeWiktionaryHeading: 'Italiano',
@@ -51,8 +44,6 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'es',
     englishName: 'Spanish',
     nativeName: 'Español',
-    nativeEtymologyLabel: 'etimología',
-    beta: true,
     wiktionaryEdition: 'es',
     englishWiktionaryHeading: 'Spanish',
     nativeWiktionaryHeading: 'Español',
@@ -64,8 +55,6 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'fr',
     englishName: 'French',
     nativeName: 'Français',
-    nativeEtymologyLabel: 'étymologie',
-    beta: true,
     wiktionaryEdition: 'fr',
     englishWiktionaryHeading: 'French',
     nativeWiktionaryHeading: 'Français',
@@ -77,14 +66,14 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'pt',
     englishName: 'Portuguese',
     nativeName: 'Português',
-    nativeEtymologyLabel: 'etimologia',
-    beta: true,
     wiktionaryEdition: 'pt',
     englishWiktionaryHeading: 'Portuguese',
     nativeWiktionaryHeading: 'Português',
     etymologyHeading: /^Etimologia(?:\s+\d+)?$/i,
     formHeading: /^(?:Forma verbal|Forma nominal|Particípio|Conjugação)/i,
     ngramCorpus: null,
+    promptNotes:
+      'PORTUGUESE: write the example sentences in neutral Portuguese. When a Brazilian/European distinction matters, label it explicitly; never silently choose one regional variant.',
   },
 }
 
@@ -99,10 +88,6 @@ export function parseLanguageCode(value: string | null | undefined): LanguageCod
   if (!value) return 'en'
   const normalized = value.toLowerCase()
   return SUPPORTED_LANGUAGE_CODES.find((code) => code === normalized) ?? null
-}
-
-export function isBetaLanguage(language: LanguageCode): language is BetaLanguageCode {
-  return language !== 'en'
 }
 
 export function wordPagePath(word: string, language: LanguageCode = 'en'): string {

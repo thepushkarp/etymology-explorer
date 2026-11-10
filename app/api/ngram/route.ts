@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { fetchNgram } from '@/lib/ngrams'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { ApiResponse } from '@/lib/types'
-import { BETA_SYMBOL, LANGUAGES, parseLanguageCode } from '@/lib/languages'
+import { LANGUAGES, parseLanguageCode } from '@/lib/languages'
 
 export async function GET(request: NextRequest) {
   const word = request.nextUrl.searchParams.get('word')
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json<ApiResponse<null>>(
       {
         success: false,
-        error: `Dados históricos de uso indisponíveis em português (${BETA_SYMBOL}).`,
+        error: `Usage history is not available for ${LANGUAGES[language].englishName}.`,
       },
       { status: 404 }
     )

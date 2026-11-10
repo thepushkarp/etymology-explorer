@@ -9,17 +9,16 @@ function isCognate(word: string): boolean {
 
 interface KinSectionProps {
   roots: Root[]
-  /** Related terms are only language-tagged for English; beta kin stays plain text. */
+  /** Related terms are only language-tagged for English; other languages' kin stays plain text. */
   linkable: boolean
-  title: string
 }
 
-export function KinSection({ roots, linkable, title }: KinSectionProps) {
+export function KinSection({ roots, linkable }: KinSectionProps) {
   const withWords = roots.filter((root) => root.relatedWords.length > 0)
   if (withWords.length === 0) return null
 
   return (
-    <Section id="entry-kin" title={title}>
+    <Section id="entry-kin" title="Words from the same roots">
       <div className="grid gap-10 sm:grid-cols-2">
         {withWords.map((root, index) => {
           const cognates = root.relatedWords.filter(isCognate)

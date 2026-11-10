@@ -241,6 +241,24 @@ describe('research breadth', () => {
     expect(hasCredibleMainSource(context)).toBe(false)
   })
 
+  test('an Italian miss is not admitted by an English entry or Wikidata identity alone', () => {
+    expect(
+      hasCredibleMainSource({
+        language: 'it',
+        mainWord: {
+          word: 'sale',
+          etymonline: { text: 'English sale', url: 'https://example.test' },
+          wiktionary: null,
+          wikidataLexeme: { text: 'Italian identity', url: 'https://example.test/it' },
+        },
+        identifiedRoots: [],
+        rootResearch: [],
+        relatedResearch: [],
+        totalSourcesFetched: 2,
+      })
+    ).toBe(false)
+  })
+
   test('extractEtymonlineRelatedEntries finds linked relation entries from escaped page payloads', () => {
     const html = String.raw`{\"word\":\"contradict\",\"desc\":\"assert the contrary\"},{\"word\":\"contra\",\"desc\":\"Latin preposition meaning against\"},{\"word\":\"*deik-\",\"desc\":\"PIE root meaning to show\"},{\"key\":\"syn_ant\",\"word\":\"contravene\",\"desc\":\"from Latin contra + venire\"},{\"word\":\"gainsay\",\"desc\":\"literally say against\"},{\"word\":\"contradictory\"}`
 
@@ -830,7 +848,7 @@ describe('source rate limits are temporary failures', () => {
       return new Response('unavailable', { status })
     }) as typeof fetch
   }
-  test('English and beta no-primary HTTP 429 errors bypass lexical absence', async () => {
+  test('English and other-language no-primary HTTP 429 errors bypass lexical absence', async () => {
     respond(429)
     for (const language of ['en', 'fr'] as const) {
       let error: unknown

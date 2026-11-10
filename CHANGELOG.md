@@ -8,6 +8,11 @@ plain-text bullet under a `###` group. `Unreleased` stays out of the dialog.
 
 ## [Unreleased]
 
+### Changed
+
+- Italian, Spanish, French, and Portuguese entries are written in English, with usage examples in the word's own language and their English translations.
+- Italian, Spanish, French, and Portuguese are no longer marked as beta.
+
 ## [0.1.0] - 2026-11-07
 
 ### First release, with all features consolidated

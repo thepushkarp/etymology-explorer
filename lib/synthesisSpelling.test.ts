@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { synthesizeFromResearch, getLlmUsageFromError } from './llm'
-import { parseWiktionaryText } from './etymologyParser'
+import { scopeEnglishHistories } from './research'
+import { etymologyResult } from './testSupport/etymologyResult'
 import type { EtymologyResult, ResearchContext } from './types'
 
 const originalFetch = globalThis.fetch
@@ -15,7 +16,8 @@ afterEach(() => {
 })
 
 function context(word = 'côte'): ResearchContext {
-  return {
+  const research: ResearchContext = {
+    language: 'en',
     mainWord: {
       word,
       etymonline: null,
@@ -25,34 +27,36 @@ function context(word = 'côte'): ResearchContext {
     rootResearch: [],
     relatedResearch: [],
     totalSourcesFetched: 1,
-    parsedChains: [parseWiktionaryText('from French côte', word)],
   }
+  scopeEnglishHistories(research)
+  return research
 }
 function output(word: string): EtymologyResult {
-  return {
-    word,
-    pronunciation: '/kot/',
-    definition: 'A fixture.',
-    ancestryGraph: {
-      branches: [
-        {
-          root: word,
-          stages: [
-            {
-              stage: 'French',
-              form: 'cote',
-              note: '',
-              confidence: 'high',
-              evidence: [{ source: 'wiktionary', snippet: 'invented' }],
-            },
-          ],
-        },
-      ],
+  return etymologyResult(
+    {
+      word,
+      pronunciation: '/kot/',
+      definition: 'A fixture.',
+      ancestryGraph: {
+        branches: [
+          {
+            root: word,
+            stages: [
+              {
+                stage: 'French',
+                form: 'cote',
+                note: '',
+                confidence: 'high',
+                evidence: [{ source: 'wiktionary', snippet: 'invented' }],
+              },
+            ],
+          },
+        ],
+      },
+      lore: 'A fixture history.',
     },
-    roots: [],
-    lore: 'A fixture history.',
-    sources: [],
-  }
+    context()
+  )
 }
 
 function provider(result: EtymologyResult, completed?: () => void) {
@@ -88,7 +92,7 @@ function provider(result: EtymologyResult, completed?: () => void) {
 
 describe('synthesis spelling and publication', () => {
   test.each([false, true])(
-    'rejects changed query spelling (stream=%s) and retains billed usage',
+    'rejects changed query spelling after one retry (stream=%s) and retains billed usage',
     async (stream) => {
       provider(output('cote'))
       const sections: string[] = []
@@ -103,12 +107,12 @@ describe('synthesis spelling and publication', () => {
       }
       expect(failure).toBeInstanceOf(Error)
       expect((failure as Error).message).toContain('spelling')
-      expect(getLlmUsageFromError(failure)).toMatchObject({ inputTokens: 10, outputTokens: 20 })
+      expect(getLlmUsageFromError(failure)).toMatchObject({ inputTokens: 20, outputTokens: 40 })
       expect(sections).toEqual([])
     }
   )
 
-  test('publishes only enriched graph sections, after the provider completes', async () => {
+  test('publishes the enriched primary history before the provider completes', async () => {
     let completed = false
     provider(output('co\u0302te'), () => {
       completed = true
@@ -116,7 +120,8 @@ describe('synthesis spelling and publication', () => {
     const emitted: Array<[string, unknown]> = []
     const result = await synthesizeFromResearch(context(), {
       onSection: (name, data) => {
-        expect(completed).toBe(!['word', 'pronunciation', 'definition'].includes(name))
+        // Server-attached sources wait for the complete, finalized result.
+        expect(completed).toBe(name === 'sources')
         emitted.push([name, data])
       },
     })
@@ -128,12 +133,15 @@ describe('synthesis spelling and publication', () => {
       evidence: [],
     })
     expect(emitted.map(([name]) => name)).toEqual([
+      'language',
       'word',
       'pronunciation',
       'definition',
       'ancestryGraph',
       'roots',
       'lore',
+      'primaryHistoryId',
+      'histories',
       'sources',
     ])
   })
@@ -141,6 +149,7 @@ describe('synthesis spelling and publication', () => {
   test('does not publish held sections when final validation fails', async () => {
     const invalid = output('côte')
     invalid.pronunciation = 123 as unknown as string
+    invalid.histories[0].pronunciation = invalid.pronunciation
     provider(invalid)
     const sections: string[] = []
     await expect(

@@ -1,16 +1,14 @@
 import { describe, expect, test } from 'bun:test'
 import { createResponseAdapter } from '@/lib/responseAdapter'
 import type { EtymologyResult } from '@/lib/types'
+import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 
-const RESULT_FIXTURE: EtymologyResult = {
+const RESULT_FIXTURE: EtymologyResult = etymologyResult({
   word: 'bread',
   pronunciation: '/brɛd/',
   definition: 'staple baked food',
-  roots: [],
-  ancestryGraph: { branches: [] },
   lore: 'A compact fixture for adapter tests.',
-  sources: [],
-}
+})
 
 async function readSseEvent(response: Response): Promise<Record<string, unknown>> {
   const body = await response.text()

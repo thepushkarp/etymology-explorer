@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { EtymologyResult } from './types'
+import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 import {
   landingSearchPreviews,
   parseRecentSearchPreviews,
@@ -10,53 +11,33 @@ import {
 } from './recentSearchPreview'
 import { getRecentSearches, recordRecentSearch } from './recentSearches'
 
-const result: EtymologyResult = {
+const result: EtymologyResult = etymologyResult({
   word: 'nice',
   pronunciation: '/naɪs/',
   definition: 'Pleasant.',
-  roots: [],
-  ancestryGraph: { branches: [] },
   lore: 'From Latin nescius, ignorant.',
-  sources: [],
-}
+})
 
 describe('recent search previews', () => {
   test('uses the selected language and primary history, with a bounded whole-word teaser', () => {
-    const local = '*Una* parola dalla storia antica. '.repeat(8)
-    const italian: EtymologyResult = {
+    const primaryLore = '*A* word with an old history. '.repeat(8)
+    const italian = etymologyResult({
       language: 'it',
       word: ' CÀSA ',
-      pronunciation: '',
-      roots: [],
-      ancestryGraph: { branches: [] },
-      sources: [],
-      definition: { en: 'House.', local: 'Casa.' },
-      lore: { en: 'English lore.', local: 'Another history.' },
-      primaryHistoryId: 'main',
-      histories: [
-        {
-          id: 'main',
-          label: { en: 'House', local: 'Casa' },
-          entryKind: 'lemma',
-          queryNodeId: 'query',
-          lemmaNodeId: 'lemma',
-          evidenceScopeIds: [],
-          pronunciation: '',
-          definition: { en: 'House.', local: 'Casa.' },
-          roots: [],
-          ancestryGraph: { branches: [] },
-          lore: { en: 'English history.', local },
-        },
-      ],
-    }
+      definition: 'House.',
+      lore: 'Projected lore.',
+    })
+    italian.histories[0].lore = primaryLore
     const preview = recentSearchPreview(italian, 'it')!
     expect(preview.word).toBe('càsa')
-    expect(preview.teaser.startsWith('Una parola dalla storia antica.')).toBe(true)
+    expect(preview.teaser.startsWith('A word with an old history.')).toBe(true)
     expect(preview.teaser.length).toBeLessThanOrEqual(120)
     expect(preview.teaser.endsWith('…')).toBe(true)
     expect(recentSearchPreview(italian, 'en')).toBeNull()
-    expect(recentSearchPreview({ ...result, lore: '  ' }, 'en')?.teaser).toBe('Pleasant.')
-    expect(recentSearchPreview({ ...result, lore: 'From *hūsą to *house*.' }, 'en')?.teaser).toBe(
+    const english = (lore: string) =>
+      etymologyResult({ word: 'nice', definition: 'Pleasant.', lore })
+    expect(recentSearchPreview(english('  '), 'en')?.teaser).toBe('Pleasant.')
+    expect(recentSearchPreview(english('From *hūsą to *house*.'), 'en')?.teaser).toBe(
       'From *hūsą to house.'
     )
   })

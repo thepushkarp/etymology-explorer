@@ -3,11 +3,11 @@ import { EtymologyResultSchema } from '@/lib/schemas/etymology'
 
 /**
  * Known-good fixture mirroring a real post-enrichment pipeline result:
- * required core fields, a two-branch ancestry graph with merge point,
- * and the optional enrichment fields (isReconstructed, confidence, evidence).
+ * required core fields, one source history projected to the top level, a
+ * two-branch ancestry graph with merge point, and the optional enrichment
+ * fields (isReconstructed, confidence, evidence).
  */
-const KNOWN_GOOD_RESULT = {
-  word: 'telephone',
+const ENTRY = {
   pronunciation: '/ˈtɛlɪfoʊn/',
   definition: 'A device that converts sound into electrical signals for transmission.',
   roots: [
@@ -84,13 +84,35 @@ const KNOWN_GOOD_RESULT = {
     ],
   },
   lore: 'When Alexander Graham Bell needed a name for his talking machine, he reached back to Greek: tēle "far" and phōnē "voice" — literally a "far voice". The word had already been used for earlier acoustic devices, but Bell made it stick.',
-  sources: [
-    { name: 'etymonline', url: 'https://www.etymonline.com/word/telephone', word: 'telephone' },
-    { name: 'wiktionary', url: 'https://en.wiktionary.org/wiki/telephone', word: 'telephone' },
+  examples: [
+    { text: 'She answered the telephone on the second ring.' },
+    { text: 'News of the treaty travelled by telephone before the papers had it.' },
   ],
   partsOfSpeech: [
     { pos: 'noun', definition: 'A telecommunications device.' },
     { pos: 'verb', definition: 'To call someone using a telephone.' },
+  ],
+}
+
+const KNOWN_GOOD_RESULT = {
+  language: 'en',
+  word: 'telephone',
+  primaryHistoryId: 'history:en:telephone:1',
+  histories: [
+    {
+      id: 'history:en:telephone:1',
+      label: 'telephone',
+      entryKind: 'lemma',
+      queryNodeId: 'query:history:en:telephone:1',
+      lemmaNodeId: 'query:history:en:telephone:1',
+      evidenceScopeIds: ['scope:en:telephone:1'],
+      ...ENTRY,
+    },
+  ],
+  ...ENTRY,
+  sources: [
+    { name: 'etymonline', url: 'https://www.etymonline.com/word/telephone', word: 'telephone' },
+    { name: 'wiktionary', url: 'https://en.wiktionary.org/wiki/telephone', word: 'telephone' },
   ],
   suggestions: {
     synonyms: ['phone'],
@@ -138,5 +160,38 @@ describe('EtymologyResultSchema', () => {
     graph.branches[0]!.stages[0]!.confidence = 'certain'
 
     expect(EtymologyResultSchema.safeParse(invalid).success).toBe(false)
+  })
+
+  test('rejects duplicate or dangling history identity', () => {
+    const dangling = structuredClone(KNOWN_GOOD_RESULT)
+    dangling.primaryHistoryId = 'missing'
+    expect(EtymologyResultSchema.safeParse(dangling).success).toBe(false)
+
+    const duplicate = structuredClone(KNOWN_GOOD_RESULT)
+    duplicate.histories.push(structuredClone(duplicate.histories[0]))
+    expect(EtymologyResultSchema.safeParse(duplicate).success).toBe(false)
+  })
+
+  test('glosses examples only for words outside English', () => {
+    const glossed = structuredClone(KNOWN_GOOD_RESULT) as Record<string, unknown>
+    glossed.examples = [{ text: 'Hello.', translation: 'Hello.' }]
+    expect(EtymologyResultSchema.safeParse(glossed).success).toBe(false)
+
+    const french = { ...structuredClone(KNOWN_GOOD_RESULT), language: 'fr' }
+    expect(EtymologyResultSchema.safeParse(french).success).toBe(false)
+    const translated = [
+      { text: 'Il a décroché le téléphone.', translation: 'He picked up the telephone.' },
+    ]
+    french.examples = translated
+    french.histories[0].examples = translated
+    expect(EtymologyResultSchema.safeParse(french).success).toBe(true)
+  })
+
+  test('reads an entry cached with paired English and local prose as a miss', () => {
+    const paired = structuredClone(KNOWN_GOOD_RESULT) as Record<string, unknown>
+    paired.language = 'it'
+    paired.definition = { en: 'telephone', local: 'telefono' }
+    paired.examples = [{ en: 'He called.', local: 'Ha chiamato.' }]
+    expect(EtymologyResultSchema.safeParse(paired).success).toBe(false)
   })
 })

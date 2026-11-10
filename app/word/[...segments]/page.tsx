@@ -13,14 +13,8 @@ import {
   etymologyWordTag,
   getCachedEtymology,
 } from '@/lib/cache'
-import {
-  LANGUAGES,
-  isBetaLanguage,
-  isLanguageCode,
-  wordPagePath,
-  type LanguageCode,
-} from '@/lib/languages'
-import { localizeResult, type ResultLocale } from '@/lib/resultLocalization'
+import { LANGUAGES, isLanguageCode, wordPagePath, type LanguageCode } from '@/lib/languages'
+import { historyEntry } from '@/lib/resultHistories'
 import { SITE_SHORT_NAME } from '@/lib/site'
 import type { EtymologyResult } from '@/lib/types'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
@@ -68,7 +62,6 @@ async function resolveRoute(params: WordPageProps['params']): Promise<ResolvedWo
   const word = resolveWord(segments[1])
   if (!isLanguageCode(language) || !word) notFound()
   if (language === 'en') permanentRedirect(wordPagePath(word, 'en'))
-  if (!isBetaLanguage(language)) notFound()
   return { language, word }
 }
 
@@ -103,8 +96,8 @@ function asSentence(text: string): string {
   return /[.!?…]$/.test(capitalized) ? capitalized : `${capitalized}.`
 }
 
-function buildDescription(result: EtymologyResult, locale: ResultLocale): string {
-  const display = localizeResult(result, locale)
+function buildDescription(result: EtymologyResult): string {
+  const display = historyEntry(result)
   return truncateAtWordBoundary(
     [asSentence(display.definition), display.lore]
       .filter(Boolean)
@@ -115,8 +108,7 @@ function buildDescription(result: EtymologyResult, locale: ResultLocale): string
 }
 
 function resultMatchesLanguage(result: EtymologyResult | null, language: LanguageCode): boolean {
-  if (!result) return false
-  return language === 'en' ? (result.language ?? 'en') === 'en' : result.language === language
+  return result?.language === language
 }
 
 export async function generateMetadata({ params }: WordPageProps): Promise<Metadata> {
@@ -141,7 +133,7 @@ export async function generateMetadata({ params }: WordPageProps): Promise<Metad
     }
   }
 
-  const description = buildDescription(result as EtymologyResult, isEnglish ? 'en' : 'local')
+  const description = buildDescription(result as EtymologyResult)
   const languageQuery = isEnglish ? '' : `&language=${language}`
   const ogImage = `/og?word=${encodeURIComponent(word)}${languageQuery}`
   const alt = isEnglish ? `Etymology of ${word}` : title

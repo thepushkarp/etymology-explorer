@@ -1,12 +1,7 @@
 import type { Metadata } from 'next'
 import { PageFrame } from '@/components/PageFrame'
 import { WordLink } from '@/components/WordLink'
-import {
-  BETA_SYMBOL,
-  LANGUAGES,
-  SUPPORTED_LANGUAGE_CODES,
-  type LanguageCode,
-} from '@/lib/languages'
+import { LANGUAGES, SUPPORTED_LANGUAGE_CODES, type LanguageCode } from '@/lib/languages'
 import { getTracedWords, type TracedWord } from '@/lib/tracedWords'
 
 // Crawlable A–Z index of every cached word page: the internal-link path to
@@ -86,7 +81,6 @@ export default async function WordsIndexPage() {
           >
             <h2 id={`${language}-heading`} className="label">
               {definition.englishName}
-              {definition.beta ? ` ${BETA_SYMBOL}` : ''}
             </h2>
             <nav
               aria-label={`${definition.englishName} letters`}

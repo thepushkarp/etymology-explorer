@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { LANGUAGES, type BetaLanguageCode } from './languages'
+import { LANGUAGES, type LanguageCode } from './languages'
 import {
   cleanWiktionaryHtml,
   extractWiktionaryEntryGroups,
@@ -189,7 +189,11 @@ test('regional spelling lists keep their local heading and selected-language bou
   ])
 })
 
-function fixture(language: BetaLanguageCode, languageHeading: string, etymologyHeading: string) {
+function fixture(
+  language: Exclude<LanguageCode, 'en'>,
+  languageHeading: string,
+  etymologyHeading: string
+) {
   const html = `<h2 id="other">Other</h2><p>wrong language</p><h2 id="lang">${languageHeading}</h2><h3 id="ety1">${etymologyHeading}</h3><p>Dal latino casa, dimora.</p><h3 id="ety2">${etymologyHeading} 2</h3><p>De latin casa, habitation.</p><h2 id="next">Next</h2>`
   const sections = [
     { index: '1', line: 'Other', anchor: 'other', level: '2', number: '1' },

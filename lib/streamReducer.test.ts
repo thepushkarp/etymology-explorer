@@ -8,6 +8,7 @@ import {
 } from './streamReducer'
 import type { EtymologyResult, StreamEvent } from './types'
 import type { PartialEtymology } from './streamReducer'
+import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 
 function run(actions: StreamAction[], from: StreamState = initialStreamState): StreamState {
   return actions.reduce(streamReducer, from)
@@ -17,15 +18,12 @@ function events(...list: StreamEvent[]): StreamAction[] {
   return list.map((event) => ({ type: 'stream_event', event }))
 }
 
-const RESULT: EtymologyResult = {
+const RESULT: EtymologyResult = etymologyResult({
   word: 'perfidious',
   pronunciation: '/pərˈfɪdiəs/',
   definition: 'Deceitful and untrustworthy.',
-  roots: [],
-  ancestryGraph: { branches: [] },
   lore: 'A story.',
-  sources: [],
-}
+})
 
 describe('search_started', () => {
   test('starts empty so source events define the providers for every language', () => {
@@ -104,7 +102,7 @@ describe('source events', () => {
     expect(state.sources[0]).toMatchObject({ key: 'somefuturewiki', status: 'complete' })
   })
 
-  test('labels beta providers without leaving English providers pending', () => {
+  test('labels other-language providers without leaving English providers pending', () => {
     const state = run([
       { type: 'search_started' },
       ...events(
@@ -334,23 +332,17 @@ describe('toPartialResult', () => {
     expect(partial.sources).toEqual([])
   })
 
-  test('projects bilingual streamed prose for a beta language', () => {
-    const sections = {
-      definition: { en: 'A representative instance.', local: 'Un cas représentatif.' },
-      roots: [
-        {
-          root: 'exemplum',
-          origin: 'Latin',
-          meaning: { en: 'sample', local: 'modèle' },
-          relatedWords: [],
-        },
-      ],
-    } as unknown as PartialEtymology
+  test('keeps the entry language and its streamed English prose', () => {
+    const sections: PartialEtymology = {
+      definition: 'A representative instance.',
+      examples: [{ text: 'Un exemple frappant.', translation: 'A striking example.' }],
+    }
 
     const partial = toPartialResult('exemple', sections, 'fr')
 
-    expect(partial.definition).toBe('Un cas représentatif.')
-    expect(partial.roots[0].meaning).toBe('modèle')
+    expect(partial.language).toBe('fr')
+    expect(partial.definition).toBe('A representative instance.')
+    expect(partial.examples).toEqual(sections.examples)
     expect(partial.lore).toBe('')
   })
 })

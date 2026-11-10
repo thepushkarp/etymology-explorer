@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { ImageResponse } from 'next/og'
 import { SITE_HOST, SITE_SHORT_NAME } from '@/lib/site'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
-import { BETA_SYMBOL, LANGUAGES, parseLanguageCode, type LanguageCode } from '@/lib/languages'
+import { LANGUAGES, parseLanguageCode, type LanguageCode } from '@/lib/languages'
 
 const fontDirectory = join(process.cwd(), 'public/fonts')
 
@@ -120,8 +120,6 @@ function BrandCard() {
 
 function WordCard({ word, language }: { word: string; language: LanguageCode }) {
   const [initial, rest] = splitLeadingGrapheme(word)
-  const languageDefinition = LANGUAGES[language]
-  const betaLabel = `${languageDefinition.nativeName.toLocaleUpperCase(language)} · ${languageDefinition.nativeEtymologyLabel.toLocaleUpperCase(language)} · ${BETA_SYMBOL}`
   return (
     <div
       style={{
@@ -140,14 +138,16 @@ function WordCard({ word, language }: { word: string; language: LanguageCode }) 
         style={{
           display: 'flex',
           fontSize: 26,
-          textTransform: language === 'en' ? 'uppercase' : 'none',
+          textTransform: 'uppercase',
           letterSpacing: '0.24em',
           color: '#1B1A17',
           opacity: 0.6,
           marginBottom: 34,
         }}
       >
-        {language === 'en' ? 'the etymology of' : betaLabel}
+        {language === 'en'
+          ? 'the etymology of'
+          : `the ${LANGUAGES[language].englishName} etymology of`}
       </div>
       <div
         style={{

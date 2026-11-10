@@ -12,12 +12,12 @@ const base = process.env.PERF_BASE_URL ?? 'http://127.0.0.1:4199'
 const records = JSON.parse(readFileSync(new URL('./entries.json', import.meta.url), 'utf8'))
 const result = structuredClone(records['etymology:beta:v9:fr:fenêtre'])
 result.word = 'streamfixture'
-result.definition = { en: 'English definition.', local: 'Une définition en français.' }
-result.lore = { en: 'English story.', local: 'Cette histoire complète est déjà vérifiée.' }
+result.definition = 'A synthetic definition.'
+result.lore = 'This complete story has already been verified.'
 Object.assign(result.histories[0], { definition: result.definition, lore: result.lore })
 
 // The provider/transport boundary is controlled; linguistic validation is covered
-// by lib/llm.test.ts. These synthetic entries exercise localization and rendering.
+// by lib/llm.test.ts. These synthetic entries exercise progressive rendering.
 const browser = await chromium.launch({
   executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH,
   headless: true,
@@ -53,7 +53,7 @@ try {
   await page.evaluate((entry) => {
     const start = performance.now()
     const observer = new MutationObserver(() => {
-      if (document.querySelector('#entry-story')?.textContent.includes(entry.lore.local)) {
+      if (document.querySelector('#entry-story')?.textContent.includes(entry.lore)) {
         window.__storyMs = performance.now() - start
         observer.disconnect()
       }
@@ -77,16 +77,13 @@ try {
   }, result)
   await page.waitForTimeout(300)
   assert.equal(await page.locator('article').getAttribute('aria-busy'), 'true')
-  const partialStory = (await page.locator('#entry-story').textContent()).includes(
-    result.lore.local
-  )
+  const partialStory = (await page.locator('#entry-story').textContent()).includes(result.lore)
   assert.equal(partialStory, !values.held)
   assert.equal((await page.locator('[data-tree-node]').count()) > 0, !values.held)
-  assert.ok(!(await page.locator('article').textContent()).includes(result.lore.en))
   await page.waitForFunction(
     () => document.querySelector('article')?.getAttribute('aria-busy') === 'false'
   )
-  assert.ok((await page.locator('#entry-story').textContent()).includes(result.lore.local))
+  assert.ok((await page.locator('#entry-story').textContent()).includes(result.lore))
   assert.ok((await page.locator('#entry-ancestry').textContent()).includes('Modern French'))
   assert.equal(await page.evaluate(() => window.__traces), 1)
   assert.deepEqual(errors, [])
