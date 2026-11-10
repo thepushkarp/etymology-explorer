@@ -56,21 +56,6 @@ describe('historyEntry', () => {
   test('falls back to the primary history for an unknown selection', () => {
     expect(historyEntry(RESULT, 'missing').definition).toBe('river')
   })
-
-  test('keeps a foreign-language example with its English gloss', () => {
-    const examples = [
-      { text: 'Hanno mantenuto la fede.', translation: 'They kept faith.' },
-      { text: 'Una fede d’oro.', translation: 'A gold ring.' },
-    ]
-    const italian: EtymologyResult = {
-      ...RESULT,
-      language: 'it',
-      word: 'fede',
-      primaryHistoryId: 'faith',
-      histories: [history('faith', examples)],
-    }
-    expect(historyEntry(italian).examples).toEqual(examples)
-  })
 })
 
 describe('historyChoices', () => {

@@ -61,7 +61,6 @@ export function buildSystemPrompt(language: LanguageCode): string {
   return [SYSTEM_PROMPT, languageRule, promptNotes].filter(Boolean).join('\n\n')
 }
 
-/** User prompt wrapping the research bundle for one language's lexeme. */
 export function buildUserPrompt(
   word: string,
   language: LanguageCode,
