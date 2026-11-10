@@ -22,7 +22,7 @@ const SOURCE_LABELS: Record<string, string> = {
   lewisshort: 'Lewis & Short',
   lsj: 'LSJ',
   jmdict: 'JMdict / EDRDG (via Jisho)',
-  exa: 'Source discovery',
+  exa: 'Exa retrieval',
   synthesized: 'AI synthesis',
 }
 

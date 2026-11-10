@@ -68,8 +68,15 @@ interface SourceJob {
   run(): Promise<{ records: SourceRecord[]; outcome: SourceOutcome }>
 }
 
+type SourceActivityEvent = Extract<
+  StreamEvent,
+  { type: 'source_started' | 'source_complete' | 'source_outcome' | 'source_failed' }
+>
+
 interface LookupOptions {
   primary?: boolean
+  /** The query language consuming this lexeme, including historical ancestors. */
+  progressLanguage?: LanguageCode
   skipOptionalSources?: boolean
   skipOptionalSourcesFor?: (lexeme: LexemeRef) => boolean
   /** Core dictionary evidence can start CPU/LLM root extraction while other sources finish. */
@@ -240,6 +247,29 @@ export function createLexemeResearchSession(options: {
     }
   }
 
+  let activitySequence = 0
+  const progressByLexeme = new Map<
+    string,
+    { languages: Set<LanguageCode | undefined>; events: SourceActivityEvent[] }
+  >()
+  function subscribeProgress(lexeme: LexemeRef, language: LanguageCode | undefined) {
+    const key = researchLexemeKey(lexeme)
+    let progress = progressByLexeme.get(key)
+    if (!progress) {
+      progress = { languages: new Set(), events: [] }
+      progressByLexeme.set(key, progress)
+    }
+    if (progress.languages.has(language)) return
+    progress.languages.add(language)
+    // Shared ancestor lookups still belong to each query language that uses their evidence.
+    for (const event of progress.events) emit({ ...event, language })
+  }
+  function emitFor(lexeme: LexemeRef, event: SourceActivityEvent) {
+    const progress = progressByLexeme.get(researchLexemeKey(lexeme))!
+    progress.events.push(event)
+    for (const language of progress.languages) emit({ ...event, language })
+  }
+
   function jobs(lexeme: LexemeRef, settings: LookupOptions): SourceJob[] {
     const language = languageFromName(lexeme.language)
     const heading = lexicalLanguageName(lexeme.language)
@@ -366,10 +396,10 @@ export function createLexemeResearchSession(options: {
       .concat(specialized.slice(general.length))
   }
 
-  async function runJob(lexeme: LexemeRef, job: SourceJob, primary: boolean) {
+  async function runJob(lexeme: LexemeRef, job: SourceJob) {
     const start = Date.now()
-    const language = languageFromName(lexeme.language)
-    if (primary) emit({ type: 'source_started', source: job.id, language })
+    const activityId = String(++activitySequence)
+    emitFor(lexeme, { type: 'source_started', source: job.id, activityId })
     let result: { records: SourceRecord[]; outcome: SourceOutcome }
     try {
       signal?.throwIfAborted()
@@ -382,7 +412,10 @@ export function createLexemeResearchSession(options: {
         }
       signal?.throwIfAborted()
     } catch (error) {
-      signal?.throwIfAborted()
+      if (signal?.aborted) {
+        emitFor(lexeme, { type: 'source_failed', source: job.id, activityId, error: 'Cancelled' })
+        throw error
+      }
       const outcome = classifyFailure(error)
       result = {
         records: [],
@@ -392,23 +425,21 @@ export function createLexemeResearchSession(options: {
         },
       }
     }
-    if (primary) {
-      if (result.records.length)
-        emit({
-          type: 'source_complete',
-          language,
-          source: job.id,
-          timing: Date.now() - start,
-          preview: result.records[0].data.text.slice(0, 100),
-        })
-      emit({
-        type: 'source_outcome',
-        language,
+    if (result.records.length)
+      emitFor(lexeme, {
+        type: 'source_complete',
         source: job.id,
-        outcome: result.outcome,
+        activityId,
         timing: Date.now() - start,
+        preview: result.records[0].data.text.slice(0, 100),
       })
-    }
+    emitFor(lexeme, {
+      type: 'source_outcome',
+      source: job.id,
+      activityId,
+      outcome: result.outcome,
+      timing: Date.now() - start,
+    })
     return result
   }
 
@@ -443,7 +474,56 @@ export function createLexemeResearchSession(options: {
         }
   }
 
-  async function recover(results: LexemeLookupResult[], settings: LookupOptions) {
+  async function retrieveWithExa(
+    lexemes: LexemeRef[],
+    retrieve: (onDispatch: () => void) => Promise<ExaResponse>
+  ): Promise<ExaResponse> {
+    const activityId = String(++activitySequence)
+    const start = Date.now()
+    let dispatched = false
+    try {
+      const response = await retrieve(() => {
+        dispatched = true
+        for (const lexeme of lexemes)
+          emitFor(lexeme, { type: 'source_started', source: 'exa', activityId })
+      })
+      if (dispatched)
+        for (const lexeme of lexemes)
+          emitFor(lexeme, {
+            type: 'source_outcome',
+            source: 'exa',
+            activityId,
+            outcome:
+              response.status === 'success' && response.documents.length
+                ? { status: 'found' }
+                : recoveryOutcome(response),
+            timing: Date.now() - start,
+          })
+      return response
+    } catch (error) {
+      if (dispatched)
+        for (const lexeme of lexemes)
+          emitFor(lexeme, {
+            type: 'source_failed',
+            source: 'exa',
+            activityId,
+            error: signal?.aborted ? 'Cancelled' : safeError(error),
+          })
+      throw error
+    }
+  }
+
+  function reportPublishers(lexeme: LexemeRef, records: SourceRecord[]) {
+    for (const provider of new Set(records.map((source) => source.provider)))
+      emitFor(lexeme, {
+        type: 'source_outcome',
+        source: provider,
+        activityId: String(++activitySequence),
+        outcome: { status: 'found' },
+      })
+  }
+
+  async function recover(results: LexemeLookupResult[]) {
     const blocked = results.filter((result) =>
       result.outcomes.some(
         (entry) => entry.source === 'etymonline' && entry.outcome.status === 'blocked'
@@ -462,7 +542,10 @@ export function createLexemeResearchSession(options: {
       (result) =>
         `https://www.etymonline.com/word/${encodeURIComponent(canonicalizeWord(result.lexeme.word))}`
     )
-    const response = await exa.contents(urls)
+    const response = await retrieveWithExa(
+      admitted.map((result) => result.lexeme),
+      (onDispatch) => exa.contents(urls, onDispatch)
+    )
     for (const result of admitted) {
       let outcome = recoveryOutcome(response)
       if (response.status === 'success') {
@@ -485,17 +568,15 @@ export function createLexemeResearchSession(options: {
         }
       }
       result.outcomes.push({ source: 'etymonlineRecovery', outcome })
-      if (settings.primary && outcome.status === 'found')
-        emit({
-          type: 'source_outcome',
-          language: languageFromName(result.lexeme.language),
-          source: 'etymonline',
-          outcome,
-        })
+      if (outcome.status === 'found')
+        reportPublishers(
+          result.lexeme,
+          result.sources.filter((source) => source.provider === 'etymonline')
+        )
     }
   }
 
-  async function discover(result: LexemeLookupResult, settings: LookupOptions) {
+  async function discover(result: LexemeLookupResult) {
     if (hasEtymologicalText(result.sources)) return
     const heading = lexicalLanguageName(result.lexeme.language)
     const language = languageFromName(result.lexeme.language)
@@ -508,11 +589,15 @@ export function createLexemeResearchSession(options: {
     const cached = await getCachedSourceBundle('discovery', result.lexeme.word, heading)
     if (cached) {
       addRecords(result, cached)
+      reportPublishers(result.lexeme, cached)
       return
     }
-    const response = await exa.search(
-      `Dictionary etymology and historical origin of the exact ${heading} word "${result.lexeme.word}"; separate homographs and cite attested source forms.`,
-      domains
+    const response = await retrieveWithExa([result.lexeme], (onDispatch) =>
+      exa.search(
+        `Dictionary etymology and historical origin of the exact ${heading} word "${result.lexeme.word}"; separate homographs and cite attested source forms.`,
+        domains,
+        onDispatch
+      )
     )
     const records: SourceRecord[] = []
     if (response.status === 'success') {
@@ -542,9 +627,7 @@ export function createLexemeResearchSession(options: {
     }
     const outcome = records.length ? { status: 'found' as const } : recoveryOutcome(response)
     result.outcomes.push({ source: 'discovery', outcome })
-    if (settings.primary && records.length)
-      for (const source of records)
-        emit({ type: 'source_outcome', language, source: source.provider, outcome })
+    reportPublishers(result.lexeme, records)
   }
 
   async function lookupMany(
@@ -560,6 +643,7 @@ export function createLexemeResearchSession(options: {
       reject: (error: unknown) => void
     }> = []
     for (const lexeme of lexemes) {
+      subscribeProgress(lexeme, settings.progressLanguage ?? languageFromName(lexeme.language))
       const key = researchLexemeKey(lexeme)
       if (memo.has(key)) continue
       let resolve!: (value: LexemeLookupResult) => void
@@ -590,8 +674,7 @@ export function createLexemeResearchSession(options: {
       for (let index = 0; index < width; index++)
         for (const entry of fresh) {
           const job = entry.jobs[index]
-          if (job)
-            entry.pending[index] = runJob(entry.result.lexeme, job, Boolean(settings.primary))
+          if (job) entry.pending[index] = runJob(entry.result.lexeme, job)
         }
       for (const entry of fresh) {
         const core = Promise.all(
@@ -619,21 +702,17 @@ export function createLexemeResearchSession(options: {
               ['wiktionary', 'wiktionaryEnglish', 'wiktionaryNative'].includes(source.provider)
             )
           ) {
-            const fallback = await runJob(
-              entry.result.lexeme,
-              {
-                id: 'multilingualDictionary',
-                run: async () => {
-                  const data = await fetchFreeDictionaryApi(
-                    entry.result.lexeme.word,
-                    language,
-                    signal
-                  )
-                  return found(data ? [record('multilingualDictionary', data)] : [])
-                },
+            const fallback = await runJob(entry.result.lexeme, {
+              id: 'multilingualDictionary',
+              run: async () => {
+                const data = await fetchFreeDictionaryApi(
+                  entry.result.lexeme.word,
+                  language,
+                  signal
+                )
+                return found(data ? [record('multilingualDictionary', data)] : [])
               },
-              Boolean(settings.primary)
-            )
+            })
             addRecords(entry.result, fallback.records)
             entry.result.outcomes.push({
               source: 'multilingualDictionary',
@@ -643,12 +722,9 @@ export function createLexemeResearchSession(options: {
         })
       )
       await core
-      await recover(
-        fresh.map((entry) => entry.result),
-        settings
-      )
+      await recover(fresh.map((entry) => entry.result))
       // A deterministic queue gives the query, then earlier ancestor lexemes, first access to discovery.
-      for (const entry of fresh) await discover(entry.result, settings)
+      for (const entry of fresh) await discover(entry.result)
       for (const entry of fresh) {
         signal?.throwIfAborted()
         entry.result.incomplete =

@@ -7,7 +7,7 @@ import { EtymologyCard } from '@/components/EtymologyCard'
 import { LanguageTabs } from '@/components/LanguageTabs'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
-import { SourceIcon } from '@/components/SourceIcon'
+import { TraceStatus } from '@/components/TraceStatus'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { consumeTraceIntent, scheduleTraceIntent } from '@/lib/traceIntent'
@@ -152,19 +152,7 @@ export function WordTraceExperience({
                         {slice.error}
                       </p>
                     ) : (
-                      <TraceStatus
-                        progress={{
-                          ...progress,
-                          phase: slice?.phase ?? progress.phase,
-                          sources: [
-                            ...progress.sources.filter(
-                              (source) => !slice?.sources.some((item) => item.key === source.key)
-                            ),
-                            ...(slice?.sources ?? []),
-                          ],
-                        }}
-                        resolving={progress.languages.length === 0}
-                      />
+                      <TraceStatus progress={progress} language={selected} />
                     )}
                   </>
                 ) : (
@@ -197,70 +185,6 @@ function TraceGate({ onStart, stale }: { onStart: () => void; stale: boolean }) 
       >
         {stale ? 'Retrace its origins' : 'Trace its origins'}
       </button>
-    </div>
-  )
-}
-
-/** Wall-clock milliseconds since this component mounted, ticking every 100ms while `running`. */
-function useElapsed(running: boolean): number {
-  const [start] = useState(() => Date.now())
-  const [now, setNow] = useState(start)
-  useEffect(() => {
-    if (!running) return
-    const timer = setInterval(() => setNow(Date.now()), 100)
-    return () => clearInterval(timer)
-  }, [running])
-  return now - start
-}
-
-const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`
-
-function TraceStatus({ progress, resolving }: { progress: StreamState; resolving: boolean }) {
-  const elapsed = useElapsed(progress.status === 'loading')
-  const message = resolving
-    ? 'Finding the languages that have this word…'
-    : progress.phase === 'synthesis'
-      ? 'Writing the entry…'
-      : progress.sharedWaitMs !== null
-        ? 'Someone is already tracing this word — joining them…'
-        : 'Reading the sources…'
-
-  return (
-    <div className="mt-8 text-sm">
-      <p className="font-serif italic text-muted">
-        {message} <span className="not-italic tabular-nums text-faint">{seconds(elapsed)}</span>
-      </p>
-      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
-        {progress.sources.map((source) => (
-          <li
-            key={source.key}
-            className={`transition-colors duration-500 ${
-              source.status === 'complete' ? 'text-ink' : 'text-faint'
-            }`}
-          >
-            <span className="inline-flex items-center gap-1.5 align-middle">
-              <SourceIcon source={source.key} />
-              {source.label}
-            </span>{' '}
-            <span className="tabular-nums text-muted" title={source.reason}>
-              {source.status === 'pending'
-                ? seconds(elapsed)
-                : source.status !== 'complete'
-                  ? {
-                      failed: 'unavailable',
-                      not_found: 'no entry',
-                      no_evidence: 'no evidence',
-                      blocked: 'blocked',
-                      unavailable: 'unavailable',
-                      budget_skipped: 'limit reached',
-                    }[source.status]
-                  : source.timing !== undefined
-                    ? seconds(source.timing)
-                    : 'done'}
-            </span>
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }

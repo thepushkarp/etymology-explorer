@@ -136,6 +136,8 @@ export function useStreamingEtymology(defaultHint?: LanguageCode) {
         if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
           return
 
+        // Each connection observes a new server session with its own source job IDs.
+        if (attempt > 0) dispatch({ type: 'stream_reconnecting' })
         const url = `${fallbackUrl}&stream=true`
         let eventSource: EventSource
         try {

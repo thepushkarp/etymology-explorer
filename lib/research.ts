@@ -442,6 +442,7 @@ export async function expandLexemes(
     ]
     unique.forEach((lexeme) => seen.add(researchLexemeKey(lexeme)))
     const results = await session.lookupMany(unique, {
+      progressLanguage: language,
       skipOptionalSourcesFor: (lexeme) =>
         admitted
           .filter((candidate) => researchLexemeKey(candidate.lexeme) === researchLexemeKey(lexeme))
@@ -912,6 +913,7 @@ export async function conductAgenticResearch(
       { word: normalizedWord, language },
       {
         primary: true,
+        progressLanguage: language,
         skipOptionalSources: options?.skipOptionalSources,
         onCore(sources) {
           if (!sources.length) return
@@ -953,7 +955,8 @@ export async function conductAgenticResearch(
       )
       .slice(0, CONFIG.maxRootsToExplore)
     const extraRoots = await session.lookupMany(
-      rootsToFetch.map((root) => ({ word: root, language }))
+      rootsToFetch.map((root) => ({ word: root, language })),
+      { progressLanguage: language }
     )
     for (const result of extraRoots) {
       recordLookup(context, result)
@@ -984,7 +987,8 @@ export async function conductAgenticResearch(
         sources.flatMap((source) => source.data.relatedEntries ?? [])
       )
       const related = await session.lookupMany(
-        relatedTerms.map((term) => ({ word: term, language }))
+        relatedTerms.map((term) => ({ word: term, language })),
+        { progressLanguage: language }
       )
       for (const result of related) {
         recordLookup(context, result)

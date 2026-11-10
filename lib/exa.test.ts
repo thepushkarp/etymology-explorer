@@ -107,7 +107,11 @@ describe('Exa transport', () => {
     })
     globalThis.fetch = fetchMock as unknown as typeof fetch
     process.env.EXA_ENABLED = 'false'
-    expect(await makeSession().contents([url])).toEqual({ status: 'skipped', reason: 'disabled' })
+    const onDispatch = mock(() => {})
+    expect(await makeSession().contents([url], onDispatch)).toEqual({
+      status: 'skipped',
+      reason: 'disabled',
+    })
     process.env.EXA_ENABLED = 'true'
     expect(await makeSession(new SourceFetchBudget(0)).contents([url])).toEqual({
       status: 'skipped',
@@ -132,6 +136,7 @@ describe('Exa transport', () => {
       reason: 'budget_exhausted',
     })
     expect(fetchMock).not.toHaveBeenCalled()
+    expect(onDispatch).not.toHaveBeenCalled()
   })
 
   test('redirects never forward the key and uncertain failures retain the debit', async () => {
@@ -166,7 +171,12 @@ describe('Exa transport', () => {
     expect(results[0]).toEqual({ status: 'skipped', reason: 'source_budget' })
     const budget = new SourceFetchBudget(1)
     const session = makeSession(budget)
-    const raced = await Promise.all([session.contents([url]), session.contents([url])])
+    const onDispatch = mock(() => {})
+    const raced = await Promise.all([
+      session.contents([url], onDispatch),
+      session.contents([url], onDispatch),
+    ])
+    expect(onDispatch).toHaveBeenCalledTimes(1)
     expect(raced.map((result) => result.status)).toEqual(['success', 'skipped'])
     expect(transactions.filter((args) => args[1] === 'release')).toHaveLength(1)
     expect(budget.attempts).toBe(1)

@@ -67,14 +67,16 @@ function trustedRequestUrl(target: string | URL | Request, sourceOnly: boolean):
  * Prevents external sources from hanging requests indefinitely.
  * An optional caller signal (e.g. request.signal from a disconnected
  * client) is composed with the timeout via AbortSignal.any so either
- * one cancels the underlying request.
+ * one cancels the underlying request. The optional dispatch observer runs after
+ * HTTP budget admission, immediately before each network attempt.
  */
 
 export async function fetchWithTimeout(
   url: string | URL | Request,
   options: RequestInit,
   timeoutMs: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onDispatch?: () => void
 ): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -107,6 +109,7 @@ export async function fetchWithTimeout(
     for (let hop = 0; ; hop++) {
       composedSignal.throwIfAborted()
       budget?.reserve()
+      onDispatch?.()
       const response = await fetch(target, {
         ...init,
         redirect: 'manual',

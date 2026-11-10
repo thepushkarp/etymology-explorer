@@ -97,7 +97,14 @@ test('full language lookups reuse resolution pages and emit progress for each qu
     events.filter(
       (event) => event.type === 'source_started' && event.source === 'wiktionaryEnglish'
     )
-  ).toEqual([{ type: 'source_started', source: 'wiktionaryEnglish', language: 'fr' }])
+  ).toEqual([
+    {
+      type: 'source_started',
+      source: 'wiktionaryEnglish',
+      language: 'fr',
+      activityId: expect.any(String),
+    },
+  ])
 })
 
 test('authoritative Latin misses fall back to English, while unsupported or mixed scripts fetch nothing', async () => {

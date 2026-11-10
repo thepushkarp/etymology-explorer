@@ -6,6 +6,7 @@ import { EntrySelector } from '@/components/etymology-card/EntrySelector'
 import { LanguageTabs } from '@/components/LanguageTabs'
 import { ScriptLinks } from '@/components/ScriptLinks'
 import { ShareButton } from '@/components/ShareButton'
+import { TraceStatus } from '@/components/TraceStatus'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { consumeTraceIntent } from '@/lib/traceIntent'
@@ -76,7 +77,12 @@ export function EntryView({
     <FinishedLanguage
       key={`${result.language}:${result.primaryHistoryId}`}
       result={result}
-      subheader={tabs}
+      subheader={
+        <>
+          {tabs}
+          {progress.status === 'loading' && <TraceStatus progress={progress} language={selected} />}
+        </>
+      }
       actions={
         <div className="flex items-center gap-4">
           {stale && !progress.result && (
@@ -92,13 +98,7 @@ export function EntryView({
           <ShareButton />
         </div>
       }
-      status={
-        progress.status === 'error'
-          ? progress.error?.message
-          : progress.status === 'loading'
-            ? 'Retracing this entry…'
-            : undefined
-      }
+      status={progress.status === 'error' ? progress.error?.message : undefined}
     />
   )
 }

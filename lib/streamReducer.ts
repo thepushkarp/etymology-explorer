@@ -35,6 +35,7 @@ export interface SourceProgress {
   status: SourceStatus
   timing?: number
   reason?: string
+  activities?: Record<string, { status: SourceStatus; timing?: number; reason?: string }>
 }
 
 /** Top-level synthesis sections, named and ordered exactly as in the LLM schema */
@@ -110,6 +111,7 @@ export interface StreamState {
 
 export type StreamAction =
   | { type: 'search_started' }
+  | { type: 'stream_reconnecting' }
   | { type: 'stream_event'; event: StreamEvent }
   | { type: 'fallback_success'; result: WordEntry }
   | { type: 'fallback_error'; error: StreamingUiError }
@@ -121,14 +123,40 @@ export type StreamAction =
 function upsertSource(
   sources: SourceProgress[],
   rawSource: string,
-  patch: Partial<Pick<SourceProgress, 'status' | 'timing' | 'reason'>>
+  patch: Partial<Pick<SourceProgress, 'status' | 'timing' | 'reason'>>,
+  activityId?: string
 ): SourceProgress[] {
   const key = sourceKey(rawSource)
   const existing = sources.find((source) => source.key === key)
-  if (!existing) {
-    return [...sources, { key, label: sourceLabel(rawSource), status: 'pending', ...patch }]
+  let updated: SourceProgress = existing ?? {
+    key,
+    label: sourceLabel(rawSource),
+    status: 'pending',
   }
-  return sources.map((source) => (source.key === key ? { ...source, ...patch } : source))
+  if (activityId) {
+    const previous = updated.activities?.[activityId]
+    const activity = {
+      status: 'pending' as SourceStatus,
+      timing: undefined,
+      reason: undefined,
+      ...previous,
+      ...patch,
+    }
+    const activities = { ...updated.activities, [activityId]: activity }
+    const values = Object.values(activities)
+    // A provider can read several lexemes at once. Settled siblings must not hide active work
+    // or erase a usable entry just because another lexeme has no entry at that publisher.
+    const summary =
+      values.find((item) => item.status === 'pending') ??
+      values.find((item) => item.status === 'complete') ??
+      activity
+    updated = { ...updated, ...summary, activities }
+  } else {
+    updated = { ...updated, ...patch }
+  }
+  return existing
+    ? sources.map((source) => (source.key === key ? updated : source))
+    : [...sources, updated]
 }
 
 function isSectionKey(section: string): section is SectionKey {
@@ -210,34 +238,50 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
   }
   switch (event.type) {
     case 'source_started':
-      return { ...state, sources: upsertSource(state.sources, event.source, {}) }
+      return { ...state, sources: upsertSource(state.sources, event.source, {}, event.activityId) }
 
     case 'source_complete':
       return {
         ...state,
-        sources: upsertSource(state.sources, event.source, {
-          status: 'complete',
-          timing: event.timing,
-        }),
+        sources: upsertSource(
+          state.sources,
+          event.source,
+          {
+            status: 'complete',
+            timing: event.timing,
+            reason: undefined,
+          },
+          event.activityId
+        ),
       }
 
     case 'source_failed':
       return {
         ...state,
-        sources: upsertSource(state.sources, event.source, {
-          status: 'failed',
-          reason: event.error,
-        }),
+        sources: upsertSource(
+          state.sources,
+          event.source,
+          {
+            status: 'failed',
+            reason: event.error,
+          },
+          event.activityId
+        ),
       }
 
     case 'source_outcome':
       return {
         ...state,
-        sources: upsertSource(state.sources, event.source, {
-          status: event.outcome.status === 'found' ? 'complete' : event.outcome.status,
-          timing: event.timing,
-          reason: event.outcome.reason,
-        }),
+        sources: upsertSource(
+          state.sources,
+          event.source,
+          {
+            status: event.outcome.status === 'found' ? 'complete' : event.outcome.status,
+            timing: event.timing,
+            reason: event.outcome.reason,
+          },
+          event.activityId
+        ),
       }
 
     case 'parsing_complete':
@@ -297,6 +341,19 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
         ...initialStreamState,
         status: 'loading',
         phase: 'sources',
+      }
+
+    case 'stream_reconnecting':
+      return {
+        ...state,
+        sources: [],
+        byLanguage: Object.fromEntries(
+          Object.entries(state.byLanguage).map(([language, slice]) => [
+            language,
+            { ...slice, sources: [] },
+          ])
+        ),
+        sharedWaitMs: null,
       }
 
     case 'stream_event':

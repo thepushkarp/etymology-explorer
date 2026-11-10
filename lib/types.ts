@@ -493,7 +493,7 @@ export interface SecurityTelemetryEvent {
  * Server-sent event shapes for streaming etymology synthesis
  * Emitted during the research and synthesis pipeline to provide real-time progress
  */
-export type StreamEvent = { language?: LanguageCode } & (
+export type StreamEvent = { language?: LanguageCode; activityId?: string } & (
   | { type: 'source_started'; source: string }
   | {
       type: 'source_complete'

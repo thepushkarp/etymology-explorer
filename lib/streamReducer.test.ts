@@ -195,6 +195,79 @@ describe('source events', () => {
     expect(recovered.sources[1].reason).toBeUndefined()
   })
 
+  test('concurrent jobs keep a provider pending and retain successes across later misses', () => {
+    let state = run(
+      events(
+        { type: 'source_started', source: 'exa', activityId: 'one', language: 'fr' },
+        { type: 'source_started', source: 'exa', activityId: 'two', language: 'fr' },
+        { type: 'source_complete', source: 'exa', activityId: 'one', timing: 10, language: 'fr' },
+        {
+          type: 'source_outcome',
+          source: 'exa',
+          activityId: 'one',
+          outcome: { status: 'found' },
+          language: 'fr',
+        },
+        {
+          type: 'source_outcome',
+          source: 'exa',
+          activityId: 'es',
+          outcome: { status: 'unavailable' },
+          language: 'es',
+        }
+      )
+    )
+    expect(state.byLanguage.fr?.sources[0]).toMatchObject({
+      label: 'Exa retrieval',
+      status: 'pending',
+    })
+    state = run(
+      events(
+        {
+          type: 'source_outcome',
+          source: 'exa',
+          activityId: 'two',
+          outcome: { status: 'no_evidence' },
+          language: 'fr',
+        },
+        { type: 'source_started', source: 'exa', activityId: 'one', language: 'fr' }
+      ),
+      state
+    )
+    expect(state.byLanguage.fr?.sources[0].status).toBe('complete')
+    expect(state.byLanguage.es?.sources[0].status).toBe('unavailable')
+    expect(Object.keys(state.byLanguage.fr?.sources[0].activities ?? {})).toHaveLength(2)
+    expect(state.sources).toEqual([])
+  })
+
+  test('reconnection clears source jobs before a new server session reuses its IDs', () => {
+    const previous = run(
+      events(
+        { type: 'source_started', source: 'wikipedia', activityId: 'old' },
+        {
+          type: 'source_outcome',
+          source: 'exa',
+          activityId: '1',
+          outcome: { status: 'found' },
+          language: 'en',
+        },
+        { type: 'source_started', source: 'exa', activityId: '2', language: 'en' },
+        { type: 'synthesis_section', section: 'definition', data: 'An entry.', language: 'en' }
+      )
+    )
+    const reconnected = run(
+      [
+        { type: 'stream_reconnecting' },
+        ...events({ type: 'source_started', source: 'exa', activityId: '1', language: 'en' }),
+      ],
+      previous
+    )
+    expect(reconnected.sources).toEqual([])
+    expect(reconnected.byLanguage.en?.sources[0].status).toBe('pending')
+    expect(Object.keys(reconnected.byLanguage.en?.sources[0].activities ?? {})).toEqual(['1'])
+    expect(reconnected.byLanguage.en?.sections.definition).toBe('An entry.')
+  })
+
   test('root_research events do not produce a new state reference', () => {
     const before = run([{ type: 'search_started' }])
     const after = streamReducer(before, {

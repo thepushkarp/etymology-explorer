@@ -1,4 +1,4 @@
-import { beforeEach, expect, mock, test } from 'bun:test'
+import { beforeEach, expect, mock, spyOn, test } from 'bun:test'
 import { NextRequest } from 'next/server'
 import * as nextServer from 'next/server'
 import { CONFIG } from '@/lib/config'
@@ -295,10 +295,18 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     lock = 'busy'
     const updated = { ...original, tracedAt: '2026-11-10T00:00:00.000Z' }
     read = () => (calls.reads >= 4 ? { entry: updated, stale: false } : saved)
-    const payload = await (await get('&refresh=1')).json()
-    expect(payload.data.tracedAt).toBe(updated.tracedAt)
-    expect(calls.reads).toBeGreaterThanOrEqual(4)
-    expect(calls.research).toBe(0)
+    // This checks cache generations; scheduler delays must not expire the fixture's 12 ms window.
+    const clock = spyOn(Date, 'now').mockReturnValue(0)
+    try {
+      const response = await get('&refresh=1')
+      expect(response.status).toBe(200)
+      const payload = await response.json()
+      expect(payload.data.tracedAt).toBe(updated.tracedAt)
+      expect(calls.reads).toBeGreaterThanOrEqual(4)
+      expect(calls.research).toBe(0)
+    } finally {
+      clock.mockRestore()
+    }
   })
   test('lock reread avoids spending when another holder already saved the entry', async () => {
     const completed = { entry: entry(), stale: false }
