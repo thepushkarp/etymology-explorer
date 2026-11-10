@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { EtymologyEntry } from '@/lib/types'
-import { languageFromName } from '@/lib/languages'
+import { languageFromName, type EtymologyStratum } from '@/lib/languages'
 import { PronunciationButton } from '../PronunciationButton'
 import { Skeleton } from './Section'
 import { FormText } from './StoryText'
@@ -10,6 +10,15 @@ interface EntryHeaderProps {
   actions?: ReactNode
   subheader?: ReactNode
   pending?: boolean
+}
+
+const STRATUM_LABELS: Record<EtymologyStratum, string> = {
+  wago: 'Wago · native Japanese',
+  kango: 'Kango · Sino-Japanese',
+  gairaigo: 'Gairaigo · loanword',
+  'wasei-eigo': 'Wasei-eigo · Japanese coinage from English',
+  'wasei-kango': 'Wasei-kango · Japanese coinage from Chinese elements',
+  hybrid: 'Hybrid',
 }
 
 function shortenMeaning(meaning: string): string {
@@ -69,6 +78,7 @@ export function EntryHeader({ result, actions, subheader, pending }: EntryHeader
           <span className="font-serif italic">{partsOfSpeech.join(', ')}</span>
         )}
         {attested && <span className="text-sm">first attested {attested}</span>}
+        {result.stratum && <span className="label">{STRATUM_LABELS[result.stratum]}</span>}
       </p>
 
       {subheader}

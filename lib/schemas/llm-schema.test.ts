@@ -258,6 +258,7 @@ describe('ETYMOLOGY_LLM_SCHEMA sync with Zod schema', () => {
       'word',
       'primaryHistoryId',
       'histories',
+      'stratum',
       'pronunciation',
       'transliteration',
       'definition',

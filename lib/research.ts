@@ -29,7 +29,7 @@ import {
   extractOutputText,
   extractUsage,
 } from './openrouterResponses'
-import { LANGUAGES, type LanguageCode } from './languages'
+import { LANGUAGES, languageFromName, lexicalLanguageName, type LanguageCode } from './languages'
 import type { ExaBudgetRedis } from './exaBudget'
 import { buildLexicalResearchGraph } from './lexemeGraph'
 import { deriveEntryContexts } from './lexemeEntries'
@@ -126,28 +126,62 @@ function recordLookup(context: ResearchContext, result: LexemeLookupResult): voi
   }
 }
 
+function primarySource(sources: SourceRecord[], language?: LanguageCode): SourceRecord | undefined {
+  const find = (provider: string) => sources.find((source) => source.provider === provider)
+  return language && LANGUAGES[language].historyPrimary === 'english'
+    ? (find('wiktionaryEnglish') ??
+        find('wiktionary') ??
+        find('wiktionaryNative') ??
+        sources.find((source) => sourceEvidenceRole(source) === 'etymology'))
+    : !language || language === 'en'
+      ? (find('wiktionary') ??
+        find('etymonline') ??
+        sources.find((source) => sourceEvidenceRole(source) === 'etymology'))
+      : ((find('wiktionaryNative')?.data.entryGroups?.length
+          ? find('wiktionaryNative')
+          : undefined) ??
+        find('wiktionaryEnglish') ??
+        find('wiktionaryNative') ??
+        sources.find((source) => sourceEvidenceRole(source) === 'etymology'))
+}
+
+function entryChains(entry: ResearchEntryContext, word: string): ParsedEtymChain[] {
+  const parsed =
+    entry.source === 'etymonline'
+      ? parseEtymonlineText(entry.text, word)
+      : parseDictionaryText(entry.text, word, entry.source)
+  const identity = {
+    historyId: entry.id,
+    evidenceScopeId: entry.evidenceScopeId,
+    sourceUrl: entry.sourceUrl,
+  }
+  const relations = (entry.relations ?? []).map((relation) => ({
+    source: entry.source,
+    provider: entry.source,
+    word,
+    ...identity,
+    subject: relation.subject,
+    links: [
+      {
+        language: lexicalLanguageName(relation.target.language),
+        form: relation.target.word,
+        relation: relation.relation,
+        rawSnippet: relation.snippet,
+        isReconstructed:
+          relation.target.word.startsWith('*') || relation.target.language.startsWith('Proto-'),
+      },
+    ],
+  }))
+  return [...(parsed.links.length ? [{ ...parsed, ...identity }] : []), ...relations]
+}
+
 /** Source-local groups define histories; other publishers remain independent context. */
 function scopeHistories(context: ResearchContext): void {
   const language = context.language ?? 'en'
   const word = context.mainWord.word
   const sources = mainSourceRecords(context.mainWord)
   const find = (provider: string) => sources.find((source) => source.provider === provider)
-  const primary =
-    LANGUAGES[language].historyPrimary === 'english'
-      ? (find('wiktionaryEnglish') ??
-        find('wiktionary') ??
-        find('wiktionaryNative') ??
-        sources.find((source) => sourceEvidenceRole(source) === 'etymology'))
-      : language === 'en'
-        ? (find('wiktionary') ??
-          find('etymonline') ??
-          sources.find((source) => sourceEvidenceRole(source) === 'etymology'))
-        : ((find('wiktionaryNative')?.data.entryGroups?.length
-            ? find('wiktionaryNative')
-            : undefined) ??
-          find('wiktionaryEnglish') ??
-          find('wiktionaryNative') ??
-          sources.find((source) => sourceEvidenceRole(source) === 'etymology'))
+  const primary = primarySource(sources, language) ?? lexicalSourceRecords(sources)[0]
   let entries: ResearchEntryContext[] = primary
     ? deriveEntryContexts(
         word,
@@ -173,19 +207,15 @@ function scopeHistories(context: ResearchContext): void {
       },
     ]
   }
+  const redirects =
+    primary?.data.variants?.filter((variant) => variant.relationship === 'redirect') ?? []
+  if (entries.length === 1 && redirects.length === 1) {
+    entries[0].entryKind = 'form'
+    entries[0].formOf = { word: redirects[0].word, language }
+  }
   const chains = entries.flatMap((entry) => {
     if (!primary || sourceEvidenceRole(primary) !== 'etymology') return []
-    const parsed =
-      entry.source === 'etymonline'
-        ? parseEtymonlineText(entry.text, word)
-        : parseDictionaryText(entry.text, word, entry.source, {
-            historyId: entry.id,
-            evidenceScopeId: entry.evidenceScopeId,
-            provider: entry.source,
-          })
-    return parsed.links.length
-      ? [{ ...parsed, historyId: entry.id, evidenceScopeId: entry.evidenceScopeId }]
-      : []
+    return entryChains(entry, word)
   })
   context.entryContexts = entries
   context.parsedChains = chains
@@ -265,14 +295,103 @@ export function ancestorCandidates(context: ResearchContext): ExpansionCandidate
       ) {
         bindings.push({
           lexeme,
-          relationship: 'root',
+          relationship: link.relation === 'compound_from' ? 'component' : 'root',
           parentHistoryId: chain.historyId,
           evidenceScopeId: chain.evidenceScopeId,
+          sourceUrl: chain.sourceUrl,
         })
       }
       selected.set(key, bindings)
     }
   return [...selected.values()].flat()
+}
+
+/** A source-attested target does not identify one of several homonymous histories. */
+function bindContinuation(
+  context: ResearchContext,
+  candidate: ExpansionCandidate,
+  result: LexemeLookupResult,
+  discovered: ExpansionCandidate[]
+): void {
+  const parent = context.entryContexts?.find((entry) => entry.id === candidate.parentHistoryId)
+  if (!parent) return
+  const directTarget =
+    parent.formOf && researchLexemeKey(parent.formOf) === researchLexemeKey(result.lexeme)
+  const attested = context.parsedChains?.some(
+    (chain) =>
+      chain.historyId === parent.id &&
+      candidate.evidenceScopeId &&
+      chain.evidenceScopeId === candidate.evidenceScopeId &&
+      chain.links.some(
+        (link) =>
+          researchLexemeKey({ word: link.form, language: link.language }) ===
+          researchLexemeKey(result.lexeme)
+      )
+  )
+  if (!directTarget && !attested) return
+  const primary = primarySource(result.sources, languageFromName(result.lexeme.language))
+  if (
+    !primary ||
+    sourceEvidenceRole(primary) !== 'etymology' ||
+    primary.data.entryGroups?.length !== 1
+  )
+    return
+  if (
+    [primary.data.requestedWord, primary.data.resolvedWord].some(
+      (word) => word && canonicalizeWord(word) !== canonicalizeWord(result.lexeme.word)
+    ) ||
+    (primary.data.lexicalLanguage &&
+      lexicalLanguageName(primary.data.lexicalLanguage) !==
+        lexicalLanguageName(result.lexeme.language))
+  )
+    return
+  const group = primary.data.entryGroups[0]
+  if (!directTarget && group.relations?.some((relation) => relation.relation === 'compound_from'))
+    return
+  const language = languageFromName(result.lexeme.language)
+  if (
+    language &&
+    deriveEntryContexts(result.lexeme.word, language, primary.provider, primary.data, null)
+      .length !== 1
+  )
+    return
+  const scope = `scope:continuation:${researchLexemeKey(result.lexeme)}:${primary.provider}:${group.anchor}`
+  if (
+    context.parsedChains?.some(
+      (chain) => chain.historyId === parent.id && chain.evidenceScopeId === scope
+    )
+  )
+    return
+  const entry: ResearchEntryContext = {
+    id: parent.id,
+    source: primary.provider,
+    heading: group.heading,
+    text: group.text,
+    relations: group.relations,
+    etymologyText: group.etymologyText,
+    sectionHeadings: group.sections.map((section) => section.heading),
+    evidenceScopeId: scope,
+    sourceUrl: group.sourceUrl ?? primary.data.url,
+    entryKind: 'lemma',
+  }
+  const chains = entryChains(entry, result.lexeme.word).map((chain) => ({
+    ...chain,
+    subject: chain.subject ?? result.lexeme,
+  }))
+  context.parsedChains = [...(context.parsedChains ?? []), ...chains]
+  if (directTarget) {
+    for (const chain of chains)
+      for (const link of chain.links) {
+        if (link.relation !== 'compound_from' || link.isReconstructed) continue
+        discovered.push({
+          lexeme: { word: link.form, language: link.language },
+          relationship: 'component',
+          parentHistoryId: parent.id,
+          evidenceScopeId: scope,
+          sourceUrl: entry.sourceUrl,
+        })
+      }
+  }
 }
 
 export async function expandLexemes(
@@ -334,6 +453,7 @@ export async function expandLexemes(
     for (const candidate of admitted) {
       const result = byKey.get(researchLexemeKey(candidate.lexeme))!
       context.rootResearch.push(rootLookup(result, candidate))
+      bindContinuation(context, candidate, result, discovered)
       if (!newlyDiscovered.has(researchLexemeKey(candidate.lexeme))) continue
       for (const variant of result.sources.flatMap((source) => source.data.variants ?? [])) {
         discovered.push({
@@ -371,6 +491,12 @@ export async function expandLexemes(
     return true
   })
   await fetchWave(linked)
+  context.lexicalGraph = buildLexicalResearchGraph(
+    word,
+    language,
+    context.entryContexts ?? [],
+    context.parsedChains ?? []
+  )
   signal?.throwIfAborted()
 }
 

@@ -16,6 +16,9 @@ function groupByOrigin(sources: SourceReference[]) {
 
 export function SourcesSection({ sources }: { sources: SourceReference[] }) {
   if (sources.length === 0) return null
+  const jmdict = sources.find(
+    (source) => source.license && (source.name === 'jmdict' || source.sourceFamily === 'jmdict')
+  )
   return (
     <Section id="entry-sources" title="Sources">
       <ul className="space-y-2 text-sm">
@@ -42,6 +45,29 @@ export function SourcesSection({ sources }: { sources: SourceReference[] }) {
           </li>
         ))}
       </ul>
+      {jmdict && (
+        <p className="mt-4 text-sm text-muted">
+          JMdict data by the{' '}
+          <a
+            href="https://www.edrdg.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="link"
+          >
+            Electronic Dictionary Research and Development Group (EDRDG)
+          </a>
+          , used under{' '}
+          <a
+            href="https://creativecommons.org/licenses/by-sa/4.0/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="link"
+          >
+            CC BY-SA 4.0
+          </a>
+          .
+        </p>
+      )}
     </Section>
   )
 }

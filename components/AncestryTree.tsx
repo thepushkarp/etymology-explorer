@@ -16,7 +16,16 @@ interface AncestryTreeProps {
 }
 
 type Family =
-  'pie' | 'greek' | 'latin' | 'romance' | 'germanic' | 'semitic' | 'indo-iranian' | 'other'
+  | 'pie'
+  | 'greek'
+  | 'latin'
+  | 'romance'
+  | 'germanic'
+  | 'semitic'
+  | 'indo-iranian'
+  | 'japonic'
+  | 'sinitic'
+  | 'other'
 
 // Order matters: "Proto-Germanic" is Germanic, "Anglo-Norman" Romance, "Anglo-Latin" Latin.
 const FAMILY_PATTERNS: Array<[Family, RegExp]> = [
@@ -36,6 +45,8 @@ const FAMILY_PATTERNS: Array<[Family, RegExp]> = [
     /english|germanic|norse|dutch|german|frisian|gothic|saxon|icelandic|danish|swedish|norwegian|scots/i,
   ],
   ['semitic', /arabic|hebrew|aramaic|akkadian|phoenician|syriac/i],
+  ['japonic', /japanese|japonic|ryukyuan|okinawan/i],
+  ['sinitic', /chinese|sinitic|mandarin|cantonese/i],
 ]
 
 const FAMILY: Record<Family, { label: string; stripe: string; swatch: string }> = {
@@ -50,6 +61,8 @@ const FAMILY: Record<Family, { label: string; stripe: string; swatch: string }> 
     stripe: 'border-t-lang-indo-iranian',
     swatch: 'bg-lang-indo-iranian',
   },
+  japonic: { label: 'Japonic', stripe: 'border-t-lang-japonic', swatch: 'bg-lang-japonic' },
+  sinitic: { label: 'Sinitic', stripe: 'border-t-lang-sinitic', swatch: 'bg-lang-sinitic' },
   other: { label: 'Other', stripe: 'border-t-lang-other', swatch: 'bg-lang-other' },
 }
 

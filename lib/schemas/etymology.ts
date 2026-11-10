@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod'
-import { SUPPORTED_LANGUAGE_CODES } from '../languages'
+import { ETYMOLOGY_STRATA, SUPPORTED_LANGUAGE_CODES } from '../languages'
 import { SOURCE_FAMILY_IDS, SOURCE_PROVIDER_IDS } from '../sourceProviders'
 
 const root = z.object({
@@ -29,6 +29,8 @@ const stage = z.object({
         source: z.string(),
         snippet: z.string(),
         sourceFamily: z.string().optional(),
+        sourceUrl: z.string().optional(),
+        evidenceScopeId: z.string().optional(),
       })
     )
     .optional(),
@@ -55,6 +57,7 @@ const example = z.object({
 })
 
 const entryFields = {
+  stratum: z.enum(ETYMOLOGY_STRATA).optional(),
   transliteration: z.string().optional(),
   pronunciation: z.string(),
   definition: z.string(),
@@ -146,6 +149,16 @@ export const EtymologyResultSchema = z
         code: 'custom',
         path: ['primaryHistoryId'],
         message: 'Primary history must reference an existing history',
+      })
+    }
+    if (
+      result.language !== 'ja' &&
+      (result.stratum || result.histories.some((entry) => entry.stratum))
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['stratum'],
+        message: 'Stratum applies only to Japanese',
       })
     }
     // An English sentence needs no gloss; any other sentence must carry one.

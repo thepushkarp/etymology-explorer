@@ -60,6 +60,8 @@ interface MatchResult {
   link: ParsedEtymLink
   source: SourceProviderId
   family: SourceFamilyId
+  sourceUrl?: string
+  evidenceScopeId?: string
 }
 
 /** Match within the caller's history scope and an explicitly identified language. */
@@ -82,6 +84,8 @@ function findMatches(stage: AncestryStage, chains: ParsedEtymChain[]): MatchResu
           link,
           source: provider,
           family: chain.sourceFamily ?? sourceFamily(provider),
+          sourceUrl: chain.sourceUrl,
+          evidenceScopeId: chain.evidenceScopeId,
         })
       }
     }
@@ -114,6 +118,8 @@ function buildEvidence(matches: MatchResult[]): StageEvidence[] {
       source: match.source,
       snippet: match.link.rawSnippet,
       sourceFamily: match.family,
+      ...(match.sourceUrl ? { sourceUrl: match.sourceUrl } : {}),
+      ...(match.evidenceScopeId ? { evidenceScopeId: match.evidenceScopeId } : {}),
     })
   }
 

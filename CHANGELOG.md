@@ -10,6 +10,7 @@ plain-text bullet under a `###` group. `Unreleased` stays out of the dialog.
 
 ### Added
 
+- Explore Japanese words with source-backed histories, word-origin labels, Japanese typography, and credited JMdict lexical context.
 - Explore Hindi, Urdu, and Sanskrit words in their native scripts, with source-backed transliterations, language tabs, and curated discovery words.
 - Hear Hindi and Urdu pronunciations, with right-to-left Urdu text and fonts for Devanagari and Urdu.
 

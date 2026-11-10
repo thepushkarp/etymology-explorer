@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { EtymologyCard } from './EtymologyCard'
+import { FormText } from './etymology-card/StoryText'
 import type { EtymologyEntry } from '@/lib/types'
 
 function result(language: 'en' | 'it'): EtymologyEntry {
@@ -17,6 +18,21 @@ function result(language: 'en' | 'it'): EtymologyEntry {
 }
 
 describe('EtymologyCard', () => {
+  test('marks unknown Han and kana forms by script while preserving supplied languages', () => {
+    const markup = renderToStaticMarkup(
+      <>
+        <FormText text="山" />
+        <FormText text="やま" />
+        <FormText text="パン" />
+        <FormText text="山" language="zh" />
+      </>
+    )
+    expect(markup).toContain('<bdi lang="und-Hani" dir="auto">山</bdi>')
+    expect(markup).toContain('<bdi lang="und-Hira" dir="auto">やま</bdi>')
+    expect(markup).toContain('<bdi lang="und-Kana" dir="auto">パン</bdi>')
+    expect(markup).toContain('<bdi lang="zh" dir="auto">山</bdi>')
+  })
+
   test('formats the story as paragraphs with italic forms', () => {
     const entry = {
       ...result('en'),
@@ -83,6 +99,42 @@ describe('EtymologyCard', () => {
     expect(markup.indexOf('>kitāb</span>')).toBeLessThan(markup.indexOf('/kɪ.t̪ɑːb/'))
     expect(markup).toContain('<em><bdi lang="und-Arab" dir="auto">کتاب</bdi></em>')
     expect(markup).toContain('<bdi lang="und-Deva" dir="auto">किताब</bdi>.')
+  })
+
+  test('displays a supported Japanese stratum and credits licensed JMdict data', () => {
+    const entry: EtymologyEntry = {
+      ...result('en'),
+      language: 'ja',
+      word: '電話',
+      stratum: 'wasei-kango',
+      transliteration: 'denwa',
+      definition: 'telephone',
+      roots: [],
+      sources: [
+        {
+          name: 'jmdict',
+          sourceFamily: 'jmdict',
+          word: '電話',
+          url: 'https://jisho.org/search/電話',
+          license:
+            'JMdict by the Electronic Dictionary Research and Development Group (EDRDG), https://www.edrdg.org/ — CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/',
+        },
+      ],
+    }
+    const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
+    expect(markup).toContain('lang="ja" dir="auto"')
+    expect(markup).toContain('Wasei-kango · Japanese coinage from Chinese elements')
+    expect(markup).toContain('href="https://www.edrdg.org/"')
+    expect(markup).toContain('href="https://creativecommons.org/licenses/by-sa/4.0/"')
+    expect(markup).toContain('CC BY-SA 4.0')
+    expect(markup).not.toContain(entry.sources[0].license!)
+    expect(markup.match(/Electronic Dictionary Research and Development Group/g)).toHaveLength(1)
+
+    const withoutMetadata = renderToStaticMarkup(
+      <EtymologyCard result={{ ...entry, stratum: undefined, sources: [] }} />
+    )
+    expect(withoutMetadata).not.toContain('Wasei-kango')
+    expect(withoutMetadata).not.toContain('EDRDG')
   })
 
   test('omits examples for entries cached before they existed', () => {

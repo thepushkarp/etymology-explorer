@@ -1,5 +1,25 @@
 import { canonicalizeWord } from './orthography'
-export const SUPPORTED_LANGUAGE_CODES = ['en', 'it', 'es', 'fr', 'pt', 'hi', 'ur', 'sa'] as const
+export const SUPPORTED_LANGUAGE_CODES = [
+  'en',
+  'it',
+  'es',
+  'fr',
+  'pt',
+  'hi',
+  'ur',
+  'sa',
+  'ja',
+] as const
+
+export const ETYMOLOGY_STRATA = [
+  'wago',
+  'kango',
+  'gairaigo',
+  'wasei-eigo',
+  'wasei-kango',
+  'hybrid',
+] as const
+export type EtymologyStratum = (typeof ETYMOLOGY_STRATA)[number]
 
 export type LanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number]
 
@@ -191,6 +211,28 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     particles: ['च', 'वा'],
     promptNotes:
       'SANSKRIT: distinguish source-attested words from grammatical roots marked √. Never present a root as an attested ancestor word. Preserve Vedic and Classical period distinctions when the sources make them.',
+  },
+  ja: {
+    code: 'ja',
+    englishName: 'Japanese',
+    nativeName: '日本語',
+    scripts: ['Han', 'Hiragana', 'Katakana'],
+    priority: 8,
+    englishWiktionaryHeading: 'Japanese',
+    nativeWiktionary: {
+      edition: 'ja',
+      heading: '日本語',
+      etymologyHeading: /^語源(?:\s+\d+)?$/u,
+      formHeading: /^(?:名詞|動詞|形容詞)$/u,
+    },
+    historyPrimary: 'english',
+    wikipediaEdition: 'ja',
+    wikidataEntity: 'Q5287',
+    ngramCorpus: null,
+    ttsLanguageCode: 'ja',
+    particles: ['の', 'に', 'は', 'を', 'と'],
+    promptNotes:
+      'JAPANESE: classify a history stratum only from affirmative scoped source evidence. A wasei-eigo construction is coined in Japanese, not a whole-word English borrowing. Preserve disputed borrowing and coinage accounts with attribution. Follow only source-attested, language-tagged components; do not split a source phrase or infer parts from a gloss. Kanji may be ateji: glyph origins are not word ancestry. A translation target is not an ancestor. JMdict source material with unspecified full/partial status cannot establish whole-word borrowing.',
   },
 }
 

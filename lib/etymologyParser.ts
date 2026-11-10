@@ -1,5 +1,6 @@
 import { canonicalizeWord, HISTORICAL_FORM } from './orthography'
 import { sourceFamily, type SourceProviderId, type SourceFamilyId } from './sourceProviders'
+import type { LexemeRef, SourceLexicalRelation } from './types'
 
 /**
  * Pre-parses source-local etymology text into structured chains.
@@ -15,6 +16,7 @@ import { sourceFamily, type SourceProviderId, type SourceFamilyId } from './sour
  */
 
 export interface ParsedEtymLink {
+  relation?: SourceLexicalRelation['relation']
   language: string // "Latin", "Old French", "Proto-Indo-European"
   form: string // "perfidia", "*bheid-"
   variants?: string[] // explicitly named alternate spellings in this source
@@ -25,6 +27,8 @@ export interface ParsedEtymLink {
 }
 
 export interface ParsedEtymChain {
+  subject?: LexemeRef
+  sourceUrl?: string
   source: SourceProviderId
   sourceFamily?: SourceFamilyId
   word: string
@@ -87,6 +91,7 @@ const HISTORICAL_LANGUAGE_ALIASES: Record<string, string> = {
 const KNOWN_LANGUAGES = [
   'Proto-Indo-European',
   'Proto-Germanic',
+  'Proto-West Germanic',
   'Proto-Italic',
   'Proto-Celtic',
   'Proto-Slavic',
@@ -95,6 +100,8 @@ const KNOWN_LANGUAGES = [
   'Old French',
   'Old Norse',
   'Old High German',
+  'Middle High German',
+  'Old Galician-Portuguese',
   'Middle French',
   'Middle Dutch',
   'Middle Low German',
@@ -103,6 +110,7 @@ const KNOWN_LANGUAGES = [
   'Vulgar Latin',
   'Classical Latin',
   'Modern English',
+  'English',
   'Modern French',
   'Ancient Greek',
   'Koine Greek',
@@ -157,6 +165,15 @@ const KNOWN_LANGUAGES = [
   'Persian',
   'Turkish',
   'Japanese',
+  'Old Japanese',
+  'Classical Japanese',
+  'Proto-Japonic',
+  'Middle Chinese',
+  'Old Chinese',
+  'Mandarin',
+  'Okinawan',
+  'Ainu',
+  'Korean',
   'Chinese',
   'Celtic',
   'Gaelic',
@@ -257,7 +274,10 @@ function extractForm(text: string): string | undefined {
  * Returns null if the segment doesn't contain a recognizable language.
  */
 function parseSegment(segment: string, sourceSnippet: string): ParsedEtymLink | null {
-  const trimmed = segment.normalize('NFC').trim()
+  const trimmed = segment
+    .normalize('NFC')
+    .trim()
+    .replace(/^the\s+/i, '')
 
   // Try to match a known language at the start
   const langMatch = trimmed.match(LANGUAGE_PATTERN)
@@ -272,11 +292,14 @@ function parseSegment(segment: string, sourceSnippet: string): ParsedEtymLink | 
   afterLang = afterLang.replace(/^root\s+(?=\*)/i, '')
 
   // Extract form from the text after the language name
-  const form = extractForm(afterLang)
+  const phrase = afterLang.match(
+    new RegExp(`^phrase\\s+(${HISTORICAL_FORM}(?:\\s+${HISTORICAL_FORM})*)(?=$|[,.;:"“”()])`, 'iu')
+  )
+  const form = phrase?.[1] ?? (/^phrase\b/i.test(afterLang) ? undefined : extractForm(afterLang))
   if (!form) return null
 
   // Only source-explicit alternatives are admitted, never an accent-folded guess.
-  const afterForm = afterLang.slice(form.length)
+  const afterForm = afterLang.slice(phrase ? phrase[0].length : form.length)
   const variant = afterForm.match(new RegExp(`^\\s*\\(also\\s+(${HISTORICAL_FORM})\\)`, 'iu'))
 
   // Explicit HTML reading annotations survive cleaning; unmarked readings
@@ -497,12 +520,18 @@ export function formatParsedChainsForPrompt(chains: ParsedEtymChain[]): string {
   for (const chain of chains) {
     const scope = chain.historyId ? ` for history ${escapeXml(chain.historyId)}` : ''
     sections.push(`--- Chain from ${escapeXml(chain.provider ?? chain.source)}${scope} ---`)
+    if (chain.subject) {
+      sections.push(
+        `Subject: ${escapeXml(chain.subject.language)}: ${escapeXml(chain.subject.word)}`
+      )
+    }
     if (chain.dateAttested) {
       sections.push(`First attested: ${chain.dateAttested}`)
     }
 
     for (const link of chain.links) {
       let line = `  ${escapeXml(link.language)}: ${escapeXml(link.form)}`
+      if (link.relation) line += ` [${escapeXml(link.relation)}]`
       if (link.transliteration) line += ` (${escapeXml(link.transliteration)})`
       if (link.variants?.length) {
         line += ` [source-explicit variants: ${link.variants.map(escapeXml).join(', ')}]`

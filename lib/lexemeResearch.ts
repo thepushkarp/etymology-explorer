@@ -41,6 +41,7 @@ const SPECIALIST_DOMAINS: Record<LanguageCode, readonly string[]> = {
   hi: [],
   ur: [],
   sa: [],
+  ja: [],
 }
 const HISTORICAL_DOMAINS: Record<string, readonly string[]> = {
   'Old English': ['bosworthtoller.com'],

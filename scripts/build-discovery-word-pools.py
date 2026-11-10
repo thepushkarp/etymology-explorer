@@ -4,9 +4,9 @@ Run with:
 
     uv run --with wordfreq python scripts/build-discovery-word-pools.py
 
-Refresh only curated Hindi, Urdu and Sanskrit pools, without downloads:
+Refresh only curated Hindi, Urdu, Sanskrit and Japanese pools, without downloads:
 
-    python scripts/build-discovery-word-pools.py --languages hi ur sa
+    python scripts/build-discovery-word-pools.py --languages hi ur sa ja
 
 The generated JSON is reviewed and committed, so this script and its Python
 dependency are not part of the application runtime.
@@ -29,8 +29,8 @@ from typing import Any
 from urllib.parse import quote
 
 # These small pools use English Wiktionary language sections. The Romance
-# frequency/length filters reject Indic combining marks and are not an admission
-# rule for these scripts; Sanskrit also lacks a wordfreq frequency corpus.
+# frequency/length filters reject Indic combining marks and short Japanese
+# headwords and are not an admission rule for these scripts.
 CURATED_POOLS = {
     "hi": (
         "पानी",
@@ -74,8 +74,9 @@ CURATED_POOLS = {
         "जल",
         "मित्र",
     ),
+    "ja": ("山", "電話", "パン", "コンセント", "サラリーマン", "桜", "水", "ありがとう"),
 }
-LANGUAGE_HEADINGS = {"hi": "Hindi", "ur": "Urdu", "sa": "Sanskrit"}
+LANGUAGE_HEADINGS = {"hi": "Hindi", "ur": "Urdu", "sa": "Sanskrit", "ja": "Japanese"}
 LANGUAGES = ("it", "es", "fr", "pt", *CURATED_POOLS)
 POOL_SIZE = 446
 MIN_ZIPF = 2.8

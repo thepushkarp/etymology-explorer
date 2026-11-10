@@ -20,7 +20,7 @@
  * prompt's content rules (lib/prompts.ts) don't already say.
  */
 
-import { SUPPORTED_LANGUAGE_CODES } from '../languages'
+import { ETYMOLOGY_STRATA, SUPPORTED_LANGUAGE_CODES } from '../languages'
 import { SOURCE_PROVIDER_IDS } from '../sourceProviders'
 
 const ANCESTRY_STAGE_SCHEMA = {
@@ -46,6 +46,11 @@ const ANCESTRY_STAGE_SCHEMA = {
 
 /** Entry fields every history carries; the top level repeats them as the primary projection. */
 const ENTRY_PROPERTIES = {
+  stratum: {
+    type: ['string', 'null'],
+    enum: [...ETYMOLOGY_STRATA, null],
+    description: 'Source-supported Japanese lexical stratum; null otherwise',
+  },
   pronunciation: { type: 'string', description: 'IPA, e.g. /pərˈfɪdiəs/' },
   transliteration: {
     type: ['string', 'null'],
@@ -182,6 +187,7 @@ const ENTRY_PROPERTIES = {
 } as const
 
 const ENTRY_KEYS = [
+  'stratum',
   'pronunciation',
   'transliteration',
   'definition',

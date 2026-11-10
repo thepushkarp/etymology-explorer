@@ -1,5 +1,5 @@
 import type { ParsedEtymChain } from './etymologyParser'
-import type { LanguageCode } from './languages'
+import type { LanguageCode, EtymologyStratum } from './languages'
 import type { WiktionaryEntryGroup } from './wiktionaryEntryGroups'
 import type { SourceProviderId, SourceFamilyId } from './sourceProviders'
 export type { SourceProviderId, SourceFamilyId } from './sourceProviders'
@@ -19,6 +19,14 @@ export type LexicalRelation =
   | 'variant_of'
   | 'semantic_extension_of'
   | 'cognate_with'
+
+/** A relation asserted within one publisher entry, before history binding. */
+export interface SourceLexicalRelation {
+  subject: LexemeRef
+  target: LexemeRef
+  relation: 'compound_from' | 'derived_from' | 'borrowed_from'
+  snippet: string
+}
 
 export type LexicalEdgeRole = 'ancestry' | 'morphology' | 'semantics' | 'context'
 
@@ -108,6 +116,8 @@ export interface StageEvidence {
   source: SourceProviderId
   snippet: string // raw text excerpt (~120 chars max)
   sourceFamily?: string
+  sourceUrl?: string
+  evidenceScopeId?: string
 }
 
 /**
@@ -240,6 +250,7 @@ export interface UsageExample {
 
 /** The entry fields each lexical history carries; the result projects its primary history. */
 interface HistoryEntryFields {
+  stratum?: EtymologyStratum
   transliteration?: string
   pronunciation: string // IPA, e.g., "/pərˈfɪdiəs/"
   definition: string // Brief definition
@@ -324,6 +335,7 @@ export interface WordSuggestion {
  * Raw data fetched from a single external source
  */
 export interface SourceData {
+  license?: string
   text: string
   url: string
   relatedEntries?: string[]
@@ -364,6 +376,8 @@ export type SourceFetchOutcome =
   | { status: Exclude<SourceOutcome['status'], 'found'>; reason?: string; httpStatus?: number }
 
 export interface ResearchEntryContext {
+  etymologyText?: string
+  relations?: SourceLexicalRelation[]
   transliteration?: string
   id: string
   source: SourceProviderId

@@ -16,7 +16,13 @@ export function FormText({
       ? 'und-Arab'
       : /\p{Script=Devanagari}/u.test(text)
         ? 'und-Deva'
-        : 'und')
+        : /\p{Script=Han}/u.test(text)
+          ? 'und-Hani'
+          : /\p{Script=Hiragana}/u.test(text)
+            ? 'und-Hira'
+            : /\p{Script=Katakana}/u.test(text)
+              ? 'und-Kana'
+              : 'und')
   return (
     <bdi lang={lang} dir="auto" className={className}>
       {text}

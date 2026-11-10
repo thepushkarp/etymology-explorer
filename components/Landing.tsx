@@ -68,6 +68,12 @@ const CURATED_WORDS: Record<LanguageCode, Array<{ word: string; teaser: string }
     { word: 'योग', teaser: "the source of English 'yoga'" },
     { word: 'विद्या', teaser: 'knowledge with an ancient lineage' },
   ],
+  ja: [
+    { word: '電話', teaser: 'a Japanese coinage built from Chinese elements' },
+    { word: '山', teaser: 'an inherited Japanese word written with a Chinese character' },
+    { word: 'パン', teaser: 'a Portuguese word for bread' },
+    { word: 'コンセント', teaser: 'a shortened Japanese coinage for an electrical outlet' },
+  ],
 }
 
 export function Landing() {

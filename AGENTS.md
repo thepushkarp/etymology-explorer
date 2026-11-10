@@ -6,7 +6,7 @@ This file provides guidance to AI Coding Agents when working with code in this r
 
 EtymEx is a Next.js Etymology Explorer web app that helps users discover word origins through an LLM-powered synthesis pipeline with grounded etymological evidence. The app runs in **public mode** by default (server-side API key) with rate limiting, cost budgets, caching, and distributed request deduplication.
 
-Users search for a word or phrase in Auto mode, or supply an English, Italian, Spanish, French, Portuguese, Hindi, Urdu, or Sanskrit hint. Hindi and Sanskrit use Devanagari; Urdu uses Arabic script and right-to-left text. One durable spelling entry contains independent language histories, shown in tabs. The app:
+Users search for a word or phrase in Auto mode, or supply an English, Italian, Spanish, French, Portuguese, Hindi, Urdu, Sanskrit, or Japanese hint. Hindi and Sanskrit use Devanagari; Urdu uses Arabic script and right-to-left text; Japanese uses kanji and kana. One durable spelling entry contains independent language histories, shown in tabs. The app:
 
 1. Uses a shared lexeme lookup for query words, ancestors, components, variants, and related terms. General sources (Wiktionary, Wikipedia, and applicable lexical APIs) run alongside all applicable specialist dictionaries. Modern specialists include American Heritage, De Mauro, DLE/Americanismos, CNRTL's TLFi/Littré/Académie collections, Priberam, and Michaelis. Historical specialists include Bosworth–Toller, Lewis & Short, and LSJ. FreeDictionaryAPI supplies senses and pronunciation only when direct Wiktionary evidence is unavailable; it cannot establish ancestry.
 2. Pre-parses source-local etymological chains and keeps independent lexical histories and evidence scopes.
@@ -18,6 +18,10 @@ Users search for a word or phrase in Auto mode, or supply an English, Italian, S
 The primary Wiktionary edition defines source-local history boundaries, with Etymonline as the English fallback and source-defined specialist entries as further fallbacks; complete secondary sources remain independent context without invented history alignment. Each history has its own selectable story and lineage, with compound branches kept within that history. Wikipedia and community context cannot establish ancestry. Components alone cannot admit a phrase.
 
 Hindi, Urdu, and Sanskrit use English Wiktionary as their history primary; Hindi also queries its native edition. Optional Platts, Wisdom Library, and Cologne Monier-Williams adapters and provider IDs are omitted pending source admission. The [Platts digitization](https://dsal.uchicago.edu/dictionaries/platts/) links CC BY-NC-ND terms; [Wisdom Library's site information](https://www.wisdomlib.org/m/about.html) does not establish a blanket glossary reuse license; the [Cologne digital MW header](https://raw.githubusercontent.com/sanskrit-lexicon/csl-orig/master/v02/mw/mwheader.xml) specifies noncommercial, share-alike terms. Do not register these sources based solely on accessible lookup pages.
+
+Japanese uses English Wiktionary as its history primary, with native Japanese Wiktionary as independent context. JMdict via Jisho supplies licensed supplementary lexical senses and raw loan-source material, with EDRDG and CC BY-SA 4.0 attribution retained in sources and display. An unspecified full/partial loan-source status cannot establish whole-word borrowing. A live Jisho request after a source-cache miss needs a global 40-second Redis pacing reservation; unavailable Redis or an occupied interval skips Jisho. Complete raw data uses the seven-day source cache. Review publisher terms, license, and response schema when changing the adapter. Kotobank and gogen adapters are omitted pending source admission.
+
+Japanese strata (`wago`, `kango`, `gairaigo`, `wasei-eigo`, `wasei-kango`, `hybrid`) require affirmative scoped evidence. 電話 is Japanese wasei-kango compounding of 電 and 話, not whole-word Middle Chinese borrowing. Preserve the disputed coinage accounts of サラリーマン and its source-attested Japanese サラリー + マン components; do not invent English salary/man branches. コンセント clips a longer Japanese coinage with explicitly attested English concentric + plug components. Entry prose remains English.
 
 Every application source HTTP attempt shares one entry budget: 32 attempts for the first language plus 16 for each extra resolved language, capped at 96. Language resolution is limited to the first 32 attempts and its attempts count toward the final ceiling. Primary fetches, fallback attempts, Wikidata detail requests, enrichment, and Exa API calls all count. Exa's internal crawling is outside that application counter. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
 
@@ -112,7 +116,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/recentSearches.ts`** - One atomic list of the latest 20 distinct successful searches, each labelled with its primary language. GET `/api/recent-searches` samples four; POST records only server-validated cached results and their previews. Explicit navigation and completed traces record searches; prefetching and passive loads do not. The static homepage fills gaps from curated words.
 
-- **`data/discovery-words.json`** - Frequency-selected Romance pools and curated Hindi, Urdu, and Sanskrit headwords. `scripts/build-discovery-word-pools.py --languages hi ur sa` refreshes the curated pools without downloads and preserves other pools; the Romance frequency and Latin-letter filters are not applied to Indic scripts.
+- **`data/discovery-words.json`** - Frequency-selected Romance pools and curated Hindi, Urdu, Sanskrit, and Japanese headwords. `scripts/build-discovery-word-pools.py --languages hi ur sa ja` refreshes the curated pools without downloads and preserves other pools; the Romance frequency and Latin-letter filters are not applied to these scripts.
 
 - **`lib/costGuard.ts`** - Monthly USD budget enforcement via pipelined Redis INCRBYFLOAT + EXPIRE NX:
   - Normal mode (0-90% of budget): allow uncached requests
@@ -129,7 +133,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v6:{word}` with a distinct explicit-hint scope. Transient resolution failures and retraces with a durable entry never write absence markers.
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v9:<source>:<word>` for English, `src:v9:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v9:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v9:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v10:<source>:<word>` for English, `src:v10:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v10:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v10:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
 
 - **`lib/redis.ts`** - Shared Redis client factory using KV_REST_API_URL and KV_REST_API_TOKEN (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 and Exa requires functioning accounting (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -298,7 +302,7 @@ and the output is guaranteed-shape JSON.
 - **TypeScript strict mode** - All types defined in `lib/types.ts`
 - **Prettier**: 100 char width, single quotes, no semicolons, ES5 trailing commas
 - **ESLint**: Next.js core Web Vitals + Prettier integration
-- **Tailwind CSS v4**: Seven color tokens (`paper`, `ink`, `muted`, `faint`, `rule`, `wash`, `accent`) plus lineage-only language-family tokens (`lang-pie`, `lang-greek`, `lang-latin`, `lang-romance`, `lang-germanic`, `lang-semitic`, `lang-other`) in `globals.css`, redefined under `.dark`
+- **Tailwind CSS v4**: Seven color tokens (`paper`, `ink`, `muted`, `faint`, `rule`, `wash`, `accent`) plus lineage-only language-family tokens (`lang-pie`, `lang-greek`, `lang-latin`, `lang-romance`, `lang-germanic`, `lang-semitic`, `lang-indo-iranian`, `lang-japonic`, `lang-sinitic`, `lang-other`) in `globals.css`, redefined under `.dark`
 
 ## Design Philosophy
 
@@ -306,7 +310,7 @@ The UI is a quiet, typeset dictionary page: the words carry it, the chrome gets 
 
 ### Core Principles
 
-- **Typography-first**: Libre Baskerville (regular + italic) for words and prose, Alegreya Sans (regular) for small UI text, and regular Noto Serif Devanagari and Noto Nastaliq Urdu for their scripts. Urdu text has room for Nastaliq's taller line height. Foreign forms carry language and direction metadata; source-attested transliterations accompany headwords and ancestry forms. Hierarchy comes from size, italics, and the small-caps `label` utility — no bold weights (they are not loaded).
+- **Typography-first**: Libre Baskerville (regular + italic) for words and prose, Alegreya Sans (regular) for small UI text, and regular Noto Serif Devanagari and Noto Nastaliq Urdu for their scripts. Japanese forms use system Mincho fonts (`Hiragino Mincho ProN`, `Yu Mincho`, `Noto Serif CJK JP`) without a webfont. Urdu text has room for Nastaliq's taller line height. Foreign forms carry language and direction metadata; source-attested transliterations accompany headwords and ancestry forms. Hierarchy comes from size, italics, and the small-caps `label` utility — no bold weights (they are not loaded).
 - **One reading column**: `max-w-3xl`, generous vertical rhythm, hairline `rule` borders. No cards, gradients, shadows, or pills.
 - **Restrained color**: paper, ink, and a single oxblood `accent` used for emphasis and the live marker. The one exception is the lineage tree, which marks each node's language family with a `lang-*` token (top edge + legend). Use tokens, never raw hex or Tailwind palette colors.
 - **Purposeful motion**: one CSS `animate-rise` reveal (staggered via `animation-delay`), color transitions on hover, skeleton pulses while streaming. Honor reduced motion.

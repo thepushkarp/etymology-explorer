@@ -1,11 +1,134 @@
 import { describe, expect, test } from 'bun:test'
 import { LANGUAGES, type LanguageCode } from './languages'
+import japaneseFixtures from './__fixtures__/japanese/wiktionary.json'
 import {
   cleanWiktionaryHtml,
   extractWiktionaryEntryGroups,
   extractWiktionaryVariants,
   type WiktionaryTocSection,
 } from './wiktionaryEntryGroups'
+
+test('recorded Japanese formulas retain their subject and the source-tagged component languages', () => {
+  const relations = (key: 'ja-denwa' | 'ja-consento' | 'ja-salaryman') => {
+    const fixture = japaneseFixtures[key]
+    return extractWiktionaryEntryGroups(
+      fixture.html,
+      fixture.sections,
+      fixture.language,
+      /^Etymology/,
+      fixture.word
+    )[0].relations!
+  }
+  const denwa = relations('ja-denwa')
+  expect(denwa.map(({ subject, target, relation }) => ({ subject, target, relation }))).toEqual([
+    {
+      subject: { word: '電話', language: 'Japanese' },
+      target: { word: '電', language: 'Japanese' },
+      relation: 'compound_from',
+    },
+    {
+      subject: { word: '電話', language: 'Japanese' },
+      target: { word: '話', language: 'Japanese' },
+      relation: 'compound_from',
+    },
+  ])
+  expect(denwa[0].snippet).toContain('Coined in Japanese as a compound of Chinese-derived 電')
+  const clipping = relations('ja-consento')
+  expect(
+    clipping.map(({ subject, target, relation }) => [
+      subject.word,
+      target.word,
+      target.language,
+      relation,
+    ])
+  ).toEqual([
+    ['コンセント', 'コンセントリックプラグ', 'Japanese', 'derived_from'],
+    ['コンセントリックプラグ', 'concentric', 'English', 'compound_from'],
+    ['コンセントリックプラグ', 'plug', 'English', 'compound_from'],
+  ])
+  const salaryman = relations('ja-salaryman')
+  expect(salaryman.map(({ target, relation }) => [target.word, target.language, relation])).toEqual(
+    [
+      ['salaried man', 'English', 'derived_from'],
+      ['サラリー', 'Japanese', 'compound_from'],
+      ['マン', 'Japanese', 'compound_from'],
+    ]
+  )
+})
+
+test('recorded ruby annotations preserve headword and component spelling identities', () => {
+  const fixture = japaneseFixtures['ja-denwa']
+  const [group] = extractWiktionaryEntryGroups(
+    fixture.html,
+    fixture.sections,
+    'Japanese',
+    /^Etymology/,
+    fixture.word
+  )
+  expect(group.transliteration).toBe('denwa')
+  const tsunami = japaneseFixtures['ja-tsunami']
+  const [compound] = extractWiktionaryEntryGroups(
+    tsunami.html,
+    tsunami.sections,
+    'Japanese',
+    /^Etymology/,
+    tsunami.word
+  )
+  expect(compound.relations?.map(({ target }) => target.word)).toEqual(['津', '波'])
+})
+
+test('term formulas in definitions do not become entry etymology relations', () => {
+  const fixture = japaneseFixtures['ja-denwa']
+  const etymologyBody = fixture.html.slice(
+    fixture.html.indexOf('<p>'),
+    fixture.html.indexOf(`<h3 id="${fixture.sections[2].anchor}"`)
+  )
+  const html =
+    fixture.html.slice(0, fixture.html.indexOf('<p>')) + '<h3 id="Noun">Noun</h3>' + etymologyBody
+  const sections = [
+    ...fixture.sections.slice(0, 2),
+    { index: '3', line: 'Noun', anchor: 'Noun', hLevel: 3, number: '3' },
+  ]
+  const [group] = extractWiktionaryEntryGroups(
+    html,
+    sections,
+    'Japanese',
+    /^Etymology/,
+    fixture.word
+  )
+  expect(group.relations).toBeUndefined()
+  expect(group.etymologyText).toBe('')
+  expect(group.text).toContain('Coined in Japanese as a compound')
+})
+
+test('rejected analyses and quoted comparisons do not establish component relations', () => {
+  const fixture = japaneseFixtures['ja-denwa']
+  const formula = '<i lang="ja">電</i> + <i lang="ja">話</i>'
+  const html = `<h2 id="Japanese">Japanese</h2><h3 id="Etymology_2">Etymology</h3>
+    <p>Not a compound of ${formula}.</p>
+    <p>Compare the quoted explanation “compound of ${formula}”.</p>`
+  expect(
+    extractWiktionaryEntryGroups(
+      html,
+      fixture.sections.slice(0, 2),
+      'Japanese',
+      /^Etymology/,
+      fixture.word
+    )[0].relations
+  ).toBeUndefined()
+})
+
+test('Japanese pronunciation redirects follow the primary entry and retain language boundaries', () => {
+  const fixture = japaneseFixtures['ja-tsunami-reading']
+  expect(extractWiktionaryVariants(fixture.html, fixture.sections, 'Japanese')).toEqual([
+    {
+      word: '津波',
+      relationship: 'redirect',
+      url: 'https://en.wiktionary.org/wiki/%E6%B4%A5%E6%B3%A2#Japanese',
+    },
+  ])
+  expect(extractWiktionaryVariants(fixture.html, fixture.sections, 'English')).toEqual([])
+})
 
 describe('extractWiktionaryEntryGroups', () => {
   test('attaches only exact headword readings within each selected history', () => {
@@ -94,6 +217,7 @@ describe('extractWiktionaryEntryGroups', () => {
     })
     expect(groups[0].text).toContain('vītis')
     expect(groups[0].text).toContain('screw')
+    expect(groups[0].etymologyText).toBe('From Latin vītis, vine.')
     expect(groups[0].text).not.toContain('plural of vita')
     expect(groups[0].sections[0]).toMatchObject({
       heading: 'Noun',
@@ -174,6 +298,7 @@ describe('extractWiktionaryEntryGroups', () => {
     expect(groups).toHaveLength(1)
     expect(groups[0]).toMatchObject({ heading: 'Italiano', index: '1', anchor: 'Italiano' })
     expect(groups[0].sections[0].text).toContain('Una definizione.')
+    expect(groups[0].etymologyText).toBeUndefined()
     expect(groups[0].text).not.toContain('Not selected.')
   })
 

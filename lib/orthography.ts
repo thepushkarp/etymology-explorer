@@ -1,12 +1,14 @@
 /**
  * Canonical Unicode encodings are interchangeable; accents, length marks,
  * modifier letters and compatibility characters are lexical information.
- * NFKC or accent folding here would also merge cache and evidence identities.
+ * Global NFKC or accent folding would merge distinct cache and evidence identities.
+ * Half-width Japanese forms alone fold to their ordinary full-width spelling.
  */
 // Only horizontal space separators may collapse. Controls and line separators
 // stay in the string so input validation cannot silently erase malformed input.
 export function canonicalizeWord(raw: string): string {
   return raw
+    .replace(/[\uFF61-\uFF9F]+/g, (part) => part.normalize('NFKC'))
     .toLowerCase()
     .normalize('NFC')
     .replace(/\p{Zs}+/gu, ' ')

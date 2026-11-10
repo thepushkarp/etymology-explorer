@@ -20,7 +20,7 @@ export const CONFIG = {
   maxWordLength: 120,
   // Marks must follow letters; punctuation separates nonempty letter groups.
   wordPattern:
-    /^(?:\p{L}\p{M}*)(?:[\u200C\u200D]?\p{L}\p{M}*)*(?:[ '’ʼ‐‑-](?:\p{L}\p{M}*)(?:[\u200C\u200D]?\p{L}\p{M}*)*)*$/u,
+    /^(?:\p{L}\p{M}*)(?:[\u200C\u200D]?\p{L}\p{M}*)*(?:[ '’ʼ‐‑・-](?:\p{L}\p{M}*)(?:[\u200C\u200D]?\p{L}\p{M}*)*)*$/u,
 
   // Rate limits (per IP)
   rateLimit: {
@@ -36,7 +36,7 @@ export const CONFIG = {
   maxTotalFetches: 32,
   maxFetchesPerExtraLanguage: 16,
   maxEntryFetches: 96,
-  pipelineRevision: 2,
+  pipelineRevision: 3,
   entryFreshDays: 90,
 
   // Exa's full-text search and recovery share their own paid-request allowance.
@@ -56,6 +56,7 @@ export const CONFIG = {
   incompleteEtymologyCacheTTL: 5 * 60,
   audioCacheTTL: 365 * 24 * 60 * 60, // 1 year
   negativeCacheTTL: 30 * 60, // 30m — limits repeat misses without cementing transient source failures
+  jmdictCrawlDelaySeconds: 40,
   sourceCacheTTL: 7 * 24 * 60 * 60, // 7 days — raw etymonline/wiktionary page data
 
   // Timeouts (milliseconds)

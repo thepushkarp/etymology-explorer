@@ -5,6 +5,9 @@ import {
   SourceReference,
   ResearchContext,
   LexicalHistory,
+  AncestryBranch,
+  ResearchEntryContext,
+  LexemeRef,
 } from './types'
 import { buildSystemPrompt, buildUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
@@ -21,7 +24,13 @@ import {
   extractUsage,
   streamOpenRouterResponse,
 } from './openrouterResponses'
-import type { LanguageCode } from './languages'
+import {
+  LANGUAGES,
+  lexicalLanguageName,
+  type LanguageCode,
+  type EtymologyStratum,
+} from './languages'
+import type { ParsedEtymChain } from './etymologyParser'
 import {
   lexicalSourceRecords,
   mainSourceRecords,
@@ -508,6 +517,7 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
           url,
           word,
           sourceFamily: record.sourceFamily,
+          ...(record.data.license ? { license: record.data.license } : {}),
           ...(record.provider === 'multilingualDictionary'
             ? { license: 'Per-entry attribution and license are provided by FreeDictionaryAPI' }
             : {}),
@@ -523,6 +533,263 @@ function sameStrings(left: string[], right: string[]): boolean {
   if (left.length !== right.length) return false
   const sortedRight = [...right].sort()
   return [...left].sort().every((value, index) => value === sortedRight[index])
+}
+
+function sameLexeme(form: string, language: string, lexeme: LexemeRef): boolean {
+  return (
+    sameSpelling(form, lexeme.word) &&
+    lexicalLanguageName(language) === lexicalLanguageName(lexeme.language)
+  )
+}
+
+function sourceStrata(
+  entry: ResearchEntryContext,
+  chains: ParsedEtymChain[]
+): Set<EtymologyStratum> {
+  const supported = new Set<EtymologyStratum>()
+  const affirmative = (entry.etymologyText ?? '')
+    .split(/\n|(?<=[.!?])\s+/u)
+    .filter(
+      (sentence) =>
+        !/\b(?:although|not|never|mistaken|incorrect|disputed|described as|rather than)\b/i.test(
+          sentence
+        )
+    )
+    .join('\n')
+  if (/\bwasei[ -]kango\b/i.test(affirmative)) supported.add('wasei-kango')
+  if (
+    /\bwasei[ -]eigo\b|\bpseudo-anglicism\b/i.test(affirmative) ||
+    (entry.source === 'jmdict' &&
+      /Wasei, word made in Japan/.test(entry.text) &&
+      /"language":"English"/.test(entry.text))
+  )
+    supported.add('wasei-eigo')
+  if (
+    /(?:^|\n)(?:(?:The (?:word|term) is|A|An) )?(?:wago|native Japanese)\b/i.test(affirmative) ||
+    /\b(?:from|inherited from) (?:Old Japanese|Classical Japanese|Proto-Japonic)\b/i.test(
+      affirmative
+    )
+  )
+    supported.add('wago')
+  if (
+    !supported.has('wasei-kango') &&
+    /\bkango\b|\bSino-Japanese\b|\bfrom (?:Middle|Old) Chinese\b/i.test(affirmative)
+  )
+    supported.add('kango')
+  if (/(?:^|\n)(?:(?:The (?:word|term) is|A|An) )?hybrid\b/i.test(affirmative))
+    supported.add('hybrid')
+  if (
+    /\bgairaigo\b/i.test(affirmative) ||
+    chains.some(
+      (chain) =>
+        chain.evidenceScopeId === entry.evidenceScopeId &&
+        !chain.subject &&
+        chain.links.some(
+          (link) =>
+            !/Japanese|Japonic|Chinese/i.test(link.language) &&
+            /\b(?:borrowed )?from\s+(?:the\s+)?/i.test(link.rawSnippet) &&
+            affirmative.includes(link.rawSnippet)
+        )
+    )
+  )
+    supported.add('gairaigo')
+  return supported
+}
+
+function branchContains(branch: AncestryBranch, lexeme: LexemeRef): boolean {
+  return branch.stages.some((stage) => sameLexeme(stage.form, stage.stage, lexeme))
+}
+
+function validateContinuationOrder(branch: AncestryBranch, chain: ParsedEtymChain): void {
+  if (!chain.subject) return
+  let younger = branch.stages.findIndex((stage) =>
+    sameLexeme(stage.form, stage.stage, chain.subject!)
+  )
+  if (younger < 0) return
+  for (const link of chain.links) {
+    const position = branch.stages.findIndex((stage) =>
+      sameLexeme(stage.form, stage.stage, { word: link.form, language: link.language })
+    )
+    if (position < 0) continue
+    if (position >= younger)
+      throw new Error('Schema validation failed: continuation ancestry must occur before its donor')
+    younger = position
+  }
+}
+
+function clippingPath(
+  query: LexemeRef,
+  merge: LexemeRef,
+  entry: ResearchEntryContext,
+  chains: ParsedEtymChain[],
+  visited = new Set<string>()
+): LexemeRef[] | undefined {
+  if (sameLexeme(query.word, query.language, merge)) return [query]
+  const key = `${query.language}:${canonicalizeWord(query.word)}`
+  if (visited.has(key)) return
+  const nextVisited = new Set([...visited, key])
+  const targets = chains
+    .filter(
+      (chain) => chain.subject && sameLexeme(chain.subject.word, chain.subject.language, query)
+    )
+    .flatMap((chain) =>
+      chain.links
+        .filter((link) => link.relation === 'derived_from')
+        .map((link) => ({ word: link.form, language: link.language }))
+    )
+  if (entry.formOf && sameSpelling(query.word, entry.formOf.word) === false && visited.size === 0)
+    targets.push(entry.formOf)
+  for (const target of targets) {
+    if (lexicalLanguageName(target.language) !== lexicalLanguageName(query.language)) continue
+    const tail = clippingPath(target, merge, entry, chains, nextVisited)
+    if (tail) return [query, ...tail]
+  }
+}
+
+/** Evidence follows its attested component or donor, rather than the entire history's scope union. */
+function enrichScopedHistory(
+  history: LexicalHistory,
+  entry: ResearchEntryContext,
+  context: ResearchContext,
+  chains: ParsedEtymChain[],
+  sourceWasei: boolean
+): void {
+  const graph = history.ancestryGraph
+  const query = {
+    word: context.mainWord.word,
+    language: LANGUAGES[context.language ?? 'en'].englishName,
+  }
+  const compounds = chains.filter(
+    (chain) => chain.subject && chain.links.some((link) => link.relation === 'compound_from')
+  )
+  const wholeAccount = chains.some(
+    (chain) =>
+      (!chain.subject ||
+        sameLexeme(chain.subject.word, chain.subject.language, query) ||
+        (entry.formOf && sameLexeme(chain.subject.word, chain.subject.language, entry.formOf))) &&
+      chain.links.some(
+        (link) =>
+          link.relation !== 'compound_from' &&
+          !compounds.some(
+            (compound) =>
+              sameLexeme(link.form, link.language, compound.subject!) ||
+              compound.links.some((component) =>
+                sameLexeme(link.form, link.language, {
+                  word: component.form,
+                  language: component.language,
+                })
+              )
+          )
+      )
+  )
+  if (compounds.length && !wholeAccount && graph.branches.length && !graph.mergePoint)
+    throw new Error('Schema validation failed: source compound requires its attested merge')
+  if (compounds.length && (graph.mergePoint || graph.branches.length > 1)) {
+    const merging = compounds.filter(
+      (chain) =>
+        graph.mergePoint &&
+        sameSpelling(chain.subject!.word, graph.mergePoint.form) &&
+        lexicalLanguageName(chain.subject!.language) === query.language
+    )
+    const targets = merging.flatMap((chain) =>
+      chain.links.filter((link) => link.relation === 'compound_from')
+    )
+    if (targets.length < 2 || graph.branches.length < 2)
+      throw new Error('Schema validation failed: compound merge lacks its source-attested identity')
+    const used = new Set<string>()
+    for (const branch of graph.branches) {
+      const terminal = branch.stages.at(-1)
+      const target =
+        terminal &&
+        targets.find((link) =>
+          sameLexeme(terminal.form, terminal.stage, { word: link.form, language: link.language })
+        )
+      if (!target)
+        throw new Error('Schema validation failed: ancestry branch is not an attested component')
+      const key = `${target.language}:${canonicalizeWord(target.form)}`
+      if (used.has(key)) throw new Error('Schema validation failed: duplicated source component')
+      used.add(key)
+      const evidence = chains.filter((chain) =>
+        merging.includes(chain)
+          ? chain.links.some((link) => link === target)
+          : chain.subject &&
+            branchContains(branch, chain.subject) &&
+            chain.evidenceScopeId !== entry.evidenceScopeId
+      )
+      evidence
+        .filter((chain) => !merging.includes(chain))
+        .forEach((chain) => validateContinuationOrder(branch, chain))
+      enrichAncestryGraph({ branches: [branch] }, evidence)
+      if (branch.stages.some((stage) => stage.confidence === 'low'))
+        throw new Error('Schema validation failed: component branch has unsupported ancestry')
+    }
+    // A merge has no stage language field. Its source relationship establishes
+    // query-language identity; only its explicit clipping/form path may follow it.
+    const postForms = clippingPath(query, merging[0].subject!, entry, chains)
+    if (!postForms)
+      throw new Error(
+        'Schema validation failed: compound merge has no source-attested path to the query'
+      )
+    for (const stage of graph.postMerge ?? []) {
+      if (!postForms.some((lexeme) => sameLexeme(stage.form, stage.stage, lexeme)))
+        throw new Error('Schema validation failed: post-merge ancestry is not source-attested')
+    }
+    enrichAncestryGraph(
+      { branches: [], postMerge: graph.postMerge },
+      chains.filter(
+        (chain) => !chain.subject || sameLexeme(chain.subject.word, chain.subject.language, query)
+      )
+    )
+  } else {
+    if (
+      sourceWasei &&
+      [...graph.branches.flatMap((branch) => branch.stages), ...(graph.postMerge ?? [])].some(
+        (stage) => lexicalLanguageName(stage.stage) === 'English'
+      )
+    )
+      throw new Error(
+        'Schema validation failed: Japanese coinage cannot have a whole-word English ancestor'
+      )
+    for (const branch of graph.branches) {
+      const evidence = chains.filter(
+        (chain) =>
+          !chain.subject ||
+          sameLexeme(chain.subject.word, chain.subject.language, query) ||
+          (entry.formOf && sameLexeme(chain.subject.word, chain.subject.language, entry.formOf)) ||
+          branchContains(branch, chain.subject)
+      )
+      evidence
+        .filter((chain) => chain.evidenceScopeId !== entry.evidenceScopeId)
+        .forEach((chain) => validateContinuationOrder(branch, chain))
+      enrichAncestryGraph(
+        { branches: [branch] },
+        evidence.filter((chain) => !chain.links.some((link) => link.relation === 'compound_from'))
+      )
+      const wholeLinks = evidence
+        .filter((chain) => !chain.links.some((link) => link.relation === 'compound_from'))
+        .flatMap((chain) => chain.links)
+      for (const stage of branch.stages) {
+        const component = compounds.some((chain) =>
+          chain.links.some((link) =>
+            sameLexeme(stage.form, stage.stage, { word: link.form, language: link.language })
+          )
+        )
+        if (
+          component &&
+          !wholeLinks.some((link) =>
+            sameLexeme(stage.form, stage.stage, { word: link.form, language: link.language })
+          )
+        )
+          throw new Error(
+            'Schema validation failed: component evidence cannot establish whole-word ancestry'
+          )
+      }
+    }
+    enrichAncestryGraph(
+      { branches: [], postMerge: graph.postMerge },
+      chains.filter((chain) => !chain.subject)
+    )
+  }
 }
 
 /** Reject cross-history topology before any evidence-bearing section is published. */
@@ -655,7 +922,18 @@ function finalizeHistories(result: EtymologyResult, researchContext: ResearchCon
         Boolean(chain.evidenceScopeId) &&
         history.evidenceScopeIds.includes(chain.evidenceScopeId as string)
     )
-    enrichAncestryGraph(history.ancestryGraph, scopedChains)
+    const strata =
+      researchContext.language === 'ja' && entry
+        ? sourceStrata(entry, scopedChains)
+        : new Set<EtymologyStratum>()
+    if (history.stratum && !strata.has(history.stratum)) {
+      console.warn(
+        '[LLM] Cleared unsupported lexical stratum',
+        JSON.stringify({ historyId: history.id, stratum: history.stratum })
+      )
+      delete history.stratum
+    }
+    enrichScopedHistory(history, entry!, researchContext, scopedChains, strata.has('wasei-eigo'))
     pruneUngroundedStages(history.ancestryGraph)
     // Distinct unsupported roots can collapse into identical surviving paths.
     validateHistoryGraph(history, researchContext)
@@ -667,6 +945,8 @@ function finalizeHistories(result: EtymologyResult, researchContext: ResearchCon
   }
   if (primary.transliteration) result.transliteration = primary.transliteration
   else delete result.transliteration
+  if (primary.stratum) result.stratum = primary.stratum
+  else delete result.stratum
   result.pronunciation = primary.pronunciation
   result.definition = primary.definition
   result.roots = primary.roots
@@ -733,6 +1013,7 @@ export async function synthesizeFromResearch(
       let identityError: Error | undefined
       let pendingPrimaryHistory: unknown
       const entryFields = [
+        'stratum',
         'pronunciation',
         'transliteration',
         'definition',

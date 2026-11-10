@@ -22,6 +22,7 @@ export function historyEntry(result: EtymologyResult, historyId?: string): Etymo
   if (!history) return entry
   return {
     ...entry,
+    stratum: history.stratum,
     pronunciation: history.pronunciation,
     transliteration: history.transliteration,
     definition: history.definition,

@@ -3,6 +3,32 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { AncestryTree } from './AncestryTree'
 
 describe('AncestryTree language identity', () => {
+  test('separates Japonic and Sinitic historical stages', () => {
+    const markup = renderToStaticMarkup(
+      <AncestryTree
+        language="ja"
+        word="茶"
+        graph={{
+          branches: [
+            {
+              root: '茶',
+              stages: [
+                { stage: 'Middle Chinese', form: '茶', note: 'tea' },
+                { stage: 'Old Japanese', form: '茶', note: 'borrowed reading' },
+              ],
+            },
+          ],
+        }}
+      />
+    )
+    expect(markup).toContain('border-t-lang-japonic')
+    expect(markup).toContain('border-t-lang-sinitic')
+    expect(markup).toContain('>Japonic</span>')
+    expect(markup).toContain('>Sinitic</span>')
+    expect(markup).toContain('lang="und-Hani" dir="auto"')
+    expect(markup).toContain('lang="ja" dir="auto"')
+  })
+
   test('shows source romanizations and separates Indo-Iranian ancestry from Dravidian', () => {
     const markup = renderToStaticMarkup(
       <AncestryTree

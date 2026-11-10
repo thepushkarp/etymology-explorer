@@ -40,6 +40,7 @@ describe('openrouterResponses', () => {
       'hi',
       'ur',
       'sa',
+      'ja',
     ])
     expect(schema.properties.definition.type).toBe('string')
   })

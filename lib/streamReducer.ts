@@ -38,6 +38,7 @@ export interface SourceProgress {
 /** Top-level synthesis sections, named and ordered exactly as in the LLM schema */
 export const SECTION_KEYS = [
   'word',
+  'stratum',
   'pronunciation',
   'transliteration',
   'definition',
@@ -68,6 +69,7 @@ export function toPartialResult(
   return {
     language,
     word: sections.word ?? word,
+    stratum: sections.stratum,
     pronunciation: sections.pronunciation ?? '',
     transliteration: sections.transliteration,
     definition: sections.definition ?? '',

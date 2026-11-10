@@ -1,5 +1,7 @@
 import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
 import { sameSpelling } from './orthography'
+import { LANGUAGES, languageFromName, lexicalLanguageName } from './languages'
+import type { LexemeRef, SourceLexicalRelation } from './types'
 /** A section returned by MediaWiki's `prop=tocdata` parser response. */
 export interface WiktionaryTocSection {
   index: string
@@ -31,6 +33,9 @@ export interface WiktionaryEntrySection {
 export interface WiktionaryEntryGroup {
   sourceUrl?: string
   transliteration?: string
+  relations?: SourceLexicalRelation[]
+  /** Only this heading's own body, excluding sense and descendant subsections. */
+  etymologyText?: string
   index: string
   number: string
   heading: string
@@ -122,6 +127,11 @@ function sectionPath(sections: WiktionaryTocSection[], targetIndex: number): str
   return stack.map((section) => section.heading)
 }
 
+/** Ruby readings annotate a lexical spelling without contributing to its identity. */
+function lexicalSpellingHtml(html: string): string {
+  return html.replace(/<(rt|rp)\b[^>]*>[\s\S]*?<\/\1>/gi, '').replace(/<\/?ruby\b[^>]*>/gi, '')
+}
+
 /** Readings must share a headword line with the exact query in this history. */
 function headwordTransliteration(html: string, word: string): string | undefined {
   const readings = new Set<string>()
@@ -130,7 +140,7 @@ function headwordTransliteration(html: string, word: string): string | undefined
       (match) => /\bclass=["'](?:[^"']*\s)?headword(?:\s[^"']*)?["']/i.test(match[1])
     )
     for (const [index, headword] of headwords.entries()) {
-      if (!sameSpelling(cleanWiktionaryHtml(headword[2]), word)) continue
+      if (!sameSpelling(cleanWiktionaryHtml(lexicalSpellingHtml(headword[2])), word)) continue
       const tail = block[1].slice(headword.index! + headword[0].length, headwords[index + 1]?.index)
       const reading = tail.match(
         /<span\b[^>]*class=["'](?:[^"']*\s)?headword-tr(?:\s[^"']*)?["'][^>]*>([\s\S]*?)<\/span>/i
@@ -142,6 +152,98 @@ function headwordTransliteration(html: string, word: string): string | undefined
     }
   }
   return readings.size === 1 ? [...readings][0] : undefined
+}
+
+function affirmativeOriginPrefix(prefix: string, pattern: RegExp): boolean {
+  const clause = prefix.split(/[.!?]/).at(-1) ?? ''
+  // Term markup also appears in rejected analyses and quoted comparisons. Only
+  // the publisher's affirmative local assertion can establish a relation.
+  if (
+    /\b(?:not|never|neither|without|unrelated|compar(?:e[ds]?|ison)|unlike|rather than|instead of|mistaken(?:ly)?|incorrect(?:ly)?|wrong(?:ly)?|fals(?:e|ely)|\w+n['’]t)\b/i.test(
+      clause
+    ) ||
+    /["“”‘]|(?:^|[\s(])'/.test(clause)
+  )
+    return false
+  return pattern.test(clause)
+}
+
+/** Read explicit term formulas before cleaning removes language and phrase boundaries. */
+function etymologyRelations(html: string, subject: LexemeRef): SourceLexicalRelation[] {
+  const relations: SourceLexicalRelation[] = []
+  for (const paragraph of html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
+    const body = paragraph[1]
+    const snippet = cleanWiktionaryHtml(body)
+    const terms = [
+      ...body.matchAll(/<(i|span)\b([^>]*\blang=["'][^"']+["'][^>]*)>([\s\S]*?)<\/\1>/gi),
+    ].flatMap((match) => {
+      const code = match[2].match(/\blang=["']([^"']+)["']/i)?.[1]
+      const language = code ? languageFromName(code) : undefined
+      const word = cleanWiktionaryHtml(lexicalSpellingHtml(match[3]))
+      if (!language || !word) return []
+      return [
+        {
+          lexeme: { word, language: LANGUAGES[language].englishName },
+          start: match.index!,
+          end: match.index! + match[0].length,
+        },
+      ]
+    })
+    let compoundSubject = subject
+    for (const term of terms) {
+      const prefix = cleanWiktionaryHtml(body.slice(0, term.start))
+      if (
+        affirmativeOriginPrefix(prefix, /\bclipping of$/i) &&
+        term.lexeme.language === subject.language
+      ) {
+        relations.push({ subject, target: term.lexeme, relation: 'derived_from', snippet })
+        compoundSubject = term.lexeme
+        break
+      }
+    }
+    for (let index = 0; index < terms.length - 1; index += 1) {
+      const first = terms[index]
+      const prefix = cleanWiktionaryHtml(body.slice(0, first.start))
+      if (
+        !affirmativeOriginPrefix(
+          prefix,
+          /\b(?:compound(?:ed)?(?:\s+(?:of|from))?|derived from|analy[sz]able as|formed from)\b[^.!?]*$/i
+        )
+      )
+        continue
+      const components = [first]
+      let last = index
+      while (last + 1 < terms.length) {
+        const between = cleanWiktionaryHtml(body.slice(terms[last].end, terms[last + 1].start))
+        if (!/\+/.test(between) || /[.!?;]/.test(between)) break
+        components.push(terms[last + 1])
+        last += 1
+      }
+      if (components.length < 2) continue
+      for (const component of components) {
+        relations.push({
+          subject: compoundSubject,
+          target: component.lexeme,
+          relation: 'compound_from',
+          snippet,
+        })
+      }
+      index = last
+    }
+    // A tagged phrase is one lexical donor even when its words have separate links.
+    for (const term of terms) {
+      const prefix = cleanWiktionaryHtml(body.slice(0, term.start))
+      if (
+        affirmativeOriginPrefix(
+          prefix,
+          /\b(?:derive[ds]?|derived|borrowed)\s+from\s+(?:the\s+)?[\p{L}-]+\s+phrase$/iu
+        )
+      ) {
+        relations.push({ subject, target: term.lexeme, relation: 'derived_from', snippet })
+      }
+    }
+  }
+  return relations
 }
 
 /**
@@ -200,6 +302,21 @@ export function extractWiktionaryEntryGroups(
       ? headwordTransliteration(fragment, requestedWord)
       : undefined
     const assignedSections = sections.slice(groupIndex + 1, nextGroupIndex)
+    const firstSectionOffset = assignedSections.length
+      ? anchorOffset(html, assignedSections[0].anchor)
+      : end
+    const etymologyHtml = etymologyIndexes.length
+      ? html
+          .slice(start, firstSectionOffset > start ? firstSectionOffset : end)
+          .replace(/^[\s\S]*?<\/h[1-6]>/i, '')
+      : undefined
+    const relations =
+      requestedWord && etymologyHtml
+        ? etymologyRelations(etymologyHtml, {
+            word: requestedWord,
+            language: lexicalLanguageName(languageHeading),
+          })
+        : []
 
     const structuredSections = assignedSections.flatMap((section, sectionPosition) => {
       const sectionStart = anchorOffset(html, section.anchor)
@@ -230,6 +347,10 @@ export function extractWiktionaryEntryGroups(
         anchor: group.anchor,
         level: headingLevel(group),
         ...(transliteration ? { transliteration } : {}),
+        ...(relations.length ? { relations } : {}),
+        ...(etymologyHtml !== undefined
+          ? { etymologyText: cleanWiktionaryHtml(etymologyHtml) }
+          : {}),
         text: cleanWiktionaryHtml(fragment),
         sections: structuredSections,
       },
@@ -237,13 +358,13 @@ export function extractWiktionaryEntryGroups(
   })
 }
 
-/** Only explicit spelling-variant statements in the selected language admit links. */
+/** Only explicit spelling variants and pronunciation/definition redirects admit links. */
 export function extractWiktionaryVariants(
   html: string,
   sections: readonly WiktionaryTocSection[],
   languageHeading: string,
   edition = 'en'
-): Array<{ word: string; relationship: 'spelling-variant'; url: string }> {
+): Array<{ word: string; relationship: 'spelling-variant' | 'redirect'; url: string }> {
   const index = sections.findIndex(
     (section) => comparableHeading(section.line) === comparableHeading(languageHeading)
   )
@@ -257,8 +378,31 @@ export function extractWiktionaryVariants(
   const fragment = html.slice(start, end < 0 ? html.length : end)
   const variants = new Map<
     string,
-    { word: string; relationship: 'spelling-variant'; url: string }
+    { word: string; relationship: 'spelling-variant' | 'redirect'; url: string }
   >()
+  for (const table of fragment.matchAll(
+    /<table\b[^>]*class=["'][^"']*\bja-see\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi
+  )) {
+    const header = table[1].match(/<b\b[^>]*>([\s\S]*?)<\/b>/i)
+    if (!header || !/^For pronunciation and definitions\b/i.test(cleanWiktionaryHtml(header[1])))
+      continue
+    // The first entry cell is the redirect; lower definition cells can list alternatives.
+    const target = table[1]
+      .slice(header.index! + header[0].length)
+      .match(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/i)
+    if (!target) continue
+    const url = new URL(decodeHtmlEntities(target[1]), `https://${edition}.wiktionary.org`)
+    if (
+      url.hostname !== `${edition}.wiktionary.org` ||
+      !url.pathname.startsWith('/wiki/') ||
+      comparableHeading(decodeURIComponent(url.hash.slice(1)).replace(/_/g, ' ')) !==
+        comparableHeading(languageHeading)
+    )
+      continue
+    const word = decodeURIComponent(url.pathname.slice('/wiki/'.length)).replace(/_/g, ' ')
+    if (word && !word.includes(':'))
+      variants.set(word, { word, relationship: 'redirect', url: url.toString() })
+  }
   // Resolve invariant heading offsets once to avoid whole-page scans per block.
   const positionedSections = sections.map((section) => ({
     section,

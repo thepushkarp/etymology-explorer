@@ -8,8 +8,8 @@ Try it out at [etymex.com](https://etymex.com)
 
 - **Public Mode**: No client-side API keys needed — uses a server-side LLM with rate limiting, caching, and budget controls
 - **Grounded Etymology**: Source-backed confidence scoring (high/medium/low) for each ancestral stage
-- **Automatic Language Discovery**: One spelling opens English, Italian, Spanish, French, Portuguese, Hindi, Urdu, and Sanskrit histories together in language tabs; a manual language hint also finds specialist-only entries. Explanations are English, with translated examples in the word's own language
-- **Native Scripts**: Search Hindi and Sanskrit in Devanagari and Urdu in Arabic script, with source-backed transliterations and right-to-left Urdu text
+- **Automatic Language Discovery**: One spelling opens English, Italian, Spanish, French, Portuguese, Hindi, Urdu, Sanskrit, and Japanese histories together in language tabs; a manual language hint also finds specialist-only entries. Explanations are English, with translated examples in the word's own language
+- **Native Scripts**: Search Hindi and Sanskrit in Devanagari, Urdu in Arabic script, and Japanese in kanji or kana, with source-backed transliterations and right-to-left Urdu text
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
 - **Part of Speech Tags**: See grammatical categories (noun/verb/adjective) with alternate pronunciations for words like "record"
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
@@ -125,7 +125,8 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
 - **Data Sources**:
   - [Etymonline](https://www.etymonline.com/) - Historical etymology
   - [Wiktionary](https://en.wiktionary.org/) - Definitions and linguistic data
-  - Native Italian, Spanish, French, Portuguese, and Hindi Wiktionary editions - selected-language sections; English Wiktionary defines Hindi, Urdu, and Sanskrit history boundaries
+  - Native Italian, Spanish, French, Portuguese, Hindi, and Japanese Wiktionary editions - selected-language sections; English Wiktionary defines Hindi, Urdu, Sanskrit, and Japanese history boundaries
+  - [JMdict via Jisho](https://jisho.org/) - licensed supplementary Japanese lexical senses and raw loan-source material, with EDRDG attribution retained
   - [Wikidata Lexemes](https://www.wikidata.org/wiki/Wikidata:Lexicographical_data/Documentation) - language-tagged lemmas, forms, senses, and lexical claims
   - [FreeDictionaryAPI](https://freedictionaryapi.com/) - senses, forms, and IPA after direct Wiktionary misses (not etymology)
   - [Dicionário Aberto](https://api.dicionario-aberto.net/index.html) - older Portuguese dictionary evidence
@@ -135,11 +136,15 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
   - Bosworth–Toller, Lewis & Short, and LSJ through Logeion - historical-language lexemes
   - [Exa](https://exa.ai/) - optional blocked-page recovery and targeted publisher discovery
 - **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
-- **Typography**: Libre Baskerville (display serif), Alegreya Sans (UI), Noto Serif Devanagari, and Noto Nastaliq Urdu, self-hosted regular-weight woff2 subsets
+- **Typography**: Libre Baskerville (display serif), Alegreya Sans (UI), Noto Serif Devanagari, and Noto Nastaliq Urdu, self-hosted regular-weight woff2 subsets; Japanese forms use system Mincho fonts without a webfont download
 
 Hindi, Urdu, and Sanskrit rely on Wiktionary lexical evidence; Wikipedia supplies context and cannot establish ancestry. Optional Platts, Wisdom Library, and Cologne Monier-Williams adapters are not enabled: the [Platts digitization links restrictive reuse terms](https://dsal.uchicago.edu/dictionaries/platts/), [Wisdom Library's published site information](https://www.wisdomlib.org/m/about.html) does not establish a blanket glossary reuse license, and the [Cologne digital edition specifies noncommercial, share-alike terms](https://raw.githubusercontent.com/sanskrit-lexicon/csl-orig/master/v02/mw/mwheader.xml). Their availability alone does not establish suitability for public synthesis.
 
-Random discovery uses frequency-selected Romance pools and small curated Hindi, Urdu, and Sanskrit headword pools. Refresh the curated pools without downloads using `python scripts/build-discovery-word-pools.py --languages hi ur sa`; the generator preserves unselected pools. Google Books usage charts are unavailable for these three languages.
+Japanese uses English Wiktionary as its history primary and native Japanese Wiktionary as independent context. JMdict via Jisho supplies licensed lexical senses and raw loan-source material; an unspecified full/partial status cannot establish a whole-word borrowing. Each live Jisho request after a source-cache miss requires a global 40-second Redis pacing reservation, which fails closed when Redis is unavailable or the interval is occupied; source-cache hits need no reservation. Complete raw source data is cached for seven days with its attribution retained. When updating the adapter, review the publisher terms, JMdict license, and Jisho response schema, preserve attribution through caching and display, and verify parsing and pacing with fixtures. Kotobank and gogen adapters are not enabled because their reuse terms have not been admitted.
+
+Japanese word-origin labels require affirmative source evidence. Compounding and borrowing remain distinct: 電話 is a Japanese wasei-kango compound of 電 and 話, rather than a whole Middle Chinese borrowing. サラリーマン has disputed coinage accounts and source-attested Japanese サラリー and マン components; it does not imply English salary and man branches. コンセント is clipped from a longer Japanese coinage with explicit English concentric and plug components.
+
+Random discovery uses frequency-selected Romance pools and small curated Hindi, Urdu, Sanskrit, and Japanese headword pools. Refresh the curated pools without downloads using `python scripts/build-discovery-word-pools.py --languages hi ur sa ja`; the generator preserves unselected pools. Google Books usage charts are unavailable for these four languages.
 
 ## Project Structure
 
@@ -349,6 +354,7 @@ MIT
 
 - Etymology data from [Etymonline](https://www.etymonline.com/) and [Wiktionary](https://en.wiktionary.org/)
 - Dictionary fallback from [FreeDictionaryAPI](https://freedictionaryapi.com/)
+- Japanese lexical data from [JMdict by EDRDG](https://www.edrdg.org/), via [Jisho](https://jisho.org/), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 - Encyclopedic context from [Wikipedia](https://en.wikipedia.org/)
 - Supplemental community slang context from [Incel Wiki](https://incels.wiki/)
 - Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)

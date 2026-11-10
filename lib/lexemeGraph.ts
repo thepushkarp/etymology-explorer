@@ -1,11 +1,13 @@
 import { canonicalizeWord } from './orthography'
 import { sourceFamily } from './sourceProviders'
+import { lexicalLanguageName } from './languages'
 import type { ParsedEtymChain, ParsedEtymLink } from './etymologyParser'
 import type {
   LexicalEdge,
   LexicalRelation,
   LexicalResearchGraph,
   ResearchEntryContext,
+  LexemeRef,
 } from './types'
 
 function idPart(value: string): string {
@@ -13,6 +15,7 @@ function idPart(value: string): string {
 }
 
 function relationFromEvidence(link: ParsedEtymLink): LexicalRelation {
+  if (link.relation) return link.relation
   if (/\bborrow(?:ed|ing)?\b/i.test(link.rawSnippet)) return 'borrowed_from'
   if (/\binherit(?:ed|ance)?\b/i.test(link.rawSnippet)) return 'inherited_from'
   if (/\bcalque(?:d)?\b/i.test(link.rawSnippet)) return 'calqued_from'
@@ -78,6 +81,7 @@ export function buildLexicalResearchGraph(
     const historyChains = chains.filter((chain) => chain.historyId === context.id)
     const nodeIds = [queryNodeId]
     const edgeIds: string[] = []
+    const evidenceScopes = new Set([context.evidenceScopeId])
     let lemmaNodeId = queryNodeId
 
     if (context.formOf) {
@@ -107,10 +111,27 @@ export function buildLexicalResearchGraph(
       edgeIds.push(edgeId)
     }
 
+    const matchingNode = (lexeme: LexemeRef) =>
+      nodeIds.find((id) => {
+        const node = graph.nodes[id]
+        return (
+          node.lexeme.normalizedLemma === canonicalizeWord(lexeme.word) &&
+          lexicalLanguageName(node.lexeme.language) === lexicalLanguageName(lexeme.language)
+        )
+      })
+
     for (const [chainIndex, chain] of historyChains.entries()) {
-      let youngerNodeId = queryNodeId
+      // Continuation is attached to an already attested donor or component,
+      // never promoted into a fresh whole-word ancestry account.
+      const anchor = chain.subject ? matchingNode(chain.subject) : queryNodeId
+      if (!anchor) continue
+      let youngerNodeId = anchor
+      const scope = chain.evidenceScopeId ?? context.evidenceScopeId
+      evidenceScopes.add(scope)
       for (const [linkIndex, link] of chain.links.entries()) {
-        const olderNodeId = `etymon:${context.id}:${idPart(link.language)}:${idPart(link.form)}`
+        const olderNodeId =
+          matchingNode({ word: link.form, language: link.language }) ??
+          `etymon:${context.id}:${idPart(link.language)}:${idPart(link.form)}`
         if (!graph.nodes[olderNodeId]) {
           graph.nodes[olderNodeId] = {
             id: olderNodeId,
@@ -133,8 +154,8 @@ export function buildLexicalResearchGraph(
           id: evidenceId,
           provider: chain.provider ?? chain.source,
           sourceFamily: chain.sourceFamily ?? sourceFamily(chain.provider ?? chain.source),
-          sourceUrl: context.sourceUrl,
-          evidenceScopeId: context.evidenceScopeId,
+          sourceUrl: chain.sourceUrl ?? context.sourceUrl,
+          evidenceScopeId: scope,
           subjectKind: 'edge',
           snippet: link.rawSnippet,
         }
@@ -164,7 +185,7 @@ export function buildLexicalResearchGraph(
       formOf: context.formOf,
       nodeIds,
       edgeIds,
-      evidenceScopeIds: [context.evidenceScopeId],
+      evidenceScopeIds: [...evidenceScopes],
     })
   }
 

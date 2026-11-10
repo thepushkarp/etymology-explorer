@@ -6,6 +6,38 @@ import {
   parseDictionaryText,
 } from './etymologyParser'
 import { cleanWiktionaryHtml } from './wiktionaryEntryGroups'
+import japaneseFixtures from './__fixtures__/japanese/wiktionary.json'
+
+test('recorded donor histories preserve Portuguese, English and German period languages', () => {
+  const links = (key: 'ja-pan' | 'pt-pao' | 'de-arbeit') => {
+    const fixture = japaneseFixtures[key]
+    return parseWiktionaryText(cleanWiktionaryHtml(fixture.html), fixture.word).links.map(
+      ({ language, form }) => [language, form]
+    )
+  }
+  expect(links('ja-pan')).toEqual([
+    ['Portuguese', 'pão'],
+    ['Latin', 'pānem'],
+    ['English', 'pan'],
+  ])
+  expect(links('pt-pao')).toEqual([
+    ['Old Galician-Portuguese', 'pan'],
+    ['Latin', 'pānem'],
+  ])
+  expect(links('de-arbeit')).toEqual([
+    ['Middle High German', 'arbeit'],
+    ['Old High German', 'arbeit'],
+    ['Proto-West Germanic', '*arbaiþi'],
+    ['Proto-Germanic', '*arbaidiz'],
+    ['Proto-Indo-European', '*h₃órbʰos'],
+  ])
+  const salaryman = japaneseFixtures['ja-salaryman']
+  expect(
+    parseWiktionaryText(cleanWiktionaryHtml(salaryman.html), salaryman.word).links.map(
+      ({ language, form }) => [language, form]
+    )
+  ).toEqual([['English', 'salaried man']])
+})
 
 test('an institution founding date is not a word attestation', () => {
   const chain = parseWiktionaryText(
