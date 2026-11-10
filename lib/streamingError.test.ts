@@ -34,6 +34,22 @@ describe('streamingError', () => {
     })
   })
 
+  test('preserves validated script offers for no-source and provider errors', () => {
+    for (const errorType of ['nonsense', 'typo', 'network'] as const) {
+      expect(
+        toStreamingUiError({
+          type: 'error',
+          message: 'No entry',
+          errorType,
+          otherScripts: [
+            { word: ' नमस्ते ', language: 'hi' },
+            { word: 'namaste', language: 'hi' },
+          ],
+        }).otherScripts
+      ).toEqual([{ word: 'नमस्ते', language: 'hi' }])
+    }
+  })
+
   test('keeps network SSE errors mapped to the network UI', () => {
     expect(
       toStreamingUiError({

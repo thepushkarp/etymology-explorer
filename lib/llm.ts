@@ -1,4 +1,5 @@
 import { canonicalizeWord, sameSpelling } from './orthography'
+import { normalizeScriptTargets } from './scriptTargets'
 import {
   EtymologyResult,
   LlmUsage,
@@ -878,6 +879,9 @@ function finalizeHistories(result: EtymologyResult, researchContext: ResearchCon
     const source = entry?.source
     if (entry?.transliteration) history.transliteration = entry.transliteration
     else delete history.transliteration
+    const counterparts = normalizeScriptTargets(entry?.counterparts)
+    if (counterparts.length) history.counterparts = counterparts
+    else delete history.counterparts
     const sourceRecord = mainSourceRecords(researchContext.mainWord).find(
       (record) => record.provider === source
     )
@@ -945,6 +949,8 @@ function finalizeHistories(result: EtymologyResult, researchContext: ResearchCon
   }
   if (primary.transliteration) result.transliteration = primary.transliteration
   else delete result.transliteration
+  if (primary.counterparts) result.counterparts = primary.counterparts
+  else delete result.counterparts
   if (primary.stratum) result.stratum = primary.stratum
   else delete result.stratum
   result.pronunciation = primary.pronunciation
@@ -1016,6 +1022,7 @@ export async function synthesizeFromResearch(
         'stratum',
         'pronunciation',
         'transliteration',
+        'counterparts',
         'definition',
         'ancestryGraph',
         'roots',

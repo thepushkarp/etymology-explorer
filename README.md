@@ -10,6 +10,7 @@ Try it out at [etymex.com](https://etymex.com)
 - **Grounded Etymology**: Source-backed confidence scoring (high/medium/low) for each ancestral stage
 - **Automatic Language Discovery**: One spelling opens English, Italian, Spanish, French, Portuguese, Hindi, Urdu, Sanskrit, and Japanese histories together in language tabs; a manual language hint also finds specialist-only entries. Explanations are English, with translated examples in the word's own language
 - **Native Scripts**: Search Hindi and Sanskrit in Devanagari, Urdu in Arabic script, and Japanese in kanji or kana, with source-backed transliterations and right-to-left Urdu text
+- **Cross-language Links**: Open attested lineage forms and each history's source-listed spelling counterparts. Explicit Wiktionary romanizations offer links to native spellings while preserving entries for the original spelling; only clicking a link starts a new trace
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
 - **Part of Speech Tags**: See grammatical categories (noun/verb/adjective) with alternate pronunciations for words like "record"
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
@@ -97,6 +98,7 @@ RATE_LIMIT_ENABLED=true
 Free-tier accounts cannot use Voice Library/community voices through the API.
 Pronunciation requests pass the selected ISO 639-1 `language_code` to `eleven_v4` for
 language selection and text normalization. [ElevenLabs lists Hindi and Urdu support](https://elevenlabs.io/docs/overview/models); Sanskrit pronunciation is unavailable.
+Audio is generated from the headword and selected language, independently of a selected history's displayed IPA.
 Accent still depends on the configured voice;
 `pt` does not select a Brazilian or European accent.
 

@@ -9,6 +9,7 @@ import { EtymologyResultSchema } from '@/lib/schemas/etymology'
  * attachSources in lib/llm.ts from the actual research context.
  */
 const POST_PROCESSING_ONLY_PATHS = new Set([
+  'counterparts',
   'ancestryGraph.branches[].stages[].isReconstructed',
   'ancestryGraph.branches[].stages[].confidence',
   'ancestryGraph.branches[].stages[].evidence',

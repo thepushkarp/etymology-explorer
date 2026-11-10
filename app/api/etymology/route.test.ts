@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import * as nextServer from 'next/server'
 import { CONFIG } from '@/lib/config'
 import type { LanguageCode } from '@/lib/languages'
-import type { EtymologyResult, WordEntry } from '@/lib/types'
+import type { EtymologyResult, ScriptTarget, WordEntry } from '@/lib/types'
 import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 
 // Module mocks stay in a child process so this suite cannot replace cache,
@@ -26,6 +26,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
   let saved: { entry: WordEntry; stale: boolean } | null = null
   let read: (() => typeof saved) | undefined
   let languages: LanguageCode[] = ['en', 'fr']
+  let otherScripts: ScriptTarget[] = []
   let resolutionIncomplete = false
   let failLanguage: LanguageCode | undefined
   let credible = true
@@ -35,7 +36,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
   let writeError = false
   let lock: 'acquired' | 'busy' = 'acquired'
   let promotion: () => Promise<unknown> = async () => ({ status: 'held' })
-  const negatives = new Set<LanguageCode | undefined>()
+  const negatives = new Map<LanguageCode | undefined, { otherScripts?: ScriptTarget[] }>()
   const calls = {
     research: 0,
     synthesis: 0,
@@ -46,6 +47,8 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     failure: 0,
     locks: [] as string[],
     reads: 0,
+    researchLanguages: [] as LanguageCode[],
+    failureMetadata: undefined as unknown,
   }
   const usage = { inputTokens: 10, outputTokens: 5 }
   const result = (language: LanguageCode): EtymologyResult =>
@@ -84,11 +87,16 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     },
     getNegativeCache: async (_word: string, hint?: LanguageCode) => {
       calls.negative.push(['read', hint])
-      return negatives.has(hint)
+      return negatives.get(hint) ?? null
     },
-    cacheNegative: async (_word: string, _type: string, hint?: LanguageCode) => {
+    cacheNegative: async (
+      _word: string,
+      _type: string,
+      hint?: LanguageCode,
+      offers?: ScriptTarget[]
+    ) => {
       calls.negative.push(['write', hint])
-      negatives.add(hint)
+      if (!saved) negatives.set(hint, offers?.length ? { otherScripts: offers } : {})
     },
   }))
   mock.module('@/lib/costGuard', () => ({
@@ -110,7 +118,8 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     releaseLock: async () => {
       calls.released++
     },
-    markLockFailure: async () => {
+    markLockFailure: async (_key: string, metadata: unknown) => {
+      calls.failureMetadata = metadata
       calls.failure++
     },
     attemptPromotion: () => promotion(),
@@ -122,6 +131,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     resolveEntryLanguages: async () => ({
       languages,
       otherLanguages: ['Dutch'],
+      otherScripts,
       incomplete: resolutionIncomplete,
     }),
   }))
@@ -131,6 +141,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
       options: { language: LanguageCode; signal: AbortSignal }
     ) => {
       calls.research++
+      calls.researchLanguages.push(options.language)
       options.signal.throwIfAborted()
       if (rootError) throw Object.assign(new Error('Root lookup failed'), { usage })
       return {
@@ -159,6 +170,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     saved = null
     read = undefined
     languages = ['en', 'fr']
+    otherScripts = []
     resolutionIncomplete = false
     failLanguage = undefined
     credible = true
@@ -178,6 +190,8 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     calls.negative = []
     calls.spend = []
     calls.locks = []
+    calls.researchLanguages = []
+    calls.failureMetadata = undefined
     negatives.clear()
   })
 
@@ -299,6 +313,106 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     expect(calls.failure).toBe(1)
     expect(calls.released).toBe(1)
   })
+  const offers: ScriptTarget[] = [{ word: 'नमस्ते', language: 'hi' }]
+  const sseEvents = async (response: Response) =>
+    (await response.text())
+      .split('\n\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line.slice(6)))
+
+  test('successful spelling entry stores offers without tracing their targets', async () => {
+    languages = ['en']
+    otherScripts = offers
+    const events = await sseEvents(await get('&stream=true'))
+    expect(events.find((event) => event.type === 'languages_resolved').otherScripts).toEqual(offers)
+    expect(events.find((event) => event.type === 'result').data.otherScripts).toEqual(offers)
+    expect(saved?.entry.otherScripts).toEqual(offers)
+    expect(calls.researchLanguages).toEqual(['en'])
+    expect(calls.synthesis).toBe(1)
+  })
+
+  test('no-source offers survive negative cache with JSON and SSE parity and no repeat research', async () => {
+    languages = []
+    otherScripts = offers
+    const first = await (await get()).json()
+    expect(first.data.otherScripts).toEqual(offers)
+    expect(negatives.get(undefined)).toEqual({ otherScripts: offers })
+    const second = await sseEvents(await get('&stream=true'))
+    expect(second.at(-1)).toMatchObject({ type: 'error', otherScripts: offers })
+    expect(calls.research).toBe(0)
+    expect(calls.synthesis).toBe(0)
+    expect(calls.failure).toBe(0)
+    expect(calls.reads).toBe(3)
+  })
+
+  test('retained English merges newly resolved offers when the hinted script has no entry', async () => {
+    const original = entry()
+    original.languages = ['en']
+    delete original.entries.fr
+    original.attemptedLanguages = ['en']
+    saved = { entry: original, stale: false }
+    languages = []
+    otherScripts = offers
+    const payload = await (await get('&language=hi')).json()
+    expect(payload.data.otherScripts).toEqual(offers)
+    expect(saved?.entry.entries.en).toEqual(original.entries.en)
+    expect(saved?.entry.otherScripts).toEqual(offers)
+    expect(saved?.entry.attemptedLanguages).toContain('hi')
+    expect(negatives.has('hi')).toBe(false)
+    expect(calls.synthesis).toBe(0)
+    expect(calls.research).toBe(0)
+    const cached = await sseEvents(await get('&language=hi&stream=true'))
+    expect(cached.at(-1).otherScripts).toEqual(offers)
+    negatives.set('ja', {})
+    const olderNegative = await (await get('&language=ja')).json()
+    expect(olderNegative.data.otherScripts).toEqual(offers)
+    expect(calls.writes).toBe(1)
+  })
+
+  test('lock recheck preserves offers for a completed missing hint', async () => {
+    const completed = entry()
+    completed.languages = ['en']
+    delete completed.entries.fr
+    completed.otherScripts = offers
+    read = () => (calls.reads === 1 ? null : { entry: completed, stale: false })
+    const payload = await (await get('&language=fr')).json()
+    expect(payload.data.otherScripts).toEqual(offers)
+    expect(calls.research).toBe(0)
+    expect(calls.reads).toBe(2)
+  })
+
+  test('waiters preserve offers from durable missing hints and negative metadata', async () => {
+    lock = 'busy'
+    const completed = entry()
+    completed.languages = ['en']
+    delete completed.entries.fr
+    completed.otherScripts = offers
+    read = () => (calls.reads > 1 ? { entry: completed, stale: false } : null)
+    expect((await (await get('&language=fr')).json()).data.otherScripts).toEqual(offers)
+    read = () => null
+    promotion = async () => {
+      negatives.set(undefined, { otherScripts: offers })
+      return { status: 'held' }
+    }
+    const events = await sseEvents(await get('&stream=true'))
+    expect(events.at(-1)).toMatchObject({ type: 'error', otherScripts: offers })
+    expect(calls.research).toBe(0)
+  })
+
+  test('real holder failures preserve already resolved offers for holder and waiters', async () => {
+    languages = ['en']
+    otherScripts = offers
+    rootError = true
+    expect((await (await get()).json()).data.otherScripts).toEqual(offers)
+    expect(calls.failureMetadata).toMatchObject({ otherScripts: offers })
+    lock = 'busy'
+    promotion = async () => ({ status: 'holder_failed', ...(calls.failureMetadata as object) })
+    const events = await sseEvents(await get('&stream=true'))
+    expect(events.at(-1)).toMatchObject({ type: 'error', otherScripts: offers })
+    expect(calls.research).toBe(1)
+    expect(calls.synthesis).toBe(0)
+  })
+
   test('cancelled refresh waiter never promotes or overwrites the old entry', async () => {
     const original = entry()
     saved = { entry: original, stale: true }

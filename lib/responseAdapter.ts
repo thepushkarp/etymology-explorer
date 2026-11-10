@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import type { ApiResponse, WordEntry, StreamEvent } from '@/lib/types'
+import type { ApiResponse, ScriptTarget, WordEntry, StreamEvent } from '@/lib/types'
 import { streamErrorResponse, streamResultResponse } from '@/lib/streamingResponse'
 
 type StreamErrorType = Extract<StreamEvent, { type: 'error' }>['errorType']
@@ -33,6 +33,7 @@ export interface AdapterErrorOptions {
   /** Extra payload for the unary JSON body only (e.g. typo suggestions). */
   unaryData?: unknown
   suggestions?: string[]
+  otherScripts?: ScriptTarget[]
 }
 
 export interface AdapterResultOptions {
@@ -50,17 +51,23 @@ export function createResponseAdapter(stream: boolean): ResponseAdapter {
   return {
     error(
       message,
-      { status, errorType = 'unknown', headers, unaryHeaders, unaryData, suggestions }
+      { status, errorType = 'unknown', headers, unaryHeaders, unaryData, suggestions, otherScripts }
     ) {
       if (stream) {
-        return streamErrorResponse(message, errorType, headers, suggestions)
+        return streamErrorResponse(message, errorType, headers, suggestions, otherScripts)
       }
       return NextResponse.json<ApiResponse<unknown>>(
         {
           success: false,
           error: message,
-          ...(suggestions
-            ? { data: { suggestions } }
+          ...(suggestions || otherScripts
+            ? {
+                data: {
+                  ...(unaryData && typeof unaryData === 'object' ? unaryData : {}),
+                  ...(suggestions ? { suggestions } : {}),
+                  ...(otherScripts ? { otherScripts } : {}),
+                },
+              }
             : unaryData !== undefined
               ? { data: unaryData }
               : {}),

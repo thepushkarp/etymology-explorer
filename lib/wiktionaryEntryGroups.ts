@@ -1,7 +1,8 @@
 import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
 import { sameSpelling } from './orthography'
-import { LANGUAGES, languageFromName, lexicalLanguageName } from './languages'
-import type { LexemeRef, SourceLexicalRelation } from './types'
+import { LANGUAGES, languageFromName, lexicalLanguageName, type LanguageCode } from './languages'
+import { normalizeScriptTargets } from './scriptTargets'
+import type { LexemeRef, ScriptTarget, SourceLexicalRelation } from './types'
 /** A section returned by MediaWiki's `prop=tocdata` parser response. */
 export interface WiktionaryTocSection {
   index: string
@@ -33,6 +34,7 @@ export interface WiktionaryEntrySection {
 export interface WiktionaryEntryGroup {
   sourceUrl?: string
   transliteration?: string
+  counterparts?: ScriptTarget[]
   relations?: SourceLexicalRelation[]
   /** Only this heading's own body, excluding sense and descendant subsections. */
   etymologyText?: string
@@ -154,6 +156,130 @@ function headwordTransliteration(html: string, word: string): string | undefined
   return readings.size === 1 ? [...readings][0] : undefined
 }
 
+function attribute(attributes: string, name: string): string | undefined {
+  return attributes.match(new RegExp(`\\b${name}=["']([^"']*)["']`, 'i'))?.[1]
+}
+
+function hasClass(attributes: string, name: string): boolean {
+  return (attribute(attributes, 'class') ?? '').split(/\s+/).includes(name)
+}
+
+/** The destination title, language anchor, and tagged language must agree. */
+function scriptLink(html: string, language: LanguageCode, edition: string): ScriptTarget[] {
+  const href = html.match(/<a\b[^>]*href=["']([^"']+)["']/i)?.[1]
+  if (!href) return []
+  try {
+    const url = new URL(decodeHtmlEntities(href), `https://${edition}.wiktionary.org`)
+    if (
+      url.protocol !== 'https:' ||
+      url.host !== `${edition}.wiktionary.org` ||
+      !url.pathname.startsWith('/wiki/') ||
+      url.search ||
+      languageFromName(decodeURIComponent(url.hash.slice(1)).replace(/_/g, ' ')) !== language
+    )
+      return []
+    return normalizeScriptTargets([
+      { word: decodeURIComponent(url.pathname.slice(6)).replace(/_/g, ' '), language },
+    ])
+  } catch {
+    return []
+  }
+}
+
+function selectedHeadwordLines(html: string, language: LanguageCode) {
+  return [...html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)].flatMap((block) =>
+    [...block[1].matchAll(/<strong\b([^>]*)>([\s\S]*?)<\/strong>/gi)].flatMap((headword) =>
+      hasClass(headword[1], 'headword') && attribute(headword[1], 'lang') === language
+        ? [{ body: block[1], headword }]
+        : []
+    )
+  )
+}
+
+function headwordCounterparts(
+  html: string,
+  word: string,
+  language: LanguageCode,
+  edition: string,
+  boundHeadword?: string
+): ScriptTarget[] {
+  if (language !== 'hi' && language !== 'ur') return []
+  const targetLanguage = language === 'hi' ? 'ur' : 'hi'
+  const label = language === 'hi' ? 'Urdu' : 'Hindi'
+  const targets: ScriptTarget[] = []
+  for (const { body, headword } of selectedHeadwordLines(html, language)) {
+    const spelling = cleanWiktionaryHtml(lexicalSpellingHtml(headword[2]))
+    if (!sameSpelling(spelling, word) && !sameSpelling(spelling, boundHeadword ?? '')) continue
+    const tail = body.slice(headword.index! + headword[0].length)
+    const nextHeadword = tail.search(/<strong\b[^>]*class=["'][^"']*\bheadword\b/i)
+    const local = nextHeadword < 0 ? tail : tail.slice(0, nextHeadword)
+    for (const term of local.matchAll(
+      /<(b|i|span)\b([^>]*\blang=["'][^"']+["'][^>]*)>([\s\S]*?)<\/\1>/gi
+    )) {
+      if (attribute(term[2], 'lang') !== targetLanguage) continue
+      const prefix = cleanWiktionaryHtml(local.slice(0, term.index))
+      if (!new RegExp(`(?:^|[,(;])\\s*${label} spelling\\s*:?$`, 'i').test(prefix)) continue
+      targets.push(...scriptLink(term[3], targetLanguage, edition))
+    }
+  }
+  return normalizeScriptTargets(targets)
+}
+
+/** Romanization definitions are explicit links, never inferred from pronunciation or glosses. */
+export function extractWiktionaryRomanizations(
+  html: string,
+  sections: readonly WiktionaryTocSection[],
+  requestedWord: string
+): ScriptTarget[] {
+  if (!/^[\p{Script=Latin}\p{M}\s'’\-]+$/u.test(requestedWord)) return []
+  const targets: ScriptTarget[] = []
+  for (let index = 0; index < sections.length; index++) {
+    const language = languageFromName(cleanHeading(sections[index].line))
+    if (
+      !language ||
+      LANGUAGES[language].scripts.every((script) => script === 'Latin') ||
+      headingLevel(sections[index]) !== 2
+    )
+      continue
+    for (let cursor = index + 1; cursor < sections.length; cursor++) {
+      if (headingLevel(sections[cursor]) <= 2) break
+      if (!/^Romanization$/i.test(cleanHeading(sections[cursor].line))) continue
+      const start = anchorOffset(html, sections[cursor].anchor)
+      const following = sections[cursor + 1]
+      const end = following ? anchorOffset(html, following.anchor) : html.length
+      if (start < 0 || end <= start) continue
+      const fragment = html.slice(start, end)
+      const headwords = selectedHeadwordLines(fragment, language)
+      if (
+        headwords.length !== 1 ||
+        !sameSpelling(cleanWiktionaryHtml(headwords[0].headword[2]), requestedWord)
+      )
+        continue
+      for (const definition of fragment.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)) {
+        if (!/\bclass=["'][^"']*\bform-of-definition\b/.test(definition[1])) continue
+        const linkMarker = definition[1].search(
+          /<(?:span|i)\b[^>]*class=["'][^"']*\bform-of-definition-link\b/i
+        )
+        if (linkMarker < 0) continue
+        const prefix = cleanWiktionaryHtml(definition[1].slice(0, linkMarker))
+        if (!/^(?:(?:[\p{L}\p{M}ō -]+)\s+)?(?:romanization|transcription) of$/iu.test(prefix))
+          continue
+        const target = definition[1].slice(linkMarker).match(/<(span|i)\b([^>]*)>([\s\S]*?)<\/\1>/i)
+        if (!target) continue
+        if (attribute(target[2], 'lang') === language) {
+          targets.push(...scriptLink(target[3], language, 'en'))
+        } else {
+          for (const term of target[3].matchAll(/<(i|b|span)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
+            if (attribute(term[2], 'lang') === language)
+              targets.push(...scriptLink(term[3], language, 'en'))
+          }
+        }
+      }
+    }
+  }
+  return normalizeScriptTargets(targets)
+}
+
 function affirmativeOriginPrefix(prefix: string, pattern: RegExp): boolean {
   const clause = prefix.split(/[.!?]/).at(-1) ?? ''
   // Term markup also appears in rejected analyses and quoted comparisons. Only
@@ -260,7 +386,8 @@ export function extractWiktionaryEntryGroups(
   sections: readonly WiktionaryTocSection[],
   languageHeading: string,
   etymologyHeading: RegExp,
-  requestedWord?: string
+  requestedWord?: string,
+  pageIdentity?: { title: string; edition: string }
 ): WiktionaryEntryGroup[] {
   const languageIndex = sections.findIndex(
     (section) => comparableHeading(section.line) === comparableHeading(languageHeading)
@@ -285,6 +412,20 @@ export function extractWiktionaryEntryGroups(
   }
 
   const groupIndexes = etymologyIndexes.length > 0 ? etymologyIndexes : [languageIndex]
+  const selectedLanguage = languageFromName(languageHeading)
+  const languageStart = anchorOffset(html, language.anchor)
+  const headwordLines = selectedLanguage
+    ? selectedHeadwordLines(html.slice(languageStart, languageEndOffset), selectedLanguage)
+    : []
+  // A validated page title can identify one displayed, vocalized headword locally.
+  // Multiple headword lines require exact identity rather than diacritic folding.
+  const boundHeadword =
+    requestedWord &&
+    pageIdentity &&
+    sameSpelling(pageIdentity.title, requestedWord) &&
+    headwordLines.length === 1
+      ? cleanWiktionaryHtml(lexicalSpellingHtml(headwordLines[0].headword[2]))
+      : undefined
 
   return groupIndexes.flatMap((groupIndex, position) => {
     const group = sections[groupIndex]
@@ -301,7 +442,41 @@ export function extractWiktionaryEntryGroups(
     const transliteration = requestedWord
       ? headwordTransliteration(fragment, requestedWord)
       : undefined
+    let counterparts =
+      requestedWord && selectedLanguage
+        ? headwordCounterparts(
+            fragment,
+            requestedWord,
+            selectedLanguage,
+            pageIdentity?.edition ?? 'en',
+            boundHeadword
+          )
+        : []
     const assignedSections = sections.slice(groupIndex + 1, nextGroupIndex)
+    if (
+      selectedLanguage === 'ja' &&
+      requestedWord &&
+      ((pageIdentity && sameSpelling(pageIdentity.title, requestedWord)) ||
+        selectedHeadwordLines(fragment, 'ja').some(({ headword }) =>
+          sameSpelling(cleanWiktionaryHtml(lexicalSpellingHtml(headword[2])), requestedWord)
+        ))
+    ) {
+      const variantHtml = groupIndexes.length === 1 ? html.slice(languageStart, end) : fragment
+      const variantSections =
+        groupIndexes.length === 1
+          ? sections.slice(languageIndex, nextGroupIndex)
+          : [{ ...group, line: languageHeading }, ...assignedSections]
+      counterparts = normalizeScriptTargets(
+        extractWiktionaryVariants(
+          variantHtml,
+          variantSections,
+          languageHeading,
+          pageIdentity?.edition ?? 'en'
+        )
+          .filter(({ url }) => languageFromName(new URL(url).hash.slice(1)) === 'ja')
+          .map(({ word }) => ({ word, language: 'ja' }))
+      ).filter((target) => !sameSpelling(target.word, requestedWord))
+    }
     const firstSectionOffset = assignedSections.length
       ? anchorOffset(html, assignedSections[0].anchor)
       : end
@@ -347,6 +522,7 @@ export function extractWiktionaryEntryGroups(
         anchor: group.anchor,
         level: headingLevel(group),
         ...(transliteration ? { transliteration } : {}),
+        ...(counterparts.length ? { counterparts } : {}),
         ...(relations.length ? { relations } : {}),
         ...(etymologyHtml !== undefined
           ? { etymologyText: cleanWiktionaryHtml(etymologyHtml) }
@@ -380,6 +556,34 @@ export function extractWiktionaryVariants(
     string,
     { word: string; relationship: 'spelling-variant' | 'redirect'; url: string }
   >()
+  const addJapaneseSpellings = (body: string) => {
+    for (const term of body.matchAll(
+      /<(span|i|b)\b([^>]*\blang=["']ja["'][^>]*)>([\s\S]*?)<\/\1>/gi
+    )) {
+      for (const target of scriptLink(term[3], 'ja', edition)) {
+        variants.set(target.word, {
+          word: target.word,
+          relationship: 'spelling-variant',
+          url: new URL(
+            `/wiki/${encodeURIComponent(target.word)}#Japanese`,
+            `https://${edition}.wiktionary.org`
+          ).toString(),
+        })
+      }
+    }
+  }
+  if (comparableHeading(languageHeading) === 'japanese') {
+    for (const table of fragment.matchAll(/<table\b([^>]*)>([\s\S]*?)<\/table>/gi)) {
+      if (hasClass(table[1], 'ja-see')) continue
+      const header = table[2].match(/<th\b[^>]*>([\s\S]*?)<\/th>/i)
+      if (!header || !/^Alternative spellings$/i.test(cleanWiktionaryHtml(header[1]))) continue
+      for (const cell of table[2]
+        .slice(header.index! + header[0].length)
+        .matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)) {
+        addJapaneseSpellings(cell[1])
+      }
+    }
+  }
   for (const table of fragment.matchAll(
     /<table\b[^>]*class=["'][^"']*\bja-see\b[^"']*["'][^>]*>([\s\S]*?)<\/table>/gi
   )) {
@@ -424,6 +628,13 @@ export function extractWiktionaryVariants(
       localHeading &&
       /^Alternative forms?$/i.test(cleanHeading(localHeading.line)) &&
       /\b(?:British|American|UK|US)\s+(?:English\s+)?(?:standard\s+)?spelling\b/i.test(plain)
+    if (
+      comparableHeading(languageHeading) === 'japanese' &&
+      localHeading &&
+      /^Alternative spellings?$/i.test(cleanHeading(localHeading.line))
+    ) {
+      addJapaneseSpellings(body)
+    }
     if (!statement && !listedRegionalVariant) continue
     // Standard MediaWiki form-of markup identifies the target, rather than a
     // regional label link or another word mentioned in an example.

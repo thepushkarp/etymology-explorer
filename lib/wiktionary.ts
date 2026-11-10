@@ -5,6 +5,7 @@ import {
   cleanWiktionaryHtml,
   extractWiktionaryEntryGroups,
   extractWiktionaryLanguageText,
+  extractWiktionaryRomanizations,
   extractWiktionaryVariants,
   type WiktionaryTocSection,
 } from './wiktionaryEntryGroups'
@@ -43,8 +44,10 @@ export function wiktionaryPageToc(page: WiktionaryPage): WiktionaryToc {
     .filter((section) => (section.hLevel ?? Number(section.level)) === 2)
     .map((section) => cleanWiktionaryHtml(section.line))
   const body = withoutHeadingText(page.html)
+  const otherScripts = extractWiktionaryRomanizations(page.html, page.sections, page.requestedWord)
   return {
     headings,
+    ...(otherScripts.length ? { otherScripts } : {}),
     nonemptyHeadings: headings.filter((heading) =>
       Boolean(extractWiktionaryLanguageText(body, page.sections, heading))
     ),
@@ -195,7 +198,8 @@ export function extractWiktionaryLanguage(
       page.sections,
       heading,
       pattern,
-      page.requestedWord
+      page.requestedWord,
+      { title: page.title, edition }
     ),
     variants,
     requestedWord: page.requestedWord,

@@ -1,4 +1,4 @@
-import type { WordEntry, StreamEvent } from '@/lib/types'
+import type { WordEntry, ScriptTarget, StreamEvent } from '@/lib/types'
 
 const STREAM_HEADERS = {
   'Content-Type': 'text/event-stream',
@@ -38,10 +38,17 @@ export function streamErrorResponse(
   message: string,
   errorType: StreamErrorEvent['errorType'] = 'unknown',
   headers?: HeadersInit,
-  suggestions?: string[]
+  suggestions?: string[],
+  otherScripts?: ScriptTarget[]
 ): Response {
   return new Response(
-    serializeEvent({ type: 'error', message, errorType, ...(suggestions ? { suggestions } : {}) }),
+    serializeEvent({
+      type: 'error',
+      message,
+      errorType,
+      ...(suggestions ? { suggestions } : {}),
+      ...(otherScripts ? { otherScripts } : {}),
+    }),
     {
       status: 200,
       headers: buildHeaders(headers),

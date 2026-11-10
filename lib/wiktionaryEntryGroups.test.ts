@@ -4,9 +4,130 @@ import japaneseFixtures from './__fixtures__/japanese/wiktionary.json'
 import {
   cleanWiktionaryHtml,
   extractWiktionaryEntryGroups,
+  extractWiktionaryRomanizations,
   extractWiktionaryVariants,
   type WiktionaryTocSection,
 } from './wiktionaryEntryGroups'
+
+test('counterparts require an exact scoped headword and a labelled, language-matched wiki target', () => {
+  const sections = [
+    { index: '1', line: 'Hindi', anchor: 'Hindi', hLevel: 2, number: '1' },
+    { index: '2', line: 'Etymology 1', anchor: 'E1', hLevel: 3, number: '1.1' },
+    { index: '3', line: 'Etymology 2', anchor: 'E2', hLevel: 3, number: '1.2' },
+    { index: '4', line: 'Sanskrit', anchor: 'Sanskrit', hLevel: 2, number: '2' },
+  ]
+  const line = (word: string, href: string, label = 'Urdu spelling') =>
+    `<p><strong class="headword" lang="hi">${word}</strong> (<i>plural</i> <b lang="hi"><a href="/wiki/किताबें#Hindi">किताबें</a></b>, <i>${label}</i> <b lang="ur"><a href="${href}">کِتاب</a></b>)</p>`
+  const html = `<h2 id="Hindi">Hindi</h2><h3 id="E1">Etymology 1</h3>${line('किताब', '/wiki/کتاب#Urdu')}<h3 id="E2">Etymology 2</h3>${line('किताबें', '/wiki/کتابیں#Urdu')}<h2 id="Sanskrit">Sanskrit</h2>${line('किताब', '/wiki/غلط#Urdu')}`
+  const groups = extractWiktionaryEntryGroups(html, sections, 'Hindi', /^Etymology/, 'किताब')
+  expect(groups.map((group) => group.counterparts)).toEqual([
+    [{ word: 'کتاب', language: 'ur' }],
+    undefined,
+  ])
+  for (const [href, label] of [
+    ['/wiki/کتاب#Hindi', 'Urdu spelling'],
+    ['https://example.test/wiki/کتاب#Urdu', 'Urdu spelling'],
+    ['/wiki/کتاب#Urdu', 'cognate'],
+    ['/wiki/%zz#Urdu', 'Urdu spelling'],
+  ]) {
+    const invalid = `<h2 id="Hindi">Hindi</h2>${line('किताब', href, label)}`
+    expect(
+      extractWiktionaryEntryGroups(invalid, sections.slice(0, 1), 'Hindi', /^Etymology/, 'किताब')[0]
+        .counterparts
+    ).toBeUndefined()
+  }
+})
+
+test('validated page identity binds one vocalized Urdu headword without folding arbitrary queries', () => {
+  const sections = [{ index: '1', line: 'Urdu', anchor: 'Urdu', hLevel: 2, number: '1' }]
+  const line =
+    '<p><strong class="headword" lang="ur">کِتاب</strong> (<i>Hindi spelling</i> <b lang="hi"><a href="/wiki/किताब#Hindi">किताब</a></b>)</p>'
+  const html = `<h2 id="Urdu">Urdu</h2>${line}`
+  expect(
+    extractWiktionaryEntryGroups(html, sections, 'Urdu', /^Etymology/, 'کتاب')[0].counterparts
+  ).toBeUndefined()
+  expect(
+    extractWiktionaryEntryGroups(html, sections, 'Urdu', /^Etymology/, 'کتاب', {
+      title: 'کتاب',
+      edition: 'en',
+    })[0].counterparts
+  ).toEqual([{ word: 'किताब', language: 'hi' }])
+  expect(
+    extractWiktionaryEntryGroups(html + line, sections, 'Urdu', /^Etymology/, 'کتاب', {
+      title: 'کتاب',
+      edition: 'en',
+    })[0].counterparts
+  ).toBeUndefined()
+})
+
+test('romanization links require the exact Latin headword and an explicit selected-language relation', () => {
+  const sections = [
+    { index: '1', line: 'Japanese', anchor: 'Japanese', hLevel: 2, number: '1' },
+    { index: '2', line: 'Romanization', anchor: 'Romanization', hLevel: 3, number: '1.1' },
+    { index: '3', line: 'English', anchor: 'English', hLevel: 2, number: '2' },
+  ]
+  const html =
+    '<h2 id="Japanese">Japanese</h2><h3 id="Romanization">Romanization</h3><p><strong class="Latn headword" lang="ja">tsunami</strong></p><ol><li><span class="form-of-definition use-with-mention"><a href="/wiki/romaji">Rōmaji</a> transcription of <span class="form-of-definition-link"><i lang="ja"><a href="/wiki/つなみ#Japanese">つなみ</a></i></span></span></li></ol><h2 id="English">English</h2>'
+  expect(extractWiktionaryRomanizations(html, sections, 'tsunami')).toEqual([
+    { word: 'つなみ', language: 'ja' },
+  ])
+  expect(extractWiktionaryRomanizations(html, sections, 'pani')).toEqual([])
+  expect(
+    extractWiktionaryRomanizations(
+      html.replace('transcription of', 'related to'),
+      sections,
+      'tsunami'
+    )
+  ).toEqual([])
+  expect(
+    extractWiktionaryRomanizations(
+      html.replace('lang="ja"><a', 'lang="hi"><a'),
+      sections,
+      'tsunami'
+    )
+  ).toEqual([])
+  expect(extractWiktionaryRomanizations(html, sections.slice(2), 'tsunami')).toEqual([])
+})
+
+test('Japanese alternative spellings stay within their source history', () => {
+  const sections = [
+    { index: '1', line: 'Japanese', anchor: 'Japanese', hLevel: 2, number: '1' },
+    { index: '2', line: 'Alternative spellings', anchor: 'Alternatives', hLevel: 3, number: '1.1' },
+    { index: '3', line: 'Etymology', anchor: 'Etymology', hLevel: 3, number: '1.2' },
+  ]
+  const html =
+    '<h2 id="Japanese">Japanese</h2><h3 id="Alternatives">Alternative spellings</h3><ul><li><span lang="ja"><a href="/wiki/つなみ#Japanese">つなみ</a></span></li></ul><h3 id="Etymology">Etymology</h3><p><strong class="headword" lang="ja">津波</strong></p>'
+  expect(
+    extractWiktionaryEntryGroups(html, sections, 'Japanese', /^Etymology/, '津波')[0].counterparts
+  ).toEqual([{ word: 'つなみ', language: 'ja' }])
+})
+
+test('Japanese publisher spelling tables retain only their labelled history targets', () => {
+  const sections = [
+    { index: '1', line: 'Japanese', anchor: 'Japanese', hLevel: 2, number: '1' },
+    { index: '2', line: 'Etymology 1', anchor: 'E1', hLevel: 3, number: '1.1' },
+    { index: '3', line: 'Etymology 2', anchor: 'E2', hLevel: 3, number: '1.2' },
+  ]
+  const table = (word: string) =>
+    `<table class="wikitable floatright"><tbody><tr><th style="font-weight:normal">Alternative spellings\n</th></tr><tr><td style="text-align:center;font-size:108%"><span class="Jpan" lang="ja" style="font-size:140%"><a href="/wiki/${word}#Japanese">${word}</a></span> <small><a href="/wiki/Appendix:Glossary#rare">rare</a></small></td></tr></tbody></table>`
+  const headword = '<p><strong class="headword" lang="ja">パン</strong></p>'
+  const unrelated =
+    '<table><tr><th>Related terms</th></tr><tr><td><span lang="ja"><a href="/wiki/食パン#Japanese">食パン</a></span></td></tr></table>'
+  const redirectDefinitions =
+    '<table class="ja-see"><tr><td><b>For pronunciation and definitions of パン – see the following entry.</b></td><td><span lang="ja"><a href="/wiki/ぱん#Japanese">ぱん</a></span></td></tr><tr><td><span lang="ja"><a href="/wiki/無関係#Japanese">無関係</a></span></td></tr></table>'
+  const html = `<h2 id="Japanese">Japanese</h2><h3 id="E1">Etymology 1</h3>${table('麵麭')}${headword}${unrelated}${redirectDefinitions}<h3 id="E2">Etymology 2</h3>${table('麺包')}${headword}`
+  expect(
+    extractWiktionaryEntryGroups(html, sections, 'Japanese', /^Etymology/, 'パン').map(
+      (group) => group.counterparts
+    )
+  ).toEqual([
+    [
+      { word: '麵麭', language: 'ja' },
+      { word: 'ぱん', language: 'ja' },
+    ],
+    [{ word: '麺包', language: 'ja' }],
+  ])
+})
 
 test('recorded Japanese formulas retain their subject and the source-tagged component languages', () => {
   const relations = (key: 'ja-denwa' | 'ja-consento' | 'ja-salaryman') => {

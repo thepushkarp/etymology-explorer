@@ -1,6 +1,6 @@
 import { revalidateTag } from 'next/cache'
 import { after } from 'next/server'
-import type { EtymologyResult, WordEntry } from './types'
+import type { EtymologyResult, ScriptTarget, WordEntry } from './types'
 import { EtymologyResultSchema, WordEntrySchema } from './schemas/etymology'
 import { CONFIG } from './config'
 import { getRedis } from './redis'
@@ -9,6 +9,7 @@ import { emitSecurityEvent } from './telemetry'
 import type { LanguageCode } from './languages'
 import { lexemeKey, SUPPORTED_LANGUAGE_CODES } from './languages'
 import { canonicalizeWord } from './orthography'
+import { normalizeScriptTargets } from './scriptTargets'
 
 /** Apply ±jitter to non-corpus TTLs to prevent synchronized cache stampedes. */
 function jitterTTL(ttl: number): number {
@@ -280,17 +281,27 @@ function audioKey(word: string, language: LanguageCode): string {
 /** Auto misses and explicit language hints have independent admission scopes. */
 function negativeKey(word: string, hint?: LanguageCode): string {
   const normalized = canonicalizeWord(word)
-  return hint ? `neg:v6:hint:${lexemeKey(hint, normalized)}` : `neg:v6:${normalized}`
+  return hint ? `neg:v7:hint:${lexemeKey(hint, normalized)}` : `neg:v7:${normalized}`
 }
 
-export async function getNegativeCache(word: string, hint?: LanguageCode): Promise<boolean> {
+export interface NegativeCacheMetadata {
+  otherScripts?: ScriptTarget[]
+}
+
+export async function getNegativeCache(
+  word: string,
+  hint?: LanguageCode
+): Promise<NegativeCacheMetadata | null> {
   const redis = getRedis()
-  if (!redis) return false
+  if (!redis) return null
   try {
-    return (await redis.exists(negativeKey(word, hint))) === 1
+    const value = await redis.get(negativeKey(word, hint))
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    const otherScripts = normalizeScriptTargets((value as Record<string, unknown>).otherScripts)
+    return otherScripts.length ? { otherScripts } : {}
   } catch (error) {
     console.error('[Cache] Negative cache get error:', safeError(error))
-    return false
+    return null
   }
 }
 
@@ -298,13 +309,17 @@ export async function getNegativeCache(word: string, hint?: LanguageCode): Promi
 export async function cacheNegative(
   word: string,
   errorType: string,
-  hint?: LanguageCode
+  hint?: LanguageCode,
+  offers?: ScriptTarget[]
 ): Promise<void> {
   const redis = getRedis()
   if (!redis || !CONFIG.cache.negativeCacheAdmitOnly.includes(errorType)) return
   try {
     if (await redis.exists(`${ENTRY_PREFIX}${canonicalizeWord(word)}`)) return
-    await redis.set(negativeKey(word, hint), '1', { ex: jitterTTL(CONFIG.negativeCacheTTL) })
+    const otherScripts = normalizeScriptTargets(offers)
+    await redis.set(negativeKey(word, hint), otherScripts.length ? { otherScripts } : {}, {
+      ex: jitterTTL(CONFIG.negativeCacheTTL),
+    })
   } catch (error) {
     console.error('[Cache] Negative cache set error:', safeError(error))
   }

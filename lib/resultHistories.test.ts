@@ -61,6 +61,14 @@ describe('historyEntry', () => {
     expect(historyEntry(result, 'money').transliteration).toBeUndefined()
   })
 
+  test('projects counterparts only for the selected history', () => {
+    const result = structuredClone(RESULT)
+    result.counterparts = [{ word: 'کتاب', language: 'ur' }]
+    result.histories[0].counterparts = result.counterparts
+    expect(historyEntry(result).counterparts).toEqual(result.counterparts)
+    expect(historyEntry(result, 'money').counterparts).toBeUndefined()
+  })
+
   test('falls back to the primary history for an unknown selection', () => {
     expect(historyEntry(RESULT, 'missing').definition).toBe('river')
   })

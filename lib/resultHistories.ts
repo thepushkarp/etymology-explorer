@@ -25,6 +25,7 @@ export function historyEntry(result: EtymologyResult, historyId?: string): Etymo
     stratum: history.stratum,
     pronunciation: history.pronunciation,
     transliteration: history.transliteration,
+    counterparts: history.counterparts,
     definition: history.definition,
     roots: history.roots,
     ancestryGraph: history.ancestryGraph,

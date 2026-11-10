@@ -130,10 +130,10 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
   - Merged spelling entries: `entry:v1:{word}`, 365-day physical TTL. `pipelineRevision` and `entryFreshDays` (90) determine staleness using the oldest retained `freshnessAt` (or original `tracedAt`); incomplete traces become stale after five minutes. Stale entries remain readable and require an explicit Retrace click. Successful retrace languages merge with durable previous results. `attemptedLanguages` records completed coverage so an unattempted manual hint can augment a fresh entry under the same word lock.
   - TTS audio: 1 year TTL
-  - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v6:{word}` with a distinct explicit-hint scope. Transient resolution failures and retraces with a durable entry never write absence markers.
+  - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v7:{word}` with a distinct explicit-hint scope. Source-attested romanization offers survive no-result responses. Transient resolution failures and retraces with a durable entry never write absence markers.
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v10:<source>:<word>` for English, `src:v10:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v10:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v10:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v11:<source>:<word>` for English, `src:v11:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v11:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v11:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
 
 - **`lib/redis.ts`** - Shared Redis client factory using KV_REST_API_URL and KV_REST_API_TOKEN (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 and Exa requires functioning accounting (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -208,6 +208,13 @@ URL. Crawler traffic must never cost LLM money:
   `ShareButton` shares `window.location.href` (already canonical). All in-app navigation —
   search submits, suggestions, related words, random word — routes to `/word/{word}`;
   rendered word links use `components/WordLink.tsx` (real `<a href>`, prefetch on hover/focus).
+
+Attested lineage forms link from their details panel when their language is supported. Source-only
+`counterparts` belong to each history and follow history selection. Explicit Wiktionary romanization
+sections supply `WordEntry.otherScripts` offers, including one bounded explicit written-form redirect;
+they remain links alongside independent entries for the original spelling and in no-result responses.
+Only clicking a link marks trace intent. Foreign spellings are never guessed from a gloss or a Latin
+spelling alone.
 
 ### Research Pipeline Limits
 

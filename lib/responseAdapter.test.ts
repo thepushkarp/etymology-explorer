@@ -85,6 +85,29 @@ describe('createResponseAdapter — error parity', () => {
     })
   })
 
+  test('script offers accompany suggestions in both transports and merge unary data', async () => {
+    const otherScripts = [{ word: 'नमस्ते', language: 'hi' as const }]
+    const options = {
+      status: 404,
+      errorType: 'typo' as const,
+      suggestions: ['namaste'],
+      otherScripts,
+      unaryData: { reason: 'absent' },
+    }
+    expect(await createResponseAdapter(false).error('No entry', options).json()).toEqual({
+      success: false,
+      error: 'No entry',
+      data: { reason: 'absent', suggestions: ['namaste'], otherScripts },
+    })
+    expect(await readSseEvent(createResponseAdapter(true).error('No entry', options))).toEqual({
+      type: 'error',
+      message: 'No entry',
+      errorType: 'typo',
+      suggestions: ['namaste'],
+      otherScripts,
+    })
+  })
+
   test('errorType defaults to unknown for streaming errors', async () => {
     const response = createResponseAdapter(true).error('Boom', { status: 500 })
     expect((await readSseEvent(response)).errorType).toBe('unknown')

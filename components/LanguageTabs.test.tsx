@@ -41,4 +41,33 @@ describe('LanguageTabs', () => {
     )
     expect(html).not.toContain('Irish')
   })
+
+  test('offers Japanese spellings without treating them as languages of a Latin query', () => {
+    const html = renderToStaticMarkup(
+      <LanguageTabs
+        word="tsunami"
+        languages={['en']}
+        language="en"
+        otherLanguages={[]}
+        otherScripts={[
+          { word: 'つなみ', language: 'ja' },
+          { word: '津波', language: 'ja' },
+        ]}
+      />
+    )
+    expect(html).toContain('In other scripts')
+    expect(html).toContain(`href="/word/ja/${encodeURIComponent('つなみ')}"`)
+    expect(html).toContain(`href="/word/ja/${encodeURIComponent('津波')}"`)
+    expect(html).toContain('lang="ja" dir="auto"')
+    expect(html).not.toContain('Japanese</a>')
+    expect(html).not.toContain('/word/ja/tsunami')
+  })
+
+  test('renders nothing for a single-language entry without source script offers', () => {
+    expect(
+      renderToStaticMarkup(
+        <LanguageTabs word="pani" languages={['en']} otherLanguages={[]} otherScripts={[]} />
+      )
+    ).toBe('')
+  })
 })

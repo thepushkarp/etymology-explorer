@@ -1,5 +1,5 @@
 import { after, NextRequest } from 'next/server'
-import type { EtymologyResult, StreamEvent, WordEntry } from '@/lib/types'
+import type { EtymologyResult, ScriptTarget, StreamEvent, WordEntry } from '@/lib/types'
 import { synthesizeFromResearch, getLlmUsageFromError } from '@/lib/llm'
 import { conductAgenticResearch, hasCredibleMainSource } from '@/lib/research'
 import { createLexemeResearchSession } from '@/lib/lexemeResearch'
@@ -25,13 +25,14 @@ import { emitSecurityEvent } from '@/lib/telemetry'
 import { createResponseAdapter } from '@/lib/responseAdapter'
 import { classifyApiError } from '@/lib/apiError'
 import { LANGUAGES, parseLanguageCode, type LanguageCode } from '@/lib/languages'
+import { normalizeScriptTargets } from '@/lib/scriptTargets'
 
 export const maxDuration = 300
 const IN_PROGRESS_MESSAGE = 'Request in progress, please retry in a few seconds.'
 type Outcome =
   | { kind: 'result'; result: WordEntry }
-  | { kind: 'no_sources' }
-  | { kind: 'holder_failed'; message: string }
+  | { kind: 'no_sources'; otherScripts?: ScriptTarget[] }
+  | { kind: 'holder_failed'; message: string; otherScripts?: ScriptTarget[] }
   | { kind: 'timeout' }
 
 /** Interrupt waiter sleeps immediately when their client disconnects. */
@@ -53,6 +54,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 export async function GET(request: NextRequest) {
   const shouldStream = request.nextUrl.searchParams.get('stream') === 'true'
   const respond = createResponseAdapter(shouldStream)
+  let knownOffers: ScriptTarget[] = []
   try {
     try {
       getEnv()
@@ -73,8 +75,9 @@ export async function GET(request: NextRequest) {
       return respond.error(getQuirkyMessage('nonsense'), { status: 400, errorType: 'nonsense' })
     }
     if (hint) after(() => incrLanguageCounter(hint, 'request'))
-    const noSources = () => {
+    const noSources = (otherScripts?: ScriptTarget[]) => {
       const suggestions = !hint || hint === 'en' ? getSuggestions(normalizedWord) : []
+      const offers = normalizeScriptTargets([...knownOffers, ...(otherScripts ?? [])])
       return respond.error(
         hint
           ? `No supported ${LANGUAGES[hint].englishName} entry was found for “${normalizedWord}”.`
@@ -83,11 +86,13 @@ export async function GET(request: NextRequest) {
           status: 404,
           errorType: suggestions.length ? 'typo' : 'nonsense',
           suggestions: suggestions.map((suggestion) => suggestion.word),
+          ...(offers.length ? { otherScripts: offers } : {}),
         }
       )
     }
     const cached = await getCachedEntry(normalizedWord)
     const oldEntry = cached?.entry
+    knownOffers = normalizeScriptTargets(oldEntry?.otherScripts)
     const refresh = request.nextUrl.searchParams.get('refresh') === '1' && cached?.stale === true
     const missingHint = !!hint && !oldEntry?.entries[hint]
     if (oldEntry && !refresh) {
@@ -100,14 +105,14 @@ export async function GET(request: NextRequest) {
         after(() => incrCounter('cache_hit'))
         return respond.result(oldEntry, { cached: true })
       }
-      if (hint && oldEntry.attemptedLanguages?.includes(hint)) return noSources()
+      if (hint && oldEntry.attemptedLanguages?.includes(hint)) return noSources(knownOffers)
     }
     // Automatic absence cannot exclude a specialist-only explicitly hinted entry.
     const [negative, costMode] = await Promise.all([
       getNegativeCache(normalizedWord, hint),
       getCostMode(),
     ])
-    if (negative && !refresh) return noSources()
+    if (negative && !refresh) return noSources(negative.otherScripts)
     if (costMode === 'cache_only') {
       emitSecurityEvent({
         type: 'budget_check',
@@ -144,8 +149,9 @@ export async function GET(request: NextRequest) {
         ) {
           return { kind: 'result', result: latest }
         }
+        knownOffers = normalizeScriptTargets(latest?.otherScripts ?? knownOffers)
         if (hint && !refresh && latest?.attemptedLanguages?.includes(hint)) {
-          return { kind: 'no_sources' }
+          return { kind: 'no_sources', otherScripts: knownOffers }
         }
         const budget = new SourceFetchBudget(CONFIG.maxEntryFetches)
         const session = createLexemeResearchSession({
@@ -154,7 +160,11 @@ export async function GET(request: NextRequest) {
           onProgress: emit,
         })
         const resolved = await resolveEntryLanguages(normalizedWord, session, hint)
-        const languages = latest && missingHint && !refresh && hint ? [hint] : resolved.languages
+        knownOffers = normalizeScriptTargets([...knownOffers, ...(resolved.otherScripts ?? [])])
+        const languages =
+          latest && missingHint && !refresh && hint
+            ? resolved.languages.filter((language) => language === hint)
+            : resolved.languages
         // Resolution shares the ceiling: 32 attempts plus 16 per extra language.
         budget.tighten(
           Math.min(
@@ -169,6 +179,7 @@ export async function GET(request: NextRequest) {
             (a, b) => LANGUAGES[a].priority - LANGUAGES[b].priority
           ),
           otherLanguages: resolved.otherLanguages,
+          ...(knownOffers.length ? { otherScripts: knownOffers } : {}),
         })
         // The shared wave resolves every primary before enrichment, while core
         // subscribers can start root extraction before optional sources finish.
@@ -178,6 +189,7 @@ export async function GET(request: NextRequest) {
         )
         void primaryLookup.catch(() => {})
         const attempted = new Set(latest?.attemptedLanguages ?? latest?.languages ?? [])
+        if (hint && !resolved.incomplete && !resolved.languages.includes(hint)) attempted.add(hint)
         const incompleteLanguages = new Set<LanguageCode>()
         const outcomes = await Promise.allSettled(
           languages.map(async (language): Promise<EtymologyResult | null> => {
@@ -253,8 +265,8 @@ export async function GET(request: NextRequest) {
         if (!successfulLanguages.size && resolved.incomplete)
           throw new Error('Language resolution incomplete; source availability is unknown')
         if (!successfulLanguages.size && !latest) {
-          await cacheNegative(normalizedWord, 'no_sources', hint)
-          return { kind: 'no_sources' }
+          await cacheNegative(normalizedWord, 'no_sources', hint, knownOffers)
+          return { kind: 'no_sources', otherScripts: knownOffers }
         }
         if (!successfulLanguages.size && refresh)
           throw new Error('Retrace found no supported sources; the saved entry remains available')
@@ -273,6 +285,7 @@ export async function GET(request: NextRequest) {
           otherLanguages: [
             ...new Set([...(latest?.otherLanguages ?? []), ...resolved.otherLanguages]),
           ],
+          ...(knownOffers.length ? { otherScripts: knownOffers } : {}),
           tracedAt: new Date(
             Math.max(Date.now(), (Date.parse(latest?.tracedAt ?? '') || 0) + 1)
           ).toISOString(),
@@ -299,12 +312,16 @@ export async function GET(request: NextRequest) {
           if (!attempted.has(hint)) {
             throw new Error(`Source research incomplete for ${hint}`)
           }
-          await cacheNegative(normalizedWord, 'no_sources', hint)
-          return { kind: 'no_sources' }
+          await cacheNegative(normalizedWord, 'no_sources', hint, knownOffers)
+          return { kind: 'no_sources', otherScripts: knownOffers }
         }
         return { kind: 'result', result }
       } catch (error) {
-        if (!request.signal.aborted) await markLockFailure(lockKey, classifyApiError(error).message)
+        if (!request.signal.aborted)
+          await markLockFailure(lockKey, {
+            message: classifyApiError(error).message,
+            ...(knownOffers.length ? { otherScripts: knownOffers } : {}),
+          })
         throw error
       } finally {
         stopHeartbeat()
@@ -323,13 +340,21 @@ export async function GET(request: NextRequest) {
         // Refresh waiters must observe a new generation of the durable entry.
         if (next && next.entry.tracedAt !== oldEntry?.tracedAt) {
           if (!hint || next.entry.entries[hint]) return { kind: 'result', result: next.entry }
-          if (next.entry.attemptedLanguages?.includes(hint)) return { kind: 'no_sources' }
+          if (next.entry.attemptedLanguages?.includes(hint))
+            return { kind: 'no_sources', otherScripts: next.entry.otherScripts }
         }
-        if (!refresh && (await getNegativeCache(normalizedWord, hint)))
-          return { kind: 'no_sources' }
+        const negative = !refresh ? await getNegativeCache(normalizedWord, hint) : null
+        if (negative) return { kind: 'no_sources', otherScripts: negative.otherScripts }
         const promotion = await attemptPromotion(lockKey)
         if (promotion.status === 'holder_failed')
-          return { kind: 'holder_failed', message: promotion.message }
+          return {
+            kind: 'holder_failed',
+            message: promotion.message,
+            otherScripts: normalizeScriptTargets([
+              ...knownOffers,
+              ...(promotion.otherScripts ?? []),
+            ]),
+          }
         if (promotion.status === 'promoted') return runHolder(promotion.token, emit)
         emit?.({ type: 'singleflight_wait', waitedMs: Date.now() - started })
       }
@@ -353,12 +378,17 @@ export async function GET(request: NextRequest) {
                 : await waitForHolder(emit)
             if (outcome.kind === 'result') emit({ type: 'result', data: outcome.result })
             else if (outcome.kind === 'no_sources') {
-              controller.enqueue(new Uint8Array(await (await noSources()).arrayBuffer()))
+              controller.enqueue(
+                new Uint8Array(await (await noSources(outcome.otherScripts)).arrayBuffer())
+              )
             } else
               emit({
                 type: 'error',
                 message: outcome.kind === 'holder_failed' ? outcome.message : IN_PROGRESS_MESSAGE,
                 errorType: outcome.kind === 'timeout' ? 'rate_limit' : 'unknown',
+                ...(outcome.kind === 'holder_failed' && outcome.otherScripts?.length
+                  ? { otherScripts: outcome.otherScripts }
+                  : {}),
               })
           } catch (error) {
             if (!request.signal.aborted) {
@@ -368,6 +398,7 @@ export async function GET(request: NextRequest) {
                 type: 'error',
                 message: classified.message,
                 errorType: classified.streamErrorType,
+                ...(knownOffers.length ? { otherScripts: knownOffers } : {}),
               })
             }
           } finally {
@@ -390,8 +421,12 @@ export async function GET(request: NextRequest) {
     }
     const outcome =
       acquisition.status === 'acquired' ? await runHolder(acquisition.token) : await waitForHolder()
-    if (outcome.kind === 'no_sources') return noSources()
-    if (outcome.kind === 'holder_failed') return respond.error(outcome.message, { status: 503 })
+    if (outcome.kind === 'no_sources') return noSources(outcome.otherScripts)
+    if (outcome.kind === 'holder_failed')
+      return respond.error(outcome.message, {
+        status: 503,
+        otherScripts: outcome.otherScripts,
+      })
     if (outcome.kind === 'timeout')
       return respond.error(IN_PROGRESS_MESSAGE, {
         status: 429,
@@ -410,6 +445,7 @@ export async function GET(request: NextRequest) {
     return respond.error(classified.message, {
       status: classified.status,
       errorType: classified.streamErrorType,
+      ...(knownOffers.length ? { otherScripts: knownOffers } : {}),
     })
   }
 }

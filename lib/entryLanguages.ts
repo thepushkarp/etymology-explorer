@@ -9,13 +9,21 @@ import {
 } from './languages'
 import type { LexemeResearchSession } from './lexemeResearch'
 import { canonicalizeWord } from './orthography'
-import { cacheSource, getCachedWiktionaryToc, type WiktionaryToc } from './sourceCache'
+import { normalizeScriptTargets } from './scriptTargets'
+import type { ScriptTarget } from './types'
+import {
+  cacheSource,
+  getCachedSource,
+  getCachedWiktionaryToc,
+  type WiktionaryToc,
+} from './sourceCache'
 import { extractWiktionaryLanguage, fetchWiktionaryPage, wiktionaryPageToc } from './wiktionary'
 import { comparableHeading } from './wiktionaryEntryGroups'
 
 export interface EntryLanguages {
   languages: LanguageCode[]
   otherLanguages: string[]
+  otherScripts?: ScriptTarget[]
   /** A failed page lookup cannot establish that its languages are absent. */
   incomplete?: boolean
 }
@@ -106,19 +114,51 @@ async function resolveLanguages(
   if (!languages.length && !hint && detectScripts(normalized).includes('Latin'))
     languages.push('en')
   // A manual hint admits specialist-only words, while tab order remains registry-defined.
-  if (hint && !languages.includes(hint)) languages.push(hint)
+  if (hint && candidates.includes(hint) && !languages.includes(hint)) languages.push(hint)
   languages.sort((a, b) => LANGUAGES[a].priority - LANGUAGES[b].priority)
   const supportedHeadings = new Set(
     SUPPORTED_LANGUAGE_CODES.map((code) =>
       comparableHeading(LANGUAGES[code].englishWiktionaryHeading)
     )
   )
+  const romanizations = detectScripts(normalized).includes('Latin')
+    ? normalizeScriptTargets(englishToc?.otherScripts).slice(0, CONFIG.maxRootsToExplore)
+    : []
+  // A romanization can point at a reading page whose explicit redirect names
+  // its written form. Inspect only that one hop, without researching its lexeme.
+  const writtenForms = await Promise.allSettled(
+    romanizations.map(async (target) => {
+      const heading = LANGUAGES[target.language].englishWiktionaryHeading
+      const key = `wiktionaryLanguage:${encodeURIComponent(heading)}` as const
+      let source = await getCachedSource(key, target.word)
+      if (!source) {
+        const page = await fetchWiktionaryPage(target.word, 'en', session.signal, {
+          fetchOnce: session.fetchOnce,
+        })
+        source = page && extractWiktionaryLanguage(page, heading)
+        if (source) await cacheSource(key, target.word, source)
+      }
+      const redirects = source?.variants?.filter((variant) => variant.relationship === 'redirect')
+      return redirects?.length === 1 ? [{ word: redirects[0].word, language: target.language }] : []
+    })
+  )
+  session.signal?.throwIfAborted()
+  const redirects: ScriptTarget[] = []
+  for (const outcome of writtenForms) {
+    if (outcome.status === 'fulfilled') redirects.push(...outcome.value)
+    else {
+      incomplete = true
+      console.error('[Research] Romanization redirect lookup failed:', safeError(outcome.reason))
+    }
+  }
+  const otherScripts = normalizeScriptTargets([...romanizations, ...redirects])
   return {
     languages,
     otherLanguages:
       englishToc?.headings.filter(
         (heading) => !supportedHeadings.has(comparableHeading(heading))
       ) ?? [],
+    ...(otherScripts.length ? { otherScripts } : {}),
     ...(incomplete ? { incomplete: true } : {}),
   }
 }

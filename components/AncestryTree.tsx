@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { AncestryGraph, AncestryStage } from '@/lib/types'
+import type { AncestryGraph, AncestryStage, ScriptTarget } from '@/lib/types'
 import { LANGUAGES, languageFromName, type LanguageCode } from '@/lib/languages'
 import { sourceLabel } from '@/lib/sourceLabels'
+import { isValidWord } from '@/lib/validation'
+import { WordLink } from './WordLink'
 import { FormText } from './etymology-card/StoryText'
 
 interface AncestryTreeProps {
@@ -91,6 +93,24 @@ const EMPTY_OFFSETS: Record<string, Offset> = {}
 /** Reconstructed and model-inferred forms are not directly attested in the sources. */
 function isAttested(stage?: AncestryStage): boolean {
   return !stage || (!stage.isReconstructed && stage.confidence !== 'low')
+}
+
+export function ancestryLinkTarget(stage: AncestryStage): ScriptTarget | undefined {
+  const language = languageFromName(stage.stage)
+  if (
+    !language ||
+    stage.isReconstructed ||
+    stage.confidence === 'low' ||
+    !(
+      stage.confidence === 'high' ||
+      stage.confidence === 'medium' ||
+      stage.evidence?.some((item) => item.snippet.trim())
+    ) ||
+    /^-|-$/.test(stage.form.trim()) ||
+    !isValidWord(stage.form)
+  )
+    return undefined
+  return { word: stage.form, language }
 }
 
 function provenance(stage?: AncestryStage): string | null {
@@ -519,6 +539,7 @@ export function AncestryTree({
 function TreeDetails({ node, onClose }: { node: TreeNode; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const line = provenance(node.source)
+  const target = node.kind === 'stage' && node.source ? ancestryLinkTarget(node.source) : undefined
 
   useEffect(() => {
     if (node.kind !== 'final') {
@@ -558,7 +579,13 @@ function TreeDetails({ node, onClose }: { node: TreeNode; onClose: () => void })
       </p>
       <p className="mt-1 font-serif text-lg">
         <em className={node.kind === 'final' ? 'not-italic' : ''}>
-          <FormText text={node.form} language={node.language} />
+          {target ? (
+            <WordLink word={target.word} language={target.language}>
+              <FormText text={node.form} language={node.language} />
+            </WordLink>
+          ) : (
+            <FormText text={node.form} language={node.language} />
+          )}
         </em>
         {node.note && <span className="text-muted"> — {node.note}</span>}
       </p>

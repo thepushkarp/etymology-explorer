@@ -7,7 +7,8 @@ import { canonicalizeWord } from './orthography'
 import { CONFIG } from './config'
 import { getRedis } from './redis'
 import { safeError } from './errorUtils'
-import type { SourceData, SourceRecord } from './types'
+import type { ScriptTarget, SourceData, SourceRecord } from './types'
+import { normalizeScriptTargets } from './scriptTargets'
 import { SOURCE_PROVIDER_IDS, SOURCE_FAMILY_IDS } from './sourceProviders'
 import type { LanguageCode } from './languages'
 
@@ -37,7 +38,7 @@ export type CacheableSource =
   | 'dicionarioAberto'
   | 'incelsWiki'
 
-const SOURCE_CACHE_PREFIX = 'src:v10:'
+const SOURCE_CACHE_PREFIX = 'src:v11:'
 
 function sourceKey(source: CacheableSource, word: string, language: LanguageCode): string {
   const normalized = canonicalizeWord(word)
@@ -147,6 +148,7 @@ export async function cacheSourceBundle(
 export interface WiktionaryToc {
   headings: string[]
   nonemptyHeadings: string[]
+  otherScripts?: ScriptTarget[]
 }
 
 function wiktionaryTocKey(word: string, edition: string): string {
@@ -166,7 +168,13 @@ export async function getCachedWiktionaryToc(
       Array.isArray(raw.nonemptyHeadings) &&
       raw.headings.every((heading) => typeof heading === 'string') &&
       raw.nonemptyHeadings.every((heading) => typeof heading === 'string')
-      ? (raw as WiktionaryToc)
+      ? {
+          headings: raw.headings,
+          nonemptyHeadings: raw.nonemptyHeadings,
+          ...(raw.otherScripts !== undefined
+            ? { otherScripts: normalizeScriptTargets(raw.otherScripts) }
+            : {}),
+        }
       : null
   } catch (error) {
     console.error('[SourceCache] Wiktionary TOC read failed:', safeError(error))

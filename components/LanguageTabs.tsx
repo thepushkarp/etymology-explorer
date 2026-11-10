@@ -1,12 +1,15 @@
 'use client'
 
 import { WordLink } from '@/components/WordLink'
+import { ScriptLinks } from '@/components/ScriptLinks'
 import { LANGUAGES, type LanguageCode } from '@/lib/languages'
+import type { ScriptTarget } from '@/lib/types'
 
 interface LanguageTabsProps {
   word: string
   languages: LanguageCode[]
   otherLanguages: string[]
+  otherScripts?: ScriptTarget[]
   language?: LanguageCode
   onSelect?: (language: LanguageCode) => void
 }
@@ -16,6 +19,7 @@ export function LanguageTabs({
   word,
   languages,
   otherLanguages,
+  otherScripts,
   language,
   onSelect,
 }: LanguageTabsProps) {
@@ -23,6 +27,7 @@ export function LanguageTabs({
   if (
     languages.length < 2 &&
     otherLanguages.length === 0 &&
+    !otherScripts?.length &&
     (!language || languages.includes(language))
   )
     return null
@@ -62,6 +67,7 @@ export function LanguageTabs({
           )
         })}
       </nav>
+      <ScriptLinks targets={otherScripts} />
       {otherLanguages.length > 0 && (
         <p className="mt-3 text-sm text-muted">
           Also a word in {otherLanguages.slice(0, 8).join(', ')}

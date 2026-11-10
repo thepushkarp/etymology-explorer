@@ -352,6 +352,42 @@ describe('fallback', () => {
   })
 })
 
+describe('script target metadata', () => {
+  test('resolution offers survive terminal errors and fallback errors then reset on a new search', () => {
+    const otherScripts = [{ word: 'नमस्ते', language: 'hi' as const }]
+    const resolved = run(
+      events({ type: 'languages_resolved', languages: ['en'], otherLanguages: [], otherScripts })
+    )
+    const failed = run(
+      events({ type: 'error', message: 'No entry', errorType: 'nonsense' }),
+      resolved
+    )
+    expect(failed.otherScripts).toEqual(otherScripts)
+    expect(failed.error?.otherScripts).toEqual(otherScripts)
+    const fallback = run(
+      [
+        {
+          type: 'fallback_error',
+          error: { type: 'network-error', message: 'Failed', suggestions: [] },
+        },
+      ],
+      resolved
+    )
+    expect(fallback.error?.otherScripts).toEqual(otherScripts)
+    expect(run([{ type: 'search_started' }], failed).otherScripts).toBeUndefined()
+  })
+
+  test('both result transports retain script offers', () => {
+    const otherScripts = [{ word: 'नमस्ते', language: 'hi' as const }]
+    for (const action of [
+      { type: 'stream_event', event: { type: 'result', data: { ...RESULT, otherScripts } } },
+      { type: 'fallback_success', result: { ...RESULT, otherScripts } },
+    ] as StreamAction[]) {
+      expect(run([action]).otherScripts).toEqual(otherScripts)
+    }
+  })
+})
+
 describe('toPartialResult', () => {
   test('falls back to the searched word and empty defaults before sections arrive', () => {
     const partial = toPartialResult('perfidious', {})

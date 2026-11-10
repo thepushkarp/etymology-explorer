@@ -221,6 +221,17 @@ test('history and entry readings are copied from their exact source contexts', (
   expect(finalized.transliteration).toBe('source reading')
   expect(finalized.histories[0].transliteration).toBe('source reading')
 })
+test('counterparts come only from the matching source context', () => {
+  const { result, context } = scopedFixture()
+  result.counterparts = [{ word: 'invented', language: 'en' }]
+  result.histories[0].counterparts = result.counterparts
+  expect(finalizeResult(result, context, 'standard').counterparts).toBeUndefined()
+  expect(result.histories[0].counterparts).toBeUndefined()
+  context.entryContexts![0].counterparts = [{ word: 'کتاب', language: 'ur' }]
+  const finalized = finalizeResult(result, context, 'standard')
+  expect(finalized.counterparts).toEqual([{ word: 'کتاب', language: 'ur' }])
+  expect(finalized.histories[0].counterparts).toEqual(finalized.counterparts)
+})
 test('a senses-only fallback cannot publish an ancestry graph', () => {
   const { result, context } = scopedFixture()
   result.histories[0].entryKind = 'unresolved'

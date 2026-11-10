@@ -102,6 +102,11 @@ export function WordTraceExperience({
           ? progress.otherLanguages
           : (initialEntry?.otherLanguages ?? [])
       }
+      otherScripts={
+        progress.status === 'error'
+          ? undefined
+          : (progress.result?.otherScripts ?? progress.otherScripts ?? initialEntry?.otherScripts)
+      }
       language={selected}
       onSelect={started && progress.status !== 'error' ? setSelectedLanguage : undefined}
     />

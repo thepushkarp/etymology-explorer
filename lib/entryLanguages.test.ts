@@ -4,7 +4,7 @@ import { createLexemeResearchSession } from './lexemeResearch'
 import { fetchSelectedWiktionaryLanguage, fetchWiktionaryPage } from './wiktionary'
 import { SourceFetchBudget } from './sourceFetchBudget'
 import * as sourceCache from './sourceCache'
-import type { StreamEvent } from './types'
+import type { ScriptTarget, SourceData, StreamEvent } from './types'
 
 const originalFetch = globalThis.fetch
 afterEach(() => {
@@ -235,4 +235,90 @@ test('Indic resolution reuses native Hindi and English pages without merging lan
     'en.wiktionary.org',
     'hi.wiktionary.org',
   ])
+})
+
+function romanizationPage() {
+  const response = page(['English', 'Japanese'], 'tsunami')
+  response.parse.text =
+    '<h2 id="language-0">English</h2><p>A large sea wave.</p>' +
+    '<h2 id="language-1">Japanese</h2><h3 id="Romanization">Romanization</h3>' +
+    '<p><span class="headword-line"><strong class="Latn headword" lang="ja">tsunami</strong></span></p>' +
+    '<ol><li><span class="form-of-definition">Rōmaji transcription of ' +
+    '<span class="form-of-definition-link"><i lang="ja"><a href="/wiki/つなみ#Japanese">つなみ</a></i></span></span></li></ol>'
+  response.parse.tocdata.sections.push({
+    line: 'Romanization',
+    index: '3',
+    number: '2.1',
+    anchor: 'Romanization',
+    hLevel: 3,
+  })
+  return response
+}
+
+test('romanization offers retain English, follow one explicit written-form redirect, and reuse warm sources', async () => {
+  const expected: ScriptTarget[] = [
+    { word: 'つなみ', language: 'ja' },
+    { word: '津波', language: 'ja' },
+  ]
+  const tocs = new Map<string, sourceCache.WiktionaryToc>()
+  const sources = new Map<string, SourceData>()
+  const spies = [
+    spyOn(sourceCache, 'getCachedWiktionaryToc').mockImplementation(
+      async (word, edition = 'en') => tocs.get(`${edition}:${word}`) ?? null
+    ),
+    spyOn(sourceCache, 'cacheWiktionaryToc').mockImplementation(async (word, edition, toc) => {
+      tocs.set(`${edition}:${word}`, toc)
+    }),
+    spyOn(sourceCache, 'getCachedSource').mockImplementation(
+      async (source, word) => sources.get(`${source}:${word}`) ?? null
+    ),
+    spyOn(sourceCache, 'cacheSource').mockImplementation(async (source, word, data) => {
+      sources.set(`${source}:${word}`, data)
+    }),
+  ]
+  try {
+    const requests = serve((url) => {
+      if (url.hostname !== 'en.wiktionary.org') return new Response('', { status: 404 })
+      if (url.searchParams.get('page') === 'tsunami') return Response.json(romanizationPage())
+      const response = page(['Japanese'], 'つなみ')
+      response.parse.text =
+        '<h2 id="language-0">Japanese</h2><table class="wikitable ja-see"><tr><td>' +
+        '<b>For pronunciation and definitions of つなみ – see the following entry.</b></td></tr>' +
+        '<tr><td><a href="/wiki/津波#Japanese">津波</a></td><td>' +
+        '<a href="/wiki/海嘯#Japanese">海嘯</a> in another definition</td></tr></table>'
+      return Response.json(response)
+    })
+    const shared = session()
+    expect(await resolveEntryLanguages('tsunami', shared)).toEqual({
+      languages: ['en'],
+      otherLanguages: [],
+      otherScripts: expected,
+    })
+    expect(requests.filter((url) => url.searchParams.get('page') === 'つなみ')).toHaveLength(1)
+    expect(requests.some((url) => url.searchParams.get('page') === '津波')).toBe(false)
+    const before = requests.length
+    const warm = session()
+    const hinted = await resolveEntryLanguages('tsunami', warm, 'ja')
+    expect(hinted.languages).toEqual(['en'])
+    expect(hinted.otherScripts).toEqual(expected)
+    expect(requests).toHaveLength(before)
+    expect(warm.getBudget().attempts).toBe(0)
+  } finally {
+    for (const spy of spies) spy.mockRestore()
+  }
+})
+
+test('an unavailable romanization redirect keeps the English entry and original offer', async () => {
+  serve((url) => {
+    if (url.hostname !== 'en.wiktionary.org') return new Response('', { status: 404 })
+    return url.searchParams.get('page') === 'tsunami'
+      ? Response.json(romanizationPage())
+      : new Response('', { status: 503 })
+  })
+  expect(await resolveEntryLanguages('tsunami', session())).toEqual({
+    languages: ['en'],
+    otherLanguages: [],
+    otherScripts: [{ word: 'つなみ', language: 'ja' }],
+    incomplete: true,
+  })
 })

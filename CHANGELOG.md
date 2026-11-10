@@ -10,12 +10,14 @@ plain-text bullet under a `###` group. `Unreleased` stays out of the dialog.
 
 ### Added
 
+- Follow attested lineage forms, source-listed spelling counterparts, and romanization links across supported languages.
 - Explore Japanese words with source-backed histories, word-origin labels, Japanese typography, and credited JMdict lexical context.
 - Explore Hindi, Urdu, and Sanskrit words in their native scripts, with source-backed transliterations, language tabs, and curated discovery words.
 - Hear Hindi and Urdu pronunciations, with right-to-left Urdu text and fonts for Devanagari and Urdu.
 
 ### Changed
 
+- Pronunciation playback follows language changes without stale audio resetting the selected entry.
 - Auto discovers supported languages for a spelling and traces their histories together with language tabs.
 - Saved entries remain discoverable across pipeline updates, with an explicit retrace action for older research.
 - Autocomplete includes Wiktionary headwords beyond the vocabulary list.

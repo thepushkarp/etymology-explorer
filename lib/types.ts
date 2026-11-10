@@ -9,6 +9,12 @@ export interface LexemeRef {
   language: string
 }
 
+/** A source-identified spelling that can open a supported-language word page. */
+export interface ScriptTarget {
+  word: string
+  language: LanguageCode
+}
+
 export type LexicalRelation =
   | 'inherited_from'
   | 'borrowed_from'
@@ -250,6 +256,7 @@ export interface UsageExample {
 
 /** The entry fields each lexical history carries; the result projects its primary history. */
 interface HistoryEntryFields {
+  counterparts?: ScriptTarget[]
   stratum?: EtymologyStratum
   transliteration?: string
   pronunciation: string // IPA, e.g., "/pərˈfɪdiəs/"
@@ -298,6 +305,7 @@ export interface WordEntry {
   languages: LanguageCode[]
   entries: Partial<Record<LanguageCode, EtymologyResult>>
   otherLanguages: string[]
+  otherScripts?: ScriptTarget[]
   tracedAt: string
   /** Oldest retained research timestamp; tracedAt identifies the merged generation. */
   freshnessAt?: string
@@ -376,6 +384,7 @@ export type SourceFetchOutcome =
   | { status: Exclude<SourceOutcome['status'], 'found'>; reason?: string; httpStatus?: number }
 
 export interface ResearchEntryContext {
+  counterparts?: ScriptTarget[]
   etymologyText?: string
   relations?: SourceLexicalRelation[]
   transliteration?: string
@@ -511,7 +520,12 @@ export type StreamEvent = { language?: LanguageCode } & (
       highConfidence: number
       mediumConfidence: number
     }
-  | { type: 'languages_resolved'; languages: LanguageCode[]; otherLanguages: string[] }
+  | {
+      type: 'languages_resolved'
+      languages: LanguageCode[]
+      otherLanguages: string[]
+      otherScripts?: ScriptTarget[]
+    }
   | { type: 'language_failed'; language: LanguageCode; message: string }
   | { type: 'result'; data: WordEntry }
   | {
@@ -519,5 +533,6 @@ export type StreamEvent = { language?: LanguageCode } & (
       message: string
       errorType: 'rate_limit' | 'budget' | 'network' | 'nonsense' | 'typo' | 'unknown'
       suggestions?: string[]
+      otherScripts?: ScriptTarget[]
     }
 )

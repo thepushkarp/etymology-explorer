@@ -46,4 +46,38 @@ describe('EntryView merged entries', () => {
     expect(incomplete).toContain('French entry is temporarily unavailable')
     expect(incomplete).not.toContain('No supported French entry was found')
   })
+
+  test('retains script offers alongside a successful English entry', () => {
+    const result = etymologyResult({ word: 'tsunami', definition: 'A large sea wave.' })
+    const html = renderToStaticMarkup(
+      <EntryView
+        entry={{
+          ...entry,
+          word: 'tsunami',
+          languages: ['en'],
+          entries: { en: result },
+          otherScripts: [{ word: '津波', language: 'ja' }],
+        }}
+      />
+    )
+    expect(html).toContain('A large sea wave.')
+    expect(html).toContain('In other scripts')
+    expect(html).toContain(`href="/word/ja/${encodeURIComponent('津波')}"`)
+  })
+
+  test('shows only the selected history’s source-attested counterpart', () => {
+    const result = etymologyResult({ word: 'किताब', language: 'hi', definition: 'A book.' })
+    result.histories[0].counterparts = [{ word: 'کتاب', language: 'ur' }]
+    result.histories.push({
+      ...result.histories[0],
+      id: 'unselected-history',
+      counterparts: [{ word: '書', language: 'ja' }],
+    })
+    const html = renderToStaticMarkup(
+      <EntryView entry={{ ...entry, word: 'किताब', languages: ['hi'], entries: { hi: result } }} />
+    )
+    expect(html).toContain(`href="/word/ur/${encodeURIComponent('کتاب')}"`)
+    expect(html).toContain('lang="ur" dir="auto"')
+    expect(html).not.toContain(encodeURIComponent('書'))
+  })
 })

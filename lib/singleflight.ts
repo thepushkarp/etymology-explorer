@@ -20,6 +20,8 @@ import { randomUUID } from 'crypto'
 import { getRedis } from './redis'
 import { CONFIG } from './config'
 import { safeError } from './errorUtils'
+import type { ScriptTarget } from './types'
+import { normalizeScriptTargets } from './scriptTargets'
 
 /** Minimal Redis surface used by this module (allows in-memory test doubles). */
 export interface SingleflightRedis {
@@ -136,6 +138,11 @@ function failureKey(lockKey: string): string {
   return `${lockKey}:failed`
 }
 
+export interface LockFailure {
+  message: string
+  otherScripts?: ScriptTarget[]
+}
+
 /**
  * Record that the holder exited with an error (as opposed to crashing).
  * Written BEFORE the lock is released so waiters can distinguish
@@ -144,31 +151,59 @@ function failureKey(lockKey: string): string {
  */
 export async function markLockFailure(
   lockKey: string,
-  message: string,
+  failure: string | LockFailure,
   client: SingleflightRedis | null = getRedis()
 ): Promise<void> {
   if (!client) return
 
   try {
-    await client.set(failureKey(lockKey), message, {
-      nx: true,
-      ex: CONFIG.singleflight.failureMarkerTTLSeconds,
-    })
+    const message = typeof failure === 'string' ? failure : failure.message
+    const otherScripts = normalizeScriptTargets(
+      typeof failure === 'string' ? [] : failure.otherScripts
+    )
+    await client.set(
+      failureKey(lockKey),
+      otherScripts.length ? JSON.stringify({ message, otherScripts }) : message,
+      {
+        nx: true,
+        ex: CONFIG.singleflight.failureMarkerTTLSeconds,
+      }
+    )
   } catch (error) {
     console.error('[Singleflight] Failure marker write failed:', safeError(error))
   }
 }
 
-/** Read the holder-failure message, or null if the holder didn't fail. */
+/** Read validated holder-failure metadata, preserving the original message. */
 export async function getLockFailure(
   lockKey: string,
   client: SingleflightRedis | null = getRedis()
-): Promise<string | null> {
+): Promise<LockFailure | null> {
   if (!client) return null
 
   try {
-    const value = await client.get(failureKey(lockKey))
-    return typeof value === 'string' && value.length > 0 ? value : null
+    let value = await client.get(failureKey(lockKey))
+    if (typeof value === 'string') {
+      if (!value.length) return null
+      if (!value.startsWith('{')) return { message: value }
+      try {
+        value = JSON.parse(value)
+      } catch {
+        return { message: value as string }
+      }
+    }
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !('message' in value) ||
+      typeof value.message !== 'string' ||
+      !value.message.length
+    )
+      return null
+    const otherScripts = normalizeScriptTargets(
+      'otherScripts' in value ? value.otherScripts : undefined
+    )
+    return { message: value.message, ...(otherScripts.length ? { otherScripts } : {}) }
   } catch {
     return null
   }
@@ -176,7 +211,7 @@ export async function getLockFailure(
 
 export type PromotionAttempt =
   | { status: 'promoted'; token: string } // true crash — caller must run the pipeline
-  | { status: 'holder_failed'; message: string } // holder errored — surface, don't re-run
+  | ({ status: 'holder_failed' } & LockFailure) // holder errored — surface, don't re-run
   | { status: 'held' } // holder still working (or another waiter won the race)
 
 /**
@@ -192,7 +227,7 @@ export async function attemptPromotion(
   client: SingleflightRedis | null = getRedis()
 ): Promise<PromotionAttempt> {
   const failure = await getLockFailure(lockKey, client)
-  if (failure !== null) return { status: 'holder_failed', message: failure }
+  if (failure !== null) return { status: 'holder_failed', ...failure }
 
   if (await isLockHeld(lockKey, client)) return { status: 'held' }
 
@@ -202,7 +237,7 @@ export async function attemptPromotion(
   const lateFailure = await getLockFailure(lockKey, client)
   if (lateFailure !== null) {
     await releaseLock(lockKey, acquisition.token, client)
-    return { status: 'holder_failed', message: lateFailure }
+    return { status: 'holder_failed', ...lateFailure }
   }
 
   return { status: 'promoted', token: acquisition.token }

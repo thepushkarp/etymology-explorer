@@ -14,9 +14,11 @@ import type {
   WordEntry,
   StreamEvent,
   SourceOutcome,
+  ScriptTarget,
 } from './types'
 import type { LanguageCode } from './languages'
 import { StreamingUiError, toStreamingUiError } from './streamingError'
+import { normalizeScriptTargets } from './scriptTargets'
 import { sourceKey, sourceLabel } from './sourceLabels'
 
 export type StreamStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -94,6 +96,7 @@ export interface LanguageStreamState {
 export interface StreamState {
   languages: LanguageCode[]
   otherLanguages: string[]
+  otherScripts?: ScriptTarget[]
   byLanguage: Partial<Record<LanguageCode, LanguageStreamState>>
   status: StreamStatus
   phase: StreamPhase
@@ -147,7 +150,12 @@ export const initialStreamState: StreamState = {
 
 function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
   if (event.type === 'languages_resolved') {
-    return { ...state, languages: event.languages, otherLanguages: event.otherLanguages }
+    return {
+      ...state,
+      languages: event.languages,
+      otherLanguages: event.otherLanguages,
+      otherScripts: normalizeScriptTargets(event.otherScripts),
+    }
   }
   if (event.type === 'language_failed') {
     const slice = state.byLanguage[event.language] ?? {
@@ -265,10 +273,20 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
         error: null,
         languages: [...new Set([...state.languages, ...event.data.languages])],
         otherLanguages: event.data.otherLanguages,
+        otherScripts: normalizeScriptTargets(event.data.otherScripts ?? state.otherScripts),
       }
 
     case 'error':
-      return { ...state, status: 'error', phase: 'error', error: toStreamingUiError(event) }
+      return {
+        ...state,
+        status: 'error',
+        phase: 'error',
+        error: toStreamingUiError({
+          ...event,
+          otherScripts: event.otherScripts ?? state.otherScripts,
+        }),
+        otherScripts: normalizeScriptTargets(event.otherScripts ?? state.otherScripts),
+      }
   }
 }
 
@@ -293,9 +311,16 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
         error: null,
         languages: [...new Set([...state.languages, ...action.result.languages])],
         otherLanguages: action.result.otherLanguages,
+        otherScripts: normalizeScriptTargets(action.result.otherScripts ?? state.otherScripts),
       }
 
     case 'fallback_error':
-      return { ...state, status: 'error', phase: 'error', error: action.error }
+      return {
+        ...state,
+        status: 'error',
+        phase: 'error',
+        error: { ...action.error, otherScripts: action.error.otherScripts ?? state.otherScripts },
+        otherScripts: normalizeScriptTargets(action.error.otherScripts ?? state.otherScripts),
+      }
   }
 }

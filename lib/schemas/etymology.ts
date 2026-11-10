@@ -4,8 +4,16 @@
  */
 
 import { z } from 'zod'
-import { ETYMOLOGY_STRATA, SUPPORTED_LANGUAGE_CODES } from '../languages'
+import { candidateLanguages, ETYMOLOGY_STRATA, SUPPORTED_LANGUAGE_CODES } from '../languages'
 import { SOURCE_FAMILY_IDS, SOURCE_PROVIDER_IDS } from '../sourceProviders'
+import { canonicalizeWord, isValidWord } from '../validation'
+
+const scriptTarget = z
+  .object({
+    word: z.string().refine((word) => isValidWord(word) && canonicalizeWord(word) === word),
+    language: z.enum(SUPPORTED_LANGUAGE_CODES),
+  })
+  .refine((target) => candidateLanguages(target.word).includes(target.language))
 
 const root = z.object({
   root: z.string(),
@@ -57,6 +65,7 @@ const example = z.object({
 })
 
 const entryFields = {
+  counterparts: z.array(scriptTarget).optional(),
   stratum: z.enum(ETYMOLOGY_STRATA).optional(),
   transliteration: z.string().optional(),
   pronunciation: z.string(),
@@ -191,6 +200,7 @@ export const WordEntrySchema = z
     languages: z.array(z.enum(SUPPORTED_LANGUAGE_CODES)).min(1),
     entries: z.partialRecord(z.enum(SUPPORTED_LANGUAGE_CODES), EtymologyResultSchema),
     otherLanguages: z.array(z.string()),
+    otherScripts: z.array(scriptTarget).optional(),
     tracedAt: z.iso.datetime(),
     freshnessAt: z.iso.datetime().optional(),
     revision: z.number().int().nonnegative(),

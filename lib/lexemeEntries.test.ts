@@ -131,6 +131,24 @@ describe('deriveEntryContexts', () => {
     ])
   })
 
+  test('a target mention cannot bind group counterparts to split histories', () => {
+    const source = structuredClone(wiktionary)
+    source.entryGroups![0].counterparts = [{ word: 'کتاب', language: 'ur' }]
+    source.entryGroups![0].sections[1].text += ' Unrelated donor کتاب.'
+    source.entryGroups![0].text += '\nUnrelated donor کتاب.'
+    source.entryGroups!.push({
+      ...source.entryGroups![0],
+      anchor: 'other',
+      counterparts: undefined,
+    })
+    const contexts = deriveEntryContexts('vite', 'it', 'wiktionaryNative', source, wikidata)
+    expect(contexts).toHaveLength(4)
+    expect(contexts.every((context) => !context.counterparts)).toBe(true)
+    const singletons = deriveEntryContexts('vite', 'it', 'wiktionaryNative', source, null)
+    expect(singletons[0].counterparts).toEqual([{ word: 'کتاب', language: 'ur' }])
+    expect(singletons[1].counterparts).toBeUndefined()
+  })
+
   test('does not classify a form from localized heading text alone', () => {
     const contexts = deriveEntryContexts('vite', 'it', 'wiktionaryNative', wiktionary, null)
     expect(contexts).toHaveLength(1)

@@ -233,19 +233,49 @@ describe('independent negative and audio caches', () => {
     await cacheNegative(' NICE ', 'no_sources')
     await cacheNegative('nice', 'no_sources', 'fr')
     expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
-      'neg:v6:nice',
-      'neg:v6:hint:fr:nice',
+      'neg:v7:nice',
+      'neg:v7:hint:fr:nice',
     ])
     await getNegativeCache(' NICE ')
     await getNegativeCache('nice', 'en')
-    expect(currentRedis.exists).toHaveBeenCalledWith('neg:v6:nice')
-    expect(currentRedis.exists).toHaveBeenCalledWith('neg:v6:hint:en:nice')
+    expect(currentRedis.get).toHaveBeenCalledWith('neg:v7:nice')
+    expect(currentRedis.get).toHaveBeenCalledWith('neg:v7:hint:en:nice')
     currentRedis = fakeRedis({ exists: mock(async () => 1) })
     await cacheNegative('nice', 'no_sources')
     expect(currentRedis.set).not.toHaveBeenCalled()
     currentRedis = fakeRedis()
     await cacheNegative('nice', 'timeout')
     expect(currentRedis.set).not.toHaveBeenCalled()
+  })
+
+  test('negative metadata preserves canonical script targets and rejects malformed cache values', async () => {
+    const otherScripts = [{ word: ' नमस्ते ', language: 'hi' as const }]
+    currentRedis = fakeRedis()
+    await cacheNegative('namaste', 'no_sources', undefined, otherScripts)
+    expect(currentRedis.set).toHaveBeenCalledWith(
+      'neg:v7:namaste',
+      { otherScripts: [{ word: 'नमस्ते', language: 'hi' }] },
+      { ex: expect.any(Number) }
+    )
+    currentRedis = fakeRedis({
+      get: mock(async () => ({
+        otherScripts: [
+          ...otherScripts,
+          { word: 'नमस्ते', language: 'hi' },
+          { word: 'namaste', language: 'hi' },
+          { word: 'a\nb', language: 'en' },
+        ],
+      })),
+    })
+    expect(await getNegativeCache('namaste')).toEqual({
+      otherScripts: [{ word: 'नमस्ते', language: 'hi' }],
+    })
+    for (const value of ['1', true, [], null]) {
+      currentRedis = fakeRedis({ get: mock(async () => value) })
+      expect(await getNegativeCache('namaste')).toBeNull()
+    }
+    currentRedis = fakeRedis({ get: mock(async () => ({})) })
+    expect(await getNegativeCache('namaste')).toEqual({})
   })
 
   test('retains established audio namespaces and language isolation', async () => {

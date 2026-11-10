@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { EntrySelector } from '@/components/etymology-card/EntrySelector'
 import { LanguageTabs } from '@/components/LanguageTabs'
+import { ScriptLinks } from '@/components/ScriptLinks'
 import { ShareButton } from '@/components/ShareButton'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
@@ -49,6 +50,7 @@ export function EntryView({
       word={displayed.word}
       languages={progress.result ? progress.languages : displayed.languages}
       otherLanguages={displayed.otherLanguages}
+      otherScripts={displayed.otherScripts}
       language={selected}
       onSelect={onSelectLanguage ?? (progress.result ? setRefreshedLanguage : undefined)}
     />
@@ -142,6 +144,7 @@ function FinishedLanguage({
             activeEntryId={historyId}
             onChange={setHistoryId}
           />
+          <ScriptLinks targets={display.counterparts} />
         </>
       }
     />

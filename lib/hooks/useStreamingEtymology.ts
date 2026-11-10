@@ -5,6 +5,7 @@ import { canonicalizeWord, isValidWord } from '@/lib/validation'
 import { StreamEvent } from '@/lib/types'
 import { initialStreamState, streamReducer } from '@/lib/streamReducer'
 import type { LanguageCode } from '@/lib/languages'
+import { normalizeScriptTargets } from '@/lib/scriptTargets'
 import { recordRecentSearchIntent } from '@/lib/recentSearchClient'
 
 const MAX_RETRIES = 2
@@ -36,12 +37,14 @@ export function useStreamingEtymology(defaultHint?: LanguageCode) {
 
       if (!response.ok || !payload.success || !payload.data) {
         completedRequestRef.current = requestId
+        const otherScripts = normalizeScriptTargets(payload.data?.otherScripts)
         dispatch({
           type: 'fallback_error',
           error: {
             type: 'network-error',
             message: payload.error ?? 'Search failed',
             suggestions: [],
+            ...(otherScripts.length ? { otherScripts } : {}),
           },
         })
         return

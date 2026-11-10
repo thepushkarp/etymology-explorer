@@ -138,6 +138,7 @@ export function deriveEntryContexts(
   const contexts: ResearchEntryContext[] = []
 
   for (const group of groups) {
+    const groupContextStart = contexts.length
     const formSections = identity.formTargets.flatMap((target) => {
       const matches = group.sections.filter((section) => containsWholeLexeme(section.text, target))
       if (matches.length === 0) return []
@@ -260,6 +261,8 @@ export function deriveEntryContexts(
         formOf: { word: target, language },
       })
     }
+    if (contexts.length === groupContextStart + 1)
+      contexts[groupContextStart].counterparts = group.counterparts
   }
 
   if (contexts.length > 0) return contexts
