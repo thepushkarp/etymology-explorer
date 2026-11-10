@@ -69,7 +69,9 @@ async function resolveLanguages(
       } catch (error) {
         session.signal?.throwIfAborted()
         console.error(
-          `[Research] Language resolution failed for ${edition}:${normalized}:`,
+          '[Research] Language resolution failed for %s:%s:',
+          edition,
+          normalized,
           safeError(error)
         )
         incomplete = true

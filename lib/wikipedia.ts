@@ -116,7 +116,7 @@ export async function fetchWikipedia(
     return result
   } catch (error) {
     signal?.throwIfAborted()
-    console.error(`Wikipedia fetch failed for "${word}":`, safeError(error))
+    console.error('Wikipedia fetch failed for "%s":', word, safeError(error))
     throw error
   }
 }

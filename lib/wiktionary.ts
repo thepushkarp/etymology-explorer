@@ -216,7 +216,7 @@ export async function fetchSelectedWiktionaryLanguage(
     return result
   } catch (error) {
     signal?.throwIfAborted()
-    console.error(`Wiktionary fetch failed for "${word}":`, safeError(error))
+    console.error('Wiktionary fetch failed for "%s":', word, safeError(error))
     throw error
   }
 }

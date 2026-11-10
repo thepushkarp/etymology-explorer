@@ -208,6 +208,7 @@ export function createLexemeResearchSession(options: {
 }) {
   const { budget, signal } = options
   const memo = new Map<string, Promise<LexemeLookupResult>>()
+  const coreMemo = new Map<string, Promise<SourceRecord[]>>()
   const fetchMemo = new Map<string, Promise<unknown>>()
   function fetchOnce<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
     const existing = fetchMemo.get(key)
@@ -580,13 +581,15 @@ export function createLexemeResearchSession(options: {
           if (job)
             entry.pending[index] = runJob(entry.result.lexeme, job, Boolean(settings.primary))
         }
+      for (const entry of fresh) {
+        const core = Promise.all(
+          entry.jobs.flatMap((job, index) => (job.core ? [entry.pending[index]] : []))
+        ).then((outcomes) => outcomes.flatMap((outcome) => outcome.records))
+        coreMemo.set(entry.key, core)
+        void core.catch(() => {})
+      }
       const core = Promise.all(
-        fresh.map(async (entry) => {
-          const outcomes = await Promise.all(
-            entry.jobs.flatMap((job, index) => (job.core ? [entry.pending[index]] : []))
-          )
-          return outcomes.flatMap((outcome) => outcome.records)
-        })
+        [...new Set(lexemes.map(researchLexemeKey))].map((key) => coreMemo.get(key)!)
       ).then((records) => settings.onCore?.(records.flat()))
       void core.catch(() => {})
       await Promise.all(

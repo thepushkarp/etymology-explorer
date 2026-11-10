@@ -13,6 +13,7 @@ import { extractEtymonlineRelatedEntries, fetchEtymonline } from '@/lib/etymonli
 import { parseSourceTexts } from '@/lib/etymologyParser'
 import { CONFIG } from '@/lib/config'
 import { SourceFetchBudget } from '@/lib/sourceFetchBudget'
+import { createLexemeResearchSession } from '@/lib/lexemeResearch'
 import { classifyApiError } from '@/lib/apiError'
 import { ResearchContext, StreamEvent } from '@/lib/types'
 
@@ -576,19 +577,34 @@ function installFetchRouter(options?: { wikipediaDelayMs?: number }): {
 }
 
 describe('conductAgenticResearch phase ordering', () => {
-  test('source-defined ancestors do not wait for the root-extraction LLM', async () => {
+  test('primed core evidence starts roots early but ancestors wait for all primary sources', async () => {
     const savedKey = process.env.OPENROUTER_API_KEY
     process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
     let release!: () => void
     const rootsReady = new Promise<void>((resolve) => {
       release = resolve
     })
+    let releaseOptional!: () => void
+    const optionalReady = new Promise<void>((resolve) => {
+      releaseOptional = resolve
+    })
+    let rootStarted!: () => void
+    const rootRequest = new Promise<void>((resolve) => {
+      rootStarted = resolve
+    })
+    let ancestorStarted!: () => void
+    const ancestorRequest = new Promise<void>((resolve) => {
+      ancestorStarted = resolve
+    })
+    let rootCalls = 0
     let ancestorRequested = false
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input)
       if (process.env.KV_REST_API_URL && url.startsWith(process.env.KV_REST_API_URL))
         return upstashMissResponse(init)
       if (url.includes('openrouter.ai')) {
+        rootCalls++
+        rootStarted()
         await rootsReady
         return Response.json({
           output_text: '{"roots":["traceword"]}',
@@ -597,22 +613,51 @@ describe('conductAgenticResearch phase ordering', () => {
       }
       if (url.includes('etymonline.com/word/traceword'))
         return new Response('<section class="prose-lg">1590s, from Latin nexus.</section>')
-      if (new URL(url).searchParams.get('page') === 'nexus') ancestorRequested = true
+      if (new URL(url).hostname === 'fr.wikipedia.org') await optionalReady
+      if (new URL(url).searchParams.get('page') === 'nexus') {
+        ancestorRequested = true
+        ancestorStarted()
+      }
       return new Response('not found', { status: 404 })
     }) as typeof fetch
-    const pending = conductAgenticResearch('traceword')
+    const budget = new SourceFetchBudget(48)
+    const session = createLexemeResearchSession({ budget })
+    const primaries = session.lookupMany(
+      [
+        { word: 'traceword', language: 'en' },
+        { word: 'traceword', language: 'fr' },
+      ],
+      { primary: true }
+    )
+    const pending = conductAgenticResearch('traceword', { session, budget })
     try {
-      await new Promise((resolve) => setTimeout(resolve, 30))
+      await Promise.race([
+        rootRequest,
+        Bun.sleep(1000).then(() => {
+          throw new Error('Root extraction did not start before optional sources')
+        }),
+      ])
+      expect(ancestorRequested).toBe(false)
+      releaseOptional()
+      await Promise.race([
+        ancestorRequest,
+        Bun.sleep(1000).then(() => {
+          throw new Error('Ancestor research waited for root extraction')
+        }),
+      ])
       expect(ancestorRequested).toBe(true)
       release()
       const context = await pending
       expect(context.identifiedRoots).toEqual(['traceword'])
       expect(context.mainWord.etymonline?.text).toContain('from Latin nexus')
-      expect(context.totalSourcesFetched).toBeLessThanOrEqual(CONFIG.maxTotalFetches)
+      expect(context.totalSourcesFetched).toBeLessThanOrEqual(48)
+      expect(context.llmUsage).toEqual({ inputTokens: 10, outputTokens: 2 })
+      expect(rootCalls).toBe(1)
     } finally {
       release()
+      releaseOptional()
       try {
-        await pending
+        await Promise.allSettled([pending, primaries])
       } finally {
         if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
         else process.env.OPENROUTER_API_KEY = savedKey
@@ -888,9 +933,15 @@ test('research failure after root extraction retains billed usage for route acco
       return new Response('<section class="prose-lg">From Latin nexus.</section>')
     return new Response('', { status: 404 })
   }) as typeof fetch
+  const session = createLexemeResearchSession({
+    budget: new SourceFetchBudget(32),
+    signal: controller.signal,
+  })
+  const primaries = session.lookupMany([{ word: 'fixture', language: 'en' }], { primary: true })
+  void primaries.catch(() => {})
   try {
     await expect(
-      conductAgenticResearch('fixture', { signal: controller.signal }, (event) => {
+      conductAgenticResearch('fixture', { session }, (event) => {
         if (event.type === 'roots_identified')
           controller.abort(new Error('Trace cancelled after roots'))
       })
@@ -899,6 +950,7 @@ test('research failure after root extraction retains billed usage for route acco
       usage: { inputTokens: 9, outputTokens: 2, costUSD: 0.03 },
     })
   } finally {
+    await Promise.allSettled([primaries])
     if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
     else process.env.OPENROUTER_API_KEY = previousKey
   }

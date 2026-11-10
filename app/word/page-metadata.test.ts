@@ -56,10 +56,6 @@ function paramsFor(word: string, language?: LanguageCode) {
   return { params: Promise.resolve({ segments: language ? [language, word] : [word] }) }
 }
 
-function redirectDigest(error: unknown): string {
-  return (error as { digest?: string }).digest ?? ''
-}
-
 describe('/word/[word] generateMetadata', () => {
   test('uncached English and other-language phrases have canonical noindex pages', async () => {
     cachedEntry = null
@@ -153,19 +149,16 @@ describe('/word/[word] generateMetadata', () => {
     ])
   })
 
-  test('explicit primary languages redirect only after the cache establishes the primary', async () => {
-    for (const language of ['en', 'fr'] as const) {
-      cachedEntry = entryFor([etymologyResult({ word: 'chat', language })])
-      for (const render of [generateMetadata, WordPage]) {
-        try {
-          await render(paramsFor('chat', language))
-          throw new Error('expected redirect')
-        } catch (error) {
-          expect(redirectDigest(error)).toContain('NEXT_REDIRECT')
-          expect(redirectDigest(error)).toContain('/word/chat')
-          expect(redirectDigest(error)).toContain('308')
-        }
-      }
+  test('explicit language routes keep their identity when the primary language changes', async () => {
+    const italian = etymologyResult({ word: 'sale', language: 'it', definition: 'Salt.' })
+    const english = etymologyResult({ word: 'sale', language: 'en', definition: 'A transaction.' })
+    for (const results of [[italian], [english, italian]]) {
+      cachedEntry = entryFor(results)
+      const metadata = await generateMetadata(paramsFor('sale', 'it'))
+      expect(metadata.alternates?.canonical).toBe('/word/it/sale')
+      expect(metadata.title).toEqual({ absolute: 'Italian etymology of sale — EtymEx' })
+      const page = await WordPage(paramsFor('sale', 'it'))
+      expect(page.props.children[1].props.children.props.language).toBe('it')
     }
     cachedEntry = null
     const metadata = await generateMetadata(paramsFor('chat', 'en'))

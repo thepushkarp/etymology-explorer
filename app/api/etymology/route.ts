@@ -170,12 +170,13 @@ export async function GET(request: NextRequest) {
           ),
           otherLanguages: resolved.otherLanguages,
         })
-        // Prime all selected primaries before ancestor expansion can consume
-        // budget or memoise another selected language as a reduced lookup.
-        await session.lookupMany(
+        // The shared wave resolves every primary before enrichment, while core
+        // subscribers can start root extraction before optional sources finish.
+        const primaryLookup = session.lookupMany(
           languages.map((language) => ({ word: normalizedWord, language })),
           { primary: true, skipOptionalSources: false }
         )
+        void primaryLookup.catch(() => {})
         const attempted = new Set(latest?.attemptedLanguages ?? latest?.languages ?? [])
         const incompleteLanguages = new Set<LanguageCode>()
         const outcomes = await Promise.allSettled(
@@ -227,6 +228,7 @@ export async function GET(request: NextRequest) {
             }
           })
         )
+        await primaryLookup
         request.signal.throwIfAborted()
         const entries = { ...latest?.entries }
         const successfulLanguages = new Set<LanguageCode>()

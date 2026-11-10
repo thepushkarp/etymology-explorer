@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { CONFIG } from '@/lib/config'
 import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
-import { notFound, permanentRedirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { EntryView } from '@/components/EntryView'
@@ -70,9 +70,6 @@ const loadCachedEntry = cache((word: string) =>
 async function resolveEntry(params: WordPageProps['params']) {
   const route = await resolveRoute(params)
   const cached = await loadCachedEntry(route.word)
-  if (cached && route.language === cached.entry.languages[0]) {
-    permanentRedirect(wordPagePath(route.word))
-  }
   const language = route.language ?? cached?.entry.languages[0]
   const result = language ? cached?.entry.entries[language] : undefined
   return { ...route, cached, selectedLanguage: language, result }
