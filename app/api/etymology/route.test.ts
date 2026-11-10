@@ -40,6 +40,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
   let otherScripts: ScriptTarget[] = []
   let resolutionIncomplete = false
   let failLanguage: LanguageCode | undefined
+  let failureMessage = 'Schema validation failed'
   let credible = true
   let researchIncomplete = false
   let rootUsage = false
@@ -202,12 +203,13 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
   }))
   mock.module('@/lib/llm', () => ({
     getLlmUsageFromError: (error: unknown) => (error as { usage?: unknown })?.usage,
+    isTransientSynthesisError: () => false,
     synthesizeFromResearch: async (context: { language: LanguageCode }) => {
       calls.synthesis++
       onSynthesisStarted?.()
       await synthesisGate
       if (context.language === failLanguage) {
-        throw Object.assign(new Error('Schema validation failed'), { usage })
+        throw Object.assign(new Error(failureMessage), { usage })
       }
       return { result: result(context.language), usage }
     },
@@ -237,6 +239,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     otherScripts = []
     resolutionIncomplete = false
     failLanguage = undefined
+    failureMessage = 'Schema validation failed'
     credible = true
     researchIncomplete = false
     rootUsage = false
@@ -405,17 +408,176 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     expect(calls.research).toBe(0)
     expect(calls.spend).toHaveLength(0)
   })
-  test('failed refresh leaves the durable entry untouched and marks the holder failure', async () => {
+  test('failed refresh preserves saved results and persists its language failure', async () => {
     const original = entry()
     saved = { entry: original, stale: true }
     languages = ['fr']
     failLanguage = 'fr'
-    expect((await get('&refresh=1')).status).toBe(503)
+    expect((await get('&refresh=1')).status).toBe(200)
+    expect(saved.entry.entries).toEqual(original.entries)
+    expect(saved.entry.freshnessAt).toBe(original.tracedAt)
+    expect(saved.entry.failedLanguages?.fr).toMatchObject({ kind: 'validation' })
+    expect(calls.writes).toBe(1)
+    expect(calls.negative.some((item) => (item as string[])[0] === 'write')).toBe(false)
+    expect(calls.failure).toBe(0)
+    expect(calls.spend).toHaveLength(1)
+  })
+  test('failed-language cooldown precedes source work and recovery targets only its hint', async () => {
+    failLanguage = 'fr'
+    const first = await (await get()).json()
+    expect(first.data.languages).toEqual(['en'])
+    expect(first.data.attemptedLanguages).toEqual(['en'])
+    expect(first.data.failedLanguages.fr).toMatchObject({ kind: 'validation' })
+    const originalEnglish = structuredClone(saved!.entry.entries.en)
+    const originalFreshness = saved!.entry.tracedAt
+    const identityCalls = calls.identity
+    const researchCalls = calls.research
+    const lockCalls = calls.locks.length
+    const cooldown = await get('&language=fr&refresh=1')
+    expect(cooldown.status).toBe(200)
+    expect(Number(cooldown.headers.get('Retry-After'))).toBeGreaterThan(0)
+    expect((await cooldown.json()).data.failedLanguages).toEqual(saved!.entry.failedLanguages)
+    expect(calls.identity).toBe(identityCalls)
+    expect(calls.research).toBe(researchCalls)
+    expect(calls.locks).toHaveLength(lockCalls)
+    expect(calls.negative.some((item) => (item as string[])[0] === 'write')).toBe(false)
+
+    saved!.entry.failedLanguages!.fr!.retryAt = new Date(0).toISOString()
+    saved!.stale = true
+    costMode = 'cache_only'
+    expect((await get('&language=fr&refresh=1')).status).toBe(503)
+    expect(calls.research).toBe(researchCalls)
+    costMode = 'normal'
+    const unrelatedFailure = {
+      kind: 'transient' as const,
+      message: 'A source is unavailable.',
+      retryAt: new Date(Date.now() + 300_000).toISOString(),
+    }
+    saved!.entry.failedLanguages!.it = unrelatedFailure
+    failLanguage = undefined
+    calls.researchLanguages = []
+    const recovered = await (await get('&language=fr&refresh=1')).json()
+    expect(calls.researchLanguages).toEqual(['fr'])
+    expect(recovered.data.entries.en).toEqual(originalEnglish)
+    expect(recovered.data.freshnessAt).toBe(originalFreshness)
+    expect(recovered.data.failedLanguages).toEqual({ it: unrelatedFailure })
+    expect(recovered.data.languages).toEqual(['en', 'fr'])
+  })
+  test('holder and waiter recheck a newly saved failure cooldown', async () => {
+    const original = entry()
+    original.languages = ['en']
+    delete original.entries.fr
+    original.attemptedLanguages = ['en']
+    original.failedLanguages = {
+      fr: { kind: 'validation', message: 'Please try again.', retryAt: new Date(0).toISOString() },
+    }
+    const updated = structuredClone(original)
+    updated.tracedAt = new Date().toISOString()
+    updated.failedLanguages!.fr!.retryAt = new Date(Date.now() + 300_000).toISOString()
+    for (const state of ['acquired', 'busy'] as const) {
+      lock = state
+      let reads = 0
+      read = () => ({ entry: ++reads === 1 ? original : updated, stale: true })
+      const response = await get('&language=fr&refresh=1')
+      expect(response.status).toBe(200)
+      expect((await response.json()).data.failedLanguages).toEqual(updated.failedLanguages)
+    }
+    expect(calls.research).toBe(0)
+    expect(calls.synthesis).toBe(0)
+  })
+  test('failed recovery renews only its failure and never records an absence', async () => {
+    failLanguage = 'fr'
+    await get()
+    const originalEnglish = structuredClone(saved!.entry.entries.en)
+    saved!.entry.failedLanguages!.fr!.retryAt = new Date(0).toISOString()
+    failureMessage = 'OpenRouter returned 429: quota exceeded'
+    resolutionIncomplete = true
+    calls.researchLanguages = []
+    expect((await get('&language=fr&refresh=1')).status).toBe(200)
+    expect(calls.researchLanguages).toEqual(['fr'])
+    expect(saved!.entry.entries.en).toEqual(originalEnglish)
+    expect(saved!.entry.failedLanguages?.fr?.kind).toBe('unavailable')
+    expect(Date.parse(saved!.entry.failedLanguages!.fr!.retryAt)).toBeGreaterThan(Date.now())
+    expect(calls.negative.some((item) => (item as string[])[0] === 'write')).toBe(false)
+    const researchCalls = calls.research
+    const cooldown = await get('&language=fr')
+    expect(cooldown.status).toBe(200)
+    expect((await cooldown.json()).data.failedLanguages).toEqual(saved!.entry.failedLanguages)
+    expect(calls.research).toBe(researchCalls)
+  })
+  test.each([false, true, 'legacy'] as const)(
+    'recovery preserves source uncertainty independently of failures: %s',
+    async (sourcePartial) => {
+      failLanguage = 'fr'
+      researchIncomplete = sourcePartial === true
+      await get()
+      expect(saved!.entry.researchIncomplete).toBe(sourcePartial === true)
+      if (sourcePartial === 'legacy') delete saved!.entry.researchIncomplete
+      saved!.entry.failedLanguages!.fr!.retryAt = new Date(0).toISOString()
+      researchIncomplete = false
+      failLanguage = undefined
+      const payload = await (await get('&language=fr&refresh=1')).json()
+      expect(payload.data.failedLanguages).toBeUndefined()
+      expect(payload.data.researchIncomplete).toBe(sourcePartial !== false)
+      expect(payload.data.incomplete === true).toBe(sourcePartial !== false)
+      expect(calls.researchLanguages).toEqual(['en', 'fr', 'fr'])
+    }
+  )
+  test('hint resolution without an outcome preserves entries and settles prior failures', async () => {
+    const original = entry()
+    original.languages = ['en']
+    delete original.entries.fr
+    original.attemptedLanguages = ['en']
+    saved = { entry: original, stale: false }
+    languages = []
+    resolutionIncomplete = true
+    expect((await get('&language=fr')).status).toBe(500)
     expect(saved.entry).toEqual(original)
     expect(calls.writes).toBe(0)
+
+    saved.entry = {
+      ...original,
+      researchIncomplete: false,
+      incomplete: true,
+      failedLanguages: {
+        fr: { kind: 'validation', message: 'Please retry.', retryAt: new Date(0).toISOString() },
+      },
+    }
+    const unresolved = await (await get('&language=fr&refresh=1')).json()
+    expect(unresolved.data.failedLanguages.fr.kind).toBe('transient')
+    expect(Date.parse(unresolved.data.failedLanguages.fr.retryAt)).toBeGreaterThan(Date.now())
+    expect(unresolved.data.researchIncomplete).toBe(false)
+    expect(unresolved.data.entries.en).toEqual(original.entries.en)
     expect(calls.negative.some((item) => (item as string[])[0] === 'write')).toBe(false)
-    expect(calls.failure).toBe(1)
-    expect(calls.spend).toHaveLength(1)
+
+    saved.entry.failedLanguages!.fr!.retryAt = new Date(0).toISOString()
+    const pendingRecovery = structuredClone(saved.entry)
+    resolutionIncomplete = false
+    const absent = await get('&language=fr&refresh=1')
+    expect(absent.status).toBe(200)
+    const settled = (await absent.json()).data
+    expect(settled.failedLanguages).toBeUndefined()
+    expect(settled.attemptedLanguages).toContain('fr')
+    expect(settled.incomplete).not.toBe(true)
+    expect((await get('&language=fr')).status).toBe(404)
+    const identityCalls = calls.identity
+    expect((await (await get('&language=fr&refresh=1')).json()).data).toEqual(settled)
+    expect(calls.identity).toBe(identityCalls)
+    for (const state of ['acquired', 'busy'] as const) {
+      lock = state
+      let reads = 0
+      read = () => ({ entry: ++reads === 1 ? pendingRecovery : settled, stale: false })
+      const concurrent = await get('&language=fr&refresh=1')
+      expect(concurrent.status).toBe(200)
+      expect((await concurrent.json()).data).toEqual(settled)
+    }
+    expect(calls.research).toBe(0)
+    read = undefined
+    lock = 'acquired'
+    saved.stale = true
+    languages = ['fr']
+    expect((await get('&language=fr&refresh=1')).status).toBe(200)
+    expect(calls.researchLanguages).toEqual(['fr'])
   })
   test('roots are accounted before no-source admission and failures account once', async () => {
     languages = ['en']

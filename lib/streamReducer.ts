@@ -17,7 +17,7 @@ import type {
   ScriptTarget,
   EntrySpelling,
 } from './types'
-import type { LanguageCode } from './languages'
+import { LANGUAGES, isLanguageCode, type LanguageCode } from './languages'
 import { StreamingUiError, toStreamingUiError } from './streamingError'
 import { normalizeScriptTargets } from './scriptTargets'
 import { sourceKey, sourceLabel } from './sourceLabels'
@@ -166,6 +166,18 @@ function isSectionKey(section: string): section is SectionKey {
   return (SECTION_KEYS as readonly string[]).includes(section)
 }
 
+function resultLanguages(state: StreamState, entry: WordEntry): LanguageCode[] {
+  return [
+    ...new Set([
+      ...state.languages,
+      ...entry.languages,
+      ...Object.keys(entry.failedLanguages ?? {}),
+    ]),
+  ]
+    .filter(isLanguageCode)
+    .sort((a, b) => LANGUAGES[a].priority - LANGUAGES[b].priority)
+}
+
 export const initialStreamState: StreamState = {
   languages: [],
   otherLanguages: [],
@@ -241,6 +253,7 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
           phase: next.phase,
           sources: next.sources,
           sections: next.sections,
+          ...(event.type === 'synthesis_started' ? { error: undefined } : {}),
         },
       },
     }
@@ -324,7 +337,7 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
         phase: 'done',
         result: event.data,
         error: null,
-        languages: [...new Set([...state.languages, ...event.data.languages])],
+        languages: resultLanguages(state, event.data),
         otherLanguages: event.data.otherLanguages,
         otherScripts: normalizeScriptTargets(event.data.otherScripts ?? state.otherScripts),
       }
@@ -351,6 +364,7 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
         word: action.word,
         status: 'loading',
         phase: 'sources',
+        result: action.word && state.result?.word === action.word ? state.result : null,
       }
 
     case 'stream_reconnecting':
@@ -376,7 +390,7 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
         phase: 'done',
         result: action.result,
         error: null,
-        languages: [...new Set([...state.languages, ...action.result.languages])],
+        languages: resultLanguages(state, action.result),
         otherLanguages: action.result.otherLanguages,
         otherScripts: normalizeScriptTargets(action.result.otherScripts ?? state.otherScripts),
       }

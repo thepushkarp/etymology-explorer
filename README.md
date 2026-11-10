@@ -25,7 +25,7 @@ Try it out at [etymex.com](https://etymex.com)
 - **Structured Outputs**: Guaranteed valid JSON via OpenRouter `json_schema` strict mode
 - **Streaming UI**: Optional `?stream=true` server-sent events for source progress,
   per-section synthesis events, cached hits, and early error responses
-- **Durable Corpus**: Entries remain cached for a year and become eligible for a user-requested retrace after 90 days or a pipeline revision; incomplete traces can be retried after five minutes
+- **Durable Corpus**: Entries remain cached for a year and become eligible for a user-requested retrace after 90 days or a pipeline revision; failed languages remain visible and can be retried individually after a five-minute cooldown without retracing successful languages
 - **Shareable Word Pages**: `/word/{word}` is the primary search URL — cached words are
   server-rendered straight from the cache (crawlers never trigger LLM spend), uncached words
   host the live streaming trace with progressive section-by-section rendering

@@ -306,6 +306,13 @@ export interface EntrySpelling extends ScriptTarget {
   verifiedAt: string
 }
 
+export interface LanguageFailure {
+  kind: 'validation' | 'transient' | 'unavailable'
+  message: string
+  /** Earliest explicit retry time; saved entries never schedule another trace. */
+  retryAt: string
+}
+
 /** Durable same-spelling entry. Freshness never removes its corpus identity. */
 export interface WordEntry {
   word: string
@@ -320,6 +327,10 @@ export interface WordEntry {
   revision: number
   /** Languages actually researched, including confirmed absences; omitted candidates remain augmentable. */
   attemptedLanguages?: LanguageCode[]
+  /** Failed research remains visible independently of successful language entries. */
+  failedLanguages?: Partial<Record<LanguageCode, LanguageFailure>>
+  /** Source uncertainty retained in saved results, independently of failed language attempts. */
+  researchIncomplete?: boolean
   /** Incomplete traces become retraceable after the short retry interval, but remain durable. */
   incomplete?: boolean
 }

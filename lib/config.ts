@@ -12,10 +12,6 @@ export const CONFIG = {
   synthesisMaxTokens: 9000,
   rootExtractionMaxTokens: 100,
 
-  retries: {
-    malformedOutputRetries: 1,
-  },
-
   // Input validation
   maxWordLength: 120,
   // Marks must follow letters; punctuation separates nonempty letter groups.

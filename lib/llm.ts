@@ -23,6 +23,7 @@ import {
   createOpenRouterResponse,
   extractOutputText,
   extractUsage,
+  OpenRouterHttpError,
   streamOpenRouterResponse,
 } from './openrouterResponses'
 import {
@@ -32,6 +33,7 @@ import {
   type EtymologyStratum,
 } from './languages'
 import type { ParsedEtymChain } from './etymologyParser'
+import { safeError } from './errorUtils'
 import {
   lexicalSourceRecords,
   mainSourceRecords,
@@ -53,10 +55,6 @@ class MalformedModelOutputError extends Error {
     this.name = 'MalformedModelOutputError'
     this.usage = usage
   }
-}
-
-function isMalformedModelOutputError(error: unknown): error is MalformedModelOutputError {
-  return error instanceof MalformedModelOutputError
 }
 
 /**
@@ -121,6 +119,48 @@ function isAbortLikeError(error: unknown): boolean {
 
 function timeoutErrorMessage(timeoutMs: number): string {
   return `OpenRouter request timeout after ${timeoutMs}ms`
+}
+
+export function isTransientSynthesisError(error: unknown): boolean {
+  if (!(error instanceof Error) || isAbortLikeError(error)) return false
+  if (
+    /\b(?:quota|credits?|balance|billing|payment|unauthori[sz]ed|authentication|invalid[ _-]?(?:api[ _-]?)?key)\b/i.test(
+      error.message
+    )
+  )
+    return false
+  if (error instanceof OpenRouterHttpError)
+    return [408, 429, 500, 502, 503, 504].includes(error.status)
+  if (/^(?:OpenRouter request|Request) timeout after \d+ms$/.test(error.message)) return true
+  const cause = (error as Error & { cause?: { code?: string } }).cause
+  return (
+    error instanceof TypeError &&
+    (error.message === 'fetch failed' || error.message === 'Failed to fetch') &&
+    (!cause?.code ||
+      [
+        'ECONNRESET',
+        'ECONNREFUSED',
+        'ETIMEDOUT',
+        'EAI_AGAIN',
+        'UND_ERR_CONNECT_TIMEOUT',
+        'UND_ERR_SOCKET',
+      ].includes(cause.code))
+  )
+}
+
+function waitForSynthesisRetry(signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(signal?.reason)
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, 250)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) onAbort()
+  })
 }
 
 function extractJsonObjectChunk(text: string): string | null {
@@ -410,70 +450,32 @@ async function callLlm(
     if (isAbortLikeError(error)) {
       throw new Error(timeoutErrorMessage(CONFIG.timeouts.llm))
     }
+    if (error instanceof SyntaxError) {
+      throw new MalformedModelOutputError(
+        'Failed to parse LLM response: invalid provider JSON',
+        getLlmUsageFromError(error) ?? { inputTokens: 0, outputTokens: 0 }
+      )
+    }
     throw error
   }
 }
 
 async function generateEtymologyResponse(
   userPrompt: string,
-  options: LlmCallOptions,
-  malformedAttemptLimit?: number
+  options: LlmCallOptions
 ): Promise<{
   result: EtymologyResult
   usage: LlmUsage
 }> {
-  const totalUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
-  // json_schema strict mode makes malformed output rare. The unary path
-  // keeps one retry as a safety net; the streaming path fails fast — its
-  // section events are already on the wire and cannot be retracted.
-  const maxAttempts =
-    malformedAttemptLimit ?? (options.onSection ? 1 : CONFIG.retries.malformedOutputRetries + 1)
-  let lastMalformedError: MalformedModelOutputError | null = null
-
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    try {
-      const { text, usage } = await callLlm(userPrompt, options)
-
-      try {
-        // Strict mode encodes optional fields as null — decode to the app's
-        // canonical absent-field shape before sanitizers and Zod see it.
-        const result = stripNullsDeep(parseGeneratedJson(text))
-        sanitizeSuggestions(result)
-        addUsage(totalUsage, usage)
-        return { result, usage: totalUsage }
-      } catch (error) {
-        const preview = text.slice(0, 200)
-        throw new MalformedModelOutputError(
-          `Failed to parse LLM response: ${error}. Preview: ${preview}`,
-          usage
-        )
-      }
-    } catch (error) {
-      if (!isMalformedModelOutputError(error)) {
-        const failedUsage = getLlmUsageFromError(error)
-        if (failedUsage) addUsage(totalUsage, failedUsage)
-        if (error instanceof Error) Object.assign(error, { usage: totalUsage })
-        throw error
-      }
-
-      addUsage(totalUsage, error.usage)
-      lastMalformedError = error
-
-      if (attempt < maxAttempts - 1) {
-        console.warn(
-          '[LLM] Retrying malformed model output',
-          JSON.stringify({ attempt: attempt + 1 })
-        )
-      }
-    }
+  const { text, usage } = await callLlm(userPrompt, options)
+  try {
+    // Strict mode encodes optional fields as null; the app uses absent fields.
+    const result = stripNullsDeep(parseGeneratedJson(text))
+    sanitizeSuggestions(result)
+    return { result, usage }
+  } catch (error) {
+    throw new MalformedModelOutputError(`Failed to parse LLM response: ${error}`, usage)
   }
-
-  // Re-wrap with the usage accumulated across ALL attempts (the stored
-  // error only carries the final attempt's), so the caller records the
-  // full spend of a failed synthesis.
-  throw lastMalformedError
-    ? new MalformedModelOutputError(lastMalformedError.message, totalUsage)
-    : new Error('Failed to parse LLM response after retries')
 }
 
 export function isRecoverableValidationError(error: unknown): boolean {
@@ -856,6 +858,84 @@ function validateHistoryGraph(history: LexicalHistory, context: ResearchContext)
   }
 }
 
+function hasAffirmativeOrigin(entry: ResearchEntryContext, snippet: string): boolean {
+  const text = entry.etymologyText ?? entry.text
+  const offset = text.indexOf(snippet.replace(/\.\.\.$/, ''))
+  if (offset < 0) return false
+  const before = text.slice(0, offset)
+  const start = before.search(/[^.!?;\n]*$/)
+  const end = text.slice(offset).search(/[.!?;\n]/)
+  const statement = text.slice(start, end < 0 ? undefined : offset + end)
+  // Parsed "from" snippets omit their preceding clause, including negations
+  // and comparisons. Only an affirmative source assertion may require lineage.
+  if (
+    /\b(?:not|never|neither|without|unrelated|compar(?:e[ds]?|ison)|unlike|rather than|instead of|mistaken(?:ly)?|incorrect(?:ly)?|unknown|uncertain|possibly|perhaps|probably|disputed|\w+n['’]t)\b/i.test(
+      statement
+    )
+  )
+    return false
+  const prefix = before.slice(start).trim()
+  return (
+    prefix.length === 0 ||
+    /^(?:(?:an?|the|unadapted|ultimately|directly)\s+)*(?:borrowed|borrowing|inherited|derived|adapted)$/i.test(
+      prefix
+    )
+  )
+}
+
+function validateMissingAncestry(
+  history: LexicalHistory,
+  entry: ResearchEntryContext,
+  context: ResearchContext,
+  sourceWasei: boolean
+): void {
+  const ancestry = history.ancestryGraph
+  if (ancestry.branches.some((branch) => branch.stages.length) || ancestry.postMerge?.length) return
+  const graph = context.lexicalGraph
+  const candidate = graph?.histories.find((candidate) => candidate.id === history.id)
+  if (!graph || !candidate) return
+  const anchors = new Set([candidate.queryNodeId, candidate.lemmaNodeId])
+  const donors = (candidate.edgeIds ?? []).flatMap((id) => {
+    const edge = graph.edges?.[id]
+    if (!edge || edge.role !== 'ancestry' || !anchors.has(edge.from)) return []
+    const from = graph.nodes?.[edge.from]
+    const donor = graph.nodes?.[edge.to]
+    if (
+      !from ||
+      !donor ||
+      sameLexeme(donor.displayForm, donor.lexeme.language, {
+        word: from.displayForm,
+        language: from.lexeme.language,
+      })
+    )
+      return []
+    // A source-attested Japanese coinage may use English components, but its
+    // English source material cannot require a forbidden whole-word borrowing.
+    if (
+      sourceWasei &&
+      lexicalLanguageName(donor.lexeme.language) === 'English' &&
+      edge.relation !== 'compound_from'
+    )
+      return []
+    const attested = edge.evidenceIds.some((id) => {
+      const evidence = graph.evidence?.[id]
+      return (
+        evidence &&
+        evidence.evidenceScopeId === entry.evidenceScopeId &&
+        candidate.evidenceScopeIds.includes(evidence.evidenceScopeId) &&
+        hasAffirmativeOrigin(entry, evidence.snippet)
+      )
+    })
+    return attested ? [`${lexicalLanguageName(donor.lexeme.language)} ${donor.displayForm}`] : []
+  })
+  if (donors.length) {
+    throw new Error(
+      `Schema validation failed: source-attested ancestry is missing for ${history.id}; ` +
+        `attested donors: ${[...new Set(donors)].slice(0, 4).join(', ').slice(0, 240)}`
+    )
+  }
+}
+
 function finalizeHistories(result: EtymologyResult, researchContext: ResearchContext): void {
   const candidates = researchContext.lexicalGraph?.histories ?? []
   if (candidates.length === 0) {
@@ -939,6 +1019,8 @@ function finalizeHistories(result: EtymologyResult, researchContext: ResearchCon
     }
     enrichScopedHistory(history, entry!, researchContext, scopedChains, strata.has('wasei-eigo'))
     pruneUngroundedStages(history.ancestryGraph)
+    if (!cannotEstablishAncestry)
+      validateMissingAncestry(history, entry!, researchContext, strata.has('wasei-eigo'))
     // Distinct unsupported roots can collapse into identical surviving paths.
     validateHistoryGraph(history, researchContext)
   }
@@ -1005,13 +1087,16 @@ export async function synthesizeFromResearch(
   )
 
   const totalUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
-  // A post-processing validation failure retries once, as a unary call: the
-  // streamed sections of the first attempt cannot be retracted, so the retry
-  // only replaces them through the terminal result.
-  const maxValidationAttempts = 2
+  // All recoverable failures share two calls. The unary recovery replaces any
+  // streamed first-attempt sections only through the terminal result.
+  const maxAttempts = 2
+  let correction = ''
+  let retryTransport = false
 
-  for (let attempt = 0; attempt < maxValidationAttempts; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
+      options?.signal?.throwIfAborted()
+      if (retryTransport) await waitForSynthesisRetry(options?.signal)
       const pendingSections = new Map<string, unknown>()
       const publishedSections = new Set<string>()
       let wordVerified = false
@@ -1147,11 +1232,7 @@ export async function synthesizeFromResearch(
         attempt === 0
           ? { ...options, language, onSection, onHistory }
           : { model: options?.model, signal: options?.signal, language }
-      const generated = await generateEtymologyResponse(
-        userPrompt,
-        attemptOptions,
-        attempt === 0 ? undefined : 1
-      )
+      const generated = await generateEtymologyResponse(userPrompt + correction, attemptOptions)
       addUsage(totalUsage, generated.usage)
 
       if (identityError) throw identityError
@@ -1174,10 +1255,37 @@ export async function synthesizeFromResearch(
         addUsage(totalUsage, errorUsage)
       }
 
-      if (attempt < maxValidationAttempts - 1 && isRecoverableValidationError(error)) {
+      const validation = isRecoverableValidationError(error)
+      const malformed = error instanceof MalformedModelOutputError
+      // Rate limits use the durable language cooldown; an immediate replay
+      // could violate a provider's Retry-After interval.
+      retryTransport =
+        isTransientSynthesisError(error) &&
+        !(error instanceof OpenRouterHttpError && error.status === 429)
+      if (
+        attempt < maxAttempts - 1 &&
+        !options?.signal?.aborted &&
+        (validation || malformed || retryTransport)
+      ) {
+        if (validation || malformed) {
+          const diagnostic = malformed
+            ? 'The previous response was not parseable JSON.'
+            : safeError(error)
+                .replace(/[\u0000-\u001f\u007f]/g, ' ')
+                .slice(0, 400)
+          correction =
+            '\n\nRegenerate the complete result, correcting this validation diagnostic: ' +
+            JSON.stringify(diagnostic) +
+            '\nUse only the supplied source-scoped evidence. Preserve every history identity; ' +
+            'include attested ancestry where required and do not invent missing links.'
+        }
         console.warn(
-          '[LLM] Retrying synthesis after validation failure',
-          JSON.stringify({ word: researchContext.mainWord.word, language })
+          '[LLM] Retrying synthesis after recoverable failure',
+          JSON.stringify({
+            word: researchContext.mainWord.word,
+            language,
+            kind: retryTransport ? 'transient' : 'validation',
+          })
         )
         continue
       }
@@ -1185,10 +1293,9 @@ export async function synthesizeFromResearch(
       // Validation and malformed-output failures occur after a billable
       // request. Expose the accumulated usage so the route records every
       // attempt, including the failed recovery.
-      if (error instanceof Error) {
-        ;(error as Error & { usage: LlmUsage }).usage = totalUsage
-      }
-      throw error
+      throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
+        usage: totalUsage,
+      })
     }
   }
 

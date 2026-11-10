@@ -217,6 +217,17 @@ export const WordEntrySchema = z
     freshnessAt: z.iso.datetime().optional(),
     revision: z.number().int().nonnegative(),
     attemptedLanguages: z.array(z.enum(SUPPORTED_LANGUAGE_CODES)).optional(),
+    failedLanguages: z
+      .partialRecord(
+        z.enum(SUPPORTED_LANGUAGE_CODES),
+        z.object({
+          kind: z.enum(['validation', 'transient', 'unavailable']),
+          message: z.string(),
+          retryAt: z.iso.datetime(),
+        })
+      )
+      .optional(),
+    researchIncomplete: z.boolean().optional(),
     incomplete: z.boolean().optional(),
   })
   .passthrough()

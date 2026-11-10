@@ -18,6 +18,18 @@ function result(language: 'en' | 'it'): EtymologyEntry {
 }
 
 describe('EtymologyCard', () => {
+  test('shows a neutral empty-lineage message only after the entry is available', () => {
+    const markup = renderToStaticMarkup(<EtymologyCard result={result('it')} />)
+    expect(markup).toContain('No lineage is available for this entry yet.')
+    expect(markup).toContain('id="entry-ancestry"')
+    const streaming = renderToStaticMarkup(<EtymologyCard result={result('it')} pending />)
+    expect(streaming).not.toContain('No lineage is available')
+    const untraced = renderToStaticMarkup(
+      <EtymologyCard result={{ ...result('it'), definition: '', lore: '' }} />
+    )
+    expect(untraced).not.toContain('No lineage is available')
+  })
+
   test('marks unknown Han and kana forms by script while preserving supplied languages', () => {
     const markup = renderToStaticMarkup(
       <>

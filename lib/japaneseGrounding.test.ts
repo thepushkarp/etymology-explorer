@@ -157,6 +157,9 @@ test('multiple donor histories and donor compounds remain independent context', 
 
 test('explicit wasei clipping keeps English components at the Japanese merge even without a model label', () => {
   const research = context('ja-consento')
+  expect(() => finalizeResult(result(research, { branches: [] }), research, 'standard')).toThrow(
+    'source-attested ancestry is missing'
+  )
   const graph: AncestryGraph = {
     branches: ['concentric', 'plug'].map((form) => ({
       root: form,
@@ -273,14 +276,20 @@ test('the disputed salaryman source retains its phrase account without adopting 
 test('classification uses the etymology boundary and is absent outside Japanese', () => {
   const research = context('ja-denwa')
   research.entryContexts![0].text += '\nNoun\nA hybrid device.'
-  const value = result(research, { branches: [] })
+  const graph: AncestryGraph = {
+    branches: ['電', '話'].map((form) => ({ root: form, stages: [stage('Japanese', form)] })),
+    mergePoint: { form: '電話', note: '' },
+  }
+  const value = result(research, graph)
   value.histories[0].stratum = 'hybrid'
   expect(finalizeResult(value, research, 'standard').stratum).toBeUndefined()
-  const valid = result(research, { branches: [] })
+  const valid = result(research, graph)
   valid.histories[0].stratum = 'wasei-kango'
   expect(finalizeResult(valid, research, 'standard').stratum).toBe('wasei-kango')
   const portuguese = context('pt-pao', 'pt')
-  const foreign = result(portuguese, { branches: [] })
+  const foreign = result(portuguese, {
+    branches: [{ root: 'pan', stages: [stage('Old Galician-Portuguese', 'pan')] }],
+  })
   foreign.histories[0].stratum = 'gairaigo'
   expect(finalizeResult(foreign, portuguese, 'standard').stratum).toBeUndefined()
 })
