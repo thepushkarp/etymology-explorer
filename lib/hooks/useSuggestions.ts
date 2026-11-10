@@ -31,7 +31,6 @@ export function visibleFetchedWords(
     : fetched.words.filter((word) => word.includes(normalizedQuery))
 }
 
-/** Debounced word suggestions from /api/suggestions; stale requests are cancelled. */
 export function useSuggestions(query: string, language?: LanguageCode): string[] {
   const normalizedQuery = canonicalizeWord(query)
   const [fetched, setFetched] = useState<SuggestionFetchState>({

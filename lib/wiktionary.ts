@@ -118,7 +118,7 @@ export function fetchWiktionaryPage(
               sameSpelling(redirect.from, normalizedWord) && sameSpelling(redirect.to, page.title!)
           )
         )
-          throw new Error(`Wiktionary ${edition}:${normalizedWord}: unverified redirected title`)
+          return null
         const result: WiktionaryPage = {
           requestedWord: normalizedWord,
           title: page.title ?? normalizedWord,
@@ -217,7 +217,7 @@ export async function fetchSelectedWiktionaryLanguage(
   } catch (error) {
     signal?.throwIfAborted()
     console.error(`Wiktionary fetch failed for "${word}":`, safeError(error))
-    return null
+    throw error
   }
 }
 

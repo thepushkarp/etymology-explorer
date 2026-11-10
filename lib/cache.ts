@@ -1,4 +1,3 @@
-/** Durable corpus entries and independent pronunciation/negative caches. */
 import { revalidateTag } from 'next/cache'
 import { after } from 'next/server'
 import type { EtymologyResult, WordEntry } from './types'

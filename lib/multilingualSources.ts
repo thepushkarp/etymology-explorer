@@ -38,7 +38,7 @@ export async function fetchWiktionaryEdition(
   } catch (error) {
     signal?.throwIfAborted()
     console.error(`[Research] ${edition}.wiktionary fetch failed:`, safeError(error))
-    return null
+    throw error
   }
 }
 
@@ -73,7 +73,9 @@ export async function fetchFreeDictionaryApi(
   const url = `https://freedictionaryapi.com/api/v1/entries/${language}/${encodeURIComponent(word)}`
   try {
     const response = await fetchWithTimeout(url, {}, CONFIG.timeouts.source, signal)
-    if (!response.ok) return null
+    if (response.status === 404) return null
+    if (!response.ok)
+      throw new Error(`FreeDictionaryAPI lookup for "${word}": HTTP ${response.status}`)
     const data = (await response.json()) as {
       word?: string
       entries?: unknown[]
@@ -102,7 +104,7 @@ export async function fetchFreeDictionaryApi(
     return result
   } catch (error) {
     console.error('[Research] FreeDictionaryAPI fetch failed:', safeError(error))
-    return null
+    throw error
   }
 }
 
@@ -203,8 +205,14 @@ export async function fetchWikidataLexeme(
   search.searchParams.set('origin', '*')
   try {
     const response = await fetchWithTimeout(search, {}, CONFIG.timeouts.source, signal)
-    if (!response.ok) return null
-    const data = (await response.json()) as { search?: Array<{ id?: string }> }
+    if (response.status === 404) return null
+    if (!response.ok)
+      throw new Error(`Wikidata Lexeme search lookup for "${word}": HTTP ${response.status}`)
+    const data = (await response.json()) as {
+      search?: Array<{ id?: string }>
+      error?: { code?: string }
+    }
+    if (data.error) throw new Error(`Wikidata Lexeme search: API ${data.error.code ?? 'error'}`)
     const ids = (data.search ?? [])
       .map((entry) => entry.id)
       .filter((id): id is string => Boolean(id))
@@ -218,10 +226,15 @@ export async function fetchWikidataLexeme(
     entitiesUrl.searchParams.set('format', 'json')
     entitiesUrl.searchParams.set('origin', '*')
     const entitiesResponse = await fetchWithTimeout(entitiesUrl, {}, CONFIG.timeouts.source, signal)
-    if (!entitiesResponse.ok) return null
+    if (entitiesResponse.status === 404) return null
+    if (!entitiesResponse.ok)
+      throw new Error(`Wikidata Lexeme details for "${word}": HTTP ${entitiesResponse.status}`)
     const entityData = (await entitiesResponse.json()) as {
       entities?: Record<string, WikidataLexemeEntity>
+      error?: { code?: string }
     }
+    if (entityData.error)
+      throw new Error(`Wikidata Lexeme details: API ${entityData.error.code ?? 'error'}`)
     const normalizedWord = canonicalizeWord(word)
     const matches = Object.values(entityData.entities ?? {}).filter((entity) =>
       isMatchingLexeme(entity, language, normalizedWord)
@@ -238,7 +251,7 @@ export async function fetchWikidataLexeme(
     return result
   } catch (error) {
     console.error('[Research] Wikidata Lexeme fetch failed:', safeError(error))
-    return null
+    throw error
   }
 }
 
@@ -251,7 +264,9 @@ export async function fetchDicionarioAberto(
   const url = `https://api.dicionario-aberto.net/word/${encodeURIComponent(word)}`
   try {
     const response = await fetchWithTimeout(url, {}, CONFIG.timeouts.source, signal)
-    if (!response.ok) return null
+    if (response.status === 404) return null
+    if (!response.ok)
+      throw new Error(`Dicionário Aberto lookup for "${word}": HTTP ${response.status}`)
     const entries = (await response.json()) as Array<{ word?: string; xml?: string }>
     const xml = entries
       .filter((entry) => !entry.word || canonicalizeWord(entry.word) === canonicalizeWord(word))
@@ -267,6 +282,6 @@ export async function fetchDicionarioAberto(
     return result
   } catch (error) {
     console.error('[Research] Dicionário Aberto fetch failed:', safeError(error))
-    return null
+    throw error
   }
 }

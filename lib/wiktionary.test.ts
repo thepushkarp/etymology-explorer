@@ -46,21 +46,21 @@ test('an ancestor retries one transient failure and retains complete provenance'
 test.each([404, 429])('an ancestor does not retry HTTP %d', async (status) => {
   const requests = serve([status, 200]),
     budget = new SourceFetchBudget(3)
-  expect(
-    await budget.run(() =>
-      fetchSelectedWiktionaryLanguage('porta', 'Latin', undefined, { retryTransient: true })
-    )
-  ).toBeNull()
+  const result = budget.run(() =>
+    fetchSelectedWiktionaryLanguage('porta', 'Latin', undefined, { retryTransient: true })
+  )
+  if (status === 404) expect(await result).toBeNull()
+  else await expect(result).rejects.toThrow('HTTP 429')
   expect(requests()).toBe(1)
 })
 test('ancestor recovery cannot exceed the shared HTTP budget', async () => {
   const requests = serve([503, 200]),
     budget = new SourceFetchBudget(1)
-  expect(
-    await budget.run(() =>
+  await expect(
+    budget.run(() =>
       fetchSelectedWiktionaryLanguage('porta', 'Latin', undefined, { retryTransient: true })
     )
-  ).toBeNull()
+  ).rejects.toThrow('Source HTTP request budget exhausted')
   expect(requests()).toBe(1)
   expect(budget.attempts).toBe(1)
 })

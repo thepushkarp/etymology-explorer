@@ -22,7 +22,6 @@ interface EntryViewProps {
   unavailableMessage?: string
 }
 
-/** A durable merged entry, with independent language histories and an explicit stale refresh. */
 export function EntryView({
   entry,
   language,

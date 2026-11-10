@@ -14,21 +14,18 @@ function reply(data: unknown) {
 
 describe('source spelling boundaries', () => {
   test('rejects a different Wiktionary headword and a foreign-only entry', async () => {
-    reply({
-      query: {
-        pages: {
-          '1': { title: 'cote', extract: '== English ==\n=== Etymology ===\nFrom Latin costa.' },
+    const page = (title: string, heading: string) => ({
+      parse: {
+        title,
+        text: `<h2 id="${heading}">${heading}</h2><p>From Latin costa.</p>`,
+        tocdata: {
+          sections: [{ line: heading, anchor: heading, hLevel: 2, number: '1', index: '1' }],
         },
       },
     })
+    reply(page('cote', 'English'))
     expect(await fetchWiktionary('côte')).toBeNull()
-    reply({
-      query: {
-        pages: {
-          '1': { title: 'côte', extract: '== French ==\n=== Etymology ===\nFrom Latin costa.' },
-        },
-      },
-    })
+    reply(page('côte', 'French'))
     expect(await fetchWiktionary('côte')).toBeNull()
   })
 

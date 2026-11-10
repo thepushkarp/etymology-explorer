@@ -2,6 +2,7 @@ import { sameSpelling } from './orthography'
 import type { SourceData } from './types'
 import { fetchWithTimeout } from './fetchUtils'
 import { CONFIG } from './config'
+import { safeError } from './errorUtils'
 import type { LanguageCode } from './languages'
 import { SUPPORTED_LANGUAGE_CODES } from './languages'
 import { cacheSource, getCachedSource } from './sourceCache'
@@ -44,8 +45,11 @@ export async function fetchWikipedia(
       CONFIG.timeouts.source,
       signal
     )
-    if (!response.ok) return null
+    if (response.status === 404) return null
+    if (!response.ok) throw new Error(`Wikipedia ${language}:${word}: HTTP ${response.status}`)
     const data = await response.json()
+    if (data.error)
+      throw new Error(`Wikipedia ${language}:${word}: API ${data.error.code ?? 'error'}`)
     signal?.throwIfAborted()
     const query = data.query
     const page = query?.pages?.[0]
@@ -111,7 +115,8 @@ export async function fetchWikipedia(
     signal?.throwIfAborted()
     return result
   } catch (error) {
-    if (signal?.aborted) throw error
-    return null
+    signal?.throwIfAborted()
+    console.error(`Wikipedia fetch failed for "${word}":`, safeError(error))
+    throw error
   }
 }

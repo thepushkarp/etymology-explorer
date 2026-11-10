@@ -56,6 +56,54 @@ const allowance: ExaBudgetRedis = {
   },
 }
 
+test('source failures remain incomplete while confirmed Wiktionary misses stay absent', async () => {
+  for (const [host, source, failure] of [
+    ['en.wiktionary.org', 'wiktionaryEnglish', 'parse'],
+    ['pt.wiktionary.org', 'wiktionaryNative', 'blocked'],
+    ['freedictionaryapi.com', 'multilingualDictionary', 'network'],
+    ['www.wikidata.org', 'wikidataLexeme', 'http'],
+    ['www.wikidata.org', 'wikidataLexeme', 'details'],
+    ['www.wikidata.org', 'wikidataLexeme', 'api'],
+    ['www.wikidata.org', 'wikidataLexeme', 'detailsApi'],
+    ['api.dicionario-aberto.net', 'dicionarioAberto', 'http'],
+    ['pt.wikipedia.org', 'wikipedia', 'http'],
+    ['pt.wikipedia.org', 'wikipedia', 'api'],
+  ]) {
+    serve((url) => {
+      if (url.hostname !== host) return new Response('', { status: 404 })
+      if (failure === 'network') throw new TypeError('Network unavailable')
+      if (failure === 'parse') return new Response('{')
+      if (failure.startsWith('details') && url.searchParams.get('action') === 'wbsearchentities')
+        return Response.json({ search: [{ id: 'L1' }] })
+      if (failure === 'api' || failure === 'detailsApi')
+        return Response.json({ error: { code: 'maxlag' } })
+      return new Response('', { status: failure === 'blocked' ? 403 : 503 })
+    })
+    const session = createLexemeResearchSession({
+      budget: new SourceFetchBudget(32),
+      exaBudgetClient: null,
+    })
+    const result = await session.lookup({ word: 'fixture', language: 'pt' }, { primary: true })
+    expect(result.outcomes.find((entry) => entry.source === source)?.outcome.status).toBe(
+      failure === 'blocked' ? 'blocked' : 'unavailable'
+    )
+    expect(result.incomplete).toBe(true)
+  }
+
+  serve((url) =>
+    url.hostname === 'en.wiktionary.org'
+      ? Response.json({ error: { code: 'missingtitle' } })
+      : new Response('', { status: 404 })
+  )
+  const session = createLexemeResearchSession({
+    budget: new SourceFetchBudget(32),
+    exaBudgetClient: null,
+  })
+  const missing = await session.lookup({ word: 'fixture', language: 'pt' }, { primary: true })
+  expect(missing.sources).toHaveLength(0)
+  expect(missing.incomplete).toBe(false)
+})
+
 test.each([
   ['en', 'ahdictionary.com'],
   ['it', 'dizionario.internazionale.it'],
