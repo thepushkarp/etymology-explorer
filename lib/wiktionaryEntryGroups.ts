@@ -264,12 +264,23 @@ export function extractWiktionaryRomanizations(
         const prefix = cleanWiktionaryHtml(definition[1].slice(0, linkMarker))
         if (!/^(?:(?:[\p{L}\p{M}ō -]+)\s+)?(?:romanization|transcription) of$/iu.test(prefix))
           continue
-        const target = definition[1].slice(linkMarker).match(/<(span|i)\b([^>]*)>([\s\S]*?)<\/\1>/i)
+        const targetHtml = definition[1].slice(linkMarker)
+        const target = targetHtml.match(/^<(span|i)\b([^>]*)>/i)
         if (!target) continue
+        const tags = new RegExp(`<(/?)${target[1]}\\b[^>]*>`, 'gi')
+        tags.lastIndex = target[0].length
+        let depth = 1
+        let closing
+        while ((closing = tags.exec(targetHtml))) {
+          depth += closing[1] ? -1 : 1
+          if (depth === 0) break
+        }
+        if (!closing) continue
+        const targetBody = targetHtml.slice(target[0].length, closing.index)
         if (attribute(target[2], 'lang') === language) {
-          targets.push(...scriptLink(target[3], language, 'en'))
+          targets.push(...scriptLink(targetBody, language, 'en'))
         } else {
-          for (const term of target[3].matchAll(/<(i|b|span)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
+          for (const term of targetBody.matchAll(/<(i|b|span)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
             if (attribute(term[2], 'lang') === language)
               targets.push(...scriptLink(term[3], language, 'en'))
           }

@@ -71,6 +71,16 @@ test('romanization links require the exact Latin headword and an explicit select
   expect(extractWiktionaryRomanizations(html, sections, 'tsunami')).toEqual([
     { word: 'つなみ', language: 'ja' },
   ])
+  const nestedSpans = html
+    .replace('<i lang="ja">', '<span lang="ja">')
+    .replace('</i>', '</span>')
+    .replace(
+      '</span></span></li>',
+      '</span><span lang="ja"><a href="/wiki/海嘯#Japanese">海嘯</a></span></span></li>'
+    )
+  expect(extractWiktionaryRomanizations(nestedSpans, sections, 'tsunami')).toEqual([
+    { word: 'つなみ', language: 'ja' },
+  ])
   expect(extractWiktionaryRomanizations(html, sections, 'pani')).toEqual([])
   expect(
     extractWiktionaryRomanizations(
