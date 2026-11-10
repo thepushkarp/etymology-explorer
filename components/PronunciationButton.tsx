@@ -3,12 +3,16 @@
 import { SpeakerIcon } from '@/components/Icons'
 import { useHotkey } from '@/lib/hooks/useHotkey'
 import { usePronunciation } from '@/lib/hooks/usePronunciation'
-import type { LanguageCode } from '@/lib/languages'
+import { LANGUAGES, type LanguageCode } from '@/lib/languages'
 
 /** Plays TTS audio for the word; `p` plays it from anywhere on the page. */
 export function PronunciationButton({ word, language }: { word: string; language: LanguageCode }) {
   const { play, isPlaying, isLoading, error } = usePronunciation(word, language)
-  useHotkey('p', () => void play())
+  const supported = Boolean(LANGUAGES[language].ttsLanguageCode)
+  useHotkey('p', () => {
+    if (supported) void play()
+  })
+  if (!supported) return null
 
   return (
     <button

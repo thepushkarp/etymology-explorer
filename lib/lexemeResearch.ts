@@ -38,6 +38,9 @@ const SPECIALIST_DOMAINS: Record<LanguageCode, readonly string[]> = {
   es: ['dle.rae.es', 'www.asale.org'],
   fr: ['www.cnrtl.fr', 'www.dictionnaire-academie.fr'],
   pt: ['dicionario.priberam.org', 'michaelis.uol.com.br'],
+  hi: [],
+  ur: [],
+  sa: [],
 }
 const HISTORICAL_DOMAINS: Record<string, readonly string[]> = {
   'Old English': ['bosworthtoller.com'],
@@ -67,6 +70,7 @@ interface SourceJob {
 interface LookupOptions {
   primary?: boolean
   skipOptionalSources?: boolean
+  skipOptionalSourcesFor?: (lexeme: LexemeRef) => boolean
   /** Core dictionary evidence can start CPU/LLM root extraction while other sources finish. */
   onCore?: (sources: SourceRecord[]) => void
 }
@@ -280,7 +284,10 @@ export function createLexemeResearchSession(options: {
           'wiktionaryEnglish',
           () =>
             fetchOnce(`wiktionaryLanguage:${heading}:${word}`, () =>
-              fetchEnglishWiktionaryLanguage(word, language, signal, { fetchOnce })
+              fetchEnglishWiktionaryLanguage(word, language, signal, {
+                retryTransient: !settings.primary,
+                fetchOnce,
+              })
             ),
           true
         )
@@ -321,7 +328,7 @@ export function createLexemeResearchSession(options: {
         })
     }
     if (language && language !== 'en') {
-      if (LANGUAGES[language].wikidataEntity)
+      if (!settings.skipOptionalSources && LANGUAGES[language].wikidataEntity)
         general.push(simple('wikidataLexeme', () => fetchWikidataLexeme(word, language, signal)))
       if (language === 'pt')
         general.push(simple('dicionarioAberto', () => fetchDicionarioAberto(word, signal)))
@@ -566,7 +573,11 @@ export function createLexemeResearchSession(options: {
       fresh.push({
         key,
         result: { lexeme, sources: [], outcomes: [], incomplete: false },
-        jobs: jobs(lexeme, settings),
+        jobs: jobs(lexeme, {
+          ...settings,
+          skipOptionalSources:
+            settings.skipOptionalSources || settings.skipOptionalSourcesFor?.(lexeme),
+        }),
         pending: [],
         resolve,
         reject,

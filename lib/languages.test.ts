@@ -50,7 +50,8 @@ describe('language registry and spelling identity', () => {
     expect(candidateLanguages('chat')).toEqual(['en', 'it', 'es', 'fr', 'pt'])
     expect(candidateLanguages('chatपानी')).toEqual([])
     expect(candidateLanguages('aа')).toEqual([]) // Latin and Cyrillic
-    expect(candidateLanguages('पानी')).toEqual([])
+    expect(candidateLanguages('पानी')).toEqual(['hi', 'sa'])
+    expect(candidateLanguages('کتاب')).toEqual(['ur'])
     expect(candidateLanguages('')).toEqual([])
   })
 })

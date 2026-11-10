@@ -18,4 +18,4 @@ export function sameSpelling(left: string, right: string): boolean {
 }
 
 /** Historical notation is broader than the public search syntax. */
-export const HISTORICAL_FORM = String.raw`\*?[-‐‑]?[\p{L}][\p{L}\p{M}\p{N}'’ʼʹʺ‐‑-]*`
+export const HISTORICAL_FORM = String.raw`\*?[-‐‑]?\p{L}\p{M}*(?:[\p{L}\p{M}\p{N}'’ʼʹʺ‐‑-]|(?<=\p{L}\p{M}*)[\u200C\u200D](?=\p{L}))*`

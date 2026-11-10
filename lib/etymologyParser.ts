@@ -18,6 +18,7 @@ export interface ParsedEtymLink {
   language: string // "Latin", "Old French", "Proto-Indo-European"
   form: string // "perfidia", "*bheid-"
   variants?: string[] // explicitly named alternate spellings in this source
+  transliteration?: string // source-provided reading of this exact form
   meaning?: string // "faithlessness"
   isReconstructed: boolean
   rawSnippet: string // exact substring from source that yielded this
@@ -42,6 +43,12 @@ export interface ParsedChainIdentity {
 
 /** A period qualifier belongs to the language identity, never to the following lemma. */
 const HISTORICAL_LANGUAGE_ALIASES: Record<string, string> = {
+  'śaurasenī prakrit': 'Sauraseni Prakrit',
+  'shauraseni prakrit': 'Sauraseni Prakrit',
+  'maharashtri prakrit': 'Maharastri Prakrit',
+  'māhārāṣṭrī prakrit': 'Maharastri Prakrit',
+  'māgadhī prakrit': 'Magadhi Prakrit',
+  apabhraṃśa: 'Apabhramsa',
   'latim vulgar': 'Vulgar Latin',
   'latino volgare': 'Vulgar Latin',
   'latín vulgar': 'Vulgar Latin',
@@ -114,6 +121,37 @@ const KNOWN_LANGUAGES = [
   'Danish',
   'Norwegian',
   'Sanskrit',
+  'Hindi',
+  'Urdu',
+  'Hindustani',
+  'Old Hindi',
+  'Apabhramsa',
+  'Prakrit',
+  'Sauraseni Prakrit',
+  'Maharastri Prakrit',
+  'Magadhi Prakrit',
+  'Pali',
+  'Vedic Sanskrit',
+  'Classical Sanskrit',
+  'Classical Persian',
+  'Middle Persian',
+  'Old Persian',
+  'Avestan',
+  'Proto-Indo-Aryan',
+  'Proto-Indo-Iranian',
+  'Proto-Iranian',
+  'Ottoman Turkish',
+  'Chagatai',
+  'Bengali',
+  'Marathi',
+  'Punjabi',
+  'Gujarati',
+  'Nepali',
+  'Tamil',
+  'Telugu',
+  'Kannada',
+  'Malayalam',
+  'Proto-Dravidian',
   'Arabic',
   'Hebrew',
   'Persian',
@@ -228,9 +266,10 @@ function parseSegment(segment: string, sourceSnippet: string): ParsedEtymLink | 
   const language = normalizeLanguageName(langMatch[1])
   let afterLang = trimmed.slice(langMatch[0].length).trim()
 
-  // Skip the literal "root" token when it precedes a *-prefixed form
-  // e.g., "PIE root *bheid-" → afterLang was "root *bheid-", skip "root" to get "*bheid-"
-  afterLang = afterLang.replace(/^root\s+(?=\*)/, '')
+  // Grammatical roots are not attested lexemes. A reconstructed * form can
+  // retain its notation, but the literal analysis label "root" is never a form.
+  if (/^root(?:\s|$)/i.test(afterLang) && !/^root\s+\*/i.test(afterLang)) return null
+  afterLang = afterLang.replace(/^root\s+(?=\*)/i, '')
 
   // Extract form from the text after the language name
   const form = extractForm(afterLang)
@@ -240,8 +279,20 @@ function parseSegment(segment: string, sourceSnippet: string): ParsedEtymLink | 
   const afterForm = afterLang.slice(form.length)
   const variant = afterForm.match(new RegExp(`^\\s*\\(also\\s+(${HISTORICAL_FORM})\\)`, 'iu'))
 
+  // Explicit HTML reading annotations survive cleaning; unmarked readings
+  // require a separate quoted gloss so a parenthetical meaning is not guessed.
+  const reading = afterForm.match(
+    /^\s*\(\s*transliteration:\s*([\p{Script=Latin}\p{M}ʿʾʼ’'ʹʺ* .‐‑-]+?)(?=\s*[,)]|$)|^\s*\(\s*([\p{Script=Latin}\p{M}ʿʾʼ’'ʹʺ* .‐‑-]+),\s*["“‘]/u
+  )
+  const transliteration = (reading?.[1] ?? reading?.[2])?.trim()
+
   // Extract meaning from the remainder
-  const meaning = extractMeaning(variant ? afterForm.slice(variant[0].length) : afterForm)
+  const afterAnnotation = variant
+    ? afterForm.slice(variant[0].length)
+    : reading && afterForm.slice(reading[0].length).trimStart().startsWith(')')
+      ? afterForm.slice(afterForm.indexOf(')') + 1)
+      : afterForm
+  const meaning = extractMeaning(afterAnnotation)
 
   // Build a raw snippet (cap at 120 chars, trim to word boundary)
   let rawSnippet = sourceSnippet.slice(0, 120)
@@ -254,6 +305,7 @@ function parseSegment(segment: string, sourceSnippet: string): ParsedEtymLink | 
     language,
     form,
     ...(variant ? { variants: [variant[1]] } : {}),
+    ...(transliteration ? { transliteration } : {}),
     meaning,
     isReconstructed: isReconstructedForm(form, language),
     rawSnippet,
@@ -337,8 +389,16 @@ function parseSourceText(text: string, word: string, source: SourceProviderId): 
   const segments = splitFromSegments(text)
 
   const links: ParsedEtymLink[] = []
+  let previous: ParsedEtymLink | undefined
   for (const { segment, snippet } of segments) {
-    const link = parseSegment(segment, snippet)
+    // Explicit reconstructed forms can continue the preceding Proto-language
+    // chain without restating its name. Ordinary and grammatical roots cannot.
+    const scopedSegment =
+      previous?.language.startsWith('Proto-') && /^\*/.test(segment)
+        ? `${previous.language} ${segment}`
+        : segment
+    const link = parseSegment(scopedSegment, snippet)
+    previous = link ?? undefined
     if (link) {
       links.push(link)
     }
@@ -443,6 +503,7 @@ export function formatParsedChainsForPrompt(chains: ParsedEtymChain[]): string {
 
     for (const link of chain.links) {
       let line = `  ${escapeXml(link.language)}: ${escapeXml(link.form)}`
+      if (link.transliteration) line += ` (${escapeXml(link.transliteration)})`
       if (link.variants?.length) {
         line += ` [source-explicit variants: ${link.variants.map(escapeXml).join(', ')}]`
       }

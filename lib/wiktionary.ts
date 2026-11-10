@@ -190,7 +190,13 @@ export function extractWiktionaryLanguage(
   return {
     text,
     url,
-    entryGroups: extractWiktionaryEntryGroups(page.html, page.sections, heading, pattern),
+    entryGroups: extractWiktionaryEntryGroups(
+      page.html,
+      page.sections,
+      heading,
+      pattern,
+      page.requestedWord
+    ),
     variants,
     requestedWord: page.requestedWord,
     resolvedWord: page.title,

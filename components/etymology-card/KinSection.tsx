@@ -1,6 +1,8 @@
 import type { Root } from '@/lib/types'
+import { languageFromName } from '@/lib/languages'
 import { WordLink } from '../WordLink'
 import { Section } from './Section'
+import { FormText } from './StoryText'
 
 /** Forms tagged with a language, written in another script, or reconstructed are cognates. */
 function isCognate(word: string): boolean {
@@ -26,7 +28,9 @@ export function KinSection({ roots, linkable }: KinSectionProps) {
           return (
             <div key={`${root.root}-${index}`}>
               <p className="font-serif text-ink">
-                <em>{root.root}</em>{' '}
+                <em>
+                  <FormText text={root.root} language={languageFromName(root.origin)} />
+                </em>{' '}
                 <span className="text-muted">
                   · {root.origin}, &lsquo;{root.meaning}&rsquo;
                 </span>
@@ -57,7 +61,7 @@ function WordList({
       {words.map((word, index) => (
         <span key={`${word}-${index}`}>
           {index > 0 && ', '}
-          {linkable ? <WordLink word={word} /> : <span>{word}</span>}
+          {linkable ? <WordLink word={word} /> : <FormText text={word} />}
         </span>
       ))}
     </p>

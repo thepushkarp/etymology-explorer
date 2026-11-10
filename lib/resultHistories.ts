@@ -23,6 +23,7 @@ export function historyEntry(result: EtymologyResult, historyId?: string): Etymo
   return {
     ...entry,
     pronunciation: history.pronunciation,
+    transliteration: history.transliteration,
     definition: history.definition,
     roots: history.roots,
     ancestryGraph: history.ancestryGraph,

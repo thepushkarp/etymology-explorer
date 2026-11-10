@@ -39,6 +39,11 @@ const BROAD_LANGUAGE: Record<string, string> = {
   'anglo-french': 'french',
   'old high german': 'german',
   'middle dutch': 'dutch',
+  'vedic sanskrit': 'sanskrit',
+  'classical sanskrit': 'sanskrit',
+  'classical persian': 'persian',
+  'middle persian': 'persian',
+  'old persian': 'persian',
 }
 
 function compatibleLanguage(left: string, right: string): boolean {
@@ -130,6 +135,17 @@ function enrichStage(stage: AncestryStage, chains: ParsedEtymChain[]): void {
 
   // Model-supplied evidence must never survive an unsuccessful source match.
   stage.evidence = buildEvidence(matches)
+
+  // A reading belongs to the exact written form; variant spellings cannot lend
+  // their reading, and conflicting source readings cannot select one for us.
+  const readings = new Set(
+    matches
+      .filter((match) => normalize(stage.form) === normalize(match.link.form))
+      .map((match) => match.link.transliteration)
+      .filter((reading): reading is string => Boolean(reading))
+  )
+  if (readings.size === 1) stage.transliteration = [...readings][0]
+  else delete stage.transliteration
 }
 
 /**

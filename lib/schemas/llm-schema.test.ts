@@ -259,6 +259,7 @@ describe('ETYMOLOGY_LLM_SCHEMA sync with Zod schema', () => {
       'primaryHistoryId',
       'histories',
       'pronunciation',
+      'transliteration',
       'definition',
       'ancestryGraph',
       'roots',

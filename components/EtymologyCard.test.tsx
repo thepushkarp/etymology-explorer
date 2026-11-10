@@ -23,7 +23,7 @@ describe('EtymologyCard', () => {
       lore: 'From *fides*.\n\nFrom *bher-; **faith** remains *unfinished.',
     }
     const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
-    expect(markup).toContain('<p>From <em>fides</em>.</p>')
+    expect(markup).toContain('<p>From <em><bdi lang="und" dir="auto">fides</bdi></em>.</p>')
     expect(markup).toContain('<p>From *bher-; **faith** remains *unfinished.</p>')
     expect(markup).not.toContain('<strong>')
   })
@@ -37,7 +37,7 @@ describe('EtymologyCard', () => {
     const entry = { ...result('it'), suggestions: { synonyms: ['fiducia'] } }
     const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
     expect(markup).toContain('Words from the same roots')
-    expect(markup).toContain('<span>fidelity</span>')
+    expect(markup).toContain('<bdi lang="und" dir="auto">fidelity</bdi>')
     expect(markup).not.toContain('href="/word/fidelity"')
     expect(markup).not.toContain('fiducia')
     expect(markup).toContain('Further scholarly references')
@@ -52,7 +52,7 @@ describe('EtymologyCard', () => {
     expect(markup.indexOf('id="entry-examples"')).toBeGreaterThan(
       markup.indexOf('id="entry-story"')
     )
-    expect(markup).toContain('<em>fede</em>')
+    expect(markup).toContain('<em><bdi lang="und" dir="auto">fede</bdi></em>')
     expect(markup).toContain('A second sentence.')
   })
 
@@ -65,6 +65,24 @@ describe('EtymologyCard', () => {
     expect(markup).toContain('lang="it"')
     expect(markup).toContain('Ha perso la fede.')
     expect(markup).toContain('They lost their faith.')
+  })
+
+  test('isolates native forms within English prose and places romanization beside IPA', () => {
+    const entry: EtymologyEntry = {
+      ...result('en'),
+      language: 'ur',
+      word: 'کتاب',
+      transliteration: 'kitāb',
+      pronunciation: '/kɪ.t̪ɑːb/',
+      lore: 'From Persian *کتاب* (kitāb). The Hindi spelling is किताब.',
+      roots: [{ root: 'کتاب', origin: 'Persian', meaning: 'book', relatedWords: [] }],
+    }
+    const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
+    expect(markup).toContain('lang="ur" dir="auto"')
+    expect(markup).toContain('<span lang="en" dir="ltr" class="font-serif">kitāb</span>')
+    expect(markup.indexOf('>kitāb</span>')).toBeLessThan(markup.indexOf('/kɪ.t̪ɑːb/'))
+    expect(markup).toContain('<em><bdi lang="und-Arab" dir="auto">کتاب</bdi></em>')
+    expect(markup).toContain('<bdi lang="und-Deva" dir="auto">किताब</bdi>.')
   })
 
   test('omits examples for entries cached before they existed', () => {

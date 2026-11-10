@@ -209,6 +209,18 @@ test('canonical primary prose is projected and citations come from research', ()
   expect(finalized.pronunciation).toBe('/x/')
   expect(finalized.sources.map((source) => source.name)).toEqual(['wikipedia', 'wiktionaryNative'])
 })
+
+test('history and entry readings are copied from their exact source contexts', () => {
+  const { result, context } = scopedFixture()
+  result.transliteration = 'invented entry reading'
+  result.histories[0].transliteration = 'invented history reading'
+  expect(finalizeResult(result, context, 'standard').transliteration).toBeUndefined()
+  expect(result.histories[0].transliteration).toBeUndefined()
+  context.entryContexts![0].transliteration = 'source reading'
+  const finalized = finalizeResult(result, context, 'standard')
+  expect(finalized.transliteration).toBe('source reading')
+  expect(finalized.histories[0].transliteration).toBe('source reading')
+})
 test('a senses-only fallback cannot publish an ancestry graph', () => {
   const { result, context } = scopedFixture()
   result.histories[0].entryKind = 'unresolved'
@@ -323,6 +335,7 @@ test.each([
         evidenceScopeId: 'scope1',
         source: 'wiktionary',
         heading: 'Etymology',
+        transliteration: 'source reading',
         text: 'Origin uncertain.',
         sectionHeadings: [],
         sourceUrl: 'https://en.wiktionary.org/wiki/café_au_lait',
@@ -413,6 +426,7 @@ test.each([
       ) as PartialEtymology
       const visible = toPartialResult(result.word, sections, language)
       expect(visible.pronunciation).toBe('/x/')
+      expect(visible.transliteration).toBe('source reading')
       expect(visible.definition).toBe('primary')
       expect(visible.ancestryGraph.branches).toEqual([])
       expect(emissions.filter(({ section }) => section === 'histories')).toHaveLength(0)
@@ -422,7 +436,13 @@ test.each([
       expect(finalized.result.histories).toHaveLength(2)
       expect(emissions.filter(({ section }) => section === 'histories')).toHaveLength(1)
       expect(finalized.usage).toEqual({ inputTokens: 10, outputTokens: 20, costUSD: 0.001 })
-      for (const name of ['pronunciation', 'definition', 'ancestryGraph', 'lore']) {
+      for (const name of [
+        'pronunciation',
+        'transliteration',
+        'definition',
+        'ancestryGraph',
+        'lore',
+      ]) {
         const emitted = emissions.filter(({ section }) => section === name)
         expect(emitted).toHaveLength(1)
         expect(emitted[0].data).toEqual(

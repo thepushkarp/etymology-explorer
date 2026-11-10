@@ -40,3 +40,15 @@ describe('ElevenLabs language selection', () => {
     expect(languageCode).toBe('en')
   })
 })
+
+test('Hindi and Urdu preserve language selection, while Sanskrit cannot dispatch TTS', async () => {
+  const languageCodes: string[] = []
+  globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    languageCodes.push((JSON.parse(String(init?.body)) as { language_code: string }).language_code)
+    return new Response(new Uint8Array([1]), { status: 200 })
+  }) as unknown as typeof fetch
+  await generatePronunciation('पानी', 'hi')
+  await generatePronunciation('کتاب', 'ur')
+  await expect(generatePronunciation('धर्म', 'sa')).rejects.toThrow('unavailable for Sanskrit')
+  expect(languageCodes).toEqual(['hi', 'ur'])
+})

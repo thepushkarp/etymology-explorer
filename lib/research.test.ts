@@ -10,7 +10,7 @@ import {
   expandLexemes,
 } from '@/lib/research'
 import { extractEtymonlineRelatedEntries, fetchEtymonline } from '@/lib/etymonline'
-import { parseSourceTexts } from '@/lib/etymologyParser'
+import { parseSourceTexts, parseWiktionaryText } from '@/lib/etymologyParser'
 import { CONFIG } from '@/lib/config'
 import { SourceFetchBudget } from '@/lib/sourceFetchBudget'
 import { createLexemeResearchSession } from '@/lib/lexemeResearch'
@@ -815,6 +815,44 @@ test('component variants preserve query identity, separate scopes and actual HTT
   )
   expect(budget.attempts).toBe(requests.length)
   expect(budget.attempts).toBeLessThanOrEqual(16)
+})
+
+test('a registered Sanskrit ancestor keeps its dictionary lookup without optional sources', async () => {
+  const requests: URL[] = []
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(String(input))
+    requests.push(url)
+    if (url.hostname === 'en.wiktionary.org')
+      return Response.json({
+        parse: {
+          title: 'पानीय',
+          text: '<h2 id="Sanskrit">Sanskrit</h2><p>A drink; water.</p>',
+          tocdata: {
+            sections: [
+              { index: '1', line: 'Sanskrit', anchor: 'Sanskrit', hLevel: 2, number: '1' },
+            ],
+          },
+        },
+      })
+    return new Response('', { status: 404 })
+  }) as typeof fetch
+  const context: ResearchContext = {
+    language: 'hi',
+    mainWord: { word: 'पानी', etymonline: null, wiktionary: null },
+    parsedChains: [parseWiktionaryText('From Sanskrit पानीय.', 'पानी')],
+    rootResearch: [],
+    identifiedRoots: [],
+    relatedResearch: [],
+    totalSourcesFetched: 0,
+  }
+  const budget = new SourceFetchBudget(16)
+  await expandLexemes(context, budget)
+  expect(context.rootResearch[0].lexeme).toEqual({ word: 'पानीय', language: 'Sanskrit' })
+  expect(
+    context.rootResearch[0].sources?.some((source) => source.provider === 'wiktionaryEnglish')
+  ).toBe(true)
+  expect(requests.every((url) => !/wikipedia|wikidata/.test(url.hostname))).toBe(true)
+  expect(budget.attempts).toBe(requests.length)
 })
 
 test('secondary edition homographs cannot corroborate the primary history', async () => {

@@ -34,7 +34,7 @@ function HeaderSearch({ initialLanguage }: { initialLanguage?: LanguageCode }) {
         <option value="">Auto</option>
         {SUPPORTED_LANGUAGE_CODES.map((code) => (
           <option key={code} value={code}>
-            {LANGUAGES[code].nativeName}
+            {LANGUAGES[code].englishName}
           </option>
         ))}
       </select>

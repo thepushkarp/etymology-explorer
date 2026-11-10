@@ -53,6 +53,14 @@ describe('historyEntry', () => {
     expect('histories' in selected).toBe(false)
   })
 
+  test('projects the selected reading and clears an absent sibling reading', () => {
+    const result = structuredClone(RESULT)
+    result.transliteration = 'primary reading'
+    result.histories[0].transliteration = 'primary reading'
+    expect(historyEntry(result).transliteration).toBe('primary reading')
+    expect(historyEntry(result, 'money').transliteration).toBeUndefined()
+  })
+
   test('falls back to the primary history for an unknown selection', () => {
     expect(historyEntry(RESULT, 'missing').definition).toBe('river')
   })

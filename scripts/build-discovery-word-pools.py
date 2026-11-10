@@ -1,8 +1,12 @@
-"""Build advanced discovery pools from frequency and Wiktionary evidence.
+"""Build discovery pools from frequency evidence and reviewed headwords.
 
 Run with:
 
     uv run --with wordfreq python scripts/build-discovery-word-pools.py
+
+Refresh only curated Hindi, Urdu and Sanskrit pools, without downloads:
+
+    python scripts/build-discovery-word-pools.py --languages hi ur sa
 
 The generated JSON is reviewed and committed, so this script and its Python
 dependency are not part of the application runtime.
@@ -22,10 +26,57 @@ import urllib.request
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
-from wordfreq import iter_wordlist, zipf_frequency
-
-LANGUAGES = ("it", "es", "fr", "pt")
+# These small pools use English Wiktionary language sections. The Romance
+# frequency/length filters reject Indic combining marks and are not an admission
+# rule for these scripts; Sanskrit also lacks a wordfreq frequency corpus.
+CURATED_POOLS = {
+    "hi": (
+        "पानी",
+        "किताब",
+        "जंगल",
+        "नमस्ते",
+        "धर्म",
+        "आग",
+        "नाम",
+        "रात",
+        "दिन",
+        "घर",
+        "हाथ",
+        "दोस्त",
+    ),
+    "ur": (
+        "پانی",
+        "کتاب",
+        "دل",
+        "زبان",
+        "جنگل",
+        "آگ",
+        "نام",
+        "رات",
+        "دن",
+        "گھر",
+        "ہاتھ",
+        "دوست",
+    ),
+    "sa": (
+        "अग्नि",
+        "धर्म",
+        "योग",
+        "विद्या",
+        "वेद",
+        "देव",
+        "गुरु",
+        "नामन्",
+        "कर्मन्",
+        "ज्ञान",
+        "जल",
+        "मित्र",
+    ),
+}
+LANGUAGE_HEADINGS = {"hi": "Hindi", "ur": "Urdu", "sa": "Sanskrit"}
+LANGUAGES = ("it", "es", "fr", "pt", *CURATED_POOLS)
 POOL_SIZE = 446
 MIN_ZIPF = 2.8
 MAX_ZIPF = 3.65
@@ -80,6 +131,8 @@ def normalized_letters(word: str) -> bool:
 
 
 def frequency_candidates(language: str) -> dict[str, float]:
+    from wordfreq import iter_wordlist, zipf_frequency
+
     candidates: dict[str, float] = {}
     for word in iter_wordlist(language):
         frequency = zipf_frequency(word, language)
@@ -233,13 +286,32 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="data/discovery-words.json")
     parser.add_argument("--audit", default="/tmp/etymex-discovery-word-audit.json")
+    parser.add_argument("--languages", nargs="+", choices=LANGUAGES, default=LANGUAGES)
     args = parser.parse_args()
 
-    pools: dict[str, list[str]] = {}
+    output = Path(args.output)
+    pools: dict[str, list[str]] = (
+        json.loads(output.read_text(encoding="utf-8")) if output.exists() else {}
+    )
     audit: dict[str, list[dict[str, Any]]] = {}
     audit_random = random.Random(20260729)
 
-    for language in LANGUAGES:
+    for language in args.languages:
+        if language in CURATED_POOLS:
+            pools[language] = sorted(CURATED_POOLS[language])
+            audit[language] = [
+                {
+                    "word": word,
+                    "selection": "curated",
+                    "source": f"https://en.wiktionary.org/wiki/{quote(word)}#{LANGUAGE_HEADINGS[language]}",
+                }
+                for word in pools[language]
+            ]
+            print(
+                f"{language}: selected {len(pools[language])} curated headwords",
+                file=sys.stderr,
+            )
+            continue
         candidates = frequency_candidates(language)
         records = load_qualified_entries(language, candidates)
         selected = select_pool(records)
@@ -255,7 +327,7 @@ def main() -> None:
             flush=True,
         )
 
-    Path(args.output).write_text(
+    output.write_text(
         json.dumps(pools, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     Path(args.audit).write_text(

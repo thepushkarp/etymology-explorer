@@ -39,6 +39,7 @@ export interface SourceProgress {
 export const SECTION_KEYS = [
   'word',
   'pronunciation',
+  'transliteration',
   'definition',
   'ancestryGraph',
   'roots',
@@ -68,6 +69,7 @@ export function toPartialResult(
     language,
     word: sections.word ?? word,
     pronunciation: sections.pronunciation ?? '',
+    transliteration: sections.transliteration,
     definition: sections.definition ?? '',
     roots: sections.roots ?? [],
     ancestryGraph: sections.ancestryGraph ?? { branches: [] },

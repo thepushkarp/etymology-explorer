@@ -8,6 +8,44 @@ import {
 } from './wiktionaryEntryGroups'
 
 describe('extractWiktionaryEntryGroups', () => {
+  test('attaches only exact headword readings within each selected history', () => {
+    const html = [
+      '<h2 id="Hindi">Hindi</h2>',
+      '<h3 id="Etymology_1">Etymology 1</h3>',
+      '<p>From Sanskrit <span class="tr">wrong ancestor reading</span>.</p>',
+      '<p><strong class="Deva headword" lang="hi">पानी</strong> (<span class="headword-tr tr">pānī</span>)</p>',
+      '<h3 id="Etymology_2">Etymology 2</h3>',
+      '<p><strong class="headword Deva" lang="hi">पानी</strong> (<span class="headword-tr tr">pāni</span>)</p>',
+      '<h2 id="Sanskrit">Sanskrit</h2>',
+      '<p><strong class="headword">पानी</strong> (<span class="headword-tr tr">wrong language</span>)</p>',
+    ].join('')
+    const sections = ['Hindi', 'Etymology_1', 'Etymology_2', 'Sanskrit'].map((anchor, index) => ({
+      index: String(index),
+      number: String(index),
+      anchor,
+      line: anchor.replace('_', ' '),
+      hLevel: anchor.startsWith('Etymology') ? 3 : 2,
+    }))
+    expect(
+      extractWiktionaryEntryGroups(html, sections, 'Hindi', /^Etymology/, 'पानी').map(
+        (group) => group.transliteration
+      )
+    ).toEqual(['pānī', 'pāni'])
+    expect(
+      extractWiktionaryEntryGroups(html, sections, 'Hindi', /^Etymology/, 'पाणि').every(
+        (group) => group.transliteration === undefined
+      )
+    ).toBe(true)
+    const conflicting = html.replace(
+      '<h3 id="Etymology_2">',
+      '<p><strong class="headword">पानी</strong> (<span class="headword-tr tr">other reading</span>)</p><h3 id="Etymology_2">'
+    )
+    expect(
+      extractWiktionaryEntryGroups(conflicting, sections, 'Hindi', /^Etymology/, 'पानी')[0]
+        .transliteration
+    ).toBeUndefined()
+  })
+
   test('keeps numbered etymologies and their sense contexts separate', () => {
     const html = [
       '<h2 id="English">English</h2><p>unrelated same spelling</p>',

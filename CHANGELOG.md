@@ -8,6 +8,11 @@ plain-text bullet under a `###` group. `Unreleased` stays out of the dialog.
 
 ## [Unreleased]
 
+### Added
+
+- Explore Hindi, Urdu, and Sanskrit words in their native scripts, with source-backed transliterations, language tabs, and curated discovery words.
+- Hear Hindi and Urdu pronunciations, with right-to-left Urdu text and fonts for Devanagari and Urdu.
+
 ### Changed
 
 - Auto discovers supported languages for a spelling and traces their histories together with language tabs.

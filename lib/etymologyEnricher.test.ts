@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { enrichAncestryGraph, pruneUngroundedStages } from '@/lib/etymologyEnricher'
 import type { AncestryGraph, AncestryStage } from '@/lib/types'
 import type { ParsedEtymChain } from '@/lib/etymologyParser'
+import { parseWiktionaryText } from '@/lib/etymologyParser'
 
 const CHAINS: ParsedEtymChain[] = [
   {
@@ -17,6 +18,26 @@ const CHAINS: ParsedEtymChain[] = [
     ],
   },
 ]
+
+test('stage readings replace model values only for an unambiguous exact source form and language', () => {
+  const chain = parseWiktionaryText('From Classical Persian کتاب (kitāb, “book”).', 'किताब')
+  const stages: AncestryStage[] = [
+    { stage: 'Classical Persian', form: 'کتاب', transliteration: 'invented', note: '' },
+    { stage: 'Arabic', form: 'کتاب', transliteration: 'invented', note: '' },
+    { stage: 'Classical Persian', form: 'کتب', transliteration: 'invented', note: '' },
+  ]
+  const graph = { branches: [{ root: 'किताब', stages }] }
+  enrichAncestryGraph(graph, [chain])
+  expect(stages.map((stage) => stage.transliteration)).toEqual(['kitāb', undefined, undefined])
+  const conflicting = structuredClone(chain)
+  conflicting.links[0].transliteration = 'ketāb'
+  enrichAncestryGraph(graph, [chain, conflicting])
+  expect(stages[0].transliteration).toBeUndefined()
+  chain.links[0].variants = ['کتب']
+  enrichAncestryGraph(graph, [chain])
+  expect(stages[2].confidence).toBe('medium')
+  expect(stages[2].transliteration).toBeUndefined()
+})
 
 test('confidence counts publisher families across editions and retrieval routes', () => {
   const stage: AncestryStage = { stage: 'Latin', form: 'fenestra', note: '' }

@@ -5,6 +5,7 @@ import {
   formatParsedChainsForPrompt,
   parseDictionaryText,
 } from './etymologyParser'
+import { cleanWiktionaryHtml } from './wiktionaryEntryGroups'
 
 test('an institution founding date is not a word attestation', () => {
   const chain = parseWiktionaryText(
@@ -55,5 +56,66 @@ test('historical language qualifiers are not mistaken for ancestral words', () =
     expect(link.form).toBe(form)
     expect(link.isReconstructed).toBe(form.startsWith('*'))
     expect(text).toContain(link.rawSnippet)
+  }
+})
+
+test('Indic and Persian chains retain source forms, readings, glosses and periods', () => {
+  // Recorded English Wiktionary पानी etymology; reading spans retain their role.
+  const text = cleanWiktionaryHtml(
+    '<p>Inherited from Old Hindi पांनी (<span lang="inc-ohi-Latn" class="mention-tr tr Latn">pā̃nī</span>), from Apabhramsa पाणिउ (<span lang="inc-apa-Latn" class="mention-tr tr Latn">pāṇiu</span>), from Prakrit 𑀧𑀸𑀡𑀻𑀅 (<span lang="pra-Latn" class="mention-tr tr Latn">pāṇīa</span>), from Sanskrit पानीय (<span lang="sa-Latn" class="mention-tr tr Latn">pānīya</span>, “water, drink”).</p>'
+  )
+  const chain = parseWiktionaryText(text, 'पानी')
+  expect(
+    chain.links.map(({ language, form, transliteration, meaning }) => [
+      language,
+      form,
+      transliteration,
+      meaning,
+    ])
+  ).toEqual([
+    ['Old Hindi', 'पांनी', 'pā̃nī', undefined],
+    ['Apabhramsa', 'पाणिउ', 'pāṇiu', undefined],
+    ['Prakrit', '𑀧𑀸𑀡𑀻𑀅', 'pāṇīa', undefined],
+    ['Sanskrit', 'पानीय', 'pānīya', 'water, drink'],
+  ])
+  const persian = parseWiktionaryText(
+    'Borrowed from Classical Persian کتاب (kitāb, “book”).',
+    'کتاب'
+  )
+  expect(persian.links[0]).toMatchObject({
+    language: 'Classical Persian',
+    form: 'کتاب',
+    transliteration: 'kitāb',
+    meaning: 'book',
+  })
+  expect(
+    parseWiktionaryText('From Sanskrit √धृ, from PIE root *dʰer- “hold”.', 'धर्म').links.map(
+      ({ form }) => form
+    )
+  ).toEqual(['*dʰer-'])
+  expect(parseWiktionaryText('From Sanskrit root √धृ.', 'धर्म').links).toEqual([])
+  expect(
+    parseWiktionaryText(
+      'From Proto-Indo-European *dʰér-mos, from *dʰer- (“to hold, support”); the Sanskrit root is धृ (transliteration: dhṛ).',
+      'धर्म'
+    ).links.map(({ language, form }) => [language, form])
+  ).toEqual([
+    ['Proto-Indo-European', '*dʰér-mos'],
+    ['Proto-Indo-European', '*dʰer-'],
+  ])
+  const glossOnly = parseWiktionaryText('From Sanskrit पानीय (water).', 'पानी').links[0]
+  expect(glossOnly.meaning).toBe('water')
+  expect(glossOnly.transliteration).toBeUndefined()
+  expect(formatParsedChainsForPrompt([chain])).toContain('Sanskrit: पानीय (pānīya) "water, drink"')
+})
+
+test('historical forms preserve internal joiners and reject invalid joiner boundaries', () => {
+  for (const form of ['क्\u200Dष', 'می\u200Cرود']) {
+    expect(
+      parseWiktionaryText(`From Hindi ${form} (reading, “gloss”).`, 'word').links[0]?.form
+    ).toBe(form)
+  }
+  for (const form of ['\u200Dक', 'क\u200D', 'क\u200D\u200Dष', 'क-\u200Dष']) {
+    expect(parseWiktionaryText(`From Hindi ${form}.`, 'word').links).toEqual([])
   }
 })

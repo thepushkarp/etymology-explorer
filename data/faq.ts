@@ -44,4 +44,10 @@ export const faqs: FaqItem[] = [
     answer:
       'Type a word or phrase and press Enter. Auto discovers which supported languages use that spelling and traces their independent histories in language tabs. You can choose a language to include specialist-only entries. Explanations are in English, with examples in the word’s language and English translations. Saved entries remain readable; a Retrace link appears when their research is due for an update.',
   },
+  {
+    question: 'Which languages can I explore?',
+    answer:
+      'Etymology Explorer supports English, Italian, Spanish, French, Portuguese, Hindi, Urdu, and Sanskrit. Enter Hindi and Sanskrit in Devanagari and Urdu in Arabic script. Hindi, Urdu, and Sanskrit use Wiktionary lexical evidence, with source-backed transliterations where available. Hindi and Urdu pronunciation audio is available; Sanskrit audio and usage charts for all three are unavailable.',
+    searchExample: 'पानी',
+  },
 ]

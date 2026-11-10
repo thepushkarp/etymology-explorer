@@ -6,7 +6,7 @@ This file provides guidance to AI Coding Agents when working with code in this r
 
 EtymEx is a Next.js Etymology Explorer web app that helps users discover word origins through an LLM-powered synthesis pipeline with grounded etymological evidence. The app runs in **public mode** by default (server-side API key) with rate limiting, cost budgets, caching, and distributed request deduplication.
 
-Users search for a word or phrase in Auto mode, or supply an English, Italian, Spanish, French, or Portuguese hint. One durable spelling entry contains independent language histories, shown in tabs. The app:
+Users search for a word or phrase in Auto mode, or supply an English, Italian, Spanish, French, Portuguese, Hindi, Urdu, or Sanskrit hint. Hindi and Sanskrit use Devanagari; Urdu uses Arabic script and right-to-left text. One durable spelling entry contains independent language histories, shown in tabs. The app:
 
 1. Uses a shared lexeme lookup for query words, ancestors, components, variants, and related terms. General sources (Wiktionary, Wikipedia, and applicable lexical APIs) run alongside all applicable specialist dictionaries. Modern specialists include American Heritage, De Mauro, DLE/Americanismos, CNRTL's TLFi/Littré/Académie collections, Priberam, and Michaelis. Historical specialists include Bosworth–Toller, Lewis & Short, and LSJ. FreeDictionaryAPI supplies senses and pronunciation only when direct Wiktionary evidence is unavailable; it cannot establish ancestry.
 2. Pre-parses source-local etymological chains and keeps independent lexical histories and evidence scopes.
@@ -16,6 +16,8 @@ Users search for a word or phrase in Auto mode, or supply an English, Italian, S
 6. Matches ancestry stages to scoped evidence, assigns confidence, and prunes unsupported lineage claims. Component evidence cannot establish the whole phrase's origin.
 
 The primary Wiktionary edition defines source-local history boundaries, with Etymonline as the English fallback and source-defined specialist entries as further fallbacks; complete secondary sources remain independent context without invented history alignment. Each history has its own selectable story and lineage, with compound branches kept within that history. Wikipedia and community context cannot establish ancestry. Components alone cannot admit a phrase.
+
+Hindi, Urdu, and Sanskrit use English Wiktionary as their history primary; Hindi also queries its native edition. Optional Platts, Wisdom Library, and Cologne Monier-Williams adapters and provider IDs are omitted pending source admission. The [Platts digitization](https://dsal.uchicago.edu/dictionaries/platts/) links CC BY-NC-ND terms; [Wisdom Library's site information](https://www.wisdomlib.org/m/about.html) does not establish a blanket glossary reuse license; the [Cologne digital MW header](https://raw.githubusercontent.com/sanskrit-lexicon/csl-orig/master/v02/mw/mwheader.xml) specifies noncommercial, share-alike terms. Do not register these sources based solely on accessible lookup pages.
 
 Every application source HTTP attempt shares one entry budget: 32 attempts for the first language plus 16 for each extra resolved language, capped at 96. Language resolution is limited to the first 32 attempts and its attempts count toward the final ceiling. Primary fetches, fallback attempts, Wikidata detail requests, enrichment, and Exa API calls all count. Exa's internal crawling is outside that application counter. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
 
@@ -110,6 +112,8 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/recentSearches.ts`** - One atomic list of the latest 20 distinct successful searches, each labelled with its primary language. GET `/api/recent-searches` samples four; POST records only server-validated cached results and their previews. Explicit navigation and completed traces record searches; prefetching and passive loads do not. The static homepage fills gaps from curated words.
 
+- **`data/discovery-words.json`** - Frequency-selected Romance pools and curated Hindi, Urdu, and Sanskrit headwords. `scripts/build-discovery-word-pools.py --languages hi ur sa` refreshes the curated pools without downloads and preserves other pools; the Romance frequency and Latin-letter filters are not applied to Indic scripts.
+
 - **`lib/costGuard.ts`** - Monthly USD budget enforcement via pipelined Redis INCRBYFLOAT + EXPIRE NX:
   - Normal mode (0-90% of budget): allow uncached requests
   - Cache-only mode (≥90%): serve cached results only, reject uncached requests
@@ -134,6 +138,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   persists the complete clip before releasing the lock, keeping cleanup alive on serverless
   runtimes. Concurrent listeners poll at `audioWaiterPollIntervalMs` (250 ms); cached clips
   remain available under budget pressure and retain the one-year HTTP cache lifetime.
+  The configured `eleven_v4` model supports Hindi and Urdu, as listed in the [ElevenLabs models documentation](https://elevenlabs.io/docs/overview/models). Sanskrit has no pronunciation capability; Hindi, Urdu, and Sanskrit have no ngram corpus.
 
 - **`lib/counters.ts`** - Best-effort monthly INCR counters (cache_hit / cache_miss / error), exposed via `/api/admin/stats`
 
@@ -211,8 +216,8 @@ Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API cos
 - Source text is sanitized for prompt embedding and retained in full. Context overflow returns an explicit error instead of silently truncating evidence.
 - `sourceCacheTTL = 7d` - Raw dictionary and Wikipedia source cache
 
-English's root-extraction fallback overlaps the remaining primary fetches and source-defined
-lexeme expansion. All primary sources still finish before lexeme expansion; root and related-page
+The merged route finishes every language's primary sources before enrichment begins. English's
+root-extraction fallback overlaps source-defined scoped lexeme expansion; root and related-page
 research waits for both, preserving complete source text and HTTP budget priority.
 
 ### LLM Integration
@@ -301,7 +306,7 @@ The UI is a quiet, typeset dictionary page: the words carry it, the chrome gets 
 
 ### Core Principles
 
-- **Typography-first**: Libre Baskerville (regular + italic) for words and prose, Alegreya Sans (regular) for small UI text. Hierarchy comes from size, italics, and the small-caps `label` utility — no bold weights (they are not loaded).
+- **Typography-first**: Libre Baskerville (regular + italic) for words and prose, Alegreya Sans (regular) for small UI text, and regular Noto Serif Devanagari and Noto Nastaliq Urdu for their scripts. Urdu text has room for Nastaliq's taller line height. Foreign forms carry language and direction metadata; source-attested transliterations accompany headwords and ancestry forms. Hierarchy comes from size, italics, and the small-caps `label` utility — no bold weights (they are not loaded).
 - **One reading column**: `max-w-3xl`, generous vertical rhythm, hairline `rule` borders. No cards, gradients, shadows, or pills.
 - **Restrained color**: paper, ink, and a single oxblood `accent` used for emphasis and the live marker. The one exception is the lineage tree, which marks each node's language family with a `lang-*` token (top edge + legend). Use tokens, never raw hex or Tailwind palette colors.
 - **Purposeful motion**: one CSS `animate-rise` reveal (staggered via `animation-delay`), color transitions on hover, skeleton pulses while streaming. Honor reduced motion.
@@ -371,7 +376,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 - `lib/etymonline.ts` - HTML scraper with fallback patterns
 - `lib/wiktionary.ts` - MediaWiki API client
-- `lib/multilingualSources.ts` - Selected-language dictionary sources and the senses-only FreeDictionaryAPI fallback for all supported languages
+- `lib/multilingualSources.ts` - Selected-language dictionary sources and the senses-only FreeDictionaryAPI fallback where enabled in the language registry
 - `lib/wikipedia.ts` - Selected-language MediaWiki API full-article extracts with exact-title/redirect validation and revision provenance
 - `lib/incelsWiki.ts` - Incel Wiki MediaWiki API client (supplemental context)
 - `lib/specialistSources.ts` - Modern dictionary adapters retaining exact homographs and publisher families

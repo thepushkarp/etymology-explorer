@@ -107,7 +107,7 @@ test('authoritative Latin misses fall back to English, while unsupported or mixe
     otherLanguages: [],
   })
   const before = requests.length
-  expect(await resolveEntryLanguages('नमस्ते', session())).toEqual({
+  expect(await resolveEntryLanguages('привет', session())).toEqual({
     languages: [],
     otherLanguages: [],
   })
@@ -204,4 +204,35 @@ test('persisted language TOCs resolve a warm spelling without source HTTP attemp
   } finally {
     cached.mockRestore()
   }
+})
+
+test('Indic resolution reuses native Hindi and English pages without merging language histories', async () => {
+  const requests = serve((url) =>
+    url.hostname === 'en.wiktionary.org'
+      ? Response.json(page(['Hindi', 'Sanskrit', 'Nepali'], 'नमस्ते'))
+      : url.hostname === 'hi.wiktionary.org'
+        ? Response.json(page(['हिंदी'], 'नमस्ते'))
+        : new Response('', { status: 404 })
+  )
+  const shared = session()
+  expect(await resolveEntryLanguages('नमस्ते', shared)).toEqual({
+    languages: ['hi', 'sa'],
+    otherLanguages: ['Nepali'],
+  })
+  const lookups = await shared.lookupMany(
+    [
+      { word: 'नमस्ते', language: 'hi' },
+      { word: 'नमस्ते', language: 'sa' },
+    ],
+    { skipOptionalSources: true }
+  )
+  expect(lookups[0].sources.map((source) => source.provider)).toEqual([
+    'wiktionaryEnglish',
+    'wiktionaryNative',
+  ])
+  expect(lookups[1].sources.map((source) => source.provider)).toEqual(['wiktionaryEnglish'])
+  expect(requests.map((url) => url.hostname).sort()).toEqual([
+    'en.wiktionary.org',
+    'hi.wiktionary.org',
+  ])
 })

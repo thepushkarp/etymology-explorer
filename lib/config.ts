@@ -19,7 +19,8 @@ export const CONFIG = {
   // Input validation
   maxWordLength: 120,
   // Marks must follow letters; punctuation separates nonempty letter groups.
-  wordPattern: /^(?:\p{L}\p{M}*)+(?:[ '’ʼ‐‑-](?:\p{L}\p{M}*)+)*$/u,
+  wordPattern:
+    /^(?:\p{L}\p{M}*)(?:[\u200C\u200D]?\p{L}\p{M}*)*(?:[ '’ʼ‐‑-](?:\p{L}\p{M}*)(?:[\u200C\u200D]?\p{L}\p{M}*)*)*$/u,
 
   // Rate limits (per IP)
   rateLimit: {
@@ -35,7 +36,7 @@ export const CONFIG = {
   maxTotalFetches: 32,
   maxFetchesPerExtraLanguage: 16,
   maxEntryFetches: 96,
-  pipelineRevision: 1,
+  pipelineRevision: 2,
   entryFreshDays: 90,
 
   // Exa's full-text search and recovery share their own paid-request allowance.

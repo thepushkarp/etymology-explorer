@@ -3,6 +3,35 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { AncestryTree } from './AncestryTree'
 
 describe('AncestryTree language identity', () => {
+  test('shows source romanizations and separates Indo-Iranian ancestry from Dravidian', () => {
+    const markup = renderToStaticMarkup(
+      <AncestryTree
+        language="hi"
+        word="पानी"
+        transliteration="pānī"
+        graph={{
+          branches: [
+            {
+              root: 'पानीय',
+              stages: [
+                { stage: 'Tamil', form: 'நீர்', note: 'comparison' },
+                { stage: 'Sanskrit', form: 'पानीय', transliteration: 'pānīya', note: 'drinkable' },
+                { stage: 'Old Hindi', form: 'पाणी', transliteration: 'pāṇī', note: 'water' },
+              ],
+            },
+          ],
+        }}
+      />
+    )
+    expect(markup).toContain('border-t-lang-indo-iranian')
+    expect(markup).toContain('border-t-lang-other')
+    expect(markup).toContain('lang="sa" dir="auto"')
+    expect(markup).toContain('>pānīya</span>')
+    expect(markup).toContain('lang="hi" dir="auto"')
+    expect(markup).toContain('>pānī</span>')
+    expect(markup).toContain('>Indo-Iranian</span>')
+  })
+
   test('labels the final form with the explicitly selected language', () => {
     const markup = renderToStaticMarkup(
       <AncestryTree
@@ -19,8 +48,8 @@ describe('AncestryTree language identity', () => {
       />
     )
 
-    expect(markup).toContain('Modern Italian')
-    expect(markup).not.toContain('Modern English')
+    expect(markup).toContain('>Italian</span>')
+    expect(markup).not.toContain('>English</span>')
   })
 })
 

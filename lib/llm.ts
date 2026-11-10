@@ -607,7 +607,10 @@ function finalizeHistories(result: EtymologyResult, researchContext: ResearchCon
   }
 
   for (const history of result.histories) {
-    const source = researchContext.entryContexts?.find((entry) => entry.id === history.id)?.source
+    const entry = researchContext.entryContexts?.find((entry) => entry.id === history.id)
+    const source = entry?.source
+    if (entry?.transliteration) history.transliteration = entry.transliteration
+    else delete history.transliteration
     const sourceRecord = mainSourceRecords(researchContext.mainWord).find(
       (record) => record.provider === source
     )
@@ -662,6 +665,8 @@ function finalizeHistories(result: EtymologyResult, researchContext: ResearchCon
   if (!primary) {
     throw new Error('Schema validation failed: primary history is missing')
   }
+  if (primary.transliteration) result.transliteration = primary.transliteration
+  else delete result.transliteration
   result.pronunciation = primary.pronunciation
   result.definition = primary.definition
   result.roots = primary.roots
@@ -729,6 +734,7 @@ export async function synthesizeFromResearch(
       let pendingPrimaryHistory: unknown
       const entryFields = [
         'pronunciation',
+        'transliteration',
         'definition',
         'ancestryGraph',
         'roots',

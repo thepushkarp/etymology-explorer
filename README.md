@@ -8,7 +8,8 @@ Try it out at [etymex.com](https://etymex.com)
 
 - **Public Mode**: No client-side API keys needed — uses a server-side LLM with rate limiting, caching, and budget controls
 - **Grounded Etymology**: Source-backed confidence scoring (high/medium/low) for each ancestral stage
-- **Automatic Language Discovery**: One spelling opens English, Italian, Spanish, French, and Portuguese histories together in language tabs; a manual language hint also finds specialist-only entries. Explanations are English, with translated examples in the word's own language
+- **Automatic Language Discovery**: One spelling opens English, Italian, Spanish, French, Portuguese, Hindi, Urdu, and Sanskrit histories together in language tabs; a manual language hint also finds specialist-only entries. Explanations are English, with translated examples in the word's own language
+- **Native Scripts**: Search Hindi and Sanskrit in Devanagari and Urdu in Arabic script, with source-backed transliterations and right-to-left Urdu text
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
 - **Part of Speech Tags**: See grammatical categories (noun/verb/adjective) with alternate pronunciations for words like "record"
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
@@ -95,7 +96,8 @@ RATE_LIMIT_ENABLED=true
 `ELEVENLABS_VOICE_ID` must be a voice available to your account in `My Voices`.
 Free-tier accounts cannot use Voice Library/community voices through the API.
 Pronunciation requests pass the selected ISO 639-1 `language_code` to `eleven_v4` for
-language selection and text normalization. Accent still depends on the configured voice;
+language selection and text normalization. [ElevenLabs lists Hindi and Urdu support](https://elevenlabs.io/docs/overview/models); Sanskrit pronunciation is unavailable.
+Accent still depends on the configured voice;
 `pt` does not select a Brazilian or European accent.
 
 See `.env.example` for full documentation.
@@ -123,7 +125,7 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
 - **Data Sources**:
   - [Etymonline](https://www.etymonline.com/) - Historical etymology
   - [Wiktionary](https://en.wiktionary.org/) - Definitions and linguistic data
-  - Native Italian, Spanish, French, and Portuguese Wiktionary editions - selected-language etymology sections
+  - Native Italian, Spanish, French, Portuguese, and Hindi Wiktionary editions - selected-language sections; English Wiktionary defines Hindi, Urdu, and Sanskrit history boundaries
   - [Wikidata Lexemes](https://www.wikidata.org/wiki/Wikidata:Lexicographical_data/Documentation) - language-tagged lemmas, forms, senses, and lexical claims
   - [FreeDictionaryAPI](https://freedictionaryapi.com/) - senses, forms, and IPA after direct Wiktionary misses (not etymology)
   - [Dicionário Aberto](https://api.dicionario-aberto.net/index.html) - older Portuguese dictionary evidence
@@ -133,7 +135,11 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
   - Bosworth–Toller, Lewis & Short, and LSJ through Logeion - historical-language lexemes
   - [Exa](https://exa.ai/) - optional blocked-page recovery and targeted publisher discovery
 - **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
-- **Typography**: Libre Baskerville (display serif) + Alegreya Sans (body), self-hosted woff2 subsets
+- **Typography**: Libre Baskerville (display serif), Alegreya Sans (UI), Noto Serif Devanagari, and Noto Nastaliq Urdu, self-hosted regular-weight woff2 subsets
+
+Hindi, Urdu, and Sanskrit rely on Wiktionary lexical evidence; Wikipedia supplies context and cannot establish ancestry. Optional Platts, Wisdom Library, and Cologne Monier-Williams adapters are not enabled: the [Platts digitization links restrictive reuse terms](https://dsal.uchicago.edu/dictionaries/platts/), [Wisdom Library's published site information](https://www.wisdomlib.org/m/about.html) does not establish a blanket glossary reuse license, and the [Cologne digital edition specifies noncommercial, share-alike terms](https://raw.githubusercontent.com/sanskrit-lexicon/csl-orig/master/v02/mw/mwheader.xml). Their availability alone does not establish suitability for public synthesis.
+
+Random discovery uses frequency-selected Romance pools and small curated Hindi, Urdu, and Sanskrit headword pools. Refresh the curated pools without downloads using `python scripts/build-discovery-word-pools.py --languages hi ur sa`; the generator preserves unselected pools. Google Books usage charts are unavailable for these three languages.
 
 ## Project Structure
 

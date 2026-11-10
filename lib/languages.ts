@@ -1,5 +1,5 @@
 import { canonicalizeWord } from './orthography'
-export const SUPPORTED_LANGUAGE_CODES = ['en', 'it', 'es', 'fr', 'pt'] as const
+export const SUPPORTED_LANGUAGE_CODES = ['en', 'it', 'es', 'fr', 'pt', 'hi', 'ur', 'sa'] as const
 
 export type LanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number]
 
@@ -137,6 +137,60 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     ngramCorpus: null,
     promptNotes:
       'PORTUGUESE: write the example sentences in neutral Portuguese. When a Brazilian/European distinction matters, label it explicitly; never silently choose one regional variant.',
+  },
+  hi: {
+    code: 'hi',
+    englishName: 'Hindi',
+    nativeName: 'हिन्दी',
+    scripts: ['Devanagari'],
+    priority: 5,
+    englishWiktionaryHeading: 'Hindi',
+    nativeWiktionary: {
+      edition: 'hi',
+      heading: 'हिंदी',
+      etymologyHeading: /^व्युत्पत्ति(?:\s+\d+)?$/u,
+      formHeading: /^(?:संज्ञा|क्रिया|विशेषण)$/u,
+    },
+    historyPrimary: 'english',
+    wikipediaEdition: 'hi',
+    wikidataEntity: 'Q1568',
+    ngramCorpus: null,
+    ttsLanguageCode: 'hi',
+    particles: ['का', 'की', 'के', 'और', 'में', 'से'],
+    promptNotes:
+      'HINDI: identify tatsama, tadbhava, or Perso-Arabic layers only when sources establish them. Hindi and Urdu are standardized registers of Hindustani written in different scripts; keep their source histories independent. A Sanskrit root marked √ is a root, not an attested word.',
+  },
+  ur: {
+    code: 'ur',
+    englishName: 'Urdu',
+    nativeName: 'اردو',
+    scripts: ['Arabic'],
+    priority: 6,
+    englishWiktionaryHeading: 'Urdu',
+    historyPrimary: 'english',
+    wikipediaEdition: 'ur',
+    wikidataEntity: 'Q1617',
+    ngramCorpus: null,
+    ttsLanguageCode: 'ur',
+    direction: 'rtl',
+    particles: ['کا', 'کی', 'کے', 'اور', 'میں', 'سے'],
+    promptNotes:
+      'URDU: identify inherited Indic and Perso-Arabic layers only when sources establish them. Hindi and Urdu are standardized registers of Hindustani written in different scripts; keep their source histories independent. A Sanskrit root marked √ is a root, not an attested word.',
+  },
+  sa: {
+    code: 'sa',
+    englishName: 'Sanskrit',
+    nativeName: 'संस्कृतम्',
+    scripts: ['Devanagari'],
+    priority: 7,
+    englishWiktionaryHeading: 'Sanskrit',
+    historyPrimary: 'english',
+    wikipediaEdition: 'sa',
+    wikidataEntity: 'Q11059',
+    ngramCorpus: null,
+    particles: ['च', 'वा'],
+    promptNotes:
+      'SANSKRIT: distinguish source-attested words from grammatical roots marked √. Never present a root as an attested ancestor word. Preserve Vedic and Classical period distinctions when the sources make them.',
   },
 }
 

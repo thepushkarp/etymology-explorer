@@ -114,6 +114,23 @@ describe('deriveEntryContexts', () => {
     expect(contexts[0].evidenceScopeId).not.toBe(contexts[1].evidenceScopeId)
   })
 
+  test('keeps each group reading attached to its own context identities', () => {
+    const source = structuredClone(wiktionary)
+    source.entryGroups![0].transliteration = 'first reading'
+    source.entryGroups!.push({
+      ...source.entryGroups![0],
+      anchor: 'other',
+      transliteration: 'other reading',
+    })
+    const contexts = deriveEntryContexts('vite', 'it', 'wiktionaryNative', source, wikidata)
+    expect(contexts.map((context) => context.transliteration)).toEqual([
+      'first reading',
+      'first reading',
+      'other reading',
+      'other reading',
+    ])
+  })
+
   test('does not classify a form from localized heading text alone', () => {
     const contexts = deriveEntryContexts('vite', 'it', 'wiktionaryNative', wiktionary, null)
     expect(contexts).toHaveLength(1)

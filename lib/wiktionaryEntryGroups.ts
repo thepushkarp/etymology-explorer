@@ -1,4 +1,5 @@
 import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
+import { sameSpelling } from './orthography'
 /** A section returned by MediaWiki's `prop=tocdata` parser response. */
 export interface WiktionaryTocSection {
   index: string
@@ -29,6 +30,7 @@ export interface WiktionaryEntrySection {
 /** One source-defined etymology, without merging it with adjacent etymologies. */
 export interface WiktionaryEntryGroup {
   sourceUrl?: string
+  transliteration?: string
   index: string
   number: string
   heading: string
@@ -58,7 +60,12 @@ export function comparableHeading(value: string): string {
 
 /** Converts a MediaWiki HTML fragment into compact, readable source text. */
 export function cleanWiktionaryHtml(value: string): string {
-  const withBoundaries = preserveLinguisticNotation(value)
+  // Keep the publisher's reading annotation after its HTML classes disappear.
+  const annotated = value.replace(
+    /<span\b[^>]*class=["'](?:[^"']*\s)?mention-tr(?:\s[^"']*)?["'][^>]*>([\s\S]*?)<\/span>/gi,
+    'transliteration: $1'
+  )
+  const withBoundaries = preserveLinguisticNotation(annotated)
     .replace(/<(?:style|script|noscript)[^>]*>[\s\S]*?<\/(?:style|script|noscript)>/gi, ' ')
     .replace(
       /<a\b[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
@@ -115,6 +122,28 @@ function sectionPath(sections: WiktionaryTocSection[], targetIndex: number): str
   return stack.map((section) => section.heading)
 }
 
+/** Readings must share a headword line with the exact query in this history. */
+function headwordTransliteration(html: string, word: string): string | undefined {
+  const readings = new Set<string>()
+  for (const block of html.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)) {
+    const headwords = [...block[1].matchAll(/<strong\b([^>]*)>([\s\S]*?)<\/strong>/gi)].filter(
+      (match) => /\bclass=["'](?:[^"']*\s)?headword(?:\s[^"']*)?["']/i.test(match[1])
+    )
+    for (const [index, headword] of headwords.entries()) {
+      if (!sameSpelling(cleanWiktionaryHtml(headword[2]), word)) continue
+      const tail = block[1].slice(headword.index! + headword[0].length, headwords[index + 1]?.index)
+      const reading = tail.match(
+        /<span\b[^>]*class=["'](?:[^"']*\s)?headword-tr(?:\s[^"']*)?["'][^>]*>([\s\S]*?)<\/span>/i
+      )
+      if (reading) {
+        const text = cleanWiktionaryHtml(reading[1])
+        if (text) readings.add(text)
+      }
+    }
+  }
+  return readings.size === 1 ? [...readings][0] : undefined
+}
+
 /**
  * Extracts independent entry groups from one explicitly selected language.
  *
@@ -128,7 +157,8 @@ export function extractWiktionaryEntryGroups(
   html: string,
   sections: readonly WiktionaryTocSection[],
   languageHeading: string,
-  etymologyHeading: RegExp
+  etymologyHeading: RegExp,
+  requestedWord?: string
 ): WiktionaryEntryGroup[] {
   const languageIndex = sections.findIndex(
     (section) => comparableHeading(section.line) === comparableHeading(languageHeading)
@@ -165,6 +195,10 @@ export function extractWiktionaryEntryGroups(
         ? anchorOffset(html, sections[nextGroupIndex].anchor)
         : languageEndOffset
     const end = nextGroupOffset > start ? nextGroupOffset : languageEndOffset
+    const fragment = html.slice(start, end)
+    const transliteration = requestedWord
+      ? headwordTransliteration(fragment, requestedWord)
+      : undefined
     const assignedSections = sections.slice(groupIndex + 1, nextGroupIndex)
 
     const structuredSections = assignedSections.flatMap((section, sectionPosition) => {
@@ -195,7 +229,8 @@ export function extractWiktionaryEntryGroups(
         heading: cleanHeading(group.line),
         anchor: group.anchor,
         level: headingLevel(group),
-        text: cleanWiktionaryHtml(html.slice(start, end)),
+        ...(transliteration ? { transliteration } : {}),
+        text: cleanWiktionaryHtml(fragment),
         sections: structuredSections,
       },
     ]

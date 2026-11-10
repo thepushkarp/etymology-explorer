@@ -31,7 +31,16 @@ describe('openrouterResponses', () => {
     const schema = format.schema as {
       properties: { language: { enum: string[] }; definition: { type: string } }
     }
-    expect(schema.properties.language.enum).toEqual(['en', 'it', 'es', 'fr', 'pt'])
+    expect(schema.properties.language.enum).toEqual([
+      'en',
+      'it',
+      'es',
+      'fr',
+      'pt',
+      'hi',
+      'ur',
+      'sa',
+    ])
     expect(schema.properties.definition.type).toBe('string')
   })
 

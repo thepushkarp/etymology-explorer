@@ -50,6 +50,24 @@ const CURATED_WORDS: Record<LanguageCode, Array<{ word: string; teaser: string }
     { word: 'esquerda', teaser: 'a Basque loan shared across Iberia' },
     { word: 'saudade', teaser: 'an origin etymologists still debate' },
   ],
+  hi: [
+    { word: 'पानी', teaser: 'inherited through generations of Indo-Aryan speech' },
+    { word: 'किताब', teaser: 'an Arabic word carried through Persian' },
+    { word: 'जंगल', teaser: "the source of English 'jungle'" },
+    { word: 'नमस्ते', teaser: 'a greeting borrowed from Sanskrit' },
+  ],
+  ur: [
+    { word: 'پانی', teaser: 'an inherited word for water' },
+    { word: 'کتاب', teaser: 'an Arabic word carried through Persian' },
+    { word: 'دل', teaser: "Persian for 'heart'" },
+    { word: 'زبان', teaser: "a Persian word for 'tongue' and 'language'" },
+  ],
+  sa: [
+    { word: 'अग्नि', teaser: 'an ancient word for fire' },
+    { word: 'धर्म', teaser: "built on a root meaning 'hold'" },
+    { word: 'योग', teaser: "the source of English 'yoga'" },
+    { word: 'विद्या', teaser: 'knowledge with an ancient lineage' },
+  ],
 }
 
 export function Landing() {
@@ -110,7 +128,7 @@ export function Landing() {
                 <option value="">Auto</option>
                 {SUPPORTED_LANGUAGE_CODES.map((code) => (
                   <option key={code} value={code}>
-                    {LANGUAGES[code].nativeName}
+                    {LANGUAGES[code].englishName}
                   </option>
                 ))}
               </select>

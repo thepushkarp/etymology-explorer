@@ -17,6 +17,7 @@ const root = z.object({
 })
 
 const stage = z.object({
+  transliteration: z.string().optional(),
   stage: z.string(),
   form: z.string(),
   note: z.string().optional(),
@@ -54,6 +55,7 @@ const example = z.object({
 })
 
 const entryFields = {
+  transliteration: z.string().optional(),
   pronunciation: z.string(),
   definition: z.string(),
   roots: z.array(root),

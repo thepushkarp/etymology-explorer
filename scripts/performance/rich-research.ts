@@ -16,6 +16,9 @@ const CORPUS: Record<LanguageCode, readonly string[]> = {
   es: ['ventana', 'llama', 'ojo de buey', 'psicología', 'alcalde', 'ojalá'],
   fr: ['fenêtre', 'avocat', 'pomme de terre', 'psychologie', 'travail', 'boulot'],
   pt: ['janela', 'manga', 'dor de cotovelo', 'psicologia', 'trabalho', 'saudade'],
+  hi: ['पानी', 'किताब', 'जंगल', 'नमस्ते', 'धर्म', 'आग'],
+  ur: ['پانی', 'کتاب', 'دل', 'زبان', 'جنگل', 'آگ'],
+  sa: ['अग्नि', 'धर्म', 'योग', 'विद्या', 'कर्मन्', 'नामन्'],
 }
 const { values } = parseArgs({
   options: {

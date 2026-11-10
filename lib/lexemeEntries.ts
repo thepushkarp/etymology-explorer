@@ -178,6 +178,7 @@ export function deriveEntryContexts(
           id: entryIdentity.id,
           source: sourceName,
           heading: block.heading,
+          transliteration: group.transliteration,
           text: block.text,
           sectionHeadings: [block.heading],
           evidenceScopeId: entryIdentity.evidenceScopeId,
@@ -199,6 +200,7 @@ export function deriveEntryContexts(
           id: entryIdentity.id,
           source: sourceName,
           heading: section.heading,
+          transliteration: group.transliteration,
           text: `${matchingEtymologyLine(preamble, section.heading)}\n${section.text}`,
           sectionHeadings: section.path,
           evidenceScopeId: entryIdentity.evidenceScopeId,
@@ -215,6 +217,7 @@ export function deriveEntryContexts(
           id: entryIdentity.id,
           source: sourceName,
           heading: group.heading,
+          transliteration: group.transliteration,
           text: lemmaText || group.text,
           sectionHeadings: group.sections
             .filter((section) => !formSections.some((form) => form.section.index === section.index))
@@ -240,6 +243,7 @@ export function deriveEntryContexts(
         id: entryIdentity.id,
         source: sourceName,
         heading: section.heading,
+        transliteration: group.transliteration,
         text: section.text,
         sectionHeadings: section.path,
         evidenceScopeId: entryIdentity.evidenceScopeId,

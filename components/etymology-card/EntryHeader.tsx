@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
 import type { EtymologyEntry } from '@/lib/types'
+import { languageFromName } from '@/lib/languages'
 import { PronunciationButton } from '../PronunciationButton'
 import { Skeleton } from './Section'
+import { FormText } from './StoryText'
 
 interface EntryHeaderProps {
   result: EtymologyEntry
@@ -19,13 +21,18 @@ function shortenOrigin(origin: string): string {
 }
 
 /** One-line gloss of the word's parts, e.g. "From Latin fenestra (window)." */
-function originHook(result: EtymologyEntry): string | null {
+function originHook(result: EtymologyEntry): ReactNode {
   const meaningful = result.roots.filter((root) => !root.root.startsWith('-')).slice(0, 3)
   if (meaningful.length === 0) return null
-  const parts = meaningful.map(
-    (root) => `${shortenOrigin(root.origin)} ${root.root} (${shortenMeaning(root.meaning)})`
-  )
-  return `From ${parts.join(' + ')}.`
+  const parts = meaningful.map((root, index) => (
+    <span key={`${root.origin}-${root.root}`}>
+      {index > 0 && ' + '}
+      {shortenOrigin(root.origin)}{' '}
+      <FormText text={root.root} language={languageFromName(root.origin)} /> (
+      {shortenMeaning(root.meaning)})
+    </span>
+  ))
+  return <>From {parts}.</>
 }
 
 export function EntryHeader({ result, actions, subheader, pending }: EntryHeaderProps) {
@@ -47,8 +54,13 @@ export function EntryHeader({ result, actions, subheader, pending }: EntryHeader
       </div>
 
       <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted">
+        {result.transliteration && (
+          <span lang="en" dir="ltr" className="font-serif">
+            {result.transliteration}
+          </span>
+        )}
         {result.pronunciation && (
-          <span className="inline-flex items-center gap-1.5 font-serif">
+          <span lang="en" dir="ltr" className="inline-flex items-center gap-1.5 font-serif">
             {result.pronunciation}
             <PronunciationButton word={result.word} language={result.language} />
           </span>

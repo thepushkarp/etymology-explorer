@@ -322,7 +322,12 @@ export async function expandLexemes(
       ).values(),
     ]
     unique.forEach((lexeme) => seen.add(researchLexemeKey(lexeme)))
-    const results = await session.lookupMany(unique)
+    const results = await session.lookupMany(unique, {
+      skipOptionalSourcesFor: (lexeme) =>
+        admitted
+          .filter((candidate) => researchLexemeKey(candidate.lexeme) === researchLexemeKey(lexeme))
+          .every((candidate) => candidate.relationship === 'root'),
+    })
     const byKey = new Map(results.map((result) => [researchLexemeKey(result.lexeme), result]))
     results.forEach((result) => recordLookup(context, result))
     const discovered: ExpansionCandidate[] = []

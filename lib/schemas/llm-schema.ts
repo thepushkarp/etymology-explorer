@@ -32,20 +32,25 @@ const ANCESTRY_STAGE_SCHEMA = {
     },
     form: {
       type: 'string',
-      description: 'Form at this stage, native script when it exists, e.g. "tēle (τῆλε)"',
+      description: 'Native-script form when attested; keep romanization in transliteration',
     },
+    transliteration: { type: ['string', 'null'], description: 'Source-attested romanization only' },
     note: {
       type: 'string',
       description: 'Brief meaning/context note',
     },
   },
-  required: ['stage', 'form', 'note'],
+  required: ['stage', 'form', 'transliteration', 'note'],
   additionalProperties: false,
 } as const
 
 /** Entry fields every history carries; the top level repeats them as the primary projection. */
 const ENTRY_PROPERTIES = {
   pronunciation: { type: 'string', description: 'IPA, e.g. /pərˈfɪdiəs/' },
+  transliteration: {
+    type: ['string', 'null'],
+    description: 'Source-attested headword romanization only',
+  },
   definition: { type: 'string', description: 'Brief 5-10 word definition' },
   ancestryGraph: {
     type: 'object',
@@ -178,6 +183,7 @@ const ENTRY_PROPERTIES = {
 
 const ENTRY_KEYS = [
   'pronunciation',
+  'transliteration',
   'definition',
   'ancestryGraph',
   'roots',

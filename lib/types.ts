@@ -123,6 +123,7 @@ export type StageConfidence = 'high' | 'medium' | 'low'
  */
 export interface AncestryStage {
   stage: string // Language/period: "Proto-Indo-European", "Greek", "Latin", etc.
+  transliteration?: string // Source-attested romanization
   form: string // The word form at this stage
   note: string // Brief annotation about meaning/context at this stage
   isReconstructed?: boolean // true for PIE/*-prefixed forms
@@ -239,6 +240,7 @@ export interface UsageExample {
 
 /** The entry fields each lexical history carries; the result projects its primary history. */
 interface HistoryEntryFields {
+  transliteration?: string
   pronunciation: string // IPA, e.g., "/pərˈfɪdiəs/"
   definition: string // Brief definition
   roots: Root[] // 1 to many roots depending on word composition
@@ -362,6 +364,7 @@ export type SourceFetchOutcome =
   | { status: Exclude<SourceOutcome['status'], 'found'>; reason?: string; httpStatus?: number }
 
 export interface ResearchEntryContext {
+  transliteration?: string
   id: string
   source: SourceProviderId
   heading: string
