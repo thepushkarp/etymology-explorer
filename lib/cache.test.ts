@@ -143,6 +143,21 @@ describe('durable entries', () => {
       [entry(RESULT, { revision: 0 }), true],
       [entry(RESULT, { tracedAt: new Date(Date.now() - 91 * 86400_000).toISOString() }), true],
       [entry(RESULT, { incomplete: true }), false],
+      [
+        entry(RESULT, {
+          researchIncomplete: false,
+          freshnessAt: new Date(Date.now() - 301_000).toISOString(),
+        }),
+        false,
+      ],
+      [
+        entry(RESULT, {
+          researchIncomplete: true,
+          incomplete: true,
+          freshnessAt: new Date(Date.now() - 301_000).toISOString(),
+        }),
+        true,
+      ],
       [entry(RESULT, { freshnessAt: new Date(Date.now() - 91 * 86400_000).toISOString() }), true],
       [
         entry(RESULT, { incomplete: true, tracedAt: new Date(Date.now() - 301_000).toISOString() }),
@@ -169,6 +184,27 @@ describe('durable entries', () => {
     const accented = entry({ ...RESULT, word: 'café' })
     currentRedis = fakeRedis({ get: mock(async () => accented) })
     expect((await getCachedEntry('cafe\u0301'))?.entry.word).toBe('café')
+  })
+
+  test('restores failed languages separately from successful entries', async () => {
+    const value = entry(RESULT, {
+      incomplete: true,
+      failedLanguages: {
+        fr: {
+          kind: 'transient',
+          message: 'The source is temporarily unavailable.',
+          retryAt: new Date(Date.now() + 300_000).toISOString(),
+        },
+      },
+    })
+    currentRedis = fakeRedis({ get: mock(async () => value) })
+    expect((await getCachedEntry('nice'))?.entry).toEqual(value)
+    expect(value.languages).toEqual(['en'])
+    currentRedis.get.mockImplementation(async () => ({
+      ...value,
+      failedLanguages: { fr: { ...value.failedLanguages!.fr, retryAt: 'later' } },
+    }))
+    expect(await getCachedEntry('nice')).toBeNull()
   })
 
   test('does not invalidate after failed writes, and tolerates absent request scope', async () => {

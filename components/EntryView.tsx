@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { EtymologyCard } from '@/components/EtymologyCard'
+import { EntryHeader } from '@/components/etymology-card/EntryHeader'
 import { EntrySelector } from '@/components/etymology-card/EntrySelector'
 import { LanguageTabs } from '@/components/LanguageTabs'
 import { ScriptLinks } from '@/components/ScriptLinks'
@@ -14,7 +15,8 @@ import { consumeTraceIntent } from '@/lib/traceIntent'
 import { LANGUAGES, wordPagePath, type LanguageCode } from '@/lib/languages'
 import { historyChoices, historyEntry } from '@/lib/resultHistories'
 import { spellingPronunciation } from '@/lib/scriptTargets'
-import type { EntrySpelling, EtymologyResult, WordEntry } from '@/lib/types'
+import { toPartialResult } from '@/lib/streamReducer'
+import type { EntrySpelling, EtymologyResult, LanguageFailure, WordEntry } from '@/lib/types'
 
 interface EntryViewProps {
   entry: WordEntry
@@ -22,57 +24,82 @@ interface EntryViewProps {
   stale?: boolean
   /** Live results switch tabs locally until a new page is loaded. */
   onSelectLanguage?: (language: LanguageCode) => void
-  languageTabs?: ReactNode
-  unavailableMessage?: string
 }
 
-export function EntryView({
-  entry,
-  language,
-  stale = false,
-  onSelectLanguage,
-  languageTabs,
-  unavailableMessage,
-}: EntryViewProps) {
-  const { progress, search } = useStreamingEtymology(language, entry.word)
+export function EntryView({ entry, language, stale = false, onSelectLanguage }: EntryViewProps) {
+  const { progress, search } = useStreamingEtymology(undefined, entry.word)
   const [refreshedLanguage, setRefreshedLanguage] = useState<LanguageCode>()
+  const [retryLanguage, setRetryLanguage] = useState<LanguageCode>()
   const displayed = progress.result ?? entry
-  const requested = refreshedLanguage ?? language ?? displayed.languages[0]
-  const selected =
-    progress.result && !displayed.entries[requested] && !progress.languages.includes(requested)
-      ? displayed.languages[0]
-      : requested
+  const selected = refreshedLanguage ?? language ?? displayed.languages[0]
   const result = selected ? displayed.entries[selected] : undefined
+  const failure = selected ? displayed.failedLanguages?.[selected] : undefined
   const spellings = displayed.spellings?.filter((spelling) => spelling.language === selected) ?? []
+
+  const recovering = progress.status === 'loading' && retryLanguage === selected
+  const showProgress = progress.status === 'loading' && (!retryLanguage || recovering)
 
   useEffect(() => {
     consumeTraceIntent(entry.word)
   }, [entry.word])
 
-  const tabs = languageTabs ?? (
+  const tabs = (
     <LanguageTabs
       word={displayed.word}
-      languages={progress.result ? progress.languages : displayed.languages}
+      languages={displayed.languages}
+      failedLanguages={displayed.failedLanguages}
       otherLanguages={displayed.otherLanguages}
       otherScripts={displayed.otherScripts}
       language={selected}
-      onSelect={onSelectLanguage ?? (progress.result ? setRefreshedLanguage : undefined)}
+      onSelect={
+        onSelectLanguage || progress.status !== 'idle'
+          ? (code) => {
+              setRefreshedLanguage(code)
+              onSelectLanguage?.(code)
+            }
+          : undefined
+      }
+    />
+  )
+  const recovery = failure && (
+    <FailedLanguage
+      key={`${selected}:${failure.retryAt}`}
+      language={selected}
+      failure={failure}
+      busy={progress.status === 'loading'}
+      loading={recovering}
+      error={progress.status === 'error' ? progress.error?.message : undefined}
+      onRetry={() => {
+        setRetryLanguage(selected)
+        search(displayed.word, selected, { refresh: true })
+      }}
     />
   )
   if (!result) {
     return (
-      <>
-        {tabs}
-        <p role="status" className="mt-8 font-serif italic text-muted">
-          {unavailableMessage ??
-            progress.byLanguage[selected]?.error ??
-            (selected && displayed.incomplete && !displayed.attemptedLanguages?.includes(selected)
-              ? `The ${LANGUAGES[selected].englishName} entry is temporarily unavailable. Try again later.`
-              : selected
-                ? `No supported ${LANGUAGES[selected].englishName} entry was found for “${displayed.word}”.`
-                : `No supported entry was found for “${displayed.word}”.`)}
-        </p>
-      </>
+      <EntryHeader
+        result={toPartialResult(displayed.word, {}, selected)}
+        subheader={
+          <>
+            {tabs}
+            {failure ? (
+              recovery
+            ) : (
+              <p role="status" className="mt-8 font-serif italic text-muted">
+                {progress.byLanguage[selected]?.error ??
+                  (selected &&
+                  displayed.incomplete &&
+                  !displayed.attemptedLanguages?.includes(selected)
+                    ? `The ${LANGUAGES[selected].englishName} entry is temporarily unavailable. Try again later.`
+                    : selected
+                      ? `No supported ${LANGUAGES[selected].englishName} entry was found for “${displayed.word}”.`
+                      : `No supported entry was found for “${displayed.word}”.`)}
+              </p>
+            )}
+            {showProgress && <TraceStatus progress={progress} language={selected} />}
+          </>
+        }
+      />
     )
   }
 
@@ -84,6 +111,7 @@ export function EntryView({
       subheader={
         <>
           {tabs}
+          {recovery}
           {spellings.length > 0 && (
             <p className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-2 text-sm text-muted">
               <span>Also written</span>
@@ -102,7 +130,7 @@ export function EntryView({
               ))}
             </p>
           )}
-          {progress.status === 'loading' && <TraceStatus progress={progress} language={selected} />}
+          {showProgress && <TraceStatus progress={progress} language={selected} />}
         </>
       }
       actions={
@@ -112,7 +140,10 @@ export function EntryView({
               type="button"
               className="link text-sm text-muted"
               disabled={progress.status === 'loading'}
-              onClick={() => search(entry.word, language, { refresh: true })}
+              onClick={() => {
+                setRetryLanguage(undefined)
+                search(entry.word, language, { refresh: true })
+              }}
             >
               {progress.status === 'loading' ? 'Retracing…' : 'Retrace'}
             </button>
@@ -120,8 +151,56 @@ export function EntryView({
           <ShareButton />
         </div>
       }
-      status={progress.status === 'error' ? progress.error?.message : undefined}
+      status={progress.status === 'error' && !failure ? progress.error?.message : undefined}
     />
+  )
+}
+
+function FailedLanguage({
+  language,
+  failure,
+  busy,
+  loading,
+  error,
+  onRetry,
+}: {
+  language: LanguageCode
+  failure: LanguageFailure
+  busy: boolean
+  loading: boolean
+  error?: string
+  onRetry: () => void
+}) {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const remaining = Date.parse(failure.retryAt) - Date.now()
+    // The timer only enables a human action; it never starts a trace.
+    const timer = window.setTimeout(() => setReady(true), Math.max(0, remaining))
+    return () => window.clearTimeout(timer)
+  }, [failure.retryAt])
+
+  return (
+    <div className="mt-8">
+      <p role="status" className="font-serif italic text-muted">
+        {error ?? failure.message}
+      </p>
+      {!ready && (
+        <p className="mt-3 text-sm text-muted">
+          You can retry after{' '}
+          <time dateTime={failure.retryAt}>{new Date(failure.retryAt).toUTCString()}</time>.
+        </p>
+      )}
+      <button
+        type="button"
+        className="link mt-4 text-sm text-muted disabled:cursor-wait disabled:no-underline"
+        disabled={!ready || busy}
+        onClick={onRetry}
+      >
+        {loading
+          ? `Retrying ${LANGUAGES[language].englishName}…`
+          : `Retry ${LANGUAGES[language].englishName}`}
+      </button>
+    </div>
   )
 }
 

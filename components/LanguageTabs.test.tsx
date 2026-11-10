@@ -3,6 +3,24 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { LanguageTabs } from './LanguageTabs'
 
 describe('LanguageTabs', () => {
+  test('orders successful and failed tabs by registry priority without changing the primary link', () => {
+    const html = renderToStaticMarkup(
+      <LanguageTabs
+        word="chat"
+        languages={['pt', 'fr']}
+        failedLanguages={{
+          en: { kind: 'transient', message: 'Try again later.', retryAt: '2099-01-01T00:00:00Z' },
+        }}
+        otherLanguages={[]}
+        language="en"
+      />
+    )
+    expect(html.indexOf('English</a>')).toBeLessThan(html.indexOf('French</a>'))
+    expect(html.indexOf('French</a>')).toBeLessThan(html.indexOf('Portuguese</a>'))
+    expect(html).toContain('href="/word/en/chat"')
+    expect(html).toContain('href="/word/chat"')
+  })
+
   test('cached tabs expose primary and explicit English links with current-page identity', () => {
     const html = renderToStaticMarkup(
       <LanguageTabs word="sale" languages={['it', 'en']} otherLanguages={[]} language="en" />

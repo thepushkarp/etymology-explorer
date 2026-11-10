@@ -22,6 +22,7 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Changed
 
+- Recover failed synthesis with a bounded corrective retry, retain failed-language tabs with targeted retry actions, and explain unavailable lineage.
 - Pronunciation playback follows language changes without stale audio resetting the selected entry.
 - Auto discovers supported languages for a spelling and traces their histories together with language tabs.
 - Saved entries remain discoverable across pipeline updates, with an explicit retrace action for older research.

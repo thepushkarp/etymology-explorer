@@ -69,6 +69,17 @@ describe('search_started', () => {
     expect(state.sections).toEqual({})
     expect(state.phase).toBe('sources')
   })
+
+  test('keeps the saved result through a same-word retry and reconnect', () => {
+    const previous = run(events({ type: 'result', data: RESULT }))
+    const retry = run(
+      [{ type: 'search_started', word: RESULT.word }, { type: 'stream_reconnecting' }],
+      previous
+    )
+    expect(retry.status).toBe('loading')
+    expect(retry.result).toBe(RESULT)
+    expect(run([{ type: 'search_started', word: 'another' }], retry).result).toBeNull()
+  })
 })
 
 describe('source events', () => {
@@ -363,6 +374,28 @@ describe('section accumulation', () => {
 })
 
 describe('terminal events', () => {
+  test('both result transports restore failed tabs from durable metadata', () => {
+    const partial: WordEntry = {
+      ...RESULT,
+      failedLanguages: {
+        fr: {
+          kind: 'transient',
+          message: 'The French entry is temporarily unavailable.',
+          retryAt: '2099-01-01T00:00:00.000Z',
+        },
+      },
+    }
+    for (const action of [
+      { type: 'stream_event', event: { type: 'result', data: partial } },
+      { type: 'fallback_success', result: partial },
+    ] as StreamAction[]) {
+      const state = run([action])
+      expect(state.languages).toEqual(['en', 'fr'])
+      expect(state.result?.languages).toEqual(['en'])
+      expect(run([{ type: 'stream_reconnecting' }], state).languages).toEqual(['en', 'fr'])
+    }
+  })
+
   test('result completes the stream', () => {
     const state = run([
       { type: 'search_started' },

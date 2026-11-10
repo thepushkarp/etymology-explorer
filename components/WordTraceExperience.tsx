@@ -73,6 +73,7 @@ export function WordTraceExperience({
     initialEntry.attemptedLanguages?.includes(language) &&
     !initialEntry.entries[language]
   )
+  const savedFailure = Boolean(language && initialEntry?.failedLanguages?.[language])
   const started = progress.status !== 'idle'
   // Start the usage-chart request alongside the trace so it is ready when the entry is.
   const ngram = useNgram(
@@ -81,12 +82,12 @@ export function WordTraceExperience({
   )
 
   useEffect(() => {
-    if (unavailable || (initialEntry && stale)) {
+    if (savedFailure || unavailable || (initialEntry && stale)) {
       consumeTraceIntent(word)
       return
     }
     return scheduleTraceIntent(word, language, search)
-  }, [word, language, search, unavailable, initialEntry, stale])
+  }, [word, language, search, unavailable, savedFailure, initialEntry, stale])
 
   const partial = useMemo(() => {
     const streamed = toPartialResult(activeWord, slice?.sections ?? {}, selected)
@@ -105,6 +106,7 @@ export function WordTraceExperience({
             ? progress.languages
             : ((savedTabs ? initialEntry?.languages : []) ?? [])
       }
+      failedLanguages={progress.result?.failedLanguages ?? initialEntry?.failedLanguages}
       otherLanguages={
         progress.otherLanguages.length
           ? progress.otherLanguages
@@ -129,13 +131,13 @@ export function WordTraceExperience({
           {announcementFor(progress, activeWord)}
         </div>
 
-        {progress.status === 'success' && progress.result ? (
+        {savedFailure && initialEntry ? (
+          <EntryView entry={initialEntry} language={language} stale={stale} />
+        ) : progress.status === 'success' && progress.result ? (
           <EntryView
             entry={progress.result}
             language={selected}
             onSelectLanguage={setSelectedLanguage}
-            languageTabs={tabs}
-            unavailableMessage={slice?.error}
           />
         ) : (
           <EtymologyCard

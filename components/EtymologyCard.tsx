@@ -44,7 +44,7 @@ export function EtymologyCard({
         pronunciationWord={pronunciationWord}
       />
 
-      {(hasAncestry || pending) && (
+      {(hasAncestry || pending || result.definition) && (
         <Section id="entry-ancestry" title="Lineage">
           {hasAncestry ? (
             <AncestryTree
@@ -54,8 +54,12 @@ export function EtymologyCard({
               definition={result.definition}
               transliteration={result.transliteration}
             />
-          ) : (
+          ) : pending ? (
             <Skeleton widths={['w-24', 'w-40', 'w-20', 'w-48', 'w-28']} />
+          ) : (
+            <p className="font-serif italic text-muted">
+              No lineage is available for this entry yet.
+            </p>
           )}
         </Section>
       )}

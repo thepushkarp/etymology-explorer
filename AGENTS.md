@@ -299,10 +299,19 @@ and the output is guaranteed-shape JSON.
    makes a unary call.
 3. Parse: `parseGeneratedJson` fallback parse, then `stripNullsDeep` converts strict-mode nulls
    back to absent fields before sanitizers and Zod validation
-4. Retry: malformed output retries once on the unary path, never within the streaming transport
-   (sections already on the wire cannot be retracted). A post-processing validation failure
-   (`Schema validation failed: …`) retries the whole synthesis once as a unary call, for every
-   language; usage from both attempts is recorded.
+4. Retry: synthesis shares a two-call limit across malformed output, validation failures, and
+   retryable transport failures. Recovery uses a unary call; validation feedback identifies the
+   correction needed. Caller cancellation and permanent provider errors do not retry, and reported
+   usage from both attempts is recorded. Rate limits defer to the manual retry cooldown. An empty
+   lineage is rejected only when the same history has
+   direct, source-backed ancestry; unaligned secondary accounts cannot supply that requirement.
+
+Failed languages are stored separately from successful entry languages, keeping their tabs and
+safe error messages visible after reload. A five-minute cooldown gates explicit, language-scoped
+retries under the existing word lock. Successful siblings remain available; neither cached page
+loads nor cooldown timers initiate research. `researchIncomplete` tracks source uncertainty
+separately, so recovering the last failed language clears failure-only incompleteness without
+claiming that partial source research is complete.
 
 ### State Management
 

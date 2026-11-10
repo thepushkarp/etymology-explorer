@@ -98,6 +98,16 @@ type OpenRouterStreamEvent = {
 
 const OPENROUTER_RESPONSES_URL = 'https://openrouter.ai/api/v1/responses'
 
+export class OpenRouterHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message)
+    this.name = 'OpenRouterHttpError'
+  }
+}
+
 const SYNTHESIS_REASONING_BY_MODEL: Record<string, ReasoningConfig | undefined> = {
   // GPT-6 Luna reasons at low effort. Exclusion suppresses the reasoning
   // trace from API responses without disabling the reasoning itself.
@@ -399,13 +409,22 @@ export async function createOpenRouterResponse(
     signal
   )
 
-  const payload = (await response.json()) as OpenRouterResponseLike
+  let payload: OpenRouterResponseLike
+  try {
+    payload = (await response.json()) as OpenRouterResponseLike
+  } catch (error) {
+    if (response.ok) throw error
+    throw new OpenRouterHttpError(extractErrorMessage(null, response.status), response.status)
+  }
   if (!response.ok) {
-    throw Object.assign(new Error(extractErrorMessage(payload, response.status)), {
-      ...(payload && typeof payload === 'object' && 'usage' in payload
-        ? { usage: extractUsage(payload as OpenRouterResponseLike) }
-        : {}),
-    })
+    throw Object.assign(
+      new OpenRouterHttpError(extractErrorMessage(payload, response.status), response.status),
+      {
+        ...(payload && typeof payload === 'object' && 'usage' in payload
+          ? { usage: extractUsage(payload as OpenRouterResponseLike) }
+          : {}),
+      }
+    )
   }
 
   if (payload.error?.message) {
@@ -452,11 +471,14 @@ export async function streamOpenRouterResponse(
     } catch {
       payload = null
     }
-    throw Object.assign(new Error(extractErrorMessage(payload, response.status)), {
-      ...(payload && typeof payload === 'object' && 'usage' in payload
-        ? { usage: extractUsage(payload as OpenRouterResponseLike) }
-        : {}),
-    })
+    throw Object.assign(
+      new OpenRouterHttpError(extractErrorMessage(payload, response.status), response.status),
+      {
+        ...(payload && typeof payload === 'object' && 'usage' in payload
+          ? { usage: extractUsage(payload as OpenRouterResponseLike) }
+          : {}),
+      }
+    )
   }
 
   if (!response.body) {

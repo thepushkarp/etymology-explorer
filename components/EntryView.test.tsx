@@ -36,6 +36,75 @@ describe('EntryView merged entries', () => {
     expect(renderToStaticMarkup(<EntryView entry={entry} />)).not.toContain('Retrace</button>')
   })
 
+  test('keeps failed language tabs and an explicit cooldown-gated retry after reload', () => {
+    const partial: WordEntry = {
+      ...entry,
+      languages: ['it'],
+      entries: { it: entry.entries.it },
+      failedLanguages: {
+        en: {
+          kind: 'validation',
+          message: 'The English entry could not be completed.',
+          retryAt: '2099-01-01T00:00:00.000Z',
+        },
+      },
+    }
+    const saved = renderToStaticMarkup(<EntryView entry={partial} />)
+    expect(saved).toContain('Salt, a mineral used in food.')
+    expect(saved).toContain('href="/word/en/sale"')
+    expect(saved).toContain('English</a>')
+
+    const failed = renderToStaticMarkup(<EntryView entry={partial} language="en" />)
+    expect(failed).toContain('The English entry could not be completed.')
+    expect(failed).toContain('Retry English</button>')
+    expect(failed).toContain('disabled=""')
+    expect(failed).toContain('dateTime="2099-01-01T00:00:00.000Z"')
+    expect(failed).not.toContain('No supported English entry was found')
+  })
+
+  test('offers an explicit cooldown-gated retry for an unavailable language', () => {
+    const html = renderToStaticMarkup(
+      <EntryView
+        entry={{
+          ...entry,
+          failedLanguages: {
+            fr: {
+              kind: 'unavailable',
+              message: 'No supported French entry is available.',
+              retryAt: '2026-11-10T00:00:00.000Z',
+            },
+          },
+        }}
+        language="fr"
+      />
+    )
+    expect(html).toContain('No supported French entry is available.')
+    expect(html).toContain('Retry French</button>')
+    expect(html).toContain('disabled=""')
+    expect(html).toContain('dateTime="2026-11-10T00:00:00.000Z"')
+  })
+
+  test('keeps a saved entry readable when its latest retrace failed', () => {
+    const html = renderToStaticMarkup(
+      <EntryView
+        entry={{
+          ...entry,
+          failedLanguages: {
+            it: {
+              kind: 'transient',
+              message: 'The latest Italian trace could not be completed.',
+              retryAt: '2099-01-01T00:00:00.000Z',
+            },
+          },
+        }}
+        language="it"
+      />
+    )
+    expect(html).toContain('Salt, a mineral used in food.')
+    expect(html).toContain('The latest Italian trace could not be completed.')
+    expect(html).toContain('Retry Italian</button>')
+  })
+
   test('renders an unavailable requested language without dereferencing an absent result', () => {
     const html = renderToStaticMarkup(<EntryView entry={entry} language="fr" />)
     expect(html).toContain('No supported French entry was found')
