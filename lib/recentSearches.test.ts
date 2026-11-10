@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { EtymologyResult } from './types'
+import type { EtymologyResult, WordEntry } from './types'
+import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 import {
   landingSearchPreviews,
   parseRecentSearchPreviews,
@@ -10,70 +11,62 @@ import {
 } from './recentSearchPreview'
 import { getRecentSearches, recordRecentSearch } from './recentSearches'
 
-const result: EtymologyResult = {
+const result: EtymologyResult = etymologyResult({
   word: 'nice',
   pronunciation: '/naɪs/',
   definition: 'Pleasant.',
-  roots: [],
-  ancestryGraph: { branches: [] },
   lore: 'From Latin nescius, ignorant.',
-  sources: [],
+})
+
+function entry(value: EtymologyResult): WordEntry {
+  return {
+    word: value.word,
+    languages: [value.language],
+    entries: { [value.language]: value },
+    otherLanguages: [],
+    tracedAt: new Date().toISOString(),
+    revision: 1,
+  }
 }
 
 describe('recent search previews', () => {
   test('uses the selected language and primary history, with a bounded whole-word teaser', () => {
-    const local = '*Una* parola dalla storia antica. '.repeat(8)
-    const italian: EtymologyResult = {
+    const primaryLore = '*A* word with an old history. '.repeat(8)
+    const italian = etymologyResult({
       language: 'it',
       word: ' CÀSA ',
-      pronunciation: '',
-      roots: [],
-      ancestryGraph: { branches: [] },
-      sources: [],
-      definition: { en: 'House.', local: 'Casa.' },
-      lore: { en: 'English lore.', local: 'Another history.' },
-      primaryHistoryId: 'main',
-      histories: [
-        {
-          id: 'main',
-          label: { en: 'House', local: 'Casa' },
-          entryKind: 'lemma',
-          queryNodeId: 'query',
-          lemmaNodeId: 'lemma',
-          evidenceScopeIds: [],
-          pronunciation: '',
-          definition: { en: 'House.', local: 'Casa.' },
-          roots: [],
-          ancestryGraph: { branches: [] },
-          lore: { en: 'English history.', local },
-        },
-      ],
-    }
-    const preview = recentSearchPreview(italian, 'it')!
+      definition: 'House.',
+      lore: 'Projected lore.',
+    })
+    italian.histories[0].lore = primaryLore
+    const preview = recentSearchPreview(entry(italian))!
     expect(preview.word).toBe('càsa')
-    expect(preview.teaser.startsWith('Una parola dalla storia antica.')).toBe(true)
+    expect(preview.teaser.startsWith('A word with an old history.')).toBe(true)
     expect(preview.teaser.length).toBeLessThanOrEqual(120)
     expect(preview.teaser.endsWith('…')).toBe(true)
-    expect(recentSearchPreview(italian, 'en')).toBeNull()
-    expect(recentSearchPreview({ ...result, lore: '  ' }, 'en')?.teaser).toBe('Pleasant.')
-    expect(recentSearchPreview({ ...result, lore: 'From *hūsą to *house*.' }, 'en')?.teaser).toBe(
+    expect(preview.language).toBe('it')
+    const english = (lore: string) =>
+      etymologyResult({ word: 'nice', definition: 'Pleasant.', lore })
+    expect(recentSearchPreview(entry(english('  ')))?.teaser).toBe('Pleasant.')
+    expect(recentSearchPreview(entry(english('From *hūsą to *house*.')))?.teaser).toBe(
       'From *hūsą to house.'
     )
   })
 
   test('deduplicates normalized words and fills remaining slots from curated entries', () => {
     const recent = [
-      { word: 'NiCe', teaser: 'A recent story.' },
-      { word: 'nice', teaser: 'Duplicate.' },
-      { word: 'bad\ninput', teaser: 'Invalid.' },
-      { word: 'empty', teaser: '' },
+      { word: 'NiCe', language: 'en' as const, teaser: 'A recent story.' },
+      { word: 'nice', language: 'en' as const, teaser: 'Duplicate.' },
+      { word: 'bad\ninput', language: 'fr' as const, teaser: 'Invalid.' },
+      { word: 'empty', language: 'it' as const, teaser: '' },
     ]
     const curated = ['nice', 'villain', 'muscle', 'window'].map((word) => ({
       word,
+      language: 'en' as const,
       teaser: 'A curated story.',
     }))
     expect(landingSearchPreviews(recent, curated)).toEqual([
-      { word: 'nice', teaser: 'A recent story.' },
+      { word: 'nice', language: 'en' as const, teaser: 'A recent story.' },
       ...curated.slice(1),
     ])
     expect(parseRecentSearchPreviews({ word: 'nice' })).toEqual([])
@@ -81,20 +74,33 @@ describe('recent search previews', () => {
 
   test('only records matching cached results and keeps reads cache-free', async () => {
     const client = { get: mock(async () => []), eval: mock(async () => 1) }
-    const load = mock(async () => result)
-    expect(await recordRecentSearch('  NICE ', 'en', client, load)).toBe(true)
-    expect(load).toHaveBeenCalledWith('nice', 'en')
+    const load = mock(async () => ({ entry: entry(result), stale: false }))
+    expect(await recordRecentSearch('  NICE ', client, load)).toBe(true)
+    expect(load).toHaveBeenCalledWith('nice')
     const args = client.eval.mock.calls[0] as unknown as [string, string[], string[]]
-    expect(args[1]).toEqual(['recent-searches:v2:en'])
-    expect(JSON.parse(args[2][0])).toEqual({ word: 'nice', teaser: result.lore })
-    expect(await recordRecentSearch('other', 'en', client, load)).toBe(false)
-    expect(await recordRecentSearch('nice', 'it', client, load)).toBe(false)
-    expect(await recordRecentSearch('nice', 'en', client, async () => null)).toBe(false)
+    expect(args[1]).toEqual(['recent-searches:v3'])
+    expect(JSON.parse(args[2][0])).toEqual({ word: 'nice', language: 'en', teaser: result.lore })
+    expect(await recordRecentSearch('other', client, load)).toBe(false)
+    expect(await recordRecentSearch('nice', client, async () => null)).toBe(false)
     expect(client.eval).toHaveBeenCalledTimes(1)
     load.mockClear()
-    expect(await getRecentSearches('en', client)).toEqual([])
+    expect(await getRecentSearches(client)).toEqual([])
     expect(load).not.toHaveBeenCalled()
-    expect(await getRecentSearches('en', null)).toEqual([])
+    expect(await getRecentSearches(null)).toEqual([])
+    const mixed = {
+      ...client,
+      get: mock(async () => [
+        ...Array.from({ length: 16 }, (_, index) => ({
+          word: `word${String.fromCharCode(97 + index)}`,
+          language: 'en',
+          teaser: 'English.',
+        })),
+        { word: 'fenêtre', language: 'fr', teaser: 'French.' },
+      ]),
+    }
+    expect(await getRecentSearches(mixed, 'fr')).toEqual([
+      { word: 'fenêtre', language: 'fr', teaser: 'French.' },
+    ])
   })
 })
 
@@ -145,23 +151,22 @@ describe.skipIf(!Bun.which('redis-server') || !Bun.which('redis-cli'))(
       if (directory) rmSync(directory, { recursive: true, force: true })
     })
 
-    test('keeps 20 unique concurrent successes, promotes repeats, and isolates languages', async () => {
+    test('keeps 20 unique concurrent successes and promotes repeats in one list', async () => {
       const words = Array.from(
         { length: 26 },
         (_, index) => `word${String.fromCharCode(97 + index)}`
       )
-      const load = async (word: string) => ({ ...result, word })
-      await Promise.all(words.map((word) => recordRecentSearch(word, 'en', client, load)))
-      const pool = (await client.get('recent-searches:v2:en')) as Array<{ word: string }>
+      const load = async (word: string) => ({ entry: entry({ ...result, word }), stale: false })
+      await Promise.all(words.map((word) => recordRecentSearch(word, client, load)))
+      const pool = (await client.get('recent-searches:v3')) as Array<{ word: string }>
       expect(pool).toHaveLength(20)
       expect(new Set(pool.map((entry) => entry.word)).size).toBe(20)
       const repeated = pool[15].word
-      await recordRecentSearch(repeated, 'en', client, load)
-      const promoted = (await client.get('recent-searches:v2:en')) as Array<{ word: string }>
+      await recordRecentSearch(repeated, client, load)
+      const promoted = (await client.get('recent-searches:v3')) as Array<{ word: string }>
       expect(promoted).toHaveLength(20)
       expect(promoted[0].word).toBe(repeated)
-      expect(await getRecentSearches('it', client)).toEqual([])
-      const sample = await getRecentSearches('en', client)
+      const sample = await getRecentSearches(client)
       expect(sample).toHaveLength(4)
       expect(new Set(sample.map((entry) => entry.word)).size).toBe(4)
       expect(

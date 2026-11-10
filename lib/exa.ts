@@ -84,7 +84,8 @@ export function createExaSession(options: ExaSessionOptions) {
     endpoint: 'search' | 'contents',
     body: Record<string, unknown>,
     tariff: number,
-    domains: ReadonlySet<string>
+    domains: ReadonlySet<string>,
+    onDispatch?: () => void
   ): Promise<ExaResponse> {
     options.signal?.throwIfAborted()
     if (!apiKey || process.env.EXA_ENABLED === 'false')
@@ -118,11 +119,14 @@ export function createExaSession(options: ExaSessionOptions) {
             redirect: 'error',
           },
           CONFIG.exa.timeoutMs,
-          requestSignal
+          requestSignal,
+          () => {
+            sent = true
+            onDispatch?.()
+          }
         )
       // Once transport starts, timeouts and cancellation cannot establish that
       // Exa did not bill. Only a known pre-dispatch budget rejection refunds it.
-      sent = true
       const response = await (sourceBudget ? sourceBudget.run(fetchResponse) : fetchResponse())
       let payload: Record<string, unknown> | undefined
       try {
@@ -195,7 +199,7 @@ export function createExaSession(options: ExaSessionOptions) {
   }
 
   return {
-    async contents(urls: readonly string[]): Promise<ExaResponse> {
+    async contents(urls: readonly string[], onDispatch?: () => void): Promise<ExaResponse> {
       const unique = [...new Set(urls)]
       if (!unique.length || unique.some((url) => !sourceUrl(url, allowedDomains)))
         return { status: 'error', reason: 'invalid_source_url' }
@@ -206,11 +210,16 @@ export function createExaSession(options: ExaSessionOptions) {
         'contents',
         { urls: unique, text: { includeHtmlTags: true, verbosity: 'full' } },
         unique.length * CONFIG.exa.contentPageCostMicros,
-        allowedDomains
+        allowedDomains,
+        onDispatch
       )
     },
 
-    async search(query: string, domains: readonly string[]): Promise<ExaResponse> {
+    async search(
+      query: string,
+      domains: readonly string[],
+      onDispatch?: () => void
+    ): Promise<ExaResponse> {
       const selected = new Set(domains.map((domain) => domain.toLowerCase()))
       if (
         !query.trim() ||
@@ -230,7 +239,8 @@ export function createExaSession(options: ExaSessionOptions) {
           contents: { text: { includeHtmlTags: true, verbosity: 'full' } },
         },
         CONFIG.exa.searchCostMicros,
-        selected
+        selected,
+        onDispatch
       )
     },
   }

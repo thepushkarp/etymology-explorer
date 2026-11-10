@@ -10,7 +10,7 @@ import { canonicalizeWord, isValidWord } from './validation'
  * else gets the explicit "Trace it live" button.
  */
 
-import { lexemeKey, type LanguageCode } from './languages'
+import type { LanguageCode } from './languages'
 
 const STORAGE_KEY = 'etymex:trace-intent'
 
@@ -20,7 +20,7 @@ const INTENT_TTL_MS = 30_000
 
 interface TraceIntent {
   word: string
-  language: LanguageCode
+  hint?: LanguageCode
   at: number
 }
 
@@ -35,12 +35,12 @@ function getStorage(): Storage | null {
 }
 
 /** Record that the next word-page visit is an in-app navigation for `word` */
-export function markTraceIntent(word: string, language: LanguageCode = 'en'): void {
+export function markTraceIntent(word: string, hint?: LanguageCode): void {
   if (!isValidWord(word)) return
   const storage = getStorage()
   if (!storage) return
   try {
-    const intent: TraceIntent = { word: canonicalizeWord(word), language, at: Date.now() }
+    const intent: TraceIntent = { word: canonicalizeWord(word), hint, at: Date.now() }
     storage.setItem(STORAGE_KEY, JSON.stringify(intent))
   } catch {
     // Quota/security errors just mean the visit behaves like a direct load
@@ -52,26 +52,31 @@ export function markTraceIntent(word: string, language: LanguageCode = 'en'): vo
  * removed on ANY word-page view (matching or not) so a stale intent can
  * never auto-trace a later direct load.
  */
-export function consumeTraceIntent(word: string, language: LanguageCode = 'en'): boolean {
+function takeTraceIntent(word: string): TraceIntent | null {
   const storage = getStorage()
-  if (!storage) return false
+  if (!storage) return null
   try {
     const raw = storage.getItem(STORAGE_KEY)
-    if (!raw) return false
+    if (!raw) return null
     storage.removeItem(STORAGE_KEY)
 
     const intent = JSON.parse(raw) as Partial<TraceIntent>
-    if (typeof intent.word !== 'string' || typeof intent.at !== 'number') return false
-    if (!isValidWord(intent.word) || !isValidWord(word)) return false
+    if (typeof intent.word !== 'string' || typeof intent.at !== 'number') return null
+    if (!isValidWord(intent.word) || !isValidWord(word)) return null
 
-    const intentLanguage = intent.language ?? 'en'
-    return (
-      lexemeKey(intentLanguage, intent.word) === lexemeKey(language, word) &&
-      Date.now() - intent.at < INTENT_TTL_MS
+    if (
+      canonicalizeWord(intent.word) !== canonicalizeWord(word) ||
+      Date.now() - intent.at >= INTENT_TTL_MS
     )
+      return null
+    return intent as TraceIntent
   } catch {
-    return false
+    return null
   }
+}
+
+export function consumeTraceIntent(word: string): boolean {
+  return takeTraceIntent(word) !== null
 }
 
 /**
@@ -81,11 +86,12 @@ export function consumeTraceIntent(word: string, language: LanguageCode = 'en'):
  */
 export function scheduleTraceIntent(
   word: string,
-  language: LanguageCode,
-  start: (word: string) => void
+  hint: LanguageCode | undefined,
+  start: (word: string, hint?: LanguageCode) => void
 ): () => void {
   const timer = setTimeout(() => {
-    if (consumeTraceIntent(word, language)) start(word)
+    const intent = takeTraceIntent(word)
+    if (intent) start(word, hint ?? intent.hint)
   }, 0)
   return () => clearTimeout(timer)
 }

@@ -6,6 +6,7 @@ import { canonicalizeWord } from './orthography'
 import { decodeHtmlEntities } from './sourceText'
 import type { SourceData, SourceFamilyId, SourceProviderId } from './types'
 import { cleanWiktionaryHtml, type WiktionaryEntryGroup } from './wiktionaryEntryGroups'
+import { fetchJmdict } from './jmdict'
 
 export interface SpecialistSourceResult {
   provider: SourceProviderId
@@ -484,6 +485,7 @@ export const SPECIALIST_PROVIDERS: readonly SpecialistProvider[] = [
   { id: 'cnrtl', family: 'cnrtl', languages: ['fr'], fetch: fetchCnrtl },
   { id: 'priberam', family: 'priberam', languages: ['pt'], fetch: fetchPriberam },
   { id: 'michaelis', family: 'michaelis', languages: ['pt'], fetch: fetchMichaelis },
+  { id: 'jmdict', family: 'jmdict', languages: ['ja'], fetch: fetchJmdict },
 ]
 
 /**

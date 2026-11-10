@@ -10,11 +10,18 @@ const SOURCE_ORIGINS = [
   'https://es.wiktionary.org',
   'https://fr.wiktionary.org',
   'https://pt.wiktionary.org',
+  'https://hi.wiktionary.org',
+  'https://ja.wiktionary.org',
   'https://en.wikipedia.org',
   'https://it.wikipedia.org',
   'https://es.wikipedia.org',
   'https://fr.wikipedia.org',
   'https://pt.wikipedia.org',
+  'https://hi.wikipedia.org',
+  'https://ur.wikipedia.org',
+  'https://sa.wikipedia.org',
+  'https://ja.wikipedia.org',
+  'https://jisho.org',
   'https://www.wikidata.org',
   'https://freedictionaryapi.com',
   'https://api.dicionario-aberto.net',
@@ -60,14 +67,16 @@ function trustedRequestUrl(target: string | URL | Request, sourceOnly: boolean):
  * Prevents external sources from hanging requests indefinitely.
  * An optional caller signal (e.g. request.signal from a disconnected
  * client) is composed with the timeout via AbortSignal.any so either
- * one cancels the underlying request.
+ * one cancels the underlying request. The optional dispatch observer runs after
+ * HTTP budget admission, immediately before each network attempt.
  */
 
 export async function fetchWithTimeout(
   url: string | URL | Request,
   options: RequestInit,
   timeoutMs: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onDispatch?: () => void
 ): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -100,6 +109,7 @@ export async function fetchWithTimeout(
     for (let hop = 0; ; hop++) {
       composedSignal.throwIfAborted()
       budget?.reserve()
+      onDispatch?.()
       const response = await fetch(target, {
         ...init,
         redirect: 'manual',

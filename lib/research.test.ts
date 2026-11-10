@@ -10,9 +10,10 @@ import {
   expandLexemes,
 } from '@/lib/research'
 import { extractEtymonlineRelatedEntries, fetchEtymonline } from '@/lib/etymonline'
-import { parseSourceTexts } from '@/lib/etymologyParser'
+import { parseSourceTexts, parseWiktionaryText } from '@/lib/etymologyParser'
 import { CONFIG } from '@/lib/config'
 import { SourceFetchBudget } from '@/lib/sourceFetchBudget'
+import { createLexemeResearchSession } from '@/lib/lexemeResearch'
 import { classifyApiError } from '@/lib/apiError'
 import { ResearchContext, StreamEvent } from '@/lib/types'
 
@@ -239,6 +240,24 @@ describe('research breadth', () => {
       url: 'https://incels.wiki/w/validword',
     }
     expect(hasCredibleMainSource(context)).toBe(false)
+  })
+
+  test('an Italian miss is not admitted by an English entry or Wikidata identity alone', () => {
+    expect(
+      hasCredibleMainSource({
+        language: 'it',
+        mainWord: {
+          word: 'sale',
+          etymonline: { text: 'English sale', url: 'https://example.test' },
+          wiktionary: null,
+          wikidataLexeme: { text: 'Italian identity', url: 'https://example.test/it' },
+        },
+        identifiedRoots: [],
+        rootResearch: [],
+        relatedResearch: [],
+        totalSourcesFetched: 2,
+      })
+    ).toBe(false)
   })
 
   test('extractEtymonlineRelatedEntries finds linked relation entries from escaped page payloads', () => {
@@ -558,19 +577,34 @@ function installFetchRouter(options?: { wikipediaDelayMs?: number }): {
 }
 
 describe('conductAgenticResearch phase ordering', () => {
-  test('source-defined ancestors do not wait for the root-extraction LLM', async () => {
+  test('primed core evidence starts roots early but ancestors wait for all primary sources', async () => {
     const savedKey = process.env.OPENROUTER_API_KEY
     process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
     let release!: () => void
     const rootsReady = new Promise<void>((resolve) => {
       release = resolve
     })
+    let releaseOptional!: () => void
+    const optionalReady = new Promise<void>((resolve) => {
+      releaseOptional = resolve
+    })
+    let rootStarted!: () => void
+    const rootRequest = new Promise<void>((resolve) => {
+      rootStarted = resolve
+    })
+    let ancestorStarted!: () => void
+    const ancestorRequest = new Promise<void>((resolve) => {
+      ancestorStarted = resolve
+    })
+    let rootCalls = 0
     let ancestorRequested = false
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input)
       if (process.env.KV_REST_API_URL && url.startsWith(process.env.KV_REST_API_URL))
         return upstashMissResponse(init)
       if (url.includes('openrouter.ai')) {
+        rootCalls++
+        rootStarted()
         await rootsReady
         return Response.json({
           output_text: '{"roots":["traceword"]}',
@@ -579,22 +613,51 @@ describe('conductAgenticResearch phase ordering', () => {
       }
       if (url.includes('etymonline.com/word/traceword'))
         return new Response('<section class="prose-lg">1590s, from Latin nexus.</section>')
-      if (new URL(url).searchParams.get('page') === 'nexus') ancestorRequested = true
+      if (new URL(url).hostname === 'fr.wikipedia.org') await optionalReady
+      if (new URL(url).searchParams.get('page') === 'nexus') {
+        ancestorRequested = true
+        ancestorStarted()
+      }
       return new Response('not found', { status: 404 })
     }) as typeof fetch
-    const pending = conductAgenticResearch('traceword')
+    const budget = new SourceFetchBudget(48)
+    const session = createLexemeResearchSession({ budget })
+    const primaries = session.lookupMany(
+      [
+        { word: 'traceword', language: 'en' },
+        { word: 'traceword', language: 'fr' },
+      ],
+      { primary: true }
+    )
+    const pending = conductAgenticResearch('traceword', { session, budget })
     try {
-      await new Promise((resolve) => setTimeout(resolve, 30))
+      await Promise.race([
+        rootRequest,
+        Bun.sleep(1000).then(() => {
+          throw new Error('Root extraction did not start before optional sources')
+        }),
+      ])
+      expect(ancestorRequested).toBe(false)
+      releaseOptional()
+      await Promise.race([
+        ancestorRequest,
+        Bun.sleep(1000).then(() => {
+          throw new Error('Ancestor research waited for root extraction')
+        }),
+      ])
       expect(ancestorRequested).toBe(true)
       release()
       const context = await pending
       expect(context.identifiedRoots).toEqual(['traceword'])
       expect(context.mainWord.etymonline?.text).toContain('from Latin nexus')
-      expect(context.totalSourcesFetched).toBeLessThanOrEqual(CONFIG.maxTotalFetches)
+      expect(context.totalSourcesFetched).toBeLessThanOrEqual(48)
+      expect(context.llmUsage).toEqual({ inputTokens: 10, outputTokens: 2 })
+      expect(rootCalls).toBe(1)
     } finally {
       release()
+      releaseOptional()
       try {
-        await pending
+        await Promise.allSettled([pending, primaries])
       } finally {
         if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
         else process.env.OPENROUTER_API_KEY = savedKey
@@ -754,6 +817,44 @@ test('component variants preserve query identity, separate scopes and actual HTT
   expect(budget.attempts).toBeLessThanOrEqual(16)
 })
 
+test('a registered Sanskrit ancestor keeps its dictionary lookup without optional sources', async () => {
+  const requests: URL[] = []
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(String(input))
+    requests.push(url)
+    if (url.hostname === 'en.wiktionary.org')
+      return Response.json({
+        parse: {
+          title: 'पानीय',
+          text: '<h2 id="Sanskrit">Sanskrit</h2><p>A drink; water.</p>',
+          tocdata: {
+            sections: [
+              { index: '1', line: 'Sanskrit', anchor: 'Sanskrit', hLevel: 2, number: '1' },
+            ],
+          },
+        },
+      })
+    return new Response('', { status: 404 })
+  }) as typeof fetch
+  const context: ResearchContext = {
+    language: 'hi',
+    mainWord: { word: 'पानी', etymonline: null, wiktionary: null },
+    parsedChains: [parseWiktionaryText('From Sanskrit पानीय.', 'पानी')],
+    rootResearch: [],
+    identifiedRoots: [],
+    relatedResearch: [],
+    totalSourcesFetched: 0,
+  }
+  const budget = new SourceFetchBudget(16)
+  await expandLexemes(context, budget)
+  expect(context.rootResearch[0].lexeme).toEqual({ word: 'पानीय', language: 'Sanskrit' })
+  expect(
+    context.rootResearch[0].sources?.some((source) => source.provider === 'wiktionaryEnglish')
+  ).toBe(true)
+  expect(requests.every((url) => !/wikipedia|wikidata/.test(url.hostname))).toBe(true)
+  expect(budget.attempts).toBe(requests.length)
+})
+
 test('secondary edition homographs cannot corroborate the primary history', async () => {
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input)
@@ -830,7 +931,7 @@ describe('source rate limits are temporary failures', () => {
       return new Response('unavailable', { status })
     }) as typeof fetch
   }
-  test('English and beta no-primary HTTP 429 errors bypass lexical absence', async () => {
+  test('English and other-language no-primary HTTP 429 errors bypass lexical absence', async () => {
     respond(429)
     for (const language of ['en', 'fr'] as const) {
       let error: unknown
@@ -850,7 +951,49 @@ describe('source rate limits are temporary failures', () => {
   test('genuine HTTP 404 absence remains a no-source result', async () => {
     respond(404)
     for (const language of ['en', 'fr'] as const) {
-      expect(hasCredibleMainSource(await conductAgenticResearch('bank', { language }))).toBe(false)
+      for (const word of ['bank', 'bank word']) {
+        const context = await conductAgenticResearch(word, { language })
+        expect(hasCredibleMainSource(context)).toBe(false)
+        expect(context.incompleteResearch).not.toBe(true)
+      }
     }
   })
+})
+
+test('research failure after root extraction retains billed usage for route accounting', async () => {
+  const previousKey = process.env.OPENROUTER_API_KEY
+  process.env.OPENROUTER_API_KEY = previousKey ?? 'test-openrouter-key'
+  const controller = new AbortController()
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    if (url.hostname === 'openrouter.ai')
+      return Response.json({
+        output_text: '{"roots":["fixture"]}',
+        usage: { input_tokens: 9, output_tokens: 2, cost: 0.03 },
+      })
+    if (url.hostname === 'www.etymonline.com' && url.pathname === '/word/fixture')
+      return new Response('<section class="prose-lg">From Latin nexus.</section>')
+    return new Response('', { status: 404 })
+  }) as typeof fetch
+  const session = createLexemeResearchSession({
+    budget: new SourceFetchBudget(32),
+    signal: controller.signal,
+  })
+  const primaries = session.lookupMany([{ word: 'fixture', language: 'en' }], { primary: true })
+  void primaries.catch(() => {})
+  try {
+    await expect(
+      conductAgenticResearch('fixture', { session }, (event) => {
+        if (event.type === 'roots_identified')
+          controller.abort(new Error('Trace cancelled after roots'))
+      })
+    ).rejects.toMatchObject({
+      message: 'Trace cancelled after roots',
+      usage: { inputTokens: 9, outputTokens: 2, costUSD: 0.03 },
+    })
+  } finally {
+    await Promise.allSettled([primaries])
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
+    else process.env.OPENROUTER_API_KEY = previousKey
+  }
 })

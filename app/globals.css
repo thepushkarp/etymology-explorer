@@ -18,6 +18,9 @@
   --lang-romance: #b07a22;
   --lang-germanic: #4d7c5a;
   --lang-semitic: #7b5a8e;
+  --lang-indo-iranian: #8a6140;
+  --lang-japonic: #996274;
+  --lang-sinitic: #497b7a;
   --lang-other: #7d776c;
 }
 
@@ -35,6 +38,9 @@
   --lang-romance: #deb064;
   --lang-germanic: #8fc39c;
   --lang-semitic: #bb9bd3;
+  --lang-indo-iranian: #d2aa83;
+  --lang-japonic: #d4a0b1;
+  --lang-sinitic: #8fbfba;
   --lang-other: #a29b8c;
 }
 
@@ -52,9 +58,16 @@
   --color-lang-romance: var(--lang-romance);
   --color-lang-germanic: var(--lang-germanic);
   --color-lang-semitic: var(--lang-semitic);
+  --color-lang-indo-iranian: var(--lang-indo-iranian);
+  --color-lang-japonic: var(--lang-japonic);
+  --color-lang-sinitic: var(--lang-sinitic);
   --color-lang-other: var(--lang-other);
-  --font-serif: var(--font-libre-baskerville), Georgia, serif;
-  --font-sans: var(--font-alegreya-sans), Georgia, serif;
+  --font-serif:
+    var(--font-libre-baskerville), var(--font-noto-serif-devanagari),
+    var(--font-noto-nastaliq-urdu), Georgia, serif;
+  --font-sans:
+    var(--font-alegreya-sans), var(--font-noto-serif-devanagari), var(--font-noto-nastaliq-urdu),
+    Georgia, serif;
 }
 
 html {
@@ -69,6 +82,43 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* Nastaliq's descending forms need space even in compact headings and tree nodes.
+   Limit the metrics to native text; English prose and romanizations retain theirs. */
+:lang(ur),
+:lang(und-Arab) {
+  font-family: var(--font-noto-nastaliq-urdu), var(--font-serif);
+  line-height: 2.4;
+  letter-spacing: normal;
+}
+
+:lang(hi),
+:lang(sa),
+:lang(und-Deva) {
+  /* next/font's Latin metric fallback can contain native-script system glyphs. */
+  font-family: var(--font-noto-serif-devanagari), var(--font-serif);
+}
+
+:lang(ja),
+:lang(und-Hani),
+:lang(und-Hira),
+:lang(und-Kana) {
+  font-family: 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif CJK JP', serif;
+  letter-spacing: normal;
+}
+
+:lang(hi),
+:lang(sa),
+:lang(ur),
+:lang(ja),
+:lang(und-Hani),
+:lang(und-Hira),
+:lang(und-Kana),
+:lang(und-Deva),
+:lang(und-Arab) {
+  font-synthesis: none;
+  font-style: normal;
 }
 
 /* A modal dialog does not stop the page behind it from scrolling. */

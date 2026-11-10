@@ -23,8 +23,13 @@ export function usePronunciation(word: string, language: LanguageCode = 'en') {
 
   useEffect(
     () => () => {
-      audioRef.current?.pause()
+      const audio = audioRef.current
       audioRef.current = null
+      if (audio) {
+        audio.onended = null
+        audio.onerror = null
+        audio.pause()
+      }
     },
     [src]
   )
@@ -36,10 +41,13 @@ export function usePronunciation(word: string, language: LanguageCode = 'en') {
     if (!audio) {
       audio = new Audio(src)
       const element = audio
-      audio.onended = () => setState('idle')
+      audio.onended = () => {
+        if (audioRef.current === element) setState('idle')
+      }
       // Network or decode failures mid-playback never fire onended; allow a retry.
       audio.onerror = () => {
-        if (audioRef.current === element) audioRef.current = null
+        if (audioRef.current !== element) return
+        audioRef.current = null
         setState('error')
       }
       audioRef.current = audio
@@ -47,9 +55,11 @@ export function usePronunciation(word: string, language: LanguageCode = 'en') {
     setState('loading')
     try {
       await audio.play()
-      setState('playing')
+      if (audioRef.current === audio) setState('playing')
     } catch {
+      if (audioRef.current !== audio) return
       audioRef.current = null
+      audio.pause()
       setState('error')
     }
   }, [src])

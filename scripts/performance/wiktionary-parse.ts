@@ -28,8 +28,13 @@ const language: unknown = summary.language
 if (!isLanguageCode(language)) throw new Error('Unsupported recorded language')
 const config = LANGUAGES[language]
 const heading =
-  values.edition === 'en' ? config.englishWiktionaryHeading : config.nativeWiktionaryHeading
-const pattern = values.edition === 'en' ? LANGUAGES.en.etymologyHeading : config.etymologyHeading
+  values.edition === 'en'
+    ? config.englishWiktionaryHeading
+    : (config.nativeWiktionary?.heading ?? config.englishWiktionaryHeading)
+const pattern =
+  values.edition === 'en'
+    ? LANGUAGES.en.nativeWiktionary!.etymologyHeading
+    : config.nativeWiktionary!.etymologyHeading
 const request = summary.requests.find(
   (item: { url: string; status: number; bodyFile?: string }) => {
     const url = new URL(item.url)

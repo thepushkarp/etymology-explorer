@@ -88,22 +88,22 @@ function UsageChart({ ngram }: { ngram: NgramResult }) {
 interface UsageSectionProps {
   ngram?: NgramResult
   unavailable?: boolean
-  title: string
-  unavailableMessage: string
 }
 
-export function UsageSection({ ngram, unavailable, title, unavailableMessage }: UsageSectionProps) {
+export function UsageSection({ ngram, unavailable }: UsageSectionProps) {
   if (ngram && ngram.data.length > 1) {
     return (
-      <Section id="entry-usage" title={title}>
+      <Section id="entry-usage" title="Usage over time">
         <UsageChart ngram={ngram} />
       </Section>
     )
   }
   if (!unavailable) return null
   return (
-    <Section id="entry-usage" title={title}>
-      <p className="font-serif italic text-muted">{unavailableMessage}</p>
+    <Section id="entry-usage" title="Usage over time">
+      <p className="font-serif italic text-muted">
+        Usage history is not available for this word yet.
+      </p>
     </Section>
   )
 }

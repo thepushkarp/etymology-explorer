@@ -1,15 +1,17 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, mock, spyOn, test } from 'bun:test'
 import { createLexemeResearchSession, researchLexemeKey } from './lexemeResearch'
 import { SourceFetchBudget } from './sourceFetchBudget'
 import { ancestorCandidates, expandLexemes, hasCredibleMainSource } from './research'
 import { parseDictionaryText } from './etymologyParser'
 import type { ExaBudgetRedis } from './exaBudget'
+import * as sourceCache from './sourceCache'
 import type { ResearchContext, StreamEvent } from './types'
 
 const originalFetch = globalThis.fetch
 const originalExaKey = process.env.EXA_API_KEY
 const originalExaEnabled = process.env.EXA_ENABLED
 afterEach(() => {
+  mock.restore()
   globalThis.fetch = originalFetch
   if (originalExaKey === undefined) delete process.env.EXA_API_KEY
   else process.env.EXA_API_KEY = originalExaKey
@@ -55,6 +57,54 @@ const allowance: ExaBudgetRedis = {
     return null
   },
 }
+
+test('source failures remain incomplete while confirmed Wiktionary misses stay absent', async () => {
+  for (const [host, source, failure] of [
+    ['en.wiktionary.org', 'wiktionaryEnglish', 'parse'],
+    ['pt.wiktionary.org', 'wiktionaryNative', 'blocked'],
+    ['freedictionaryapi.com', 'multilingualDictionary', 'network'],
+    ['www.wikidata.org', 'wikidataLexeme', 'http'],
+    ['www.wikidata.org', 'wikidataLexeme', 'details'],
+    ['www.wikidata.org', 'wikidataLexeme', 'api'],
+    ['www.wikidata.org', 'wikidataLexeme', 'detailsApi'],
+    ['api.dicionario-aberto.net', 'dicionarioAberto', 'http'],
+    ['pt.wikipedia.org', 'wikipedia', 'http'],
+    ['pt.wikipedia.org', 'wikipedia', 'api'],
+  ]) {
+    serve((url) => {
+      if (url.hostname !== host) return new Response('', { status: 404 })
+      if (failure === 'network') throw new TypeError('Network unavailable')
+      if (failure === 'parse') return new Response('{')
+      if (failure.startsWith('details') && url.searchParams.get('action') === 'wbsearchentities')
+        return Response.json({ search: [{ id: 'L1' }] })
+      if (failure === 'api' || failure === 'detailsApi')
+        return Response.json({ error: { code: 'maxlag' } })
+      return new Response('', { status: failure === 'blocked' ? 403 : 503 })
+    })
+    const session = createLexemeResearchSession({
+      budget: new SourceFetchBudget(32),
+      exaBudgetClient: null,
+    })
+    const result = await session.lookup({ word: 'fixture', language: 'pt' }, { primary: true })
+    expect(result.outcomes.find((entry) => entry.source === source)?.outcome.status).toBe(
+      failure === 'blocked' ? 'blocked' : 'unavailable'
+    )
+    expect(result.incomplete).toBe(true)
+  }
+
+  serve((url) =>
+    url.hostname === 'en.wiktionary.org'
+      ? Response.json({ error: { code: 'missingtitle' } })
+      : new Response('', { status: 404 })
+  )
+  const session = createLexemeResearchSession({
+    budget: new SourceFetchBudget(32),
+    exaBudgetClient: null,
+  })
+  const missing = await session.lookup({ word: 'fixture', language: 'pt' }, { primary: true })
+  expect(missing.sources).toHaveLength(0)
+  expect(missing.incomplete).toBe(false)
+})
 
 test.each([
   ['en', 'ahdictionary.com'],
@@ -254,4 +304,110 @@ test('a blocked Etymonline source remains blocked when Exa is disabled', async (
     (event) => event.type === 'source_outcome' && event.source === 'etymonline'
   )
   expect(outcomes.at(-1)).toMatchObject({ outcome: { status: 'blocked' } })
+  expect(events.some((event) => 'source' in event && event.source === 'exa')).toBe(false)
+})
+
+test('historical enrichment and memoized lookups report progress to each consuming query language', async () => {
+  serve()
+  const events: StreamEvent[] = []
+  const session = createLexemeResearchSession({
+    budget: new SourceFetchBudget(32),
+    exaBudgetClient: null,
+    onProgress: (event) => events.push(event),
+  })
+  const lexeme = { word: 'casa', language: 'Latin' }
+  await session.lookup(lexeme, { progressLanguage: 'it' })
+  const italian = events.filter((event) => event.language === 'it')
+  expect(
+    italian.some((event) => event.type === 'source_started' && event.source === 'lewisShort')
+  ).toBe(true)
+  expect(
+    italian.some((event) => event.type === 'source_outcome' && event.source === 'lewisShort')
+  ).toBe(true)
+  await session.lookup(lexeme, { progressLanguage: 'fr' })
+  expect(
+    events
+      .filter((event) => event.language === 'fr')
+      .map((event) => ({ ...event, language: undefined }))
+  ).toEqual(italian.map((event) => ({ ...event, language: undefined })))
+  expect(events.every((event) => event.language === 'it' || event.language === 'fr')).toBe(true)
+})
+
+test('Exa activity starts at dispatch and terminates on failure or caller cancellation', async () => {
+  process.env.EXA_API_KEY = 'test-exa-key'
+  process.env.EXA_ENABLED = 'true'
+  for (const cancel of [false, true]) {
+    const controller = new AbortController()
+    let release!: () => void
+    let observed!: () => void
+    const dispatched = new Promise<void>((resolve) => {
+      observed = resolve
+    })
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    serve(async (url) => {
+      if (url.hostname === 'api.exa.ai') {
+        observed()
+        await waiting
+        if (cancel) throw controller.signal.reason
+        return new Response('', { status: 503 })
+      }
+      return new Response('', { status: url.hostname === 'www.etymonline.com' ? 403 : 404 })
+    })
+    const events: StreamEvent[] = []
+    const session = createLexemeResearchSession({
+      budget: new SourceFetchBudget(32),
+      exaBudgetClient: allowance,
+      signal: controller.signal,
+      onProgress: (event) => events.push(event),
+    })
+    const pending = session.lookup({ word: 'fixture', language: 'en' })
+    await dispatched
+    const activity = events.filter((event) => 'source' in event && event.source === 'exa')
+    expect(activity).toHaveLength(1)
+    expect(activity[0]).toMatchObject({ type: 'source_started', language: 'en' })
+    if (cancel) controller.abort()
+    release()
+    if (cancel) await expect(pending).rejects.toThrow()
+    else await pending
+    expect(
+      events.filter((event) => 'source' in event && event.source === 'exa').at(-1)
+    ).toMatchObject(
+      cancel
+        ? { type: 'source_failed', error: 'Cancelled' }
+        : { type: 'source_outcome', outcome: { status: 'unavailable' } }
+    )
+  }
+})
+
+test('cached discovery reports publisher progress without live Exa activity', async () => {
+  serve()
+  const records = [
+    {
+      provider: 'americanHeritage' as const,
+      sourceFamily: 'americanHeritage' as const,
+      data: {
+        text: 'A verified cached entry.',
+        url: 'https://ahdictionary.com/word/search.html?q=fixture',
+      },
+    },
+  ]
+  spyOn(sourceCache, 'getCachedSourceBundle').mockImplementation(async (provider) =>
+    provider === 'discovery' ? records : null
+  )
+  const events: StreamEvent[] = []
+  const session = createLexemeResearchSession({
+    budget: new SourceFetchBudget(32),
+    exaBudgetClient: null,
+    onProgress: (event) => events.push(event),
+  })
+  const result = await session.lookup({ word: 'fixture', language: 'en' })
+  expect(result.sources).toEqual(records)
+  expect(
+    events
+      .filter((event) => event.type === 'source_outcome' && event.source === 'americanHeritage')
+      .at(-1)
+  ).toMatchObject({ outcome: { status: 'found' }, language: 'en' })
+  expect(events.some((event) => 'source' in event && event.source === 'exa')).toBe(false)
 })

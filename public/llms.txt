@@ -4,7 +4,7 @@
 
 ## Word pages
 
-Every traced word has a page at `https://etymex.com/word/{word}`. Italian, Spanish, French and Portuguese words (beta) live at `https://etymex.com/word/{language}/{word}`, where `{language}` is `it`, `es`, `fr` or `pt`.
+Every traced word has a page at `https://etymex.com/word/{word}`. Italian, Spanish, French and Portuguese words live at `https://etymex.com/word/{language}/{word}`, where `{language}` is `it`, `es`, `fr` or `pt`. Every entry is written in English; its usage examples are in the word's own language with English translations.
 
 - [nice](https://etymex.com/word/nice): from Latin nescius, "not knowing"; once meant foolish
 - [villain](https://etymex.com/word/villain): from Late Latin villanus, a farm worker

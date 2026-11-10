@@ -5,7 +5,7 @@ import { getTracedWords } from '@/lib/tracedWords'
 
 export const revalidate = 86400
 
-// No lastModified: cached results carry no timestamp, and a lastmod that is
+// No lastModified: the corpus scan returns only words, and a lastmod that is
 // always "now" teaches crawlers to ignore the field for the whole site.
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = [
@@ -17,9 +17,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const words = await getTracedWords()
   const wordEntries: MetadataRoute.Sitemap = [...words]
-    .sort((a, b) => `${a.language}:${a.word}`.localeCompare(`${b.language}:${b.word}`))
-    .map(({ language, word }) => ({
-      url: `${SITE_ORIGIN}${wordPagePath(word, language)}`,
+    .sort((a, b) => a.word.localeCompare(b.word))
+    .map(({ word }) => ({
+      url: `${SITE_ORIGIN}${wordPagePath(word)}`,
       changeFrequency: 'monthly',
       priority: 0.6,
     }))

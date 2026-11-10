@@ -1,6 +1,7 @@
 import type { StreamingUiError } from '@/lib/streamingError'
 import type { LanguageCode } from '@/lib/languages'
 import { WordLink } from './WordLink'
+import { ScriptLinks } from './ScriptLinks'
 
 const DEFAULT_MESSAGES: Record<StreamingUiError['type'], string> = {
   nonsense: 'That word does not appear in the record.',
@@ -20,6 +21,8 @@ export function ErrorState({ error, language, onRetry }: ErrorStateProps) {
       <p className="font-serif text-xl leading-relaxed text-ink">
         {error.message || DEFAULT_MESSAGES[error.type]}
       </p>
+
+      <ScriptLinks targets={error.otherScripts} />
 
       {error.suggestions.length > 0 && (
         <p className="mt-6 font-serif text-lg text-muted">

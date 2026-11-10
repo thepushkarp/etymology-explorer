@@ -63,18 +63,12 @@ const ROWS: Array<{ key: keyof WordSuggestions; label: string }> = [
   { key: 'seeAlso', label: 'See also' },
 ]
 
-export function RelatedWordsSection({
-  suggestions,
-  title,
-}: {
-  suggestions: WordSuggestions
-  title: string
-}) {
+export function RelatedWordsSection({ suggestions }: { suggestions: WordSuggestions }) {
   const rows = ROWS.filter(({ key }) => suggestions[key]?.length)
   if (rows.length === 0) return null
 
   return (
-    <Section id="entry-related" title={title}>
+    <Section id="entry-related" title="Related words">
       <dl className="space-y-3">
         {rows.map(({ key, label }) => (
           <div key={key} className="flex flex-col gap-1 sm:flex-row sm:gap-6">

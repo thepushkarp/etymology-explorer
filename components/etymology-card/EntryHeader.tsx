@@ -1,14 +1,24 @@
 import type { ReactNode } from 'react'
-import type { DisplayEtymologyResult } from '@/lib/types'
-import { BETA_SYMBOL } from '@/lib/languages'
+import type { EtymologyEntry } from '@/lib/types'
+import { languageFromName, type EtymologyStratum } from '@/lib/languages'
 import { PronunciationButton } from '../PronunciationButton'
 import { Skeleton } from './Section'
+import { FormText } from './StoryText'
 
 interface EntryHeaderProps {
-  result: DisplayEtymologyResult
+  result: EtymologyEntry
   actions?: ReactNode
   subheader?: ReactNode
   pending?: boolean
+}
+
+const STRATUM_LABELS: Record<EtymologyStratum, string> = {
+  wago: 'Wago · native Japanese',
+  kango: 'Kango · Sino-Japanese',
+  gairaigo: 'Gairaigo · loanword',
+  'wasei-eigo': 'Wasei-eigo · Japanese coinage from English',
+  'wasei-kango': 'Wasei-kango · Japanese coinage from Chinese elements',
+  hybrid: 'Hybrid',
 }
 
 function shortenMeaning(meaning: string): string {
@@ -20,13 +30,18 @@ function shortenOrigin(origin: string): string {
 }
 
 /** One-line gloss of the word's parts, e.g. "From Latin fenestra (window)." */
-function originHook(result: DisplayEtymologyResult): string | null {
+function originHook(result: EtymologyEntry): ReactNode {
   const meaningful = result.roots.filter((root) => !root.root.startsWith('-')).slice(0, 3)
   if (meaningful.length === 0) return null
-  const parts = meaningful.map(
-    (root) => `${shortenOrigin(root.origin)} ${root.root} (${shortenMeaning(root.meaning)})`
-  )
-  return `From ${parts.join(' + ')}.`
+  const parts = meaningful.map((root, index) => (
+    <span key={`${root.origin}-${root.root}`}>
+      {index > 0 && ' + '}
+      {shortenOrigin(root.origin)}{' '}
+      <FormText text={root.root} language={languageFromName(root.origin)} /> (
+      {shortenMeaning(root.meaning)})
+    </span>
+  ))
+  return <>From {parts}.</>
 }
 
 export function EntryHeader({ result, actions, subheader, pending }: EntryHeaderProps) {
@@ -37,20 +52,24 @@ export function EntryHeader({ result, actions, subheader, pending }: EntryHeader
   return (
     <header>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <h1 className="min-w-0 break-words font-serif text-[clamp(2.75rem,11vw,4.5rem)] leading-none tracking-tight text-ink">
+        <h1
+          lang={result.language}
+          dir="auto"
+          className="min-w-0 break-words font-serif text-[clamp(2.75rem,11vw,4.5rem)] leading-none tracking-tight text-ink"
+        >
           {result.word}
         </h1>
-        {result.language !== 'en' && (
-          <span aria-label="Beta" title="Beta language" className="font-serif text-lg text-accent">
-            {BETA_SYMBOL}
-          </span>
-        )}
         {actions && <div className="ml-auto self-center">{actions}</div>}
       </div>
 
       <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted">
+        {result.transliteration && (
+          <span lang="en" dir="ltr" className="font-serif">
+            {result.transliteration}
+          </span>
+        )}
         {result.pronunciation && (
-          <span className="inline-flex items-center gap-1.5 font-serif">
+          <span lang="en" dir="ltr" className="inline-flex items-center gap-1.5 font-serif">
             {result.pronunciation}
             <PronunciationButton word={result.word} language={result.language} />
           </span>
@@ -59,6 +78,7 @@ export function EntryHeader({ result, actions, subheader, pending }: EntryHeader
           <span className="font-serif italic">{partsOfSpeech.join(', ')}</span>
         )}
         {attested && <span className="text-sm">first attested {attested}</span>}
+        {result.stratum && <span className="label">{STRATUM_LABELS[result.stratum]}</span>}
       </p>
 
       {subheader}

@@ -1,27 +1,20 @@
 import type { Metadata } from 'next'
 import { PageFrame } from '@/components/PageFrame'
 import { WordLink } from '@/components/WordLink'
-import {
-  BETA_SYMBOL,
-  LANGUAGES,
-  SUPPORTED_LANGUAGE_CODES,
-  type LanguageCode,
-} from '@/lib/languages'
-import { getTracedWords, type TracedWord } from '@/lib/tracedWords'
+import { detectScripts } from '@/lib/languages'
+import { getTracedWords } from '@/lib/tracedWords'
 
-// Crawlable A–Z index of every cached word page: the internal-link path to
-// traced words beyond the sitemap. Every link targets a cached page, so a
-// crawler walking it never reaches the live trace.
+// This cache-only index provides an internal link to every corpus word.
 export const revalidate = 86400
 
 export const metadata: Metadata = {
   title: 'Index of words',
   description:
-    'Every word EtymEx has traced, A to Z. Each entry follows the word back through the languages it passed through, with its sources.',
+    'Every word EtymEx has traced, grouped by initial or script. Each entry follows the word back through the languages it passed through, with its sources.',
   alternates: { canonical: '/words' },
   openGraph: {
     title: 'Index of words - EtymEx',
-    description: 'Every word EtymEx has traced, A to Z.',
+    description: 'Every word EtymEx has traced, grouped by initial or script.',
     url: '/words',
   },
 }
@@ -29,110 +22,90 @@ export const metadata: Metadata = {
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 const OTHER_INITIAL = '#'
 
-interface LetterGroup {
-  letter: string
-  words: string[]
+/** Latin diacritics fold into A–Z; other scripts retain their names. */
+function groupOf(word: string): string {
+  const scripts = detectScripts(word)
+  if (scripts.some((script) => script !== 'Latin')) return scripts.join(' / ')
+  const initial = word.normalize('NFD').charAt(0).toUpperCase()
+  return ALPHABET.includes(initial) ? initial : OTHER_INITIAL
 }
 
-/** Initial letter with diacritics folded (é → E), so accented words file under their base letter. */
-function initialOf(word: string): string {
-  const letter = word.normalize('NFD').charAt(0).toUpperCase()
-  return ALPHABET.includes(letter) ? letter : OTHER_INITIAL
-}
-
-function groupByInitial(words: string[], language: LanguageCode): LetterGroup[] {
-  const sorted = [...words].sort((a, b) => a.localeCompare(b, language, { sensitivity: 'base' }))
-  const groups = new Map<string, string[]>()
-  for (const word of sorted) {
-    const letter = initialOf(word)
-    groups.set(letter, [...(groups.get(letter) ?? []), word])
-  }
-  return [...groups.entries()]
-    .sort(([a], [b]) => (a === OTHER_INITIAL ? 1 : b === OTHER_INITIAL ? -1 : a.localeCompare(b)))
-    .map(([letter, groupWords]) => ({ letter, words: groupWords }))
-}
-
-function wordsByLanguage(traced: TracedWord[]): Array<[LanguageCode, LetterGroup[]]> {
-  return SUPPORTED_LANGUAGE_CODES.map((language): [LanguageCode, string[]] => [
-    language,
-    traced.filter((entry) => entry.language === language).map((entry) => entry.word),
-  ])
-    .filter(([, words]) => words.length > 0)
-    .map(([language, words]) => [language, groupByInitial(words, language)])
-}
-
-function anchorFor(language: LanguageCode, letter: string): string {
-  return `${language}-${letter === OTHER_INITIAL ? 'other' : letter.toLowerCase()}`
+function anchorFor(group: string): string {
+  return group === OTHER_INITIAL ? 'other' : group.toLowerCase().replace(/\W+/g, '-')
 }
 
 export default async function WordsIndexPage() {
   const traced = await getTracedWords()
-  const sections = wordsByLanguage(traced)
+  const groups = new Map<string, string[]>()
+  for (const { word } of [...traced].sort((a, b) =>
+    a.word.localeCompare(b.word, 'en', { sensitivity: 'base' })
+  )) {
+    const group = groupOf(word)
+    const words = groups.get(group) ?? []
+    words.push(word)
+    groups.set(group, words)
+  }
+  const groupNames = [...groups.keys()].sort((a, b) => {
+    const rank = (group: string) => (ALPHABET.includes(group) ? 0 : group === OTHER_INITIAL ? 2 : 1)
+    return rank(a) - rank(b) || a.localeCompare(b)
+  })
+  const navigation = [...ALPHABET, ...groupNames.filter((group) => !ALPHABET.includes(group))]
   const subtitle =
     traced.length > 0
-      ? `${traced.length} ${traced.length === 1 ? 'word' : 'words'} traced so far, A to Z.`
+      ? `${traced.length} ${traced.length === 1 ? 'word' : 'words'} traced so far.`
       : 'No words have been traced yet.'
 
   return (
     <PageFrame title="Index" subtitle={subtitle}>
-      {sections.map(([language, groups]) => {
-        const present = new Set(groups.map((group) => group.letter))
-        const definition = LANGUAGES[language]
-        return (
+      {traced.length > 0 && (
+        <nav
+          aria-label="Word index"
+          className="flex flex-wrap gap-x-3 gap-y-1 font-serif text-muted"
+        >
+          {navigation.map((group) =>
+            groups.has(group) ? (
+              <a
+                key={group}
+                href={`#${anchorFor(group)}`}
+                className="transition-colors hover:text-accent"
+              >
+                {group}
+              </a>
+            ) : (
+              <span key={group} className="text-faint" aria-hidden>
+                {group}
+              </span>
+            )
+          )}
+        </nav>
+      )}
+      <div className="mt-6 border-t border-rule">
+        {groupNames.map((group) => (
           <section
-            key={language}
-            aria-labelledby={`${language}-heading`}
-            className="mb-16 last:mb-0"
+            key={group}
+            id={anchorFor(group)}
+            aria-labelledby={`${anchorFor(group)}-heading`}
+            className="scroll-mt-6 border-b border-rule py-5"
           >
-            <h2 id={`${language}-heading`} className="label">
-              {definition.englishName}
-              {definition.beta ? ` ${BETA_SYMBOL}` : ''}
-            </h2>
-            <nav
-              aria-label={`${definition.englishName} letters`}
-              className="mt-4 flex flex-wrap gap-x-3 gap-y-1 font-serif text-muted"
+            <h2
+              id={`${anchorFor(group)}-heading`}
+              className="font-serif text-2xl italic text-accent"
             >
-              {ALPHABET.map((letter) =>
-                present.has(letter) ? (
-                  <a
-                    key={letter}
-                    href={`#${anchorFor(language, letter)}`}
-                    className="transition-colors hover:text-accent"
-                  >
-                    {letter}
-                  </a>
-                ) : (
-                  <span key={letter} className="text-faint" aria-hidden>
-                    {letter}
-                  </span>
-                )
-              )}
-            </nav>
-            <div className="mt-6 border-t border-rule">
-              {groups.map(({ letter, words }) => (
-                <div
-                  key={letter}
-                  id={anchorFor(language, letter)}
-                  className="grid scroll-mt-6 grid-cols-[2.5rem_1fr] items-baseline gap-4 border-b border-rule py-5"
-                >
-                  <h3 className="font-serif text-2xl italic text-accent">{letter}</h3>
-                  <ul className="flex flex-wrap gap-x-5 gap-y-2">
-                    {words.map((word) => (
-                      <li key={word}>
-                        <WordLink
-                          word={word}
-                          language={language}
-                          className="font-serif text-lg text-ink transition-colors hover:text-accent"
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              {group}
+            </h2>
+            <ul className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
+              {groups.get(group)?.map((word) => (
+                <li key={word}>
+                  <WordLink
+                    word={word}
+                    className="font-serif text-lg text-ink transition-colors hover:text-accent"
+                  />
+                </li>
               ))}
-            </div>
+            </ul>
           </section>
-        )
-      })}
+        ))}
+      </div>
     </PageFrame>
   )
 }

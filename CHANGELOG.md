@@ -4,9 +4,30 @@ Notable changes to EtymEx, following [Keep a Changelog](https://keepachangelog.c
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 The site's changelog dialog is built from this file, so each entry must be a single-line,
-plain-text bullet under a `###` group. `Unreleased` stays out of the dialog.
+plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ## [Unreleased]
+
+### Added
+
+- See unreleased changes in the beta changelog, with the beta build identified in the header.
+- Preview the latest main changes at beta.etymex.com while production remains release-only.
+- Follow dictionary and Exa retrieval activity as research expands to components, variants, and ancestors, including during retraces.
+- Hear a labelled Hindi reading of Sanskrit Devanagari, with female stock voice fallback when the preferred voice is unavailable.
+- Follow attested lineage forms, source-listed spelling counterparts, and romanization links across supported languages.
+- Explore Japanese words with source-backed histories, word-origin labels, Japanese typography, and credited JMdict lexical context.
+- Explore Hindi, Urdu, and Sanskrit words in their native scripts, with source-backed transliterations, language tabs, and curated discovery words.
+- Hear Hindi and Urdu pronunciations, with right-to-left Urdu text and fonts for Devanagari and Urdu.
+
+### Changed
+
+- Pronunciation playback follows language changes without stale audio resetting the selected entry.
+- Auto discovers supported languages for a spelling and traces their histories together with language tabs.
+- Saved entries remain discoverable across pipeline updates, with an explicit retrace action for older research.
+- Autocomplete includes Wiktionary headwords beyond the vocabulary list.
+
+- Italian, Spanish, French, and Portuguese entries are written in English, with usage examples in the word's own language and their English translations.
+- Italian, Spanish, French, and Portuguese are no longer marked as beta.
 
 ## [0.1.0] - 2026-11-07
 

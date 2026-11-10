@@ -9,17 +9,16 @@
  */
 
 import type {
-  BetaEtymologyResult,
-  BilingualText,
-  DisplayEtymologyResult,
-  EnglishEtymologyResult,
+  EtymologyEntry,
   EtymologyResult,
+  WordEntry,
   StreamEvent,
   SourceOutcome,
+  ScriptTarget,
 } from './types'
 import type { LanguageCode } from './languages'
-import { localizeResult } from './resultLocalization'
 import { StreamingUiError, toStreamingUiError } from './streamingError'
+import { normalizeScriptTargets } from './scriptTargets'
 import { sourceKey, sourceLabel } from './sourceLabels'
 
 export type StreamStatus = 'idle' | 'loading' | 'success' | 'error'
@@ -36,12 +35,15 @@ export interface SourceProgress {
   status: SourceStatus
   timing?: number
   reason?: string
+  activities?: Record<string, { status: SourceStatus; timing?: number; reason?: string }>
 }
 
 /** Top-level synthesis sections, named and ordered exactly as in the LLM schema */
 export const SECTION_KEYS = [
   'word',
+  'stratum',
   'pronunciation',
+  'transliteration',
   'definition',
   'ancestryGraph',
   'roots',
@@ -56,24 +58,23 @@ export const SECTION_KEYS = [
 export type SectionKey = (typeof SECTION_KEYS)[number]
 
 /** Progressive slice of the final result, hydrated one section at a time */
-export type PartialEtymology = Partial<Pick<EnglishEtymologyResult, SectionKey>>
-
-const EMPTY_BILINGUAL_TEXT: BilingualText = { en: '', local: '' }
+export type PartialEtymology = Partial<Pick<EtymologyResult, SectionKey>>
 
 /**
- * Project the streamed sections onto a full display result, defaulting every
- * not-yet-arrived field to an empty value. Beta sections carry bilingual prose,
- * so they get paired empty text and the same projection as completed results.
+ * Project the streamed sections onto a renderable entry, defaulting every
+ * not-yet-arrived field to an empty value.
  */
 export function toPartialResult(
   word: string,
   sections: PartialEtymology,
   language: LanguageCode = 'en'
-): DisplayEtymologyResult {
-  const partial: EnglishEtymologyResult = {
-    language: 'en',
+): EtymologyEntry {
+  return {
+    language,
     word: sections.word ?? word,
+    stratum: sections.stratum,
     pronunciation: sections.pronunciation ?? '',
+    transliteration: sections.transliteration,
     definition: sections.definition ?? '',
     roots: sections.roots ?? [],
     ancestryGraph: sections.ancestryGraph ?? { branches: [] },
@@ -84,32 +85,35 @@ export function toPartialResult(
     suggestions: sections.suggestions,
     modernUsage: sections.modernUsage,
   }
-  if (language === 'en') return localizeResult(partial, 'en')
+}
 
-  const betaPartial = {
-    ...partial,
-    language,
-    definition: sections.definition ?? EMPTY_BILINGUAL_TEXT,
-    lore: sections.lore ?? EMPTY_BILINGUAL_TEXT,
-  } as unknown as BetaEtymologyResult
-  return localizeResult(betaPartial, 'local')
+export interface LanguageStreamState {
+  phase: StreamPhase
+  sources: SourceProgress[]
+  sections: PartialEtymology
+  error?: string
 }
 
 export interface StreamState {
+  languages: LanguageCode[]
+  otherLanguages: string[]
+  otherScripts?: ScriptTarget[]
+  byLanguage: Partial<Record<LanguageCode, LanguageStreamState>>
   status: StreamStatus
   phase: StreamPhase
   sources: SourceProgress[]
   sections: PartialEtymology
   /** Non-null while this request is waiting on another in-flight lookup */
   sharedWaitMs: number | null
-  result: EtymologyResult | null
+  result: WordEntry | null
   error: StreamingUiError | null
 }
 
 export type StreamAction =
   | { type: 'search_started' }
+  | { type: 'stream_reconnecting' }
   | { type: 'stream_event'; event: StreamEvent }
-  | { type: 'fallback_success'; result: EtymologyResult }
+  | { type: 'fallback_success'; result: WordEntry }
   | { type: 'fallback_error'; error: StreamingUiError }
 
 /**
@@ -119,14 +123,40 @@ export type StreamAction =
 function upsertSource(
   sources: SourceProgress[],
   rawSource: string,
-  patch: Partial<Pick<SourceProgress, 'status' | 'timing' | 'reason'>>
+  patch: Partial<Pick<SourceProgress, 'status' | 'timing' | 'reason'>>,
+  activityId?: string
 ): SourceProgress[] {
   const key = sourceKey(rawSource)
   const existing = sources.find((source) => source.key === key)
-  if (!existing) {
-    return [...sources, { key, label: sourceLabel(rawSource), status: 'pending', ...patch }]
+  let updated: SourceProgress = existing ?? {
+    key,
+    label: sourceLabel(rawSource),
+    status: 'pending',
   }
-  return sources.map((source) => (source.key === key ? { ...source, ...patch } : source))
+  if (activityId) {
+    const previous = updated.activities?.[activityId]
+    const activity = {
+      status: 'pending' as SourceStatus,
+      timing: undefined,
+      reason: undefined,
+      ...previous,
+      ...patch,
+    }
+    const activities = { ...updated.activities, [activityId]: activity }
+    const values = Object.values(activities)
+    // A provider can read several lexemes at once. Settled siblings must not hide active work
+    // or erase a usable entry just because another lexeme has no entry at that publisher.
+    const summary =
+      values.find((item) => item.status === 'pending') ??
+      values.find((item) => item.status === 'complete') ??
+      activity
+    updated = { ...updated, ...summary, activities }
+  } else {
+    updated = { ...updated, ...patch }
+  }
+  return existing
+    ? sources.map((source) => (source.key === key ? updated : source))
+    : [...sources, updated]
 }
 
 function isSectionKey(section: string): section is SectionKey {
@@ -134,6 +164,9 @@ function isSectionKey(section: string): section is SectionKey {
 }
 
 export const initialStreamState: StreamState = {
+  languages: [],
+  otherLanguages: [],
+  byLanguage: {},
   status: 'idle',
   phase: 'idle',
   sources: [],
@@ -144,36 +177,111 @@ export const initialStreamState: StreamState = {
 }
 
 function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
+  if (event.type === 'languages_resolved') {
+    return {
+      ...state,
+      languages: event.languages,
+      otherLanguages: event.otherLanguages,
+      otherScripts: normalizeScriptTargets(event.otherScripts),
+    }
+  }
+  if (event.type === 'language_failed') {
+    const slice = state.byLanguage[event.language] ?? {
+      phase: 'sources',
+      sources: [],
+      sections: {},
+    }
+    return {
+      ...state,
+      byLanguage: {
+        ...state.byLanguage,
+        [event.language]: { ...slice, phase: 'error', error: event.message },
+      },
+    }
+  }
+  if (
+    event.language &&
+    event.type !== 'result' &&
+    event.type !== 'error' &&
+    event.type !== 'singleflight_wait'
+  ) {
+    const language = event.language
+    const slice = state.byLanguage[language] ?? { phase: 'sources', sources: [], sections: {} }
+    const next = applyStreamEvent(
+      { ...state, phase: slice.phase, sources: slice.sources, sections: slice.sections },
+      { ...event, language: undefined }
+    )
+    if (
+      next.sources === slice.sources &&
+      next.sections === slice.sections &&
+      next.phase === slice.phase
+    )
+      return state
+    return {
+      ...state,
+      phase:
+        state.phase === 'done' || state.phase === 'error'
+          ? state.phase
+          : next.phase === 'synthesis'
+            ? 'synthesis'
+            : state.phase,
+      byLanguage: {
+        ...state.byLanguage,
+        [language]: {
+          ...slice,
+          phase: next.phase,
+          sources: next.sources,
+          sections: next.sections,
+        },
+      },
+    }
+  }
   switch (event.type) {
     case 'source_started':
-      return { ...state, sources: upsertSource(state.sources, event.source, {}) }
+      return { ...state, sources: upsertSource(state.sources, event.source, {}, event.activityId) }
 
     case 'source_complete':
       return {
         ...state,
-        sources: upsertSource(state.sources, event.source, {
-          status: 'complete',
-          timing: event.timing,
-        }),
+        sources: upsertSource(
+          state.sources,
+          event.source,
+          {
+            status: 'complete',
+            timing: event.timing,
+            reason: undefined,
+          },
+          event.activityId
+        ),
       }
 
     case 'source_failed':
       return {
         ...state,
-        sources: upsertSource(state.sources, event.source, {
-          status: 'failed',
-          reason: event.error,
-        }),
+        sources: upsertSource(
+          state.sources,
+          event.source,
+          {
+            status: 'failed',
+            reason: event.error,
+          },
+          event.activityId
+        ),
       }
 
     case 'source_outcome':
       return {
         ...state,
-        sources: upsertSource(state.sources, event.source, {
-          status: event.outcome.status === 'found' ? 'complete' : event.outcome.status,
-          timing: event.timing,
-          reason: event.outcome.reason,
-        }),
+        sources: upsertSource(
+          state.sources,
+          event.source,
+          {
+            status: event.outcome.status === 'found' ? 'complete' : event.outcome.status,
+            timing: event.timing,
+            reason: event.outcome.reason,
+          },
+          event.activityId
+        ),
       }
 
     case 'parsing_complete':
@@ -201,10 +309,28 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
       return { ...state, sharedWaitMs: event.waitedMs }
 
     case 'result':
-      return { ...state, status: 'success', phase: 'done', result: event.data, error: null }
+      return {
+        ...state,
+        status: 'success',
+        phase: 'done',
+        result: event.data,
+        error: null,
+        languages: [...new Set([...state.languages, ...event.data.languages])],
+        otherLanguages: event.data.otherLanguages,
+        otherScripts: normalizeScriptTargets(event.data.otherScripts ?? state.otherScripts),
+      }
 
     case 'error':
-      return { ...state, status: 'error', phase: 'error', error: toStreamingUiError(event) }
+      return {
+        ...state,
+        status: 'error',
+        phase: 'error',
+        error: toStreamingUiError({
+          ...event,
+          otherScripts: event.otherScripts ?? state.otherScripts,
+        }),
+        otherScripts: normalizeScriptTargets(event.otherScripts ?? state.otherScripts),
+      }
   }
 }
 
@@ -217,13 +343,41 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
         phase: 'sources',
       }
 
+    case 'stream_reconnecting':
+      return {
+        ...state,
+        sources: [],
+        byLanguage: Object.fromEntries(
+          Object.entries(state.byLanguage).map(([language, slice]) => [
+            language,
+            { ...slice, sources: [] },
+          ])
+        ),
+        sharedWaitMs: null,
+      }
+
     case 'stream_event':
       return applyStreamEvent(state, action.event)
 
     case 'fallback_success':
-      return { ...state, status: 'success', phase: 'done', result: action.result, error: null }
+      return {
+        ...state,
+        status: 'success',
+        phase: 'done',
+        result: action.result,
+        error: null,
+        languages: [...new Set([...state.languages, ...action.result.languages])],
+        otherLanguages: action.result.otherLanguages,
+        otherScripts: normalizeScriptTargets(action.result.otherScripts ?? state.otherScripts),
+      }
 
     case 'fallback_error':
-      return { ...state, status: 'error', phase: 'error', error: action.error }
+      return {
+        ...state,
+        status: 'error',
+        phase: 'error',
+        error: { ...action.error, otherScripts: action.error.otherScripts ?? state.otherScripts },
+        otherScripts: normalizeScriptTargets(action.error.otherScripts ?? state.otherScripts),
+      }
   }
 }

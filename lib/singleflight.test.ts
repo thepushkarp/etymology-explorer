@@ -197,6 +197,30 @@ describe('holder failure vs holder crash (promotion state machine)', () => {
     expect(await isLockHeld(LOCK_KEY, redis)).toBe(false) // no one re-ran the pipeline
   })
 
+  test('failure metadata keeps validated offers without changing message or expiry', async () => {
+    const redis = createInMemoryRedis()
+    await markLockFailure(
+      LOCK_KEY,
+      {
+        message: 'provider failed',
+        otherScripts: [
+          { word: ' नमस्ते ', language: 'hi' },
+          { word: 'namaste', language: 'hi' },
+        ],
+      },
+      redis
+    )
+    expect(await attemptPromotion(LOCK_KEY, redis)).toEqual({
+      status: 'holder_failed',
+      message: 'provider failed',
+      otherScripts: [{ word: 'नमस्ते', language: 'hi' }],
+    })
+    redis.advanceClock(61_000)
+    expect(await getLockFailure(LOCK_KEY, redis)).toBeNull()
+    await redis.set(`${LOCK_KEY}:failed`, JSON.stringify({ message: 1, otherScripts: [] }))
+    expect(await getLockFailure(LOCK_KEY, redis)).toBeNull()
+  })
+
   test('true crash: lock expired with no marker — exactly one waiter promotes', async () => {
     const redis = createInMemoryRedis()
     await tryAcquireLock(LOCK_KEY, redis)
@@ -262,6 +286,6 @@ describe('holder failure vs holder crash (promotion state machine)', () => {
     await markLockFailure(LOCK_KEY, 'first error', redis)
     await markLockFailure(LOCK_KEY, 'second error', redis)
 
-    expect(await getLockFailure(LOCK_KEY, redis)).toBe('first error')
+    expect(await getLockFailure(LOCK_KEY, redis)).toEqual({ message: 'first error' })
   })
 })

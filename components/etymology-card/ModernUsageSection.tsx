@@ -1,16 +1,10 @@
 import type { ModernUsage } from '@/lib/types'
 import { Section } from './Section'
 
-export function ModernUsageSection({
-  modernUsage,
-  title,
-}: {
-  modernUsage: ModernUsage
-  title: string
-}) {
+export function ModernUsageSection({ modernUsage }: { modernUsage: ModernUsage }) {
   const { slangDefinition, popularizedBy, contexts, notableReferences } = modernUsage
   return (
-    <Section title={title}>
+    <Section title="Modern usage">
       {slangDefinition && (
         <p className="max-w-2xl font-serif text-lg leading-relaxed text-ink">{slangDefinition}</p>
       )}

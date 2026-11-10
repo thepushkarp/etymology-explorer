@@ -6,13 +6,7 @@
  * The LLM does NOT self-assess confidence — we determine it programmatically.
  */
 
-import type {
-  AncestryGraph,
-  AncestryStage,
-  ResultText,
-  StageConfidence,
-  StageEvidence,
-} from './types'
+import type { AncestryGraph, AncestryStage, StageConfidence, StageEvidence } from './types'
 import {
   isReconstructedForm,
   normalizeLanguageName,
@@ -45,6 +39,11 @@ const BROAD_LANGUAGE: Record<string, string> = {
   'anglo-french': 'french',
   'old high german': 'german',
   'middle dutch': 'dutch',
+  'vedic sanskrit': 'sanskrit',
+  'classical sanskrit': 'sanskrit',
+  'classical persian': 'persian',
+  'middle persian': 'persian',
+  'old persian': 'persian',
 }
 
 function compatibleLanguage(left: string, right: string): boolean {
@@ -61,10 +60,12 @@ interface MatchResult {
   link: ParsedEtymLink
   source: SourceProviderId
   family: SourceFamilyId
+  sourceUrl?: string
+  evidenceScopeId?: string
 }
 
 /** Match within the caller's history scope and an explicitly identified language. */
-function findMatches(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]): MatchResult[] {
+function findMatches(stage: AncestryStage, chains: ParsedEtymChain[]): MatchResult[] {
   const matches: MatchResult[] = []
 
   for (const chain of chains) {
@@ -83,6 +84,8 @@ function findMatches(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]
           link,
           source: provider,
           family: chain.sourceFamily ?? sourceFamily(provider),
+          sourceUrl: chain.sourceUrl,
+          evidenceScopeId: chain.evidenceScopeId,
         })
       }
     }
@@ -115,6 +118,8 @@ function buildEvidence(matches: MatchResult[]): StageEvidence[] {
       source: match.source,
       snippet: match.link.rawSnippet,
       sourceFamily: match.family,
+      ...(match.sourceUrl ? { sourceUrl: match.sourceUrl } : {}),
+      ...(match.evidenceScopeId ? { evidenceScopeId: match.evidenceScopeId } : {}),
     })
   }
 
@@ -125,7 +130,7 @@ function buildEvidence(matches: MatchResult[]): StageEvidence[] {
  * Enrich a single AncestryStage with confidence and evidence.
  * Mutates the stage in-place for efficiency.
  */
-function enrichStage(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]): void {
+function enrichStage(stage: AncestryStage, chains: ParsedEtymChain[]): void {
   stage.isReconstructed = isReconstructedForm(stage.form, stage.stage)
 
   // Find matching parsed links
@@ -136,6 +141,17 @@ function enrichStage(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]
 
   // Model-supplied evidence must never survive an unsuccessful source match.
   stage.evidence = buildEvidence(matches)
+
+  // A reading belongs to the exact written form; variant spellings cannot lend
+  // their reading, and conflicting source readings cannot select one for us.
+  const readings = new Set(
+    matches
+      .filter((match) => normalize(stage.form) === normalize(match.link.form))
+      .map((match) => match.link.transliteration)
+      .filter((reading): reading is string => Boolean(reading))
+  )
+  if (readings.size === 1) stage.transliteration = [...readings][0]
+  else delete stage.transliteration
 }
 
 /**
@@ -144,10 +160,7 @@ function enrichStage(stage: AncestryStage<ResultText>, chains: ParsedEtymChain[]
  *
  * Call this AFTER the LLM returns its response, BEFORE sending to the client.
  */
-export function enrichAncestryGraph<Text extends ResultText>(
-  graph: AncestryGraph<Text>,
-  parsedChains: ParsedEtymChain[]
-): void {
+export function enrichAncestryGraph(graph: AncestryGraph, parsedChains: ParsedEtymChain[]): void {
   if (!graph?.branches) return
 
   // Enrich each branch's stages
@@ -176,11 +189,11 @@ export function enrichAncestryGraph<Text extends ResultText>(
  * Must be called after enrichAncestryGraph() — relies on isReconstructed
  * and confidence fields set by that function.
  */
-export function pruneUngroundedStages<Text extends ResultText>(graph: AncestryGraph<Text>): number {
+export function pruneUngroundedStages(graph: AncestryGraph): number {
   if (!graph?.branches) return 0
   let pruned = 0
 
-  const isUngrounded = (s: AncestryStage<ResultText>) => s.isReconstructed && s.confidence === 'low'
+  const isUngrounded = (s: AncestryStage) => s.isReconstructed && s.confidence === 'low'
 
   for (const branch of graph.branches) {
     const before = branch.stages.length

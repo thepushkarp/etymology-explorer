@@ -21,7 +21,8 @@ const SOURCE_LABELS: Record<string, string> = {
   bosworthtoller: 'Bosworth–Toller',
   lewisshort: 'Lewis & Short',
   lsj: 'LSJ',
-  exa: 'Source discovery',
+  jmdict: 'JMdict / EDRDG (via Jisho)',
+  exa: 'Exa retrieval',
   synthesized: 'AI synthesis',
 }
 

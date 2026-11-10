@@ -1,9 +1,11 @@
-import type { EtymologyResult, ResultText } from './types'
-import type { LanguageCode } from './languages'
+import type { WordEntry } from './types'
+import { SUPPORTED_LANGUAGE_CODES, type LanguageCode } from './languages'
+import { historyEntry } from './resultHistories'
 import { canonicalizeWord, isValidWord } from './validation'
 
 export interface RecentSearchPreview {
   word: string
+  language: LanguageCode
   teaser: string
 }
 
@@ -11,21 +13,13 @@ export const RECENT_SEARCH_POOL_SIZE = 20
 export const RECENT_SEARCH_DISPLAY_COUNT = 4
 const TEASER_LENGTH = 120
 
-function localizedText(text: ResultText | undefined, language: LanguageCode): string {
-  if (typeof text === 'string') return language === 'en' ? text : ''
-  return (language === 'en' ? text?.en : text?.local) ?? ''
-}
-
-export function recentSearchPreview(
-  result: EtymologyResult,
-  language: LanguageCode
-): RecentSearchPreview | null {
-  if ((result.language ?? 'en') !== language || !isValidWord(result.word)) return null
-  const primary = result.histories?.find((history) => history.id === result.primaryHistoryId)
-  const lore = localizedText(primary?.lore ?? result.lore, language)
-    .replace(/\s+/gu, ' ')
-    .trim()
-  let teaser = lore || localizedText(primary?.definition ?? result.definition, language).trim()
+export function recentSearchPreview(entry: WordEntry): RecentSearchPreview | null {
+  const language = entry.languages[0]
+  const result = entry.entries[language]
+  if (!result || result.language !== language || !isValidWord(result.word)) return null
+  const primary = historyEntry(result)
+  const lore = primary.lore.replace(/\s+/gu, ' ').trim()
+  let teaser = lore || primary.definition.trim()
   teaser = teaser
     .replace(/(\*\*|__|\*|_)(?=\S)([^*_]*?\S)\1(?![\p{L}\p{N}])/gu, '$2')
     .replace(/\s+/gu, ' ')
@@ -35,7 +29,7 @@ export function recentSearchPreview(
     const boundary = prefix.lastIndexOf(' ')
     teaser = `${(boundary > 0 ? prefix.slice(0, boundary) : prefix).trimEnd()}…`
   }
-  return { word: canonicalizeWord(result.word), teaser }
+  return { word: canonicalizeWord(result.word), language, teaser }
 }
 
 /** Validate the small public snapshot without loading full cached entries. */
@@ -48,6 +42,7 @@ export function parseRecentSearchPreviews(value: unknown): RecentSearchPreview[]
       !entry ||
       typeof entry !== 'object' ||
       typeof entry.word !== 'string' ||
+      !SUPPORTED_LANGUAGE_CODES.includes(entry.language) ||
       !isValidWord(entry.word) ||
       typeof entry.teaser !== 'string' ||
       !entry.teaser.trim() ||
@@ -58,7 +53,7 @@ export function parseRecentSearchPreviews(value: unknown): RecentSearchPreview[]
     const word = canonicalizeWord(entry.word)
     if (seen.has(word)) continue
     seen.add(word)
-    previews.push({ word, teaser: entry.teaser })
+    previews.push({ word, language: entry.language, teaser: entry.teaser })
     if (previews.length === RECENT_SEARCH_POOL_SIZE) break
   }
   return previews

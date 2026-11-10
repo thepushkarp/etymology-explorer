@@ -6,10 +6,10 @@ import { getCostMode } from '@/lib/costGuard'
 import { tryAcquireLock, releaseLock, pollForResult } from '@/lib/singleflight'
 import { safeError } from '@/lib/errorUtils'
 import { CONFIG } from '@/lib/config'
-import { lexemeKey, parseLanguageCode } from '@/lib/languages'
+import { LANGUAGES, lexemeKey, parseLanguageCode } from '@/lib/languages'
 import { incrLanguageCounter } from '@/lib/counters'
 
-// TTS generation has a 15s timeout, plus cache round-trips and waiter polling.
+// A configured voice and one stock fallback each have a 15s timeout; catalog lookup is bounded.
 export const maxDuration = 60
 
 export async function GET(request: NextRequest) {
@@ -27,6 +27,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'Unsupported language' }, { status: 400 })
   }
 
+  if (!LANGUAGES[language].ttsLanguageCode) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Pronunciation is unavailable for ${LANGUAGES[language].englishName}`,
+      },
+      { status: 400 }
+    )
+  }
+
   if (!word) {
     return NextResponse.json({ success: false, error: 'Word parameter required' }, { status: 400 })
   }
@@ -41,10 +51,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          'Pronunciation service not configured. Set ELEVENLABS_API_KEY and ' +
-          'ELEVENLABS_VOICE_ID to a voice available in your My Voices list. ' +
-          'Free-tier accounts cannot use Voice Library voices via the API.',
+        error: 'Pronunciation service not configured. Set ELEVENLABS_API_KEY.',
       },
       { status: 503 }
     )

@@ -6,8 +6,9 @@ import {
   type StreamAction,
   type StreamState,
 } from './streamReducer'
-import type { EtymologyResult, StreamEvent } from './types'
+import type { WordEntry, StreamEvent } from './types'
 import type { PartialEtymology } from './streamReducer'
+import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 
 function run(actions: StreamAction[], from: StreamState = initialStreamState): StreamState {
   return actions.reduce(streamReducer, from)
@@ -17,14 +18,19 @@ function events(...list: StreamEvent[]): StreamAction[] {
   return list.map((event) => ({ type: 'stream_event', event }))
 }
 
-const RESULT: EtymologyResult = {
+const LANGUAGE_RESULT = etymologyResult({
   word: 'perfidious',
   pronunciation: '/pərˈfɪdiəs/',
   definition: 'Deceitful and untrustworthy.',
-  roots: [],
-  ancestryGraph: { branches: [] },
   lore: 'A story.',
-  sources: [],
+})
+const RESULT: WordEntry = {
+  word: LANGUAGE_RESULT.word,
+  languages: ['en'],
+  entries: { en: LANGUAGE_RESULT },
+  otherLanguages: [],
+  tracedAt: '2026-11-10T00:00:00.000Z',
+  revision: 1,
 }
 
 describe('search_started', () => {
@@ -55,6 +61,30 @@ describe('search_started', () => {
 })
 
 describe('source events', () => {
+  test('parallel language progress keeps source outcomes, sections, and failures independent', () => {
+    const state = run([
+      { type: 'search_started' },
+      ...events(
+        { type: 'source_started', source: 'wiktionaryEnglish' },
+        { type: 'languages_resolved', languages: ['en', 'fr'], otherLanguages: ['Dutch'] },
+        { type: 'source_complete', source: 'wiktionaryNative', timing: 12, language: 'en' },
+        { type: 'source_failed', source: 'wiktionaryNative', error: 'timeout', language: 'fr' },
+        { type: 'synthesis_section', section: 'definition', data: 'English entry', language: 'en' },
+        { type: 'language_failed', language: 'fr', message: 'French unavailable' },
+        { type: 'result', data: { ...RESULT, otherLanguages: ['Dutch'] } }
+      ),
+    ])
+    expect(state.sources).toHaveLength(1)
+    expect(state.byLanguage.en?.sources[0].status).toBe('complete')
+    expect(state.byLanguage.fr?.sources[0].status).toBe('failed')
+    expect(state.byLanguage.en?.sections.definition).toBe('English entry')
+    expect(state.byLanguage.fr?.sections).toEqual({})
+    expect(state.byLanguage.fr?.error).toBe('French unavailable')
+    expect(state.phase).toBe('done')
+    expect(state.languages).toEqual(['en', 'fr'])
+    expect(state.otherLanguages).toEqual(['Dutch'])
+  })
+
   test('completion records status and timing', () => {
     const state = run([
       { type: 'search_started' },
@@ -104,7 +134,7 @@ describe('source events', () => {
     expect(state.sources[0]).toMatchObject({ key: 'somefuturewiki', status: 'complete' })
   })
 
-  test('labels beta providers without leaving English providers pending', () => {
+  test('labels other-language providers without leaving English providers pending', () => {
     const state = run([
       { type: 'search_started' },
       ...events(
@@ -163,6 +193,79 @@ describe('source events', () => {
     )
     expect(recovered.sources[1]).toMatchObject({ status: 'complete', timing: 500 })
     expect(recovered.sources[1].reason).toBeUndefined()
+  })
+
+  test('concurrent jobs keep a provider pending and retain successes across later misses', () => {
+    let state = run(
+      events(
+        { type: 'source_started', source: 'exa', activityId: 'one', language: 'fr' },
+        { type: 'source_started', source: 'exa', activityId: 'two', language: 'fr' },
+        { type: 'source_complete', source: 'exa', activityId: 'one', timing: 10, language: 'fr' },
+        {
+          type: 'source_outcome',
+          source: 'exa',
+          activityId: 'one',
+          outcome: { status: 'found' },
+          language: 'fr',
+        },
+        {
+          type: 'source_outcome',
+          source: 'exa',
+          activityId: 'es',
+          outcome: { status: 'unavailable' },
+          language: 'es',
+        }
+      )
+    )
+    expect(state.byLanguage.fr?.sources[0]).toMatchObject({
+      label: 'Exa retrieval',
+      status: 'pending',
+    })
+    state = run(
+      events(
+        {
+          type: 'source_outcome',
+          source: 'exa',
+          activityId: 'two',
+          outcome: { status: 'no_evidence' },
+          language: 'fr',
+        },
+        { type: 'source_started', source: 'exa', activityId: 'one', language: 'fr' }
+      ),
+      state
+    )
+    expect(state.byLanguage.fr?.sources[0].status).toBe('complete')
+    expect(state.byLanguage.es?.sources[0].status).toBe('unavailable')
+    expect(Object.keys(state.byLanguage.fr?.sources[0].activities ?? {})).toHaveLength(2)
+    expect(state.sources).toEqual([])
+  })
+
+  test('reconnection clears source jobs before a new server session reuses its IDs', () => {
+    const previous = run(
+      events(
+        { type: 'source_started', source: 'wikipedia', activityId: 'old' },
+        {
+          type: 'source_outcome',
+          source: 'exa',
+          activityId: '1',
+          outcome: { status: 'found' },
+          language: 'en',
+        },
+        { type: 'source_started', source: 'exa', activityId: '2', language: 'en' },
+        { type: 'synthesis_section', section: 'definition', data: 'An entry.', language: 'en' }
+      )
+    )
+    const reconnected = run(
+      [
+        { type: 'stream_reconnecting' },
+        ...events({ type: 'source_started', source: 'exa', activityId: '1', language: 'en' }),
+      ],
+      previous
+    )
+    expect(reconnected.sources).toEqual([])
+    expect(reconnected.byLanguage.en?.sources[0].status).toBe('pending')
+    expect(Object.keys(reconnected.byLanguage.en?.sources[0].activities ?? {})).toEqual(['1'])
+    expect(reconnected.byLanguage.en?.sections.definition).toBe('An entry.')
   })
 
   test('root_research events do not produce a new state reference', () => {
@@ -322,6 +425,42 @@ describe('fallback', () => {
   })
 })
 
+describe('script target metadata', () => {
+  test('resolution offers survive terminal errors and fallback errors then reset on a new search', () => {
+    const otherScripts = [{ word: 'नमस्ते', language: 'hi' as const }]
+    const resolved = run(
+      events({ type: 'languages_resolved', languages: ['en'], otherLanguages: [], otherScripts })
+    )
+    const failed = run(
+      events({ type: 'error', message: 'No entry', errorType: 'nonsense' }),
+      resolved
+    )
+    expect(failed.otherScripts).toEqual(otherScripts)
+    expect(failed.error?.otherScripts).toEqual(otherScripts)
+    const fallback = run(
+      [
+        {
+          type: 'fallback_error',
+          error: { type: 'network-error', message: 'Failed', suggestions: [] },
+        },
+      ],
+      resolved
+    )
+    expect(fallback.error?.otherScripts).toEqual(otherScripts)
+    expect(run([{ type: 'search_started' }], failed).otherScripts).toBeUndefined()
+  })
+
+  test('both result transports retain script offers', () => {
+    const otherScripts = [{ word: 'नमस्ते', language: 'hi' as const }]
+    for (const action of [
+      { type: 'stream_event', event: { type: 'result', data: { ...RESULT, otherScripts } } },
+      { type: 'fallback_success', result: { ...RESULT, otherScripts } },
+    ] as StreamAction[]) {
+      expect(run([action]).otherScripts).toEqual(otherScripts)
+    }
+  })
+})
+
 describe('toPartialResult', () => {
   test('falls back to the searched word and empty defaults before sections arrive', () => {
     const partial = toPartialResult('perfidious', {})
@@ -334,23 +473,17 @@ describe('toPartialResult', () => {
     expect(partial.sources).toEqual([])
   })
 
-  test('projects bilingual streamed prose for a beta language', () => {
-    const sections = {
-      definition: { en: 'A representative instance.', local: 'Un cas représentatif.' },
-      roots: [
-        {
-          root: 'exemplum',
-          origin: 'Latin',
-          meaning: { en: 'sample', local: 'modèle' },
-          relatedWords: [],
-        },
-      ],
-    } as unknown as PartialEtymology
+  test('keeps the entry language and its streamed English prose', () => {
+    const sections: PartialEtymology = {
+      definition: 'A representative instance.',
+      examples: [{ text: 'Un exemple frappant.', translation: 'A striking example.' }],
+    }
 
     const partial = toPartialResult('exemple', sections, 'fr')
 
-    expect(partial.definition).toBe('Un cas représentatif.')
-    expect(partial.roots[0].meaning).toBe('modèle')
+    expect(partial.language).toBe('fr')
+    expect(partial.definition).toBe('A representative instance.')
+    expect(partial.examples).toEqual(sections.examples)
     expect(partial.lore).toBe('')
   })
 })

@@ -1,27 +1,19 @@
 import { canonicalizeWord, sameSpelling } from './orthography'
+import { normalizeScriptTargets } from './scriptTargets'
 import {
-  AncestryGraph,
   EtymologyResult,
   LlmUsage,
   SourceReference,
   ResearchContext,
-  ModernUsage,
-  ResultText,
   LexicalHistory,
+  AncestryBranch,
+  ResearchEntryContext,
+  LexemeRef,
 } from './types'
-import {
-  SYSTEM_PROMPT,
-  buildBetaSystemPrompt,
-  buildBetaUserPrompt,
-  buildRichUserPrompt,
-} from './prompts'
+import { buildSystemPrompt, buildUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
 import { enrichAncestryGraph, pruneUngroundedStages } from './etymologyEnricher'
-import {
-  BetaEtymologyResultSchema,
-  EnglishHistoryEtymologyResultSchema,
-  EtymologyResultSchema,
-} from './schemas/etymology'
+import { EtymologyResultSchema } from './schemas/etymology'
 import { stripNullsDeep } from './schemas/llm-schema'
 import { createSectionScanner } from './sectionScanner'
 import { CONFIG } from './config'
@@ -33,7 +25,13 @@ import {
   extractUsage,
   streamOpenRouterResponse,
 } from './openrouterResponses'
-import { LANGUAGES, type LanguageCode } from './languages'
+import {
+  LANGUAGES,
+  lexicalLanguageName,
+  type LanguageCode,
+  type EtymologyStratum,
+} from './languages'
+import type { ParsedEtymChain } from './etymologyParser'
 import {
   lexicalSourceRecords,
   mainSourceRecords,
@@ -288,12 +286,11 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
     return
   }
 
-  // Beta research deliberately excludes slang-only English sources.
-  if (result.language && result.language !== 'en') {
+  // Research for other languages deliberately excludes slang-only English sources.
+  if (result.language !== 'en') {
     result.modernUsage = { hasSlangMeaning: false }
     return
   }
-  const englishUsage = modernUsage as ModernUsage<string>
 
   const supplementalSignals = getSupplementalSourceSignals(researchContext)
   const hasSupplementalSlangEvidence =
@@ -304,15 +301,15 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
   }
 
   const compact = (value: string) => value.replace(/\s+/g, ' ').trim()
-  const slangDefinition = englishUsage.slangDefinition ? compact(englishUsage.slangDefinition) : ''
-  const popularizedBy = englishUsage.popularizedBy ? compact(englishUsage.popularizedBy) : ''
+  const slangDefinition = modernUsage.slangDefinition ? compact(modernUsage.slangDefinition) : ''
+  const popularizedBy = modernUsage.popularizedBy ? compact(modernUsage.popularizedBy) : ''
   const contexts = dedupeStrings(
-    (englishUsage.contexts ?? [])
+    (modernUsage.contexts ?? [])
       .map(compact)
       .filter((context) => context.length >= 3 && context.length <= 50)
   ).slice(0, 4)
   const notableReferences = dedupeStrings(
-    (englishUsage.notableReferences ?? [])
+    (modernUsage.notableReferences ?? [])
       .map(compact)
       .filter((reference) => reference.length >= 6 && reference.length <= 140)
   ).slice(0, 3)
@@ -344,8 +341,6 @@ function sanitizeModernUsage(result: EtymologyResult, researchContext: ResearchC
 interface SynthesisOptions {
   model?: string
   signal?: AbortSignal
-  language?: LanguageCode
-  sourceHistories?: boolean
   /**
    * Selects streaming transport and publishes validated entry fields once.
    * Source-defined primary-history fields can arrive before the complete
@@ -357,36 +352,28 @@ interface SynthesisOptions {
 }
 
 type LlmCallOptions = SynthesisOptions & {
+  language: LanguageCode
   onHistory?: (history: unknown) => void
 }
 
 async function callLlm(
   userPrompt: string,
-  options?: LlmCallOptions
+  options: LlmCallOptions
 ): Promise<{
   text: string
   usage: LlmUsage
 }> {
-  const language = options?.language ?? 'en'
-  const request = buildSynthesisRequest(
-    userPrompt,
-    options?.model,
-    language,
-    options?.sourceHistories
-  )
-  request.instructions =
-    language === 'en'
-      ? SYSTEM_PROMPT
-      : buildBetaSystemPrompt(LANGUAGES[language].englishName, language)
-  const onSection = options?.onSection
+  const request = buildSynthesisRequest(userPrompt, options.model)
+  request.instructions = buildSystemPrompt(options.language)
+  const onSection = options.onSection
 
   try {
     if (!onSection) {
-      const response = await createOpenRouterResponse(request, CONFIG.timeouts.llm, options?.signal)
+      const response = await createOpenRouterResponse(request, CONFIG.timeouts.llm, options.signal)
       return { text: extractOutputText(response), usage: extractUsage(response) }
     }
 
-    const onHistory = options?.onHistory
+    const onHistory = options.onHistory
     const scanner = createSectionScanner(
       (section, data) => onSection(section, stripNullsDeep(data)),
       onHistory
@@ -404,7 +391,7 @@ async function callLlm(
         scanner.push(token)
       },
       CONFIG.timeouts.llm,
-      options?.signal
+      options.signal
     )
 
     assertCompleteResponse(response)
@@ -417,7 +404,7 @@ async function callLlm(
 
     return { text: streamedText, usage: extractUsage(response) }
   } catch (error) {
-    if (options?.signal?.aborted) {
+    if (options.signal?.aborted) {
       throw error // caller-initiated cancellation, not a timeout
     }
     if (isAbortLikeError(error)) {
@@ -429,7 +416,7 @@ async function callLlm(
 
 async function generateEtymologyResponse(
   userPrompt: string,
-  options?: LlmCallOptions,
+  options: LlmCallOptions,
   malformedAttemptLimit?: number
 ): Promise<{
   result: EtymologyResult
@@ -440,7 +427,7 @@ async function generateEtymologyResponse(
   // keeps one retry as a safety net; the streaming path fails fast — its
   // section events are already on the wire and cannot be retracted.
   const maxAttempts =
-    malformedAttemptLimit ?? (options?.onSection ? 1 : CONFIG.retries.malformedOutputRetries + 1)
+    malformedAttemptLimit ?? (options.onSection ? 1 : CONFIG.retries.malformedOutputRetries + 1)
   let lastMalformedError: MalformedModelOutputError | null = null
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -489,9 +476,8 @@ async function generateEtymologyResponse(
     : new Error('Failed to parse LLM response after retries')
 }
 
-export function isRecoverableBetaValidationError(error: unknown, language: LanguageCode): boolean {
+export function isRecoverableValidationError(error: unknown): boolean {
   return (
-    language !== 'en' &&
     error instanceof Error &&
     error.message.startsWith('Schema validation failed:') &&
     !isAbortLikeError(error)
@@ -532,6 +518,7 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
           url,
           word,
           sourceFamily: record.sourceFamily,
+          ...(record.data.license ? { license: record.data.license } : {}),
           ...(record.provider === 'multilingualDictionary'
             ? { license: 'Per-entry attribution and license are provided by FreeDictionaryAPI' }
             : {}),
@@ -549,8 +536,265 @@ function sameStrings(left: string[], right: string[]): boolean {
   return [...left].sort().every((value, index) => value === sortedRight[index])
 }
 
+function sameLexeme(form: string, language: string, lexeme: LexemeRef): boolean {
+  return (
+    sameSpelling(form, lexeme.word) &&
+    lexicalLanguageName(language) === lexicalLanguageName(lexeme.language)
+  )
+}
+
+function sourceStrata(
+  entry: ResearchEntryContext,
+  chains: ParsedEtymChain[]
+): Set<EtymologyStratum> {
+  const supported = new Set<EtymologyStratum>()
+  const affirmative = (entry.etymologyText ?? '')
+    .split(/\n|(?<=[.!?])\s+/u)
+    .filter(
+      (sentence) =>
+        !/\b(?:although|not|never|mistaken|incorrect|disputed|described as|rather than)\b/i.test(
+          sentence
+        )
+    )
+    .join('\n')
+  if (/\bwasei[ -]kango\b/i.test(affirmative)) supported.add('wasei-kango')
+  if (
+    /\bwasei[ -]eigo\b|\bpseudo-anglicism\b/i.test(affirmative) ||
+    (entry.source === 'jmdict' &&
+      /Wasei, word made in Japan/.test(entry.text) &&
+      /"language":"English"/.test(entry.text))
+  )
+    supported.add('wasei-eigo')
+  if (
+    /(?:^|\n)(?:(?:The (?:word|term) is|A|An) )?(?:wago|native Japanese)\b/i.test(affirmative) ||
+    /\b(?:from|inherited from) (?:Old Japanese|Classical Japanese|Proto-Japonic)\b/i.test(
+      affirmative
+    )
+  )
+    supported.add('wago')
+  if (
+    !supported.has('wasei-kango') &&
+    /\bkango\b|\bSino-Japanese\b|\bfrom (?:Middle|Old) Chinese\b/i.test(affirmative)
+  )
+    supported.add('kango')
+  if (/(?:^|\n)(?:(?:The (?:word|term) is|A|An) )?hybrid\b/i.test(affirmative))
+    supported.add('hybrid')
+  if (
+    /\bgairaigo\b/i.test(affirmative) ||
+    chains.some(
+      (chain) =>
+        chain.evidenceScopeId === entry.evidenceScopeId &&
+        !chain.subject &&
+        chain.links.some(
+          (link) =>
+            !/Japanese|Japonic|Chinese/i.test(link.language) &&
+            /\b(?:borrowed )?from\s+(?:the\s+)?/i.test(link.rawSnippet) &&
+            affirmative.includes(link.rawSnippet)
+        )
+    )
+  )
+    supported.add('gairaigo')
+  return supported
+}
+
+function branchContains(branch: AncestryBranch, lexeme: LexemeRef): boolean {
+  return branch.stages.some((stage) => sameLexeme(stage.form, stage.stage, lexeme))
+}
+
+function validateContinuationOrder(branch: AncestryBranch, chain: ParsedEtymChain): void {
+  if (!chain.subject) return
+  let younger = branch.stages.findIndex((stage) =>
+    sameLexeme(stage.form, stage.stage, chain.subject!)
+  )
+  if (younger < 0) return
+  for (const link of chain.links) {
+    const position = branch.stages.findIndex((stage) =>
+      sameLexeme(stage.form, stage.stage, { word: link.form, language: link.language })
+    )
+    if (position < 0) continue
+    if (position >= younger)
+      throw new Error('Schema validation failed: continuation ancestry must occur before its donor')
+    younger = position
+  }
+}
+
+function clippingPath(
+  query: LexemeRef,
+  merge: LexemeRef,
+  entry: ResearchEntryContext,
+  chains: ParsedEtymChain[],
+  visited = new Set<string>()
+): LexemeRef[] | undefined {
+  if (sameLexeme(query.word, query.language, merge)) return [query]
+  const key = `${query.language}:${canonicalizeWord(query.word)}`
+  if (visited.has(key)) return
+  const nextVisited = new Set([...visited, key])
+  const targets = chains
+    .filter(
+      (chain) => chain.subject && sameLexeme(chain.subject.word, chain.subject.language, query)
+    )
+    .flatMap((chain) =>
+      chain.links
+        .filter((link) => link.relation === 'derived_from')
+        .map((link) => ({ word: link.form, language: link.language }))
+    )
+  if (entry.formOf && sameSpelling(query.word, entry.formOf.word) === false && visited.size === 0)
+    targets.push(entry.formOf)
+  for (const target of targets) {
+    if (lexicalLanguageName(target.language) !== lexicalLanguageName(query.language)) continue
+    const tail = clippingPath(target, merge, entry, chains, nextVisited)
+    if (tail) return [query, ...tail]
+  }
+}
+
+/** Evidence follows its attested component or donor, rather than the entire history's scope union. */
+function enrichScopedHistory(
+  history: LexicalHistory,
+  entry: ResearchEntryContext,
+  context: ResearchContext,
+  chains: ParsedEtymChain[],
+  sourceWasei: boolean
+): void {
+  const graph = history.ancestryGraph
+  const query = {
+    word: context.mainWord.word,
+    language: LANGUAGES[context.language ?? 'en'].englishName,
+  }
+  const compounds = chains.filter(
+    (chain) => chain.subject && chain.links.some((link) => link.relation === 'compound_from')
+  )
+  const wholeAccount = chains.some(
+    (chain) =>
+      (!chain.subject ||
+        sameLexeme(chain.subject.word, chain.subject.language, query) ||
+        (entry.formOf && sameLexeme(chain.subject.word, chain.subject.language, entry.formOf))) &&
+      chain.links.some(
+        (link) =>
+          link.relation !== 'compound_from' &&
+          !compounds.some(
+            (compound) =>
+              sameLexeme(link.form, link.language, compound.subject!) ||
+              compound.links.some((component) =>
+                sameLexeme(link.form, link.language, {
+                  word: component.form,
+                  language: component.language,
+                })
+              )
+          )
+      )
+  )
+  if (compounds.length && !wholeAccount && graph.branches.length && !graph.mergePoint)
+    throw new Error('Schema validation failed: source compound requires its attested merge')
+  if (compounds.length && (graph.mergePoint || graph.branches.length > 1)) {
+    const merging = compounds.filter(
+      (chain) =>
+        graph.mergePoint &&
+        sameSpelling(chain.subject!.word, graph.mergePoint.form) &&
+        lexicalLanguageName(chain.subject!.language) === query.language
+    )
+    const targets = merging.flatMap((chain) =>
+      chain.links.filter((link) => link.relation === 'compound_from')
+    )
+    if (targets.length < 2 || graph.branches.length < 2)
+      throw new Error('Schema validation failed: compound merge lacks its source-attested identity')
+    const used = new Set<string>()
+    for (const branch of graph.branches) {
+      const terminal = branch.stages.at(-1)
+      const target =
+        terminal &&
+        targets.find((link) =>
+          sameLexeme(terminal.form, terminal.stage, { word: link.form, language: link.language })
+        )
+      if (!target)
+        throw new Error('Schema validation failed: ancestry branch is not an attested component')
+      const key = `${target.language}:${canonicalizeWord(target.form)}`
+      if (used.has(key)) throw new Error('Schema validation failed: duplicated source component')
+      used.add(key)
+      const evidence = chains.filter((chain) =>
+        merging.includes(chain)
+          ? chain.links.some((link) => link === target)
+          : chain.subject &&
+            branchContains(branch, chain.subject) &&
+            chain.evidenceScopeId !== entry.evidenceScopeId
+      )
+      evidence
+        .filter((chain) => !merging.includes(chain))
+        .forEach((chain) => validateContinuationOrder(branch, chain))
+      enrichAncestryGraph({ branches: [branch] }, evidence)
+      if (branch.stages.some((stage) => stage.confidence === 'low'))
+        throw new Error('Schema validation failed: component branch has unsupported ancestry')
+    }
+    // A merge has no stage language field. Its source relationship establishes
+    // query-language identity; only its explicit clipping/form path may follow it.
+    const postForms = clippingPath(query, merging[0].subject!, entry, chains)
+    if (!postForms)
+      throw new Error(
+        'Schema validation failed: compound merge has no source-attested path to the query'
+      )
+    for (const stage of graph.postMerge ?? []) {
+      if (!postForms.some((lexeme) => sameLexeme(stage.form, stage.stage, lexeme)))
+        throw new Error('Schema validation failed: post-merge ancestry is not source-attested')
+    }
+    enrichAncestryGraph(
+      { branches: [], postMerge: graph.postMerge },
+      chains.filter(
+        (chain) => !chain.subject || sameLexeme(chain.subject.word, chain.subject.language, query)
+      )
+    )
+  } else {
+    if (
+      sourceWasei &&
+      [...graph.branches.flatMap((branch) => branch.stages), ...(graph.postMerge ?? [])].some(
+        (stage) => lexicalLanguageName(stage.stage) === 'English'
+      )
+    )
+      throw new Error(
+        'Schema validation failed: Japanese coinage cannot have a whole-word English ancestor'
+      )
+    for (const branch of graph.branches) {
+      const evidence = chains.filter(
+        (chain) =>
+          !chain.subject ||
+          sameLexeme(chain.subject.word, chain.subject.language, query) ||
+          (entry.formOf && sameLexeme(chain.subject.word, chain.subject.language, entry.formOf)) ||
+          branchContains(branch, chain.subject)
+      )
+      evidence
+        .filter((chain) => chain.evidenceScopeId !== entry.evidenceScopeId)
+        .forEach((chain) => validateContinuationOrder(branch, chain))
+      enrichAncestryGraph(
+        { branches: [branch] },
+        evidence.filter((chain) => !chain.links.some((link) => link.relation === 'compound_from'))
+      )
+      const wholeLinks = evidence
+        .filter((chain) => !chain.links.some((link) => link.relation === 'compound_from'))
+        .flatMap((chain) => chain.links)
+      for (const stage of branch.stages) {
+        const component = compounds.some((chain) =>
+          chain.links.some((link) =>
+            sameLexeme(stage.form, stage.stage, { word: link.form, language: link.language })
+          )
+        )
+        if (
+          component &&
+          !wholeLinks.some((link) =>
+            sameLexeme(stage.form, stage.stage, { word: link.form, language: link.language })
+          )
+        )
+          throw new Error(
+            'Schema validation failed: component evidence cannot establish whole-word ancestry'
+          )
+      }
+    }
+    enrichAncestryGraph(
+      { branches: [], postMerge: graph.postMerge },
+      chains.filter((chain) => !chain.subject)
+    )
+  }
+}
+
 /** Reject cross-history topology before any evidence-bearing section is published. */
-function validateHistoryGraph(history: LexicalHistory<ResultText>, context: ResearchContext): void {
+function validateHistoryGraph(history: LexicalHistory, context: ResearchContext): void {
   const entry = context.entryContexts?.find((candidate) => candidate.id === history.id)
   if (!entry) throw new Error('Schema validation failed: source history context is missing')
   const graph = history.ancestryGraph
@@ -612,19 +856,7 @@ function validateHistoryGraph(history: LexicalHistory<ResultText>, context: Rese
   }
 }
 
-function finalizeHistories(
-  result: Pick<
-    LexicalHistory<ResultText>,
-    | 'pronunciation'
-    | 'definition'
-    | 'roots'
-    | 'ancestryGraph'
-    | 'lore'
-    | 'examples'
-    | 'partsOfSpeech'
-  > & { primaryHistoryId: string; histories: LexicalHistory<ResultText>[] },
-  researchContext: ResearchContext
-): void {
+function finalizeHistories(result: EtymologyResult, researchContext: ResearchContext): void {
   const candidates = researchContext.lexicalGraph?.histories ?? []
   if (candidates.length === 0) {
     throw new Error('Schema validation failed: research has no entry histories')
@@ -643,7 +875,13 @@ function finalizeHistories(
   }
 
   for (const history of result.histories) {
-    const source = researchContext.entryContexts?.find((entry) => entry.id === history.id)?.source
+    const entry = researchContext.entryContexts?.find((entry) => entry.id === history.id)
+    const source = entry?.source
+    if (entry?.transliteration) history.transliteration = entry.transliteration
+    else delete history.transliteration
+    const counterparts = normalizeScriptTargets(entry?.counterparts)
+    if (counterparts.length) history.counterparts = counterparts
+    else delete history.counterparts
     const sourceRecord = mainSourceRecords(researchContext.mainWord).find(
       (record) => record.provider === source
     )
@@ -688,7 +926,18 @@ function finalizeHistories(
         Boolean(chain.evidenceScopeId) &&
         history.evidenceScopeIds.includes(chain.evidenceScopeId as string)
     )
-    enrichAncestryGraph(history.ancestryGraph, scopedChains)
+    const strata =
+      researchContext.language === 'ja' && entry
+        ? sourceStrata(entry, scopedChains)
+        : new Set<EtymologyStratum>()
+    if (history.stratum && !strata.has(history.stratum)) {
+      console.warn(
+        '[LLM] Cleared unsupported lexical stratum',
+        JSON.stringify({ historyId: history.id, stratum: history.stratum })
+      )
+      delete history.stratum
+    }
+    enrichScopedHistory(history, entry!, researchContext, scopedChains, strata.has('wasei-eigo'))
     pruneUngroundedStages(history.ancestryGraph)
     // Distinct unsupported roots can collapse into identical surviving paths.
     validateHistoryGraph(history, researchContext)
@@ -698,6 +947,12 @@ function finalizeHistories(
   if (!primary) {
     throw new Error('Schema validation failed: primary history is missing')
   }
+  if (primary.transliteration) result.transliteration = primary.transliteration
+  else delete result.transliteration
+  if (primary.counterparts) result.counterparts = primary.counterparts
+  else delete result.counterparts
+  if (primary.stratum) result.stratum = primary.stratum
+  else delete result.stratum
   result.pronunciation = primary.pronunciation
   result.definition = primary.definition
   result.roots = primary.roots
@@ -718,41 +973,14 @@ export function finalizeResult(
       `Schema validation failed: synthesis changed requested spelling "${requestedWord}" to "${result.word}"`
     )
   }
-  if ((result.language ?? 'en') !== (researchContext.language ?? 'en')) {
+  if (result.language !== (researchContext.language ?? 'en')) {
     throw new Error('Schema validation failed: synthesis changed requested language')
   }
   sanitizeModernUsage(result, researchContext)
-
-  if (
-    researchContext.lexicalGraph?.histories.length ||
-    (researchContext.language && researchContext.language !== 'en')
-  ) {
-    finalizeHistories(
-      result as EtymologyResult & {
-        primaryHistoryId: string
-        histories: LexicalHistory<ResultText>[]
-      },
-      researchContext
-    )
-  } else {
-    const graph = result.ancestryGraph as AncestryGraph<ResultText>
-    enrichAncestryGraph(graph, researchContext.parsedChains ?? [])
-    const pruned = pruneUngroundedStages(graph)
-    if (pruned > 0) {
-      console.warn(
-        `[LLM] Pruned ${pruned} ungrounded reconstructed stage(s) for "${researchContext.mainWord.word}"`
-      )
-    }
-  }
-
+  finalizeHistories(result, researchContext)
   attachSources(result, researchContext)
 
-  const validated =
-    researchContext.language && researchContext.language !== 'en'
-      ? BetaEtymologyResultSchema.safeParse(result)
-      : researchContext.lexicalGraph?.histories.length
-        ? EnglishHistoryEtymologyResultSchema.safeParse(result)
-        : EtymologyResultSchema.safeParse(result)
+  const validated = EtymologyResultSchema.safeParse(result)
   if (!validated.success) {
     const issue = validated.error.issues[0]
     console.error(
@@ -769,33 +997,32 @@ export async function synthesizeFromResearch(
   researchContext: ResearchContext,
   options?: SynthesisOptions
 ): Promise<SynthesisResult> {
-  const researchData = buildResearchPrompt(researchContext)
   const language = researchContext.language ?? 'en'
-  const userPrompt =
-    language === 'en'
-      ? buildRichUserPrompt(researchContext.mainWord.word, researchData)
-      : buildBetaUserPrompt(
-          researchContext.mainWord.word,
-          LANGUAGES[language].englishName,
-          language,
-          researchData
-        )
+  const userPrompt = buildUserPrompt(
+    researchContext.mainWord.word,
+    language,
+    buildResearchPrompt(researchContext)
+  )
 
   const totalUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
-  const sourceHistories = Boolean(researchContext.lexicalGraph?.histories.length)
-  const maxValidationAttempts = language === 'en' ? 1 : 2
+  // A post-processing validation failure retries once, as a unary call: the
+  // streamed sections of the first attempt cannot be retracted, so the retry
+  // only replaces them through the terminal result.
+  const maxValidationAttempts = 2
 
   for (let attempt = 0; attempt < maxValidationAttempts; attempt += 1) {
     try {
-      const heldSections = ['ancestryGraph', 'histories', 'primaryHistoryId', 'sources']
       const pendingSections = new Map<string, unknown>()
       const publishedSections = new Set<string>()
       let wordVerified = false
-      let languageVerified = language === 'en'
+      let languageVerified = false
       let identityError: Error | undefined
       let pendingPrimaryHistory: unknown
       const entryFields = [
+        'stratum',
         'pronunciation',
+        'transliteration',
+        'counterparts',
         'definition',
         'ancestryGraph',
         'roots',
@@ -848,20 +1075,19 @@ export async function synthesizeFromResearch(
           identityError = error instanceof Error ? error : new Error(String(error))
         }
       }
-      const onHistory =
-        options?.onSection && sourceHistories
-          ? (history: unknown) => {
-              if (
-                history &&
-                typeof history === 'object' &&
-                'id' in history &&
-                history.id === researchContext.lexicalGraph?.histories[0]?.id
-              ) {
-                pendingPrimaryHistory = history
-                publishPrimary()
-              }
+      const onHistory = options?.onSection
+        ? (history: unknown) => {
+            if (
+              history &&
+              typeof history === 'object' &&
+              'id' in history &&
+              history.id === researchContext.lexicalGraph?.histories[0]?.id
+            ) {
+              pendingPrimaryHistory = history
+              publishPrimary()
             }
-          : undefined
+          }
+        : undefined
       const onSection = options?.onSection
         ? (section: string, data: unknown) => {
             if (section === 'word') {
@@ -881,56 +1107,46 @@ export async function synthesizeFromResearch(
             }
             if (identityError) return
             pendingSections.set(section, data)
-            if (sourceHistories && wordVerified && languageVerified) {
-              if (language !== 'en') publish('language', language)
-              publish('word', researchContext.mainWord.word)
-              publishPrimary()
-              if (identityError) return
-              if (
-                !publishedSections.has('histories') &&
-                pendingSections.has('histories') &&
-                pendingSections.has('primaryHistoryId')
-              ) {
-                try {
-                  // The history contains every entry field. Reuse the terminal
-                  // identity, evidence and schema checks before publishing it.
-                  const primary = finalizeResult(
-                    {
-                      word: researchContext.mainWord.word,
-                      language,
-                      primaryHistoryId: pendingSections.get('primaryHistoryId'),
-                      histories: pendingSections.get('histories'),
-                      sources: [],
-                    } as unknown as EtymologyResult,
-                    researchContext,
-                    'streaming'
-                  )
-                  for (const name of ['primaryHistoryId', 'histories']) {
-                    publish(name, (primary as unknown as Record<string, unknown>)[name])
-                  }
-                  publishEntry(primary)
-                } catch (error) {
-                  // Drain the provider response even on validation failure so
-                  // its completed usage is included in the failed request.
-                  identityError = error instanceof Error ? error : new Error(String(error))
-                }
-              }
-              return
-            }
+            if (!wordVerified || !languageVerified) return
+            publish('language', language)
+            publish('word', researchContext.mainWord.word)
+            publishPrimary()
+            if (identityError) return
             if (
-              wordVerified &&
-              languageVerified &&
-              !heldSections.some((name) => pendingSections.has(name))
+              !publishedSections.has('histories') &&
+              pendingSections.has('histories') &&
+              pendingSections.has('primaryHistoryId')
             ) {
-              for (const [name, value] of pendingSections) options.onSection?.(name, value)
-              pendingSections.clear()
+              try {
+                // The history contains every entry field. Reuse the terminal
+                // identity, evidence and schema checks before publishing it.
+                const primary = finalizeResult(
+                  {
+                    word: researchContext.mainWord.word,
+                    language,
+                    primaryHistoryId: pendingSections.get('primaryHistoryId'),
+                    histories: pendingSections.get('histories'),
+                    sources: [],
+                  } as unknown as EtymologyResult,
+                  researchContext,
+                  'streaming'
+                )
+                for (const name of ['primaryHistoryId', 'histories']) {
+                  publish(name, (primary as unknown as Record<string, unknown>)[name])
+                }
+                publishEntry(primary)
+              } catch (error) {
+                // Drain the provider response even on validation failure so
+                // its completed usage is included in the failed request.
+                identityError = error instanceof Error ? error : new Error(String(error))
+              }
             }
           }
         : undefined
       const attemptOptions =
         attempt === 0
-          ? { ...options, language, sourceHistories, onSection, onHistory }
-          : { signal: options?.signal, language, sourceHistories }
+          ? { ...options, language, onSection, onHistory }
+          : { model: options?.model, signal: options?.signal, language }
       const generated = await generateEtymologyResponse(
         userPrompt,
         attemptOptions,
@@ -958,12 +1174,9 @@ export async function synthesizeFromResearch(
         addUsage(totalUsage, errorUsage)
       }
 
-      if (
-        attempt < maxValidationAttempts - 1 &&
-        isRecoverableBetaValidationError(error, language)
-      ) {
+      if (attempt < maxValidationAttempts - 1 && isRecoverableValidationError(error)) {
         console.warn(
-          '[LLM] Retrying beta synthesis after validation failure',
+          '[LLM] Retrying synthesis after validation failure',
           JSON.stringify({ word: researchContext.mainWord.word, language })
         )
         continue
@@ -979,5 +1192,5 @@ export async function synthesizeFromResearch(
     }
   }
 
-  throw new Error('Beta synthesis exhausted its validation attempts')
+  throw new Error('Synthesis exhausted its validation attempts')
 }

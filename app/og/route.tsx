@@ -3,11 +3,17 @@ import { join } from 'node:path'
 import { ImageResponse } from 'next/og'
 import { SITE_HOST, SITE_SHORT_NAME } from '@/lib/site'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
-import { BETA_SYMBOL, LANGUAGES, parseLanguageCode, type LanguageCode } from '@/lib/languages'
+import {
+  LANGUAGES,
+  candidateLanguages,
+  parseLanguageCode,
+  type LanguageCode,
+} from '@/lib/languages'
+import { getCachedEntry } from '@/lib/cache'
 
 const fontDirectory = join(process.cwd(), 'public/fonts')
 
-// Satori (next/og) cannot read woff2, so these Latin-subset TTFs exist solely
+// Satori (next/og) cannot read woff2, so these Latin Extended TTFs exist solely
 // for this route; the app itself loads the woff2 subsets via next/font/local.
 // Lazy + memoized so a failed read rejects inside the request handler
 // (500 for that request) instead of as an unhandled rejection at module load
@@ -118,10 +124,16 @@ function BrandCard() {
   )
 }
 
-function WordCard({ word, language }: { word: string; language: LanguageCode }) {
+function WordCard({
+  word,
+  language,
+  subtitle,
+}: {
+  word: string
+  language?: LanguageCode
+  subtitle?: string
+}) {
   const [initial, rest] = splitLeadingGrapheme(word)
-  const languageDefinition = LANGUAGES[language]
-  const betaLabel = `${languageDefinition.nativeName.toLocaleUpperCase(language)} · ${languageDefinition.nativeEtymologyLabel.toLocaleUpperCase(language)} · ${BETA_SYMBOL}`
   return (
     <div
       style={{
@@ -140,14 +152,14 @@ function WordCard({ word, language }: { word: string; language: LanguageCode }) 
         style={{
           display: 'flex',
           fontSize: 26,
-          textTransform: language === 'en' ? 'uppercase' : 'none',
+          textTransform: 'uppercase',
           letterSpacing: '0.24em',
           color: '#1B1A17',
           opacity: 0.6,
           marginBottom: 34,
         }}
       >
-        {language === 'en' ? 'the etymology of' : betaLabel}
+        {language ? `the ${LANGUAGES[language].englishName} etymology of` : 'the etymology of'}
       </div>
       <div
         style={{
@@ -163,6 +175,19 @@ function WordCard({ word, language }: { word: string; language: LanguageCode }) 
         <span style={{ color: '#7E2A1F' }}>{initial}</span>
         <span>{rest}</span>
       </div>
+      {subtitle && (
+        <div
+          style={{
+            display: 'flex',
+            marginTop: 24,
+            fontSize: 30,
+            color: '#1B1A17',
+            opacity: 0.6,
+          }}
+        >
+          {subtitle}
+        </div>
+      )}
       <div
         style={{
           display: 'flex',
@@ -211,10 +236,33 @@ export async function GET(request: Request) {
   ]
 
   const rawWord = new URL(request.url).searchParams.get('word')
-  const language = parseLanguageCode(new URL(request.url).searchParams.get('language')) ?? 'en'
+  const languageHint = new URL(request.url).searchParams.get('language')
+  const language = languageHint ? (parseLanguageCode(languageHint) ?? undefined) : undefined
   const word = rawWord ? canonicalizeWord(rawWord) : ''
 
   if (word && isValidWord(word)) {
+    // Satori cannot shape Indic or Arabic. Resolve only durable cached text;
+    // generating a social preview must never initiate etymology research.
+    if (/[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u.test(word)) {
+      const cached = await getCachedEntry(word)
+      const selected = language ?? cached?.entry.languages[0]
+      const result = selected ? cached?.entry.entries[selected] : undefined
+      const languageName = selected
+        ? LANGUAGES[selected].englishName
+        : candidateLanguages(word)
+            .map((code) => LANGUAGES[code].englishName)
+            .join(' / ') || 'Word origins'
+      const romanization = result?.transliteration
+      const headline =
+        romanization &&
+        !/[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u.test(romanization)
+          ? romanization
+          : null
+      return new ImageResponse(
+        <WordCard word={headline ?? languageName} subtitle={headline ? languageName : undefined} />,
+        { ...IMAGE_OPTIONS, fonts }
+      )
+    }
     return new ImageResponse(<WordCard word={word} language={language} />, {
       ...IMAGE_OPTIONS,
       fonts,

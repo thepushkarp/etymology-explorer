@@ -29,7 +29,7 @@ import {
   extractOutputText,
   extractUsage,
 } from './openrouterResponses'
-import type { LanguageCode } from './languages'
+import { LANGUAGES, languageFromName, lexicalLanguageName, type LanguageCode } from './languages'
 import type { ExaBudgetRedis } from './exaBudget'
 import { buildLexicalResearchGraph } from './lexemeGraph'
 import { deriveEntryContexts } from './lexemeEntries'
@@ -81,10 +81,11 @@ function completeResearch(context: ResearchContext, budget: SourceFetchBudget): 
   }
   context.totalSourcesFetched = budget.attempts
   if (
-    !mainSourceRecords(context.mainWord).some(
+    hasCredibleMainSource(context) &&
+    (!mainSourceRecords(context.mainWord).some(
       (source) => sourceEvidenceRole(source) === 'etymology'
     ) ||
-    context.rootResearch.some((root) => !lexicalSourceRecords(rootSourceRecords(root)).length)
+      context.rootResearch.some((root) => !lexicalSourceRecords(rootSourceRecords(root)).length))
   ) {
     context.incompleteResearch = true
   }
@@ -125,14 +126,14 @@ function recordLookup(context: ResearchContext, result: LexemeLookupResult): voi
   }
 }
 
-/** Source-local groups define histories; other publishers remain independent context. */
-function scopeHistories(context: ResearchContext): void {
-  const language = context.language ?? 'en'
-  const word = context.mainWord.word
-  const sources = mainSourceRecords(context.mainWord)
+function primarySource(sources: SourceRecord[], language?: LanguageCode): SourceRecord | undefined {
   const find = (provider: string) => sources.find((source) => source.provider === provider)
-  const primary =
-    language === 'en'
+  return language && LANGUAGES[language].historyPrimary === 'english'
+    ? (find('wiktionaryEnglish') ??
+        find('wiktionary') ??
+        find('wiktionaryNative') ??
+        sources.find((source) => sourceEvidenceRole(source) === 'etymology'))
+    : !language || language === 'en'
       ? (find('wiktionary') ??
         find('etymonline') ??
         sources.find((source) => sourceEvidenceRole(source) === 'etymology'))
@@ -142,6 +143,45 @@ function scopeHistories(context: ResearchContext): void {
         find('wiktionaryEnglish') ??
         find('wiktionaryNative') ??
         sources.find((source) => sourceEvidenceRole(source) === 'etymology'))
+}
+
+function entryChains(entry: ResearchEntryContext, word: string): ParsedEtymChain[] {
+  const parsed =
+    entry.source === 'etymonline'
+      ? parseEtymonlineText(entry.text, word)
+      : parseDictionaryText(entry.text, word, entry.source)
+  const identity = {
+    historyId: entry.id,
+    evidenceScopeId: entry.evidenceScopeId,
+    sourceUrl: entry.sourceUrl,
+  }
+  const relations = (entry.relations ?? []).map((relation) => ({
+    source: entry.source,
+    provider: entry.source,
+    word,
+    ...identity,
+    subject: relation.subject,
+    links: [
+      {
+        language: lexicalLanguageName(relation.target.language),
+        form: relation.target.word,
+        relation: relation.relation,
+        rawSnippet: relation.snippet,
+        isReconstructed:
+          relation.target.word.startsWith('*') || relation.target.language.startsWith('Proto-'),
+      },
+    ],
+  }))
+  return [...(parsed.links.length ? [{ ...parsed, ...identity }] : []), ...relations]
+}
+
+/** Source-local groups define histories; other publishers remain independent context. */
+function scopeHistories(context: ResearchContext): void {
+  const language = context.language ?? 'en'
+  const word = context.mainWord.word
+  const sources = mainSourceRecords(context.mainWord)
+  const find = (provider: string) => sources.find((source) => source.provider === provider)
+  const primary = primarySource(sources, language) ?? lexicalSourceRecords(sources)[0]
   let entries: ResearchEntryContext[] = primary
     ? deriveEntryContexts(
         word,
@@ -167,19 +207,15 @@ function scopeHistories(context: ResearchContext): void {
       },
     ]
   }
+  const redirects =
+    primary?.data.variants?.filter((variant) => variant.relationship === 'redirect') ?? []
+  if (entries.length === 1 && redirects.length === 1) {
+    entries[0].entryKind = 'form'
+    entries[0].formOf = { word: redirects[0].word, language }
+  }
   const chains = entries.flatMap((entry) => {
     if (!primary || sourceEvidenceRole(primary) !== 'etymology') return []
-    const parsed =
-      entry.source === 'etymonline'
-        ? parseEtymonlineText(entry.text, word)
-        : parseDictionaryText(entry.text, word, entry.source, {
-            historyId: entry.id,
-            evidenceScopeId: entry.evidenceScopeId,
-            provider: entry.source,
-          })
-    return parsed.links.length
-      ? [{ ...parsed, historyId: entry.id, evidenceScopeId: entry.evidenceScopeId }]
-      : []
+    return entryChains(entry, word)
   })
   context.entryContexts = entries
   context.parsedChains = chains
@@ -192,15 +228,7 @@ export function scopeEnglishHistories(context: ResearchContext): void {
 
 /** Components describe their own lexemes, never attest the phrase's history. */
 export function phraseComponents(word: string, language: LanguageCode): string[] {
-  const particles = new Set(
-    {
-      en: ['the', 'of', 'and', 'a', 'an'],
-      fr: ['de', 'du', 'des', 'la', 'le', 'les', 'un', 'une', 'et'],
-      it: ['di', 'da', 'del', 'della', 'il', 'lo', 'la', 'e'],
-      es: ['de', 'del', 'la', 'el', 'los', 'las', 'y'],
-      pt: ['de', 'da', 'do', 'das', 'dos', 'a', 'o', 'as', 'os', 'e'],
-    }[language]
-  )
+  const particles = new Set(LANGUAGES[language].particles)
   if (!/\s/u.test(word)) return []
   return [...new Set(word.split(/\s+/u).map(canonicalizeWord))]
     .filter((part) => part.length > 1 && !particles.has(part))
@@ -267,14 +295,103 @@ export function ancestorCandidates(context: ResearchContext): ExpansionCandidate
       ) {
         bindings.push({
           lexeme,
-          relationship: 'root',
+          relationship: link.relation === 'compound_from' ? 'component' : 'root',
           parentHistoryId: chain.historyId,
           evidenceScopeId: chain.evidenceScopeId,
+          sourceUrl: chain.sourceUrl,
         })
       }
       selected.set(key, bindings)
     }
   return [...selected.values()].flat()
+}
+
+/** A source-attested target does not identify one of several homonymous histories. */
+function bindContinuation(
+  context: ResearchContext,
+  candidate: ExpansionCandidate,
+  result: LexemeLookupResult,
+  discovered: ExpansionCandidate[]
+): void {
+  const parent = context.entryContexts?.find((entry) => entry.id === candidate.parentHistoryId)
+  if (!parent) return
+  const directTarget =
+    parent.formOf && researchLexemeKey(parent.formOf) === researchLexemeKey(result.lexeme)
+  const attested = context.parsedChains?.some(
+    (chain) =>
+      chain.historyId === parent.id &&
+      candidate.evidenceScopeId &&
+      chain.evidenceScopeId === candidate.evidenceScopeId &&
+      chain.links.some(
+        (link) =>
+          researchLexemeKey({ word: link.form, language: link.language }) ===
+          researchLexemeKey(result.lexeme)
+      )
+  )
+  if (!directTarget && !attested) return
+  const primary = primarySource(result.sources, languageFromName(result.lexeme.language))
+  if (
+    !primary ||
+    sourceEvidenceRole(primary) !== 'etymology' ||
+    primary.data.entryGroups?.length !== 1
+  )
+    return
+  if (
+    [primary.data.requestedWord, primary.data.resolvedWord].some(
+      (word) => word && canonicalizeWord(word) !== canonicalizeWord(result.lexeme.word)
+    ) ||
+    (primary.data.lexicalLanguage &&
+      lexicalLanguageName(primary.data.lexicalLanguage) !==
+        lexicalLanguageName(result.lexeme.language))
+  )
+    return
+  const group = primary.data.entryGroups[0]
+  if (!directTarget && group.relations?.some((relation) => relation.relation === 'compound_from'))
+    return
+  const language = languageFromName(result.lexeme.language)
+  if (
+    language &&
+    deriveEntryContexts(result.lexeme.word, language, primary.provider, primary.data, null)
+      .length !== 1
+  )
+    return
+  const scope = `scope:continuation:${researchLexemeKey(result.lexeme)}:${primary.provider}:${group.anchor}`
+  if (
+    context.parsedChains?.some(
+      (chain) => chain.historyId === parent.id && chain.evidenceScopeId === scope
+    )
+  )
+    return
+  const entry: ResearchEntryContext = {
+    id: parent.id,
+    source: primary.provider,
+    heading: group.heading,
+    text: group.text,
+    relations: group.relations,
+    etymologyText: group.etymologyText,
+    sectionHeadings: group.sections.map((section) => section.heading),
+    evidenceScopeId: scope,
+    sourceUrl: group.sourceUrl ?? primary.data.url,
+    entryKind: 'lemma',
+  }
+  const chains = entryChains(entry, result.lexeme.word).map((chain) => ({
+    ...chain,
+    subject: chain.subject ?? result.lexeme,
+  }))
+  context.parsedChains = [...(context.parsedChains ?? []), ...chains]
+  if (directTarget) {
+    for (const chain of chains)
+      for (const link of chain.links) {
+        if (link.relation !== 'compound_from' || link.isReconstructed) continue
+        discovered.push({
+          lexeme: { word: link.form, language: link.language },
+          relationship: 'component',
+          parentHistoryId: parent.id,
+          evidenceScopeId: scope,
+          sourceUrl: entry.sourceUrl,
+        })
+      }
+  }
 }
 
 export async function expandLexemes(
@@ -324,13 +441,20 @@ export async function expandLexemes(
       ).values(),
     ]
     unique.forEach((lexeme) => seen.add(researchLexemeKey(lexeme)))
-    const results = await session.lookupMany(unique)
+    const results = await session.lookupMany(unique, {
+      progressLanguage: language,
+      skipOptionalSourcesFor: (lexeme) =>
+        admitted
+          .filter((candidate) => researchLexemeKey(candidate.lexeme) === researchLexemeKey(lexeme))
+          .every((candidate) => candidate.relationship === 'root'),
+    })
     const byKey = new Map(results.map((result) => [researchLexemeKey(result.lexeme), result]))
     results.forEach((result) => recordLookup(context, result))
     const discovered: ExpansionCandidate[] = []
     for (const candidate of admitted) {
       const result = byKey.get(researchLexemeKey(candidate.lexeme))!
       context.rootResearch.push(rootLookup(result, candidate))
+      bindContinuation(context, candidate, result, discovered)
       if (!newlyDiscovered.has(researchLexemeKey(candidate.lexeme))) continue
       for (const variant of result.sources.flatMap((source) => source.data.variants ?? [])) {
         discovered.push({
@@ -368,6 +492,12 @@ export async function expandLexemes(
     return true
   })
   await fetchWave(linked)
+  context.lexicalGraph = buildLexicalResearchGraph(
+    word,
+    language,
+    context.entryContexts ?? [],
+    context.parsedChains ?? []
+  )
   signal?.throwIfAborted()
 }
 
@@ -430,7 +560,9 @@ Return the JSON object only, no explanation:`
   try {
     return { roots: parseRootsArray(extractOutputText(response)), usage }
   } catch (error) {
-    if (classifyApiError(error).status === 422) throw error
+    if (classifyApiError(error).status === 422) {
+      throw Object.assign(error instanceof Error ? error : new Error(String(error)), { usage })
+    }
     console.error('Root extraction error:', safeError(error))
     return { roots: [], usage }
   }
@@ -707,19 +839,31 @@ export async function conductAgenticResearch(
     signal?: AbortSignal
     language?: LanguageCode
     exaBudgetClient?: ExaBudgetRedis | null
+    session?: LexemeResearchSession
+    budget?: SourceFetchBudget
   },
   onProgress?: (event: StreamEvent) => void
 ): Promise<ResearchContext> {
-  const budget = new SourceFetchBudget(CONFIG.maxTotalFetches)
+  const budget =
+    options?.budget ??
+    options?.session?.getBudget() ??
+    new SourceFetchBudget(CONFIG.maxTotalFetches)
+  if (options?.session && options.budget && options.session.getBudget() !== options.budget)
+    throw new Error('Research session and source budget must share the same counter')
   const normalizedWord = canonicalizeWord(word)
   const language = options?.language ?? 'en'
-  const signal = options?.signal
-  const session = createLexemeResearchSession({
-    budget,
-    signal,
-    onProgress,
-    exaBudgetClient: options?.exaBudgetClient,
-  })
+  const signal = options?.signal ?? options?.session?.signal
+  const progress = onProgress
+    ? (event: StreamEvent) => onProgress({ ...event, language } as StreamEvent)
+    : undefined
+  const session =
+    options?.session ??
+    createLexemeResearchSession({
+      budget,
+      signal,
+      onProgress: progress,
+      exaBudgetClient: options?.exaBudgetClient,
+    })
   const context: ResearchContext = {
     language,
     mainWord: projectMainSources(normalizedWord, []),
@@ -730,129 +874,155 @@ export async function conductAgenticResearch(
     rawSources: {},
   }
   let rootWork: Promise<string[]> | undefined
-  const identifyRoots = async (): Promise<string[]> => {
-    const entries = context.entryContexts ?? []
-    const parsed = context.parsedChains ?? []
-    if (language !== 'en') return []
-    const cpu = [
-      ...new Set([
-        ...phraseComponents(normalizedWord, language),
-        ...extractRootsCpu(normalizedWord, context.mainWord.etymonline?.text ?? null, null, []),
-        ...entries.flatMap((entry) =>
-          extractRootsCpu(
-            normalizedWord,
-            entry.text,
-            null,
-            parsed.filter((chain) => chain.historyId === entry.id)
-          )
-        ),
-      ]),
-    ].slice(0, CONFIG.maxRootsToExplore)
-    let roots = cpu
-    if (
-      !cpu.length &&
-      entries.length === 1 &&
-      lexicalSourceRecords(mainSourceRecords(context.mainWord)).some(
-        (source) => sourceEvidenceRole(source) === 'etymology'
-      )
-    ) {
-      const extracted = await extractRootsQuick(normalizedWord, entries[0].text, null, signal)
-      roots = extracted.roots
-      if (extracted.usage) context.llmUsage = extracted.usage
-    }
-    context.identifiedRoots = roots
-    emitProgress(onProgress, { type: 'roots_identified', roots })
-    return roots
-  }
-  const main = await session.lookup(
-    { word: normalizedWord, language },
-    {
-      primary: true,
-      skipOptionalSources: options?.skipOptionalSources,
-      onCore(sources) {
-        if (!sources.length) return
-        context.mainWord = projectMainSources(normalizedWord, sources)
-        scopeHistories(context)
-        rootWork = identifyRoots()
-        void rootWork.catch(() => {})
-      },
-    }
-  )
-  context.mainWord = projectMainSources(normalizedWord, main.sources)
-  recordLookup(context, main)
-  scopeHistories(context)
-  context.rawSources = {
-    wikipedia: context.mainWord.wikipedia?.text,
-    dateAttested: context.parsedChains?.find((chain) => chain.dateAttested)?.dateAttested,
-  }
-  emitProgress(onProgress, {
-    type: 'parsing_complete',
-    chainCount: context.parsedChains?.length ?? 0,
-  })
-  rootWork ??= identifyRoots()
-  const [identifiedRoots] = await Promise.all([
-    rootWork,
-    expandLexemes(context, budget, signal, session),
-  ])
-  if (language !== 'en') {
-    context.identifiedRoots = context.identifiedRootLexemes?.map((lexeme) => lexeme.word) ?? []
-    emitProgress(onProgress, { type: 'roots_identified', roots: context.identifiedRoots })
-  }
-  const rootsToFetch = identifiedRoots
-    .filter(
-      (root) =>
-        root !== normalizedWord &&
-        root.length > 1 &&
-        !context.rootResearch.some(
-          (existing) => canonicalizeWord(existing.root) === canonicalizeWord(root)
+  try {
+    const identifyRoots = async (): Promise<string[]> => {
+      const entries = context.entryContexts ?? []
+      const parsed = context.parsedChains ?? []
+      if (language !== 'en') return []
+      const cpu = [
+        ...new Set([
+          ...phraseComponents(normalizedWord, language),
+          ...extractRootsCpu(normalizedWord, context.mainWord.etymonline?.text ?? null, null, []),
+          ...entries.flatMap((entry) =>
+            extractRootsCpu(
+              normalizedWord,
+              entry.text,
+              null,
+              parsed.filter((chain) => chain.historyId === entry.id)
+            )
+          ),
+        ]),
+      ].slice(0, CONFIG.maxRootsToExplore)
+      let roots = cpu
+      if (
+        !cpu.length &&
+        entries.length === 1 &&
+        lexicalSourceRecords(mainSourceRecords(context.mainWord)).some(
+          (source) => sourceEvidenceRole(source) === 'etymology'
         )
+      ) {
+        const extracted = await extractRootsQuick(normalizedWord, entries[0].text, null, signal)
+        roots = extracted.roots
+        if (extracted.usage) context.llmUsage = extracted.usage
+      }
+      context.identifiedRoots = roots
+      emitProgress(progress, { type: 'roots_identified', roots })
+      return roots
+    }
+    const main = await session.lookup(
+      { word: normalizedWord, language },
+      {
+        primary: true,
+        progressLanguage: language,
+        skipOptionalSources: options?.skipOptionalSources,
+        onCore(sources) {
+          if (!sources.length) return
+          context.mainWord = projectMainSources(normalizedWord, sources)
+          scopeHistories(context)
+          rootWork = identifyRoots()
+          void rootWork.catch(() => {})
+        },
+      }
     )
-    .slice(0, CONFIG.maxRootsToExplore)
-  const extraRoots = await session.lookupMany(
-    rootsToFetch.map((root) => ({ word: root, language }))
-  )
-  for (const result of extraRoots) {
-    recordLookup(context, result)
-    const owners = (context.entryContexts ?? []).filter((entry) =>
-      extractRootsCpu(normalizedWord, entry.text, null, []).includes(result.lexeme.word)
-    )
-    const bindings = owners.length ? owners : [undefined]
-    for (const owner of bindings)
-      context.rootResearch.push(
-        rootLookup(result, {
-          lexeme: result.lexeme,
-          relationship: 'root',
-          parentHistoryId: owner?.id,
-        })
-      )
-    emitProgress(onProgress, {
-      type: 'root_research',
-      root: result.lexeme.word,
-      source: result.sources.map((source) => source.provider).join('+'),
-      status: lexicalSourceRecords(result.sources).length ? 'complete' : 'failed',
+    context.mainWord = projectMainSources(normalizedWord, main.sources)
+    recordLookup(context, main)
+    scopeHistories(context)
+    context.rawSources = {
+      wikipedia: context.mainWord.wikipedia?.text,
+      dateAttested: context.parsedChains?.find((chain) => chain.dateAttested)?.dateAttested,
+    }
+    emitProgress(progress, {
+      type: 'parsing_complete',
+      chainCount: context.parsedChains?.length ?? 0,
     })
-  }
-  if (language === 'en') {
-    const sources = mainSourceRecords(context.mainWord)
-    const relatedTerms = extractRelatedTerms(
-      sources.map((source) => source.data.text).join('\n'),
-      [normalizedWord, ...context.rootResearch.map((root) => root.root)],
-      sources.flatMap((source) => source.data.relatedEntries ?? [])
+    rootWork ??= identifyRoots()
+    const [identifiedRoots] = await Promise.all([
+      rootWork,
+      expandLexemes(context, budget, signal, session),
+    ])
+    if (language !== 'en') {
+      context.identifiedRoots = context.identifiedRootLexemes?.map((lexeme) => lexeme.word) ?? []
+      emitProgress(progress, { type: 'roots_identified', roots: context.identifiedRoots })
+    }
+    const rootsToFetch = identifiedRoots
+      .filter(
+        (root) =>
+          root !== normalizedWord &&
+          root.length > 1 &&
+          !context.rootResearch.some(
+            (existing) => canonicalizeWord(existing.root) === canonicalizeWord(root)
+          )
+      )
+      .slice(0, CONFIG.maxRootsToExplore)
+    const extraRoots = await session.lookupMany(
+      rootsToFetch.map((root) => ({ word: root, language })),
+      { progressLanguage: language }
     )
-    const related = await session.lookupMany(relatedTerms.map((term) => ({ word: term, language })))
-    for (const result of related) {
+    for (const result of extraRoots) {
       recordLookup(context, result)
-      context.relatedResearch.push({
-        term: result.lexeme.word,
-        lexeme: result.lexeme,
-        sources: result.sources,
-        etymonlineData:
-          result.sources.find((source) => source.provider === 'etymonline')?.data ?? null,
+      const owners = (context.entryContexts ?? []).filter((entry) =>
+        extractRootsCpu(normalizedWord, entry.text, null, []).includes(result.lexeme.word)
+      )
+      const bindings = owners.length ? owners : [undefined]
+      for (const owner of bindings)
+        context.rootResearch.push(
+          rootLookup(result, {
+            lexeme: result.lexeme,
+            relationship: 'root',
+            parentHistoryId: owner?.id,
+          })
+        )
+      emitProgress(progress, {
+        type: 'root_research',
+        root: result.lexeme.word,
+        source: result.sources.map((source) => source.provider).join('+'),
+        status: lexicalSourceRecords(result.sources).length ? 'complete' : 'failed',
       })
     }
+    if (language === 'en') {
+      const sources = mainSourceRecords(context.mainWord)
+      const relatedTerms = extractRelatedTerms(
+        sources.map((source) => source.data.text).join('\n'),
+        [normalizedWord, ...context.rootResearch.map((root) => root.root)],
+        sources.flatMap((source) => source.data.relatedEntries ?? [])
+      )
+      const related = await session.lookupMany(
+        relatedTerms.map((term) => ({ word: term, language })),
+        { progressLanguage: language }
+      )
+      for (const result of related) {
+        recordLookup(context, result)
+        context.relatedResearch.push({
+          term: result.lexeme.word,
+          lexeme: result.lexeme,
+          sources: result.sources,
+          etymonlineData:
+            result.sources.find((source) => source.provider === 'etymonline')?.data ?? null,
+        })
+      }
+    }
+    signal?.throwIfAborted()
+    return completeResearch(context, budget)
+  } catch (error) {
+    // Root extraction overlaps source work. Await it even when a sibling fails so every billed
+    // call is visible to the route's error accounting before research rejects.
+    let rootError: unknown
+    if (rootWork)
+      await rootWork.catch((failure) => {
+        rootError = failure
+      })
+    const usage =
+      context.llmUsage ??
+      (rootError && typeof rootError === 'object' && 'usage' in rootError
+        ? (rootError as { usage?: LlmUsage }).usage
+        : undefined)
+    if (usage) {
+      const failure = error instanceof Error ? error : new Error(String(error))
+      Object.assign(failure, { usage })
+      throw failure
+    }
+    throw error
   }
-  signal?.throwIfAborted()
-  return completeResearch(context, budget)
 }
 
 /**

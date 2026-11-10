@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import {
   getCachedSource,
+  getCachedWiktionaryToc,
+  cacheWiktionaryToc,
   cacheSource,
   getCachedSourceBundle,
   cacheSourceBundle,
@@ -52,7 +54,7 @@ describe('source cache', () => {
 
     await cacheSource('etymonline', 'Telephone', DATA, store)
 
-    expect(store.keys()).toContain('src:v8:etymonline:telephone')
+    expect(store.keys()).toContain('src:v11:etymonline:telephone')
     expect(await getCachedSource('etymonline', 'telephone', store)).toEqual(DATA)
   })
 
@@ -64,14 +66,14 @@ describe('source cache', () => {
     expect(await getCachedSource('wiktionary', 'telephone', store)).toBeNull()
   })
 
-  test('same-spelling beta lexemes use language-qualified source keys', async () => {
+  test('same-spelling lexemes in other languages use language-qualified source keys', async () => {
     const store = createStore()
     await cacheSource('wiktionaryNative', 'sale', DATA, store, 'it')
     await cacheSource('wiktionaryNative', 'sale', DATA, store, 'fr')
 
     expect(store.keys().sort()).toEqual([
-      'src:v8:wiktionaryNative:fr:sale',
-      'src:v8:wiktionaryNative:it:sale',
+      'src:v11:wiktionaryNative:fr:sale',
+      'src:v11:wiktionaryNative:it:sale',
     ])
   })
 
@@ -111,7 +113,7 @@ describe('source cache', () => {
 
   test('treats malformed cache entries as misses', async () => {
     const store = createStore()
-    await store.set('src:v8:etymonline:telephone', {
+    await store.set('src:v11:etymonline:telephone', {
       text: 42,
       url: 'https://example.com',
     } as unknown as SourceData)
@@ -166,4 +168,22 @@ test('partial source entries and bundles are not stored for seven days', async (
     store
   )
   expect(store.keys()).toEqual([])
+})
+
+test('TOC cache preserves page-order headings and authoritative absence per edition', async () => {
+  const store = createStore()
+  const toc = { headings: ['English', 'German', 'French'], nonemptyHeadings: ['English', 'French'] }
+  await cacheWiktionaryToc('Fixture', 'en', toc, store)
+  await cacheWiktionaryToc('fixture', 'fr', { headings: [], nonemptyHeadings: [] }, store)
+  expect(store.keys()).toEqual([
+    'src:v11:wiktionaryToc:fixture',
+    'src:v11:wiktionaryToc:fr:fixture',
+  ])
+  expect(await getCachedWiktionaryToc('fixture', 'en', store)).toEqual(toc)
+  expect(await getCachedWiktionaryToc('fixture', 'fr', store)).toEqual({
+    headings: [],
+    nonemptyHeadings: [],
+  })
+  expect(await getCachedWiktionaryToc('fixture', 'it', store)).toBeNull()
+  expect(await getCachedWiktionaryToc('fixture', 'en', null)).toBeNull()
 })

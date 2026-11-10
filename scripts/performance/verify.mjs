@@ -41,8 +41,8 @@ try {
   await page.waitForFunction(() => document.querySelector('article h1')?.textContent === 'nice')
   assert.equal(await page.evaluate(() => window.__traces), 0)
   await page.goBack()
-  await page.locator('a[href="/word/fr/fen%C3%AAtre"]').click()
-  await page.waitForURL('**/word/fr/fen%C3%AAtre')
+  await page.locator('a[href="/word/fen%C3%AAtre"]').click()
+  await page.waitForURL('**/word/fen%C3%AAtre')
   assert.equal(await page.locator('article h1').textContent(), 'fenêtre')
   assert.ok((await page.locator('#entry-ancestry').textContent()).includes('Modern French'))
 

@@ -1,23 +1,41 @@
 'use client'
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { AncestryGraph, AncestryStage } from '@/lib/types'
-import { LANGUAGES, type LanguageCode } from '@/lib/languages'
+import type { AncestryGraph, AncestryStage, ScriptTarget } from '@/lib/types'
+import { LANGUAGES, languageFromName, type LanguageCode } from '@/lib/languages'
 import { sourceLabel } from '@/lib/sourceLabels'
+import { isValidWord } from '@/lib/validation'
+import { WordLink } from './WordLink'
+import { FormText } from './etymology-card/StoryText'
 
 interface AncestryTreeProps {
   graph: AncestryGraph
   word: string
   language?: LanguageCode
+  transliteration?: string
   /** Shown when the modern word's node is selected. */
   definition?: string
 }
 
-type Family = 'pie' | 'greek' | 'latin' | 'romance' | 'germanic' | 'semitic' | 'other'
+type Family =
+  | 'pie'
+  | 'greek'
+  | 'latin'
+  | 'romance'
+  | 'germanic'
+  | 'semitic'
+  | 'indo-iranian'
+  | 'japonic'
+  | 'sinitic'
+  | 'other'
 
 // Order matters: "Proto-Germanic" is Germanic, "Anglo-Norman" Romance, "Anglo-Latin" Latin.
 const FAMILY_PATTERNS: Array<[Family, RegExp]> = [
   ['pie', /indo-european|\bPIE\b/i],
+  [
+    'indo-iranian',
+    /indo-aryan|indo-iranian|iranian|sanskrit|hindi|urdu|hindustani|apabhram|prakrit|pali|sauraseni|maharastri|magadhi|persian|avestan|bengali|marathi|punjabi|gujarati|nepali/i,
+  ],
   ['latin', /latin/i],
   ['greek', /greek/i],
   [
@@ -29,6 +47,8 @@ const FAMILY_PATTERNS: Array<[Family, RegExp]> = [
     /english|germanic|norse|dutch|german|frisian|gothic|saxon|icelandic|danish|swedish|norwegian|scots/i,
   ],
   ['semitic', /arabic|hebrew|aramaic|akkadian|phoenician|syriac/i],
+  ['japonic', /japanese|japonic|ryukyuan|okinawan/i],
+  ['sinitic', /chinese|sinitic|mandarin|cantonese/i],
 ]
 
 const FAMILY: Record<Family, { label: string; stripe: string; swatch: string }> = {
@@ -38,6 +58,13 @@ const FAMILY: Record<Family, { label: string; stripe: string; swatch: string }> 
   romance: { label: 'Romance', stripe: 'border-t-lang-romance', swatch: 'bg-lang-romance' },
   germanic: { label: 'Germanic', stripe: 'border-t-lang-germanic', swatch: 'bg-lang-germanic' },
   semitic: { label: 'Semitic', stripe: 'border-t-lang-semitic', swatch: 'bg-lang-semitic' },
+  'indo-iranian': {
+    label: 'Indo-Iranian',
+    stripe: 'border-t-lang-indo-iranian',
+    swatch: 'bg-lang-indo-iranian',
+  },
+  japonic: { label: 'Japonic', stripe: 'border-t-lang-japonic', swatch: 'bg-lang-japonic' },
+  sinitic: { label: 'Sinitic', stripe: 'border-t-lang-sinitic', swatch: 'bg-lang-sinitic' },
   other: { label: 'Other', stripe: 'border-t-lang-other', swatch: 'bg-lang-other' },
 }
 
@@ -52,6 +79,8 @@ interface TreeNode {
   kind: Kind
   stage: string
   form: string
+  language?: LanguageCode
+  transliteration?: string
   note?: string
   family?: Family
   source?: AncestryStage
@@ -64,6 +93,24 @@ const EMPTY_OFFSETS: Record<string, Offset> = {}
 /** Reconstructed and model-inferred forms are not directly attested in the sources. */
 function isAttested(stage?: AncestryStage): boolean {
   return !stage || (!stage.isReconstructed && stage.confidence !== 'low')
+}
+
+export function ancestryLinkTarget(stage: AncestryStage): ScriptTarget | undefined {
+  const language = languageFromName(stage.stage)
+  if (
+    !language ||
+    stage.isReconstructed ||
+    stage.confidence === 'low' ||
+    !(
+      stage.confidence === 'high' ||
+      stage.confidence === 'medium' ||
+      stage.evidence?.some((item) => item.snippet.trim())
+    ) ||
+    /^-|-$/.test(stage.form.trim()) ||
+    !isValidWord(stage.form)
+  )
+    return undefined
+  return { word: stage.form, language }
 }
 
 function provenance(stage?: AncestryStage): string | null {
@@ -92,7 +139,8 @@ function buildTree(
   graph: AncestryGraph,
   word: string,
   language: LanguageCode,
-  definition?: string
+  definition?: string,
+  transliteration?: string
 ) {
   const { branches, mergePoint, postMerge = [] } = graph
   const split = branches.length > 1
@@ -101,6 +149,8 @@ function buildTree(
     kind: 'stage',
     stage: stage.stage,
     form: stage.form,
+    language: languageFromName(stage.stage),
+    transliteration: stage.transliteration,
     note: stage.note,
     family: familyOf(stage.stage),
     source: stage,
@@ -126,8 +176,10 @@ function buildTree(
   tail.push({
     key: 'final',
     kind: 'final',
-    stage: `Modern ${LANGUAGES[language].englishName}`,
+    stage: LANGUAGES[language].englishName,
     form: word,
+    language,
+    transliteration,
     note: definition,
     delay: step * STEP_MS,
   })
@@ -162,7 +214,13 @@ function useGraphState<T>(graph: AncestryGraph, initial: T) {
   return [value, set] as const
 }
 
-export function AncestryTree({ graph, word, language = 'en', definition }: AncestryTreeProps) {
+export function AncestryTree({
+  graph,
+  word,
+  language = 'en',
+  definition,
+  transliteration,
+}: AncestryTreeProps) {
   const [openKey, setOpenKey] = useGraphState<string | null>(graph, 'final')
   const [offsets, setOffsets] = useGraphState(graph, EMPTY_OFFSETS)
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
@@ -184,8 +242,8 @@ export function AncestryTree({ graph, word, language = 'en', definition }: Ances
   const suppressClick = useRef(false)
 
   const { split, columns, tail, edges } = useMemo(
-    () => buildTree(graph, word, language, definition),
-    [graph, word, language, definition]
+    () => buildTree(graph, word, language, definition, transliteration),
+    [graph, word, language, definition, transliteration]
   )
   const nodes = [...columns.flat(), ...tail]
   // Edges are measured from the rendered nodes, so they follow drags, wrapping, and resizes.
@@ -373,13 +431,18 @@ export function AncestryTree({ graph, word, language = 'en', definition }: Ances
         } ${node.family ? '' : node.kind === 'final' ? '' : open ? 'border-t-ink' : 'border-t-faint/70'}`}
       >
         <span className={LABEL}>{node.stage}</span>
-        <span
+        <FormText
+          text={node.form}
+          language={node.language}
           className={`mt-0.5 block break-words font-serif text-ink sm:mt-1 ${
             node.kind === 'final' ? 'text-lg sm:text-xl' : 'text-base italic sm:text-lg'
           }`}
-        >
-          {node.form}
-        </span>
+        />
+        {node.transliteration && (
+          <span lang="en" dir="ltr" className="mt-1 block font-serif text-sm text-muted">
+            {node.transliteration}
+          </span>
+        )}
       </button>
     )
   }
@@ -394,9 +457,15 @@ export function AncestryTree({ graph, word, language = 'en', definition }: Ances
     <div>
       {graph.convergencePoints?.map((point, index) => (
         <p key={`${point.pieRoot}-${index}`} className="mb-6 font-serif text-sm italic text-muted">
-          {point.branchIndices.map((i) => graph.branches[i]?.root ?? '?').join(' and ')} share
-          Proto-Indo-European <span className="text-ink">*{point.pieRoot.replace(/^\*/, '')}</span>{' '}
-          &lsquo;{point.meaning}&rsquo;.
+          {point.branchIndices.map((i, index) => (
+            <span key={i}>
+              {index > 0 && ' and '}
+              <FormText text={graph.branches[i]?.root ?? '?'} />
+            </span>
+          ))}{' '}
+          share Proto-Indo-European{' '}
+          <FormText className="text-ink" text={`*${point.pieRoot.replace(/^\*/, '')}`} /> &lsquo;
+          {point.meaning}&rsquo;.
         </p>
       ))}
 
@@ -418,7 +487,7 @@ export function AncestryTree({ graph, word, language = 'en', definition }: Ances
             {columns.map((column, b) => (
               <div key={b} className={`flex min-w-0 flex-col items-center ${gap}`}>
                 <p className="-mb-2 max-w-full truncate font-serif text-sm italic text-ink sm:-mb-4">
-                  {graph.branches[b].root}
+                  <FormText text={graph.branches[b].root} />
                 </p>
                 {column.map(renderNode)}
               </div>
@@ -470,6 +539,7 @@ export function AncestryTree({ graph, word, language = 'en', definition }: Ances
 function TreeDetails({ node, onClose }: { node: TreeNode; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const line = provenance(node.source)
+  const target = node.kind === 'stage' && node.source ? ancestryLinkTarget(node.source) : undefined
 
   useEffect(() => {
     if (node.kind !== 'final') {
@@ -508,9 +578,22 @@ function TreeDetails({ node, onClose }: { node: TreeNode; onClose: () => void })
         {node.stage}
       </p>
       <p className="mt-1 font-serif text-lg">
-        <em className={node.kind === 'final' ? 'not-italic' : ''}>{node.form}</em>
+        <em className={node.kind === 'final' ? 'not-italic' : ''}>
+          {target ? (
+            <WordLink word={target.word} language={target.language}>
+              <FormText text={node.form} language={node.language} />
+            </WordLink>
+          ) : (
+            <FormText text={node.form} language={node.language} />
+          )}
+        </em>
         {node.note && <span className="text-muted"> — {node.note}</span>}
       </p>
+      {node.transliteration && (
+        <p lang="en" dir="ltr" className="mt-1 font-serif text-muted">
+          {node.transliteration}
+        </p>
+      )}
       {line && <p className="mt-2 text-muted">{line}</p>}
       {node.source?.evidence && node.source.evidence.length > 0 && (
         <ul className="mt-3 space-y-2">

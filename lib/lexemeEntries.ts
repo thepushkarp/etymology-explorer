@@ -126,6 +126,8 @@ export function deriveEntryContexts(
       source: sourceName,
       heading: group.heading,
       text: group.text,
+      relations: group.relations,
+      etymologyText: group.etymologyText,
       sectionHeadings: group.sections.map((section) => section.heading),
       sourceUrl: group.sourceUrl ?? source.url,
       entryKind: 'lemma' as const,
@@ -136,6 +138,7 @@ export function deriveEntryContexts(
   const contexts: ResearchEntryContext[] = []
 
   for (const group of groups) {
+    const groupContextStart = contexts.length
     const formSections = identity.formTargets.flatMap((target) => {
       const matches = group.sections.filter((section) => containsWholeLexeme(section.text, target))
       if (matches.length === 0) return []
@@ -145,7 +148,7 @@ export function deriveEntryContexts(
         matches.find((candidate) =>
           sourceName !== 'wiktionaryNative'
             ? /\b(?:plural|singular|form|inflection) of\b/i.test(candidate.text)
-            : LANGUAGES[language].formHeading.test(candidate.heading)
+            : LANGUAGES[language].nativeWiktionary?.formHeading.test(candidate.heading)
         ) ?? matches[0]
       return [{ section, target }]
     })
@@ -178,7 +181,10 @@ export function deriveEntryContexts(
           id: entryIdentity.id,
           source: sourceName,
           heading: block.heading,
+          transliteration: group.transliteration,
           text: block.text,
+          etymologyText: block.text,
+          relations: group.relations?.filter((relation) => block.text.includes(relation.snippet)),
           sectionHeadings: [block.heading],
           evidenceScopeId: entryIdentity.evidenceScopeId,
           sourceUrl: source.url,
@@ -199,7 +205,10 @@ export function deriveEntryContexts(
           id: entryIdentity.id,
           source: sourceName,
           heading: section.heading,
+          transliteration: group.transliteration,
           text: `${matchingEtymologyLine(preamble, section.heading)}\n${section.text}`,
+          etymologyText: matchingEtymologyLine(preamble, section.heading) ?? undefined,
+          relations: group.relations?.filter((relation) => section.text.includes(relation.snippet)),
           sectionHeadings: section.path,
           evidenceScopeId: entryIdentity.evidenceScopeId,
           sourceUrl: source.url,
@@ -215,7 +224,10 @@ export function deriveEntryContexts(
           id: entryIdentity.id,
           source: sourceName,
           heading: group.heading,
+          transliteration: group.transliteration,
           text: lemmaText || group.text,
+          etymologyText: group.etymologyText,
+          relations: group.relations,
           sectionHeadings: group.sections
             .filter((section) => !formSections.some((form) => form.section.index === section.index))
             .map((section) => section.heading),
@@ -240,6 +252,7 @@ export function deriveEntryContexts(
         id: entryIdentity.id,
         source: sourceName,
         heading: section.heading,
+        transliteration: group.transliteration,
         text: section.text,
         sectionHeadings: section.path,
         evidenceScopeId: entryIdentity.evidenceScopeId,
@@ -248,6 +261,8 @@ export function deriveEntryContexts(
         formOf: { word: target, language },
       })
     }
+    if (contexts.length === groupContextStart + 1)
+      contexts[groupContextStart].counterparts = group.counterparts
   }
 
   if (contexts.length > 0) return contexts

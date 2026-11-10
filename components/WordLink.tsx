@@ -11,6 +11,7 @@ interface WordLinkProps {
   language?: LanguageCode
   className?: string
   title?: string
+  'aria-current'?: 'page'
   children?: ReactNode
 }
 
@@ -22,10 +23,11 @@ interface WordLinkProps {
  */
 export function WordLink({
   word,
-  language = 'en',
+  language,
   className = 'link',
   title,
   children,
+  'aria-current': ariaCurrent,
 }: WordLinkProps) {
   const [prefetch, setPrefetch] = useState(false)
 
@@ -37,10 +39,13 @@ export function WordLink({
       onFocus={() => setPrefetch(true)}
       onClick={() => {
         markTraceIntent(word, language)
-        void recordRecentSearchIntent(word, language)
+        void recordRecentSearchIntent(word)
       }}
       className={className}
       title={title}
+      aria-current={ariaCurrent}
+      lang={language}
+      dir="auto"
     >
       {children ?? word}
     </Link>

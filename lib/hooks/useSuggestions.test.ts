@@ -15,4 +15,11 @@ describe('language-aware fetched suggestions', () => {
   test('retains same-language words that still match a changed query', () => {
     expect(visibleFetchedWords(fetched, 'cab', 'en')).toEqual(['cabal'])
   })
+
+  test('keeps Auto results separate from an explicitly selected language', () => {
+    const auto = { ...fetched, language: undefined }
+    expect(visibleFetchedWords(auto, 'ca')).toEqual(['cabal', 'cadence'])
+    expect(visibleFetchedWords(auto, 'ca', 'en')).toEqual([])
+    expect(visibleFetchedWords(fetched, 'ca')).toEqual([])
+  })
 })

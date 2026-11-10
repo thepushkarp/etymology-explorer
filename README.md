@@ -8,7 +8,9 @@ Try it out at [etymex.com](https://etymex.com)
 
 - **Public Mode**: No client-side API keys needed — uses a server-side LLM with rate limiting, caching, and budget controls
 - **Grounded Etymology**: Source-backed confidence scoring (high/medium/low) for each ancestral stage
-- **Romance-language Beta**: Explicit Italian, Spanish, French, and neutral Portuguese lookup with paired local/English prose and no spelling-based language inference
+- **Automatic Language Discovery**: One spelling opens English, Italian, Spanish, French, Portuguese, Hindi, Urdu, Sanskrit, and Japanese histories together in language tabs; a manual language hint also finds specialist-only entries. Explanations are English, with translated examples in the word's own language
+- **Native Scripts**: Search Hindi and Sanskrit in Devanagari, Urdu in Arabic script, and Japanese in kanji or kana, with source-backed transliterations and right-to-left Urdu text
+- **Cross-language Links**: Open attested lineage forms and each history's source-listed spelling counterparts. Explicit Wiktionary romanizations offer links to native spellings while preserving entries for the original spelling; only clicking a link starts a new trace
 - **Etymology Lookup**: Search any word to discover its linguistic origins, root morphemes, and historical evolution
 - **Part of Speech Tags**: See grammatical categories (noun/verb/adjective) with alternate pronunciations for words like "record"
 - **Memorable Lore**: Each word comes with a 4-6 sentence narrative that makes the etymology stick
@@ -17,12 +19,12 @@ Try it out at [etymex.com](https://etymex.com)
 - **Modern Usage**: Supplemental community usage gated by source significance from Incel Wiki extracts
 - **Pronunciation Audio**: Listen to word pronunciations powered by ElevenLabs
 - **Random Word**: Open a random word to expand your vocabulary
-- **Recently Explored**: Four random selections from the latest 20 successful searches in each language, with localized previews and curated fallback words
+- **Recently Explored**: Four random selections from the latest 20 successful searches, filtered by primary language when a language is selected, with previews and curated fallback words
 - **Specialist Dictionaries**: General and language-specific evidence for query words, components, variants, and ancestors
 - **Structured Outputs**: Guaranteed valid JSON via OpenRouter `json_schema` strict mode
 - **Streaming UI**: Optional `?stream=true` server-sent events for source progress,
   per-section synthesis events, cached hits, and early error responses
-- **Smart Caching**: Redis-backed caching reduces costs and improves speed (30d etymology, 1yr audio)
+- **Durable Corpus**: Entries remain cached for a year and become eligible for a user-requested retrace after 90 days or a pipeline revision; incomplete traces can be retried after five minutes
 - **Shareable Word Pages**: `/word/{word}` is the primary search URL — cached words are
   server-rendered straight from the cache (crawlers never trigger LLM spend), uncached words
   host the live streaming trace with progressive section-by-section rendering
@@ -92,11 +94,8 @@ FORCE_CACHE_ONLY=false
 RATE_LIMIT_ENABLED=true
 ```
 
-`ELEVENLABS_VOICE_ID` must be a voice available to your account in `My Voices`.
-Free-tier accounts cannot use Voice Library/community voices through the API.
-Pronunciation requests pass the selected ISO 639-1 `language_code` to `eleven_v4` for
-language selection and text normalization. Accent still depends on the configured voice;
-`pt` does not select a Brazilian or European accent.
+`ELEVENLABS_API_KEY` enables pronunciation. Optional `ELEVENLABS_VOICE_ID` is the preferred voice for every language. If that voice is missing or the provider confirms it is inaccessible, the app selects one female premade stock voice from the [official catalog](https://elevenlabs.io/docs/api-reference/voices/search), preferring target-language labels or verified-language metadata, then multilingual capability. Authentication, quota, rate-limit, and general server errors do not trigger a voice retry.
+Pronunciation requests pass the speech language’s ISO 639-1 `language_code` to `eleven_v4`. Sanskrit entries keep their lexical identity and offer a labelled Hindi reading of their Devanagari spelling, rather than a claim of classical Sanskrit pronunciation. Audio is generated from the headword, independently of a selected history’s displayed IPA; voice quality and regional accent are not guaranteed by catalog metadata.
 
 See `.env.example` for full documentation.
 
@@ -105,8 +104,8 @@ allowance in Redis. Missing credentials, unavailable accounting, or an exhausted
 allowance disable Exa while ordinary sources continue. Use a dedicated Exa key
 with a $10 provider-side budget as an additional limit; the provider's billing
 period may differ from a calendar month. Each trace permits at most two searches,
-eight Contents pages, and five Exa HTTP calls within the shared 32-attempt source
-budget. Retrieved text is attributed to its publisher, and ambiguous entry
+eight Contents pages, and five Exa HTTP calls within the shared entry source
+budget (32 attempts for one language, plus 16 per extra language, capped at 96, including language resolution). Retrieved text is attributed to its publisher, and ambiguous entry
 boundaries cannot establish ancestry.
 
 For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and restart `bun dev`.
@@ -123,7 +122,8 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
 - **Data Sources**:
   - [Etymonline](https://www.etymonline.com/) - Historical etymology
   - [Wiktionary](https://en.wiktionary.org/) - Definitions and linguistic data
-  - Native Italian, Spanish, French, and Portuguese Wiktionary editions - selected-language etymology sections
+  - Native Italian, Spanish, French, Portuguese, Hindi, and Japanese Wiktionary editions - selected-language sections; English Wiktionary defines Hindi, Urdu, Sanskrit, and Japanese history boundaries
+  - [JMdict via Jisho](https://jisho.org/) - licensed supplementary Japanese lexical senses and raw loan-source material, with EDRDG attribution retained
   - [Wikidata Lexemes](https://www.wikidata.org/wiki/Wikidata:Lexicographical_data/Documentation) - language-tagged lemmas, forms, senses, and lexical claims
   - [FreeDictionaryAPI](https://freedictionaryapi.com/) - senses, forms, and IPA after direct Wiktionary misses (not etymology)
   - [Dicionário Aberto](https://api.dicionario-aberto.net/index.html) - older Portuguese dictionary evidence
@@ -133,7 +133,15 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
   - Bosworth–Toller, Lewis & Short, and LSJ through Logeion - historical-language lexemes
   - [Exa](https://exa.ai/) - optional blocked-page recovery and targeted publisher discovery
 - **Audio**: [ElevenLabs](https://elevenlabs.io/) - Text-to-speech pronunciation
-- **Typography**: Libre Baskerville (display serif) + Alegreya Sans (body), self-hosted woff2 subsets
+- **Typography**: Libre Baskerville (display serif), Alegreya Sans (UI), Noto Serif Devanagari, and Noto Nastaliq Urdu, self-hosted regular-weight woff2 subsets; Japanese forms use system Mincho fonts without a webfont download
+
+Hindi, Urdu, and Sanskrit rely on Wiktionary lexical evidence; Wikipedia supplies context and cannot establish ancestry. Optional Platts, Wisdom Library, and Cologne Monier-Williams adapters are not enabled: the [Platts digitization links restrictive reuse terms](https://dsal.uchicago.edu/dictionaries/platts/), [Wisdom Library's published site information](https://www.wisdomlib.org/m/about.html) does not establish a blanket glossary reuse license, and the [Cologne digital edition specifies noncommercial, share-alike terms](https://raw.githubusercontent.com/sanskrit-lexicon/csl-orig/master/v02/mw/mwheader.xml). Their availability alone does not establish suitability for public synthesis.
+
+Japanese uses English Wiktionary as its history primary and native Japanese Wiktionary as independent context. JMdict via Jisho supplies licensed lexical senses and raw loan-source material; an unspecified full/partial status cannot establish a whole-word borrowing. Each live Jisho request after a source-cache miss requires a global 40-second Redis pacing reservation, which fails closed when Redis is unavailable or the interval is occupied; source-cache hits need no reservation. Complete raw source data is cached for seven days with its attribution retained. When updating the adapter, review the publisher terms, JMdict license, and Jisho response schema, preserve attribution through caching and display, and verify parsing and pacing with fixtures. Kotobank and gogen adapters are not enabled because their reuse terms have not been admitted.
+
+Japanese word-origin labels require affirmative source evidence. Compounding and borrowing remain distinct: 電話 is a Japanese wasei-kango compound of 電 and 話, rather than a whole Middle Chinese borrowing. サラリーマン has disputed coinage accounts and source-attested Japanese サラリー and マン components; it does not imply English salary and man branches. コンセント is clipped from a longer Japanese coinage with explicit English concentric and plug components.
+
+Random discovery uses frequency-selected Romance pools and small curated Hindi, Urdu, Sanskrit, and Japanese headword pools. Refresh the curated pools without downloads using `python scripts/build-discovery-word-pools.py --languages hi ur sa ja`; the generator preserves unselected pools. Google Books usage charts are unavailable for these four languages.
 
 ## Project Structure
 
@@ -159,7 +167,7 @@ etymology-explorer/
 ├── proxy.ts               # Rate limiting, CSP headers, legacy /?q= redirect
 ├── components/
 │   ├── AncestryTree.tsx    # Lineage timeline
-│   ├── EntryView.tsx       # Finished entry shell (locale, histories, usage, share)
+│   ├── EntryView.tsx       # Finished entry shell (language tabs, histories, usage, share)
 │   ├── ErrorState.tsx      # Error display with retry
 │   ├── EtymologyCard.tsx   # Entry layout, final and streaming (pending) states
 │   ├── etymology-card/     # Entry sections
@@ -208,29 +216,29 @@ etymology-explorer/
 
 ## API Endpoints
 
-| Endpoint               | Method     | Description                                                        | Auth Required     |
-| ---------------------- | ---------- | ------------------------------------------------------------------ | ----------------- |
-| `/api/etymology`       | GET        | Synthesize etymology (`?word=X`, optional `language` and `stream`) | No (rate-limited) |
-| `/api/pronunciation`   | GET        | Get pronunciation audio (`?word=X&language=it`)                    | No                |
-| `/api/suggestions`     | GET        | Get language-aware autocomplete suggestions                        | No                |
-| `/api/random-word`     | GET        | Get a random word                                                  | No                |
-| `/api/ngram`           | GET        | Get language-aware Google Books usage data (`?word=X`)             | No                |
-| `/api/health`          | GET        | Liveness check                                                     | No                |
-| `/api/admin/stats`     | GET        | Get budget/usage statistics and counters                           | Admin secret      |
-| `/api/recent-searches` | GET / POST | Sample recent searches or record a validated cached lookup         | No (rate-limited) |
+| Endpoint               | Method     | Description                                                                           | Auth Required     |
+| ---------------------- | ---------- | ------------------------------------------------------------------------------------- | ----------------- |
+| `/api/etymology`       | GET        | Synthesize etymology (`?word=X`, optional `language` hint, `refresh=1`, and `stream`) | No (rate-limited) |
+| `/api/pronunciation`   | GET        | Get pronunciation audio (`?word=X&language=it`)                                       | No                |
+| `/api/suggestions`     | GET        | Get language-aware autocomplete suggestions                                           | No                |
+| `/api/random-word`     | GET        | Get a random word                                                                     | No                |
+| `/api/ngram`           | GET        | Get language-aware Google Books usage data (`?word=X`)                                | No                |
+| `/api/health`          | GET        | Liveness check                                                                        | No                |
+| `/api/admin/stats`     | GET        | Get budget/usage statistics and counters                                              | Admin secret      |
+| `/api/recent-searches` | GET / POST | Sample recent searches or record a validated cached lookup                            | No (rate-limited) |
 
 ## How It Works
 
 1. **Request Deduplication**: Singleflight owner-token locks (90s TTL, heartbeat-extended) ensure one pipeline run per word; waiters poll the cache for the holder's result, and streaming waiters can take over if the holder crashes
 2. **Rate Limiting**: Per-IP rate limiting (20 req/min + 200 req/day) via Upstash Redis
-3. **Cache Check**: Redis cache lookup with versioned keys (`etymology:v2.6:`), schema validation on read, a five-minute TTL for incomplete research, and negative cache (30m) for known no-source/invalid words. Without Redis, uncached searches return 503 (fail closed)
+3. **Cache Check**: One durable `entry:v1:{word}` contains every successful language. Schema validation runs on reads. Fresh entries are served immediately; stale entries remain readable until an explicit retrace. Incomplete entries remain durable and become retraceable after five minutes. Legacy entries remain discoverable and migrate during bounded corpus scans (up to 1,000 words) or on read. Negative misses are scoped to Auto or the explicit language hint. Without Redis, uncached searches return 503 (fail closed)
 4. **Grounded Etymology Pipeline**:
    - **Parser** (CPU-only): Extracts "from X, from Y" chains from raw source text
    - **Agentic Research**: Multi-phase research pipeline (aborts mid-flight if the client disconnects):
      - Phase 1: Fetch Etymonline and Wiktionary alongside optional Wikipedia and Incel Wiki. FreeDictionaryAPI runs only when direct Wiktionary misses, providing definitions and pronunciation with an explicitly unresolved origin. Native and English Wiktionary editions define multilingual history boundaries; Wikidata supplies lexical identity. Source-cache hits avoid HTTP attempts.
      - Phase 2: Root morphemes extracted on-CPU from derivation formulas ("From X + Y", "equivalent to X + Y") and parsed-chain affixes (e.g., "telephone" → ["tele", "phone"]); a quick LLM call (15s timeout) runs only when the CPU pass finds nothing
-     - Phase 3: One parallel wave fetches root pages (up to 4 roots, etymonline + wiktionary) and main-word related-term pages (etymonline only) within the 32-fetch budget
-   - **LLM Synthesis**: Aggregated research context sent to LLM with structured output schema
+     - Phase 3: One parallel wave fetches root pages (up to 4 roots, etymonline + wiktionary) and main-word related-term pages (etymonline only) within the shared entry fetch budget
+   - **LLM Synthesis**: Each admitted language receives an independent parallel LLM call with scoped evidence and one structured output schema; successful languages are retained when siblings fail
    - **Enricher** (CPU): Post-processes LLM output, assigns confidence scores (high/medium/low) based on source evidence match
 5. **Guaranteed JSON**: Using constrained decoding, the LLM produces valid JSON matching the exact schema
 6. **Budget Enforcement**: Cost guard tracks monthly spend (OpenRouter-reported cost, with a conservative fallback-chain pricing ceiling when cost is omitted) against a $10/month cap and switches from normal to cache_only mode at 90% of budget; both the root-extraction and synthesis LLM calls are counted
@@ -280,10 +288,10 @@ disabled until it completes the same etymology-quality and latency bakeoff.
 │ 1) Fetch direct sources; use a senses-only dictionary fallback on misses    │
 │ 2) Parse "from X, from Y" chains once etymonline+wiktionary land (CPU-only)  │
 │ 3) CPU root extraction from derivation formulas; LLM fallback if none found  │
-│ 4) ONE parallel wave: root pages + related-term pages (32-fetch budget)      │
+│ 4) Shared bounded language research: 32 + 16 per extra language, capped at 96      │
 │ 5) OpenRouter synthesis, json_schema strict (sections stream when stream=true)│
 │ 6) Enrich ancestry graph + confidence/evidence                               │
-│ 7) Cache result in Redis                                                     │
+│ 7) Merge successful languages into one durable WordEntry in Redis                                                     │
 └──────────────────────────────┬───────────────────────────────────────────────┘
                                ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -319,9 +327,19 @@ Deploy easily on [Vercel](https://vercel.com):
 
 **Important**: Set environment variables in your Vercel project settings (see Environment Configuration section above).
 
+### Beta
+
+Every push to `main` runs [Deploy Beta](.github/workflows/deploy-beta.yml), which fast-forwards the `beta` mirror branch to the latest `main` commit, builds a Vercel Preview deployment remotely, and assigns it to [beta.etymex.com](https://beta.etymex.com). Runs are serialized and superseded commits are skipped. The workflow can also be run manually from `main`.
+
+The Preview deployment retains `main` source metadata and receives `APP_CHANNEL=beta` at build time. The workflow explicitly assigns the beta domain only after confirming the deployed commit is still current on `main`.
+
+Keep `beta` as a deployment mirror: do not add commits directly to it. The workflow uses `GITHUB_TOKEN` with `contents: write` for the fast-forward and the same `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` secrets as production for deployment. Configure the application's Preview environment variables in Vercel and connect `beta.etymex.com` to the `beta` Preview branch so production releases cannot claim it. Automatic Git deployments for `main` and `beta` are disabled in `vercel.json`; other branches retain their previews.
+
+Builds with `APP_CHANNEL=beta` label the header version as beta and show nonempty `Unreleased` changelog groups first, without a release date or tag link. Default builds show released versions only.
+
 ### Releasing
 
-Production deploys only when a GitHub release is published. Pull requests still get Vercel previews, but merging to `main` does not change the live site.
+Production at `etymex.com` deploys only when a GitHub release is published. Pull requests still get Vercel previews; merging to `main` updates beta.
 
 Pre-1.0 versions use minor bumps for user-facing features and patch bumps for fixes.
 
@@ -343,6 +361,7 @@ MIT
 
 - Etymology data from [Etymonline](https://www.etymonline.com/) and [Wiktionary](https://en.wiktionary.org/)
 - Dictionary fallback from [FreeDictionaryAPI](https://freedictionaryapi.com/)
+- Japanese lexical data from [JMdict by EDRDG](https://www.edrdg.org/), via [Jisho](https://jisho.org/), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 - Encyclopedic context from [Wikipedia](https://en.wikipedia.org/)
 - Supplemental community slang context from [Incel Wiki](https://incels.wiki/)
 - Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)

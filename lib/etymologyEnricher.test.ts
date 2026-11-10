@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { enrichAncestryGraph, pruneUngroundedStages } from '@/lib/etymologyEnricher'
-import type { AncestryGraph, AncestryStage, ResultText } from '@/lib/types'
+import type { AncestryGraph, AncestryStage } from '@/lib/types'
 import type { ParsedEtymChain } from '@/lib/etymologyParser'
+import { parseWiktionaryText } from '@/lib/etymologyParser'
 
 const CHAINS: ParsedEtymChain[] = [
   {
@@ -17,6 +18,26 @@ const CHAINS: ParsedEtymChain[] = [
     ],
   },
 ]
+
+test('stage readings replace model values only for an unambiguous exact source form and language', () => {
+  const chain = parseWiktionaryText('From Classical Persian کتاب (kitāb, “book”).', 'किताब')
+  const stages: AncestryStage[] = [
+    { stage: 'Classical Persian', form: 'کتاب', transliteration: 'invented', note: '' },
+    { stage: 'Arabic', form: 'کتاب', transliteration: 'invented', note: '' },
+    { stage: 'Classical Persian', form: 'کتب', transliteration: 'invented', note: '' },
+  ]
+  const graph = { branches: [{ root: 'किताब', stages }] }
+  enrichAncestryGraph(graph, [chain])
+  expect(stages.map((stage) => stage.transliteration)).toEqual(['kitāb', undefined, undefined])
+  const conflicting = structuredClone(chain)
+  conflicting.links[0].transliteration = 'ketāb'
+  enrichAncestryGraph(graph, [chain, conflicting])
+  expect(stages[0].transliteration).toBeUndefined()
+  chain.links[0].variants = ['کتب']
+  enrichAncestryGraph(graph, [chain])
+  expect(stages[2].confidence).toBe('medium')
+  expect(stages[2].transliteration).toBeUndefined()
+})
 
 test('confidence counts publisher families across editions and retrieval routes', () => {
   const stage: AncestryStage = { stage: 'Latin', form: 'fenestra', note: '' }
@@ -85,41 +106,40 @@ describe('enricher robustness against malformed LLM output', () => {
   })
 })
 
-for (const note of ['name', { en: 'name', local: 'nome' }]) {
-  test(`preserves orphaned post-merge lineage with ${typeof note === 'string' ? 'English' : 'bilingual'} prose`, () => {
-    const graph: AncestryGraph<ResultText> = {
-      branches: [
-        { root: 'rik-', stages: [{ stage: 'Proto-Germanic', form: '*rik-', note }] },
-        { root: '-hardu', stages: [{ stage: 'Proto-Germanic', form: '*hardu', note }] },
+test('preserves orphaned post-merge lineage', () => {
+  const note = 'name'
+  const graph: AncestryGraph = {
+    branches: [
+      { root: 'rik-', stages: [{ stage: 'Proto-Germanic', form: '*rik-', note }] },
+      { root: '-hardu', stages: [{ stage: 'Proto-Germanic', form: '*hardu', note }] },
+    ],
+    mergePoint: { form: '*Rikuhardu', note },
+    postMerge: [
+      { stage: 'Old High German', form: 'Rihhart', note },
+      { stage: 'English', form: 'Richard', note },
+    ],
+  }
+  const chains: ParsedEtymChain[] = [
+    {
+      source: 'wiktionary',
+      word: 'dick',
+      links: [
+        {
+          language: 'Old High German',
+          form: 'Rihhart',
+          isReconstructed: false,
+          rawSnippet: 'from Old High German Rihhart',
+        },
       ],
-      mergePoint: { form: '*Rikuhardu', note },
-      postMerge: [
-        { stage: 'Old High German', form: 'Rihhart', note },
-        { stage: 'English', form: 'Richard', note },
-      ],
-    }
-    const chains: ParsedEtymChain[] = [
-      {
-        source: 'wiktionary',
-        word: 'dick',
-        links: [
-          {
-            language: 'Old High German',
-            form: 'Rihhart',
-            isReconstructed: false,
-            rawSnippet: 'from Old High German Rihhart',
-          },
-        ],
-      },
-    ]
-    enrichAncestryGraph(graph, chains)
-    expect(pruneUngroundedStages(graph)).toBe(2)
-    expect(graph.branches).toHaveLength(1)
-    expect(graph.branches[0].root).toBe('Rihhart')
-    expect(graph.branches[0].stages.map((stage) => stage.form)).toEqual(['Rihhart', 'Richard'])
-    expect(graph.branches[0].stages[0].note).toEqual(note)
-    expect(graph.branches[0].stages[0].confidence).toBe('medium')
-    expect(graph.mergePoint).toBeUndefined()
-    expect(graph.postMerge).toBeUndefined()
-  })
-}
+    },
+  ]
+  enrichAncestryGraph(graph, chains)
+  expect(pruneUngroundedStages(graph)).toBe(2)
+  expect(graph.branches).toHaveLength(1)
+  expect(graph.branches[0].root).toBe('Rihhart')
+  expect(graph.branches[0].stages.map((stage) => stage.form)).toEqual(['Rihhart', 'Richard'])
+  expect(graph.branches[0].stages[0].note).toEqual(note)
+  expect(graph.branches[0].stages[0].confidence).toBe('medium')
+  expect(graph.mergePoint).toBeUndefined()
+  expect(graph.postMerge).toBeUndefined()
+})

@@ -23,12 +23,7 @@ import { safeError } from '@/lib/errorUtils'
 import { getLlmUsageFromError, synthesizeFromResearch } from '@/lib/llm'
 import { conductAgenticResearch } from '@/lib/research'
 import { EtymologyResultSchema } from '@/lib/schemas/etymology'
-import type {
-  AncestryStage,
-  EnglishEtymologyResult,
-  EtymologyResult,
-  ResearchContext,
-} from '@/lib/types'
+import type { AncestryStage, EtymologyResult, ResearchContext } from '@/lib/types'
 
 const RESULTS_DIR = join(process.cwd(), 'bench-results')
 
@@ -172,7 +167,7 @@ async function benchmarkWord(
     const researchDone = performance.now()
 
     const synthesis = await synthesizeFromResearch(context, { model })
-    const result = synthesis.result as EnglishEtymologyResult
+    const result = synthesis.result
     const { usage } = synthesis
     const synthesisDone = performance.now()
 

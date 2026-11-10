@@ -3,8 +3,12 @@ import {
   finalizeResult,
   synthesizeFromResearch,
   getLlmUsageFromError,
-  isRecoverableBetaValidationError,
+  isRecoverableValidationError,
 } from '@/lib/llm'
+import { scopeEnglishHistories } from './research'
+import { etymologyResult } from './testSupport/etymologyResult'
+import type { EtymologyResult, ResearchContext } from './types'
+import { toPartialResult, type PartialEtymology } from './streamReducer'
 
 describe('getLlmUsageFromError', () => {
   test('extracts usage attached to a failed-synthesis error', () => {
@@ -37,28 +41,19 @@ describe('getLlmUsageFromError', () => {
   })
 })
 
-describe('isRecoverableBetaValidationError', () => {
-  test('admits selected-language post-processing validation failures', () => {
+describe('isRecoverableValidationError', () => {
+  test('admits post-processing validation failures', () => {
     expect(
-      isRecoverableBetaValidationError(
-        new Error('Schema validation failed: model changed the source-defined history set'),
-        'es'
+      isRecoverableValidationError(
+        new Error('Schema validation failed: model changed the source-defined history set')
       )
     ).toBe(true)
   })
 
-  test('does not retry English or non-validation failures', () => {
-    const validationError = new Error('Schema validation failed: primary history is missing')
-
-    expect(isRecoverableBetaValidationError(validationError, 'en')).toBe(false)
-    expect(isRecoverableBetaValidationError(new Error('OpenRouter request failed'), 'it')).toBe(
-      false
-    )
+  test('does not retry transport failures', () => {
+    expect(isRecoverableValidationError(new Error('OpenRouter request failed'))).toBe(false)
   })
 })
-
-import type { BetaEtymologyResult, EtymologyResult, ResearchContext } from './types'
-import { toPartialResult, type PartialEtymology } from './streamReducer'
 
 describe('modern usage evidence', () => {
   const wikipediaText =
@@ -105,21 +100,21 @@ describe('modern usage evidence', () => {
         relatedResearch: [],
         totalSourcesFetched: 1,
       }
-      const result: EtymologyResult = {
-        language: 'en',
-        word: 'rizz',
-        pronunciation: '/rɪz/',
-        definition: 'Charisma.',
-        roots: [],
-        ancestryGraph: { branches: [] },
-        lore: 'Origin uncertain.',
-        sources: [],
-        modernUsage: {
-          hasSlangMeaning: true,
-          slangDefinition: definition,
-          contexts: ['Internet culture'],
+      scopeEnglishHistories(context)
+      const result = etymologyResult(
+        {
+          word: 'rizz',
+          pronunciation: '/rɪz/',
+          definition: 'Charisma.',
+          lore: 'Origin uncertain.',
+          modernUsage: {
+            hasSlangMeaning: true,
+            slangDefinition: definition,
+            contexts: ['Internet culture'],
+          },
         },
-      }
+        context
+      )
       const finalized = finalizeResult(result, context, 'standard')
       expect(finalized.modernUsage).toEqual(
         accepted
@@ -133,16 +128,16 @@ describe('modern usage evidence', () => {
 function scopedFixture() {
   const history = {
     id: 'h1',
-    label: { en: 'phrase', local: 'locution' },
+    label: 'phrase',
     entryKind: 'lemma' as const,
     queryNodeId: 'q1',
     lemmaNodeId: 'q1',
     evidenceScopeIds: ['scope1'],
     pronunciation: '/x/',
-    definition: { en: 'primary', local: 'primaire' },
+    definition: 'primary',
     ancestryGraph: { branches: [] },
     roots: [],
-    lore: { en: 'uncertain', local: 'incertain' },
+    lore: 'uncertain',
     partsOfSpeech: [],
   }
   const result = {
@@ -151,15 +146,15 @@ function scopedFixture() {
     primaryHistoryId: 'h1',
     histories: [history],
     pronunciation: '/other/',
-    definition: { en: 'duplicated prose differs', local: 'différent' },
+    definition: 'duplicated prose differs',
     ancestryGraph: { branches: [] },
     roots: [],
-    lore: { en: 'other', local: 'autre' },
+    lore: 'other',
     partsOfSpeech: [],
     suggestions: {},
     modernUsage: { hasSlangMeaning: false },
     sources: [{ name: 'invented' }],
-  } as unknown as BetaEtymologyResult
+  } as unknown as EtymologyResult
   const context = {
     language: 'fr',
     mainWord: {
@@ -203,10 +198,39 @@ function scopedFixture() {
 
 test('canonical primary prose is projected and citations come from research', () => {
   const { result, context } = scopedFixture()
+  const examples = [
+    { text: 'Un café au lait, s’il vous plaît.', translation: 'A café au lait, please.' },
+    { text: 'Le café au lait refroidit.', translation: 'The café au lait is getting cold.' },
+  ]
+  result.histories[0].examples = examples
   const finalized = finalizeResult(result, context, 'standard')
-  expect(finalized.definition).toEqual({ en: 'primary', local: 'primaire' })
+  expect(finalized.definition).toBe('primary')
+  expect(finalized.examples).toEqual(examples)
   expect(finalized.pronunciation).toBe('/x/')
   expect(finalized.sources.map((source) => source.name)).toEqual(['wikipedia', 'wiktionaryNative'])
+})
+
+test('history and entry readings are copied from their exact source contexts', () => {
+  const { result, context } = scopedFixture()
+  result.transliteration = 'invented entry reading'
+  result.histories[0].transliteration = 'invented history reading'
+  expect(finalizeResult(result, context, 'standard').transliteration).toBeUndefined()
+  expect(result.histories[0].transliteration).toBeUndefined()
+  context.entryContexts![0].transliteration = 'source reading'
+  const finalized = finalizeResult(result, context, 'standard')
+  expect(finalized.transliteration).toBe('source reading')
+  expect(finalized.histories[0].transliteration).toBe('source reading')
+})
+test('counterparts come only from the matching source context', () => {
+  const { result, context } = scopedFixture()
+  result.counterparts = [{ word: 'invented', language: 'en' }]
+  result.histories[0].counterparts = result.counterparts
+  expect(finalizeResult(result, context, 'standard').counterparts).toBeUndefined()
+  expect(result.histories[0].counterparts).toBeUndefined()
+  context.entryContexts![0].counterparts = [{ word: 'کتاب', language: 'ur' }]
+  const finalized = finalizeResult(result, context, 'standard')
+  expect(finalized.counterparts).toEqual([{ word: 'کتاب', language: 'ur' }])
+  expect(finalized.histories[0].counterparts).toEqual(finalized.counterparts)
 })
 test('a senses-only fallback cannot publish an ancestry graph', () => {
   const { result, context } = scopedFixture()
@@ -256,9 +280,7 @@ test('an encyclopedia-only history cannot establish a lexical ancestry', () => {
     branches: [
       {
         root: 'unattested',
-        stages: [
-          { stage: 'Latin', form: 'unattested', note: { en: 'Unsupported.', local: 'Non étayé.' } },
-        ],
+        stages: [{ stage: 'Latin', form: 'unattested', note: 'Unsupported.' }],
       },
     ],
   }
@@ -324,6 +346,7 @@ test.each([
         evidenceScopeId: 'scope1',
         source: 'wiktionary',
         heading: 'Etymology',
+        transliteration: 'source reading',
         text: 'Origin uncertain.',
         sectionHeadings: [],
         sourceUrl: 'https://en.wiktionary.org/wiki/café_au_lait',
@@ -340,28 +363,19 @@ test.each([
         entryKind: 'lemma',
       },
     ]
-    const output =
-      language === 'en'
-        ? {
-            ...result,
-            language,
-            definition: 'wrong top-level definition',
-            lore: 'wrong top-level story',
-            histories: result.histories.map((history) => ({
-              ...history,
-              label: history.label.en,
-              definition: history.definition.en,
-              lore: history.lore.en,
-            })),
-          }
-        : result
+    const output = {
+      ...result,
+      language,
+      definition: 'wrong top-level definition',
+      lore: 'wrong top-level story',
+    }
     // Unsupported reconstructed ancestry must already be pruned in the
     // progressive projection, just as it is in the terminal result.
     output.histories[0].ancestryGraph = {
       branches: [
         {
           root: '*invented',
-          stages: [{ stage: 'Proto-Germanic', form: '*invented', note: { en: '', local: '' } }],
+          stages: [{ stage: 'Proto-Germanic', form: '*invented', note: '' }],
         },
       ],
     }
@@ -423,7 +437,8 @@ test.each([
       ) as PartialEtymology
       const visible = toPartialResult(result.word, sections, language)
       expect(visible.pronunciation).toBe('/x/')
-      expect(visible.definition).toBe(language === 'en' ? 'primary' : 'primaire')
+      expect(visible.transliteration).toBe('source reading')
+      expect(visible.definition).toBe('primary')
       expect(visible.ancestryGraph.branches).toEqual([])
       expect(emissions.filter(({ section }) => section === 'histories')).toHaveLength(0)
       expect(emissions.every((emission) => !emission.completed)).toBe(true)
@@ -432,7 +447,13 @@ test.each([
       expect(finalized.result.histories).toHaveLength(2)
       expect(emissions.filter(({ section }) => section === 'histories')).toHaveLength(1)
       expect(finalized.usage).toEqual({ inputTokens: 10, outputTokens: 20, costUSD: 0.001 })
-      for (const name of ['pronunciation', 'definition', 'ancestryGraph', 'lore']) {
+      for (const name of [
+        'pronunciation',
+        'transliteration',
+        'definition',
+        'ancestryGraph',
+        'lore',
+      ]) {
         const emitted = emissions.filter(({ section }) => section === name)
         expect(emitted).toHaveLength(1)
         expect(emitted[0].data).toEqual(
@@ -449,14 +470,16 @@ test.each([
   }
 )
 
-test.each(['scope', 'bilingual', 'sibling'] as const)(
+test.each(['scope', 'translation', 'sibling'] as const)(
   'an invalid %s value prevents a complete history collection and retains billed usage',
   async (fault) => {
     const fixture = scopedFixture()
     const context = structuredClone(fixture.context)
     const output = structuredClone(fixture.result)
     if (fault === 'scope') output.histories[0].evidenceScopeIds = ['someone-elses-scope']
-    else if (fault === 'bilingual') output.histories[0].lore.local = ''
+    // A French example sentence without its English gloss.
+    else if (fault === 'translation')
+      output.histories[0].examples = [{ text: 'Un café.' }, { text: 'Deux cafés.' }]
     else {
       const sibling = {
         ...structuredClone(output.histories[0]),

@@ -1,6 +1,8 @@
 import type { Root } from '@/lib/types'
+import { languageFromName } from '@/lib/languages'
 import { WordLink } from '../WordLink'
 import { Section } from './Section'
+import { FormText } from './StoryText'
 
 /** Forms tagged with a language, written in another script, or reconstructed are cognates. */
 function isCognate(word: string): boolean {
@@ -9,17 +11,16 @@ function isCognate(word: string): boolean {
 
 interface KinSectionProps {
   roots: Root[]
-  /** Related terms are only language-tagged for English; beta kin stays plain text. */
+  /** Related terms are only language-tagged for English; other languages' kin stays plain text. */
   linkable: boolean
-  title: string
 }
 
-export function KinSection({ roots, linkable, title }: KinSectionProps) {
+export function KinSection({ roots, linkable }: KinSectionProps) {
   const withWords = roots.filter((root) => root.relatedWords.length > 0)
   if (withWords.length === 0) return null
 
   return (
-    <Section id="entry-kin" title={title}>
+    <Section id="entry-kin" title="Words from the same roots">
       <div className="grid gap-10 sm:grid-cols-2">
         {withWords.map((root, index) => {
           const cognates = root.relatedWords.filter(isCognate)
@@ -27,7 +28,9 @@ export function KinSection({ roots, linkable, title }: KinSectionProps) {
           return (
             <div key={`${root.root}-${index}`}>
               <p className="font-serif text-ink">
-                <em>{root.root}</em>{' '}
+                <em>
+                  <FormText text={root.root} language={languageFromName(root.origin)} />
+                </em>{' '}
                 <span className="text-muted">
                   · {root.origin}, &lsquo;{root.meaning}&rsquo;
                 </span>
@@ -58,7 +61,7 @@ function WordList({
       {words.map((word, index) => (
         <span key={`${word}-${index}`}>
           {index > 0 && ', '}
-          {linkable ? <WordLink word={word} /> : <span>{word}</span>}
+          {linkable ? <WordLink word={word} /> : <FormText text={word} />}
         </span>
       ))}
     </p>

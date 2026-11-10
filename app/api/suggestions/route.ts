@@ -7,9 +7,10 @@ import { parseLanguageCode } from '@/lib/languages'
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const query = searchParams.get('q')
-  const language = parseLanguageCode(searchParams.get('language'))
+  const languageParam = searchParams.get('language')
+  const language = languageParam ? parseLanguageCode(languageParam) : undefined
 
-  if (!language) {
+  if (language === null) {
     return NextResponse.json<ApiResponse<null>>(
       { success: false, error: 'Unsupported language' },
       { status: 400 }
@@ -36,7 +37,9 @@ export async function GET(request: NextRequest) {
   }
 
   const cacheHeaders = {
-    'Cache-Control': 'public, max-age=86400', // Cache for 24 hours
+    // Redis caches complete prefix lookups. HTTP caching would also retain
+    // empty or partial suggestions returned during a provider outage.
+    'Cache-Control': 'no-store',
   }
 
   const suggestions = await getWordSuggestions(normalized, language, false, request.signal)

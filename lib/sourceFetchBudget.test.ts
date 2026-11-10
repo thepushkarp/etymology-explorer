@@ -56,3 +56,20 @@ test('records actual HTTP 429 responses without adding retries', async () => {
   expect(budget.rateLimited).toBe(true)
   expect(budget.attempts).toBe(1)
 })
+
+test('phase limits preserve the same counter and tightening cannot reset or increase it', async () => {
+  const budget = new SourceFetchBudget(96)
+  await budget.runLimited(2, async () => {
+    await Promise.all([1, 2].map(async () => budget.run(() => budget.reserve())))
+    expect(budget.exhausted).toBe(true)
+    expect(() => budget.reserve()).toThrow('budget exhausted')
+  })
+  expect(budget.remaining).toBe(94)
+  budget.rateLimited = true
+  budget.tighten(32)
+  expect(budget.attempts).toBe(2)
+  expect(budget.remaining).toBe(30)
+  expect(budget.rateLimited).toBe(true)
+  expect(() => budget.tighten(33)).toThrow()
+  expect(() => budget.tighten(1)).toThrow()
+})

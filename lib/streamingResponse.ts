@@ -1,4 +1,4 @@
-import type { EtymologyResult, StreamEvent } from '@/lib/types'
+import type { WordEntry, ScriptTarget, StreamEvent } from '@/lib/types'
 
 const STREAM_HEADERS = {
   'Content-Type': 'text/event-stream',
@@ -27,7 +27,7 @@ function serializeEvent(event: StreamEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`
 }
 
-export function streamResultResponse(result: EtymologyResult, headers?: HeadersInit): Response {
+export function streamResultResponse(result: WordEntry, headers?: HeadersInit): Response {
   return new Response(serializeEvent({ type: 'result', data: result }), {
     status: 200,
     headers: buildHeaders(headers),
@@ -38,10 +38,17 @@ export function streamErrorResponse(
   message: string,
   errorType: StreamErrorEvent['errorType'] = 'unknown',
   headers?: HeadersInit,
-  suggestions?: string[]
+  suggestions?: string[],
+  otherScripts?: ScriptTarget[]
 ): Response {
   return new Response(
-    serializeEvent({ type: 'error', message, errorType, ...(suggestions ? { suggestions } : {}) }),
+    serializeEvent({
+      type: 'error',
+      message,
+      errorType,
+      ...(suggestions ? { suggestions } : {}),
+      ...(otherScripts ? { otherScripts } : {}),
+    }),
     {
       status: 200,
       headers: buildHeaders(headers),

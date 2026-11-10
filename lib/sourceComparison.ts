@@ -3,7 +3,9 @@ import { sourceEvidenceRole } from './researchSources'
 import type { SourceRecord } from './types'
 
 function isEtymologyHeading(heading: string): boolean {
-  return Object.values(LANGUAGES).some((language) => language.etymologyHeading.test(heading))
+  return Object.values(LANGUAGES).some((language) =>
+    language.nativeWiktionary?.etymologyHeading.test(heading)
+  )
 }
 
 /**

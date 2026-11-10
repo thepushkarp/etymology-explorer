@@ -11,6 +11,14 @@ export interface ChangelogRelease {
   groups: ChangelogGroup[]
 }
 
+export interface ChangelogUnreleased {
+  version: 'Unreleased'
+  date: null
+  groups: ChangelogGroup[]
+}
+
+export type ChangelogEntry = ChangelogRelease | ChangelogUnreleased
+
 const SECTION_PREFIX = '## '
 const UNRELEASED_HEADING = '## [Unreleased]'
 const RELEASE_HEADING = /^## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})$/
@@ -21,21 +29,24 @@ export function releaseUrl(version: string): string {
   return `${RELEASES_URL}/tag/v${version}`
 }
 
-function assertComplete(release: ChangelogRelease | null): void {
-  if (!release) return
+function assertComplete(release: ChangelogEntry | null): void {
+  if (!release || (release.date === null && release.groups.length === 0)) return
   if (release.groups.length === 0 || release.groups.some((group) => group.items.length === 0)) {
     throw new Error(`Changelog release ${release.version} has an empty section`)
   }
 }
 
 /**
- * Parse CHANGELOG.md into released versions, newest first as written. Throws on
+ * Parse CHANGELOG.md into released versions, opting into Unreleased for beta builds. Throws on
  * any line it cannot place: the dialog renders entries as plain text, so markup
  * this parser does not understand would otherwise disappear from the site.
  */
-export function parseChangelog(markdown: string): ChangelogRelease[] {
-  const releases: ChangelogRelease[] = []
-  let release: ChangelogRelease | null = null
+export function parseChangelog(
+  markdown: string,
+  { includeUnreleased = false }: { includeUnreleased?: boolean } = {}
+): ChangelogEntry[] {
+  const releases: ChangelogEntry[] = []
+  let release: ChangelogEntry | null = null
   let group: ChangelogGroup | null = null
 
   for (const [index, rawLine] of markdown.split('\n').entries()) {
@@ -45,7 +56,13 @@ export function parseChangelog(markdown: string): ChangelogRelease[] {
       assertComplete(release)
       release = null
       group = null
-      if (line === UNRELEASED_HEADING) continue
+      if (line === UNRELEASED_HEADING) {
+        if (includeUnreleased) {
+          release = { version: 'Unreleased', date: null, groups: [] }
+          releases.unshift(release)
+        }
+        continue
+      }
 
       const heading = RELEASE_HEADING.exec(line)
       if (!heading) {
@@ -56,7 +73,7 @@ export function parseChangelog(markdown: string): ChangelogRelease[] {
       continue
     }
 
-    // The preamble and Unreleased are free-form; only release sections are structured.
+    // The preamble and excluded Unreleased section do not appear in the dialog.
     if (!release || line === '') continue
 
     const groupHeading = GROUP_HEADING.exec(line)
@@ -74,5 +91,5 @@ export function parseChangelog(markdown: string): ChangelogRelease[] {
   }
 
   assertComplete(release)
-  return releases
+  return releases.filter((entry) => entry.date !== null || entry.groups.length > 0)
 }

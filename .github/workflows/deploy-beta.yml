@@ -1,0 +1,71 @@
+name: Deploy Beta
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: beta-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy main to beta
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Mirror main and deploy beta
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          source_sha="$(git rev-parse HEAD)"
+          latest_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$source_sha" != "$latest_sha" ]; then
+            echo "Skipping superseded main commit $source_sha"
+            exit 0
+          fi
+
+          git push origin "$source_sha:refs/heads/beta"
+
+          deployment_json="$(bunx vercel@59.16.0 deploy --target preview --yes --json \
+            --build-env APP_CHANNEL=beta \
+            --meta githubDeployment=1 --meta githubCommitRef=main \
+            --meta "githubCommitSha=$source_sha" --token="$VERCEL_TOKEN")"
+          if ! deployment_url="$(jq -er '
+            (.deployment // .)
+            | select(.readyState == "READY" and .target != "production")
+            | .url
+            | select(type == "string" and test("^https://[a-zA-Z0-9-]+\\.vercel\\.app$"))
+          ' <<< "$deployment_json")"; then
+            echo "::error::Vercel did not return a ready preview deployment URL"
+            exit 1
+          fi
+
+          latest_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$source_sha" != "$latest_sha" ]; then
+            echo "Skipping beta alias for superseded main commit $source_sha"
+            exit 0
+          fi
+
+          bunx vercel@59.16.0 alias set "$deployment_url" beta.etymex.com \
+            --scope="$VERCEL_ORG_ID" --token="$VERCEL_TOKEN"
+          echo "Beta deployment for main commit $source_sha: $deployment_url" >> "$GITHUB_STEP_SUMMARY"
