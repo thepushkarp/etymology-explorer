@@ -163,18 +163,8 @@
         "word": "nice"
       },
       {
-        "name": "freeDictionary",
-        "url": "https://api.dictionaryapi.dev/api/v2/entries/en/nice",
-        "word": "nice"
-      },
-      {
         "name": "wikipedia",
         "url": "https://en.wikipedia.org/wiki/Nice",
-        "word": "nice"
-      },
-      {
-        "name": "urbanDictionary",
-        "url": "https://www.urbandictionary.com/define.php?term=nice",
         "word": "nice"
       },
       {
@@ -351,18 +341,8 @@
         "word": "nice"
       },
       {
-        "name": "freeDictionary",
-        "url": "https://api.dictionaryapi.dev/api/v2/entries/en/nice",
-        "word": "nice"
-      },
-      {
         "name": "wikipedia",
         "url": "https://en.wikipedia.org/wiki/Nice",
-        "word": "nice"
-      },
-      {
-        "name": "urbanDictionary",
-        "url": "https://www.urbandictionary.com/define.php?term=nice",
         "word": "nice"
       },
       {

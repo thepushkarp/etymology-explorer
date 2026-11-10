@@ -3,110 +3,40 @@ import { CONFIG } from './config'
 import { safeError } from './errorUtils'
 import { fetchWithTimeout } from './fetchUtils'
 import { LANGUAGES, type LanguageCode } from './languages'
-import { cacheSource, getCachedSource, type CacheableSource } from './sourceCache'
+import { cacheSource, getCachedSource } from './sourceCache'
 import type { SourceData } from './types'
+import { cleanWiktionaryHtml } from './wiktionaryEntryGroups'
+
 import {
-  cleanWiktionaryHtml,
-  extractWiktionaryEntryGroups,
-  extractWiktionaryLanguageText,
-  extractWiktionaryVariants,
-  type WiktionaryTocSection,
-} from './wiktionaryEntryGroups'
+  fetchSelectedWiktionaryLanguage,
+  fetchWiktionaryPage,
+  extractWiktionaryLanguage,
+  type WiktionaryFetchOptions,
+} from './wiktionary'
 
 /** Languages researched through their own Wiktionary edition and lexical sources. */
 type NonEnglishLanguage = Exclude<LanguageCode, 'en'>
 
-type TocSection = WiktionaryTocSection
-
-interface ParseResponse {
-  parse?: {
-    title?: string
-    redirects?: Array<{ from: string; to: string }>
-    revid?: number
-    text?: string
-    tocdata?: { sections?: TocSection[] }
-  }
-  error?: { info?: string }
-}
-
-async function fetchWiktionaryEdition(
+export async function fetchWiktionaryEdition(
   word: string,
-  language: NonEnglishLanguage,
-  edition: 'en' | NonEnglishLanguage,
-  signal?: AbortSignal
+  language: LanguageCode,
+  edition: string,
+  signal?: AbortSignal,
+  options?: WiktionaryFetchOptions
 ): Promise<SourceData | null> {
   const config = LANGUAGES[language]
-  const source: CacheableSource = edition === 'en' ? 'wiktionaryEnglish' : 'wiktionaryNative'
-  const cached = await getCachedSource(source, word, undefined, language)
+  if (edition === 'en')
+    return fetchSelectedWiktionaryLanguage(word, config.englishWiktionaryHeading, signal, options)
+  if (!config.nativeWiktionary || config.nativeWiktionary.edition !== edition) return null
+  const cached = await getCachedSource('wiktionaryNative', word, undefined, language)
   if (cached) return cached
-
-  const url = new URL(`https://${edition}.wiktionary.org/w/api.php`)
-  url.searchParams.set('action', 'parse')
-  url.searchParams.set('page', word)
-  url.searchParams.set('prop', 'text|tocdata|revid')
-  url.searchParams.set('format', 'json')
-  url.searchParams.set('formatversion', '2')
-  url.searchParams.set('origin', '*')
-  url.searchParams.set('redirects', 'true')
-
   try {
-    const response = await fetchWithTimeout(
-      url,
-      { headers: { 'User-Agent': 'EtymologyExplorer/1.0 (educational project)' } },
-      CONFIG.timeouts.source,
-      signal
-    )
-    if (!response.ok) return null
-    const data = (await response.json()) as ParseResponse
-    const html = data.parse?.text
-    const sections = data.parse?.tocdata?.sections
-    if (!html || !sections) return null
-    if (
-      data.parse?.title &&
-      canonicalizeWord(data.parse.title) !== canonicalizeWord(word) &&
-      !data.parse.redirects?.some(
-        (redirect) =>
-          canonicalizeWord(redirect.from) === canonicalizeWord(word) &&
-          canonicalizeWord(redirect.to) === canonicalizeWord(data.parse!.title!)
-      )
-    )
-      return null
-
-    const languageHeading =
-      edition === 'en' ? config.englishWiktionaryHeading : config.nativeWiktionaryHeading
-    const entryGroups = extractWiktionaryEntryGroups(
-      html,
-      sections,
-      languageHeading,
-      edition === 'en' ? LANGUAGES.en.etymologyHeading : config.etymologyHeading
-    )
-    const text = extractWiktionaryLanguageText(html, sections, languageHeading)
-    if (!text) return null
-
-    const result = {
-      text,
-      url: `https://${edition}.wiktionary.org/wiki/${encodeURIComponent(data.parse?.title ?? word)}`,
-      entryGroups,
-      requestedWord: word,
-      resolvedWord: data.parse?.title ?? word,
-      language,
-      revisionId: data.parse?.revid,
-      variants: [
-        ...extractWiktionaryVariants(html, sections, languageHeading, edition),
-        ...(data.parse?.title && canonicalizeWord(data.parse.title) !== canonicalizeWord(word)
-          ? [
-              {
-                word: data.parse.title,
-                relationship: 'redirect' as const,
-                url: `https://${edition}.wiktionary.org/wiki/${encodeURIComponent(data.parse.title)}`,
-              },
-            ]
-          : []),
-      ],
-    }
-    void cacheSource(source, word, result, undefined, language)
+    const page = await fetchWiktionaryPage(word, edition, signal, options)
+    const result = page && extractWiktionaryLanguage(page, config.nativeWiktionary.heading, edition)
+    if (result) await cacheSource('wiktionaryNative', word, result, undefined, language)
     return result
   } catch (error) {
+    signal?.throwIfAborted()
     console.error(`[Research] ${edition}.wiktionary fetch failed:`, safeError(error))
     return null
   }
@@ -115,17 +45,22 @@ async function fetchWiktionaryEdition(
 export function fetchEnglishWiktionaryLanguage(
   word: string,
   language: NonEnglishLanguage,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: WiktionaryFetchOptions
 ): Promise<SourceData | null> {
-  return fetchWiktionaryEdition(word, language, 'en', signal)
+  return fetchWiktionaryEdition(word, language, 'en', signal, options)
 }
 
 export function fetchNativeWiktionary(
   word: string,
   language: NonEnglishLanguage,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: WiktionaryFetchOptions
 ): Promise<SourceData | null> {
-  return fetchWiktionaryEdition(word, language, language, signal)
+  const edition = LANGUAGES[language].nativeWiktionary?.edition
+  return edition
+    ? fetchWiktionaryEdition(word, language, edition, signal, options)
+    : Promise.resolve(null)
 }
 
 export async function fetchFreeDictionaryApi(
@@ -169,13 +104,6 @@ export async function fetchFreeDictionaryApi(
     console.error('[Research] FreeDictionaryAPI fetch failed:', safeError(error))
     return null
   }
-}
-
-const WIKIDATA_LANGUAGE_ENTITY: Record<NonEnglishLanguage, string> = {
-  it: 'Q652',
-  es: 'Q1321',
-  fr: 'Q150',
-  pt: 'Q5146',
 }
 
 interface WikidataMonolingualText {
@@ -238,7 +166,7 @@ function isMatchingLexeme(
   if (
     typeof entity.id !== 'string' ||
     entity.type !== 'lexeme' ||
-    entity.language !== WIKIDATA_LANGUAGE_ENTITY[language]
+    entity.language !== LANGUAGES[language].wikidataEntity
   ) {
     return false
   }
@@ -259,6 +187,7 @@ export async function fetchWikidataLexeme(
   language: NonEnglishLanguage,
   signal?: AbortSignal
 ): Promise<SourceData | null> {
+  if (!LANGUAGES[language].wikidataEntity) return null
   const cached = await getCachedSource('wikidataLexeme', word, undefined, language)
   if (cached) return cached
   const search = new URL('https://www.wikidata.org/w/api.php')

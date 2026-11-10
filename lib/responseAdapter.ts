@@ -11,7 +11,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import type { ApiResponse, EtymologyResult, StreamEvent } from '@/lib/types'
+import type { ApiResponse, WordEntry, StreamEvent } from '@/lib/types'
 import { streamErrorResponse, streamResultResponse } from '@/lib/streamingResponse'
 
 type StreamErrorType = Extract<StreamEvent, { type: 'error' }>['errorType']
@@ -43,7 +43,7 @@ export interface AdapterResultOptions {
 
 export interface ResponseAdapter {
   error(message: string, options: AdapterErrorOptions): Response
-  result(result: EtymologyResult, options: AdapterResultOptions): Response
+  result(result: WordEntry, options: AdapterResultOptions): Response
 }
 
 export function createResponseAdapter(stream: boolean): ResponseAdapter {
@@ -73,9 +73,15 @@ export function createResponseAdapter(stream: boolean): ResponseAdapter {
       if (stream) {
         return streamResultResponse(result, headers)
       }
-      return NextResponse.json<ApiResponse<EtymologyResult> & { cached: boolean }>(
+      return NextResponse.json<ApiResponse<WordEntry> & { cached: boolean }>(
         { success: true, data: result, cached },
-        { headers: { ...UNARY_RESULT_HEADERS, ...headers } }
+        {
+          headers: {
+            ...UNARY_RESULT_HEADERS,
+            ...(result.incomplete ? { 'Cache-Control': 'no-store' } : {}),
+            ...headers,
+          },
+        }
       )
     },
   }

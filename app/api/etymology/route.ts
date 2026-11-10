@@ -1,12 +1,13 @@
 import { after, NextRequest } from 'next/server'
-import { EtymologyResult, StreamEvent, StageConfidence, ResearchContext } from '@/lib/types'
-import { synthesizeFromResearch, getLlmUsageFromError, SynthesisResult } from '@/lib/llm'
+import type { EtymologyResult, StreamEvent, WordEntry } from '@/lib/types'
+import { synthesizeFromResearch, getLlmUsageFromError } from '@/lib/llm'
 import { conductAgenticResearch, hasCredibleMainSource } from '@/lib/research'
-import { getWordSuggestions } from '@/lib/wordSuggestions'
+import { createLexemeResearchSession } from '@/lib/lexemeResearch'
+import { resolveEntryLanguages } from '@/lib/entryLanguages'
+import { SourceFetchBudget } from '@/lib/sourceFetchBudget'
 import { getSuggestions } from '@/lib/spellcheck'
-import { getRandomWord } from '@/lib/wordlist'
 import { getQuirkyMessage } from '@/lib/prompts'
-import { getCachedEtymology, cacheEtymology, getNegativeCache, cacheNegative } from '@/lib/cache'
+import { getCachedEntry, cacheEntry, getNegativeCache, cacheNegative } from '@/lib/cache'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { getCostMode, recordSpend } from '@/lib/costGuard'
 import {
@@ -15,7 +16,6 @@ import {
   startLockHeartbeat,
   markLockFailure,
   attemptPromotion,
-  pollForResult,
 } from '@/lib/singleflight'
 import { incrCounter, incrLanguageCounter } from '@/lib/counters'
 import { safeError } from '@/lib/errorUtils'
@@ -24,120 +24,90 @@ import { CONFIG } from '@/lib/config'
 import { emitSecurityEvent } from '@/lib/telemetry'
 import { createResponseAdapter } from '@/lib/responseAdapter'
 import { classifyApiError } from '@/lib/apiError'
-import { LANGUAGES, lexemeKey, parseLanguageCode } from '@/lib/languages'
+import { LANGUAGES, parseLanguageCode, type LanguageCode } from '@/lib/languages'
 
-// Uncached searches run a multi-phase research + synthesis pipeline that can
-// take minutes; without this the function dies at the platform default.
 export const maxDuration = 300
-
-const REDIS_DOWN_MESSAGE =
-  'New word lookups are temporarily unavailable — our cache service is unreachable. ' +
-  'Please try again in a few minutes.'
 const IN_PROGRESS_MESSAGE = 'Request in progress, please retry in a few seconds.'
-
-function countConfidence(result: EtymologyResult, level: StageConfidence): number {
-  let count = 0
-  for (const branch of result.ancestryGraph.branches) {
-    for (const stage of branch.stages) if (stage.confidence === level) count += 1
-  }
-  for (const stage of result.ancestryGraph.postMerge ?? []) {
-    if (stage.confidence === level) count += 1
-  }
-  return count
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-type ResearchOutcome =
-  | { kind: 'ok'; researchContext: ResearchContext }
-  | { kind: 'no_sources'; typoSuggestions?: string[] }
-
-type PipelineOutcome =
-  { kind: 'result'; result: EtymologyResult } | { kind: 'no_sources'; typoSuggestions?: string[] }
-
-type WaiterOutcome =
-  | PipelineOutcome
-  | { kind: 'negative_cached' }
+type Outcome =
+  | { kind: 'result'; result: WordEntry }
+  | { kind: 'no_sources' }
   | { kind: 'holder_failed'; message: string }
   | { kind: 'timeout' }
 
+/** Interrupt waiter sleeps immediately when their client disconnects. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted()
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer)
+      reject(signal.reason)
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', abort)
+      resolve()
+    }, ms)
+    signal.addEventListener('abort', abort, { once: true })
+  })
+}
+
 export async function GET(request: NextRequest) {
-  let shouldStream = false
-
+  const shouldStream = request.nextUrl.searchParams.get('stream') === 'true'
+  const respond = createResponseAdapter(shouldStream)
   try {
-    shouldStream = request.nextUrl.searchParams.get('stream') === 'true'
-    const respond = createResponseAdapter(shouldStream)
-
     try {
       getEnv()
     } catch {
       return respond.error('Service configuration error', { status: 503 })
     }
-
     if (!CONFIG.features.publicSearchEnabled || CONFIG.features.forceCacheOnly) {
       return respond.error('Service temporarily unavailable', { status: 503 })
     }
-
     const word = request.nextUrl.searchParams.get('word')
-    const language = parseLanguageCode(request.nextUrl.searchParams.get('language'))
-
-    if (!language) {
-      return respond.error('Unsupported language', { status: 400 })
-    }
-    // Best-effort counters never delay the response.
-    after(() => incrLanguageCounter(language, 'request'))
-
-    if (!word || typeof word !== 'string') {
-      return respond.error('Word is required', { status: 400 })
-    }
-
+    const rawHint = request.nextUrl.searchParams.get('language')
+    const hint = rawHint === null ? undefined : parseLanguageCode(rawHint)
+    if (hint === null) return respond.error('Unsupported language', { status: 400 })
+    if (!word) return respond.error('Word is required', { status: 400 })
     const normalizedWord = canonicalizeWord(word)
-
-    if (!normalizedWord) {
-      return respond.error(getQuirkyMessage('empty'), { status: 400 })
-    }
-
+    if (!normalizedWord) return respond.error(getQuirkyMessage('empty'), { status: 400 })
     if (!isValidWord(normalizedWord)) {
       return respond.error(getQuirkyMessage('nonsense'), { status: 400, errorType: 'nonsense' })
     }
-
-    // Honor stream=true even for cached results so EventSource never receives JSON.
-    // The hit path is a single Redis read; everything else waits for a miss.
-    const cached = await getCachedEtymology(normalizedWord, language)
-    if (cached) {
-      console.log(`[Etymology API] Cache hit for "${normalizedWord}"`)
-      emitSecurityEvent({
-        type: 'cache_hit',
-        timestamp: Date.now(),
-        detail: { word: normalizedWord, language },
-      })
-      after(() =>
-        Promise.all([incrCounter('cache_hit'), incrLanguageCounter(language, 'cache_hit')])
-      )
-      return respond.result(cached, { cached: true })
-    }
-
-    // Negative cache (skip source fetches for known gibberish) and budget, fetched in parallel
-    const [isNegCached, costMode] = await Promise.all([
-      getNegativeCache(normalizedWord, language),
-      getCostMode(),
-    ])
-    if (isNegCached) {
-      console.log(`[Etymology API] Negative cache hit for "${normalizedWord}"`)
-      const suggestions = language === 'en' ? getSuggestions(normalizedWord).map((s) => s.word) : []
+    if (hint) after(() => incrLanguageCounter(hint, 'request'))
+    const noSources = () => {
+      const suggestions = !hint || hint === 'en' ? getSuggestions(normalizedWord) : []
       return respond.error(
-        `No supported ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
+        hint
+          ? `No supported ${LANGUAGES[hint].englishName} entry was found for “${normalizedWord}”.`
+          : `No supported entry was found for “${normalizedWord}”.`,
         {
           status: 404,
           errorType: suggestions.length ? 'typo' : 'nonsense',
-          suggestions,
+          suggestions: suggestions.map((suggestion) => suggestion.word),
         }
       )
     }
-
-    // Reject uncached requests when monthly budget is exhausted
+    const cached = await getCachedEntry(normalizedWord)
+    const oldEntry = cached?.entry
+    const refresh = request.nextUrl.searchParams.get('refresh') === '1' && cached?.stale === true
+    const missingHint = !!hint && !oldEntry?.entries[hint]
+    if (oldEntry && !refresh) {
+      if (!missingHint) {
+        emitSecurityEvent({
+          type: 'cache_hit',
+          timestamp: Date.now(),
+          detail: { word: normalizedWord, language: hint },
+        })
+        after(() => incrCounter('cache_hit'))
+        return respond.result(oldEntry, { cached: true })
+      }
+      if (hint && oldEntry.attemptedLanguages?.includes(hint)) return noSources()
+    }
+    // Automatic absence cannot exclude a specialist-only explicitly hinted entry.
+    const [negative, costMode] = await Promise.all([
+      getNegativeCache(normalizedWord, hint),
+      getCostMode(),
+    ])
+    if (negative && !refresh) return noSources()
     if (costMode === 'cache_only') {
       emitSecurityEvent({
         type: 'budget_check',
@@ -149,183 +119,220 @@ export async function GET(request: NextRequest) {
         { status: 503, errorType: 'budget', headers: { 'X-Protection-Mode': costMode } }
       )
     }
-
-    // Singleflight: prevent duplicate LLM calls for the same word
-    const lockKey = `lock:etymology:${lexemeKey(language, normalizedWord)}`
+    const lockKey = `lock:etymology:${normalizedWord}`
     const acquisition = await tryAcquireLock(lockKey)
-
-    // Fail closed: an uncached synthesis without Redis would run with no
-    // budget enforcement, no dedup, and no caching — reject it instead.
-    // Cached lookups can't exist without Redis, so only uncached paths hit this.
     if (acquisition.status === 'unavailable' || acquisition.status === 'error') {
-      console.error(
-        `[Etymology API] Redis ${acquisition.status} — failing closed for uncached search`
+      return respond.error(
+        'New word lookups are temporarily unavailable — our cache service is unreachable. Please try again in a few minutes.',
+        { status: 503, errorType: 'network', unaryHeaders: { 'Retry-After': '60' } }
       )
-      return respond.error(REDIS_DOWN_MESSAGE, {
-        status: 503,
-        errorType: 'network',
-        unaryHeaders: { 'Retry-After': '60' },
-      })
     }
 
-    const runResearch = async (
-      onProgress?: (event: StreamEvent) => void
-    ): Promise<ResearchOutcome> => {
-      // request.signal aborts in-flight source fetches and LLM calls when the
-      // client disconnects, so abandoned searches stop spending immediately.
-      const researchContext = await conductAgenticResearch(
-        normalizedWord,
-        { signal: request.signal, language },
-        onProgress
-      )
-
-      if (!hasCredibleMainSource(researchContext)) {
-        // Awaited so the entry lands BEFORE the lock releases — waiters
-        // poll the negative cache to learn this word has no sources.
-        await cacheNegative(normalizedWord, 'no_sources', language)
-        await incrLanguageCounter(language, 'no_source')
-
-        const suggestions = await getWordSuggestions(normalizedWord, language, true, request.signal)
-        return {
-          kind: 'no_sources',
-          typoSuggestions: suggestions.map((s) => s.word),
-        }
-      }
-
-      console.log(
-        `[Etymology API] Research complete. Fetched ${researchContext.totalSourcesFetched} sources, ` +
-          `identified ${researchContext.identifiedRoots.length} roots`
-      )
-      return { kind: 'ok', researchContext }
-    }
-
-    /**
-     * Full holder pipeline: heartbeat the lock while working, record spend
-     * (awaited) for both the root-extraction and synthesis calls, and write
-     * the result to cache BEFORE the lock is released in `finally` so
-     * waiters polling the cache always find it. On error, a short-TTL
-     * failure marker is written (also before release) so waiters surface
-     * the failure instead of promoting and re-spending.
-     */
-    const runHolderPipeline = async (
-      lockToken: string,
+    const runHolder = async (
+      token: string,
       emit?: (event: StreamEvent) => void
-    ): Promise<PipelineOutcome> => {
-      const stopHeartbeat = startLockHeartbeat(lockKey, lockToken)
+    ): Promise<Outcome> => {
+      const stopHeartbeat = startLockHeartbeat(lockKey, token)
       try {
-        const research = await runResearch(emit)
-        if (research.kind === 'no_sources') {
-          return research
+        request.signal.throwIfAborted()
+        // Merge the latest durable generation after acquiring the word lock.
+        const latest = (await getCachedEntry(normalizedWord))?.entry ?? oldEntry
+        if (
+          latest &&
+          (!hint || latest.entries[hint]) &&
+          (!refresh || latest.tracedAt !== oldEntry?.tracedAt)
+        ) {
+          return { kind: 'result', result: latest }
         }
-        const researchContext = research.researchContext
-
-        if (researchContext.llmUsage) {
-          await recordSpend(researchContext.llmUsage)
+        if (hint && !refresh && latest?.attemptedLanguages?.includes(hint)) {
+          return { kind: 'no_sources' }
         }
-
-        let synthesis: SynthesisResult
-        if (emit) {
-          emit({ type: 'synthesis_started' })
-          synthesis = await synthesizeFromResearch(researchContext, {
-            signal: request.signal,
-            onSection: (section, data) => {
-              emit({ type: 'synthesis_section', section, data })
-            },
-          })
-        } else {
-          synthesis = await synthesizeFromResearch(researchContext, { signal: request.signal })
-        }
-
-        await recordSpend(synthesis.usage)
-
-        await cacheEtymology(normalizedWord, synthesis.result, language, {
-          incomplete: researchContext.incompleteResearch,
+        const budget = new SourceFetchBudget(CONFIG.maxEntryFetches)
+        const session = createLexemeResearchSession({
+          signal: request.signal,
+          budget,
+          onProgress: emit,
         })
+        const resolved = await resolveEntryLanguages(normalizedWord, session, hint)
+        const languages = latest && missingHint && !refresh && hint ? [hint] : resolved.languages
+        // Resolution shares the ceiling: 32 attempts plus 16 per extra language.
+        budget.tighten(
+          Math.min(
+            CONFIG.maxEntryFetches,
+            CONFIG.maxTotalFetches +
+              CONFIG.maxFetchesPerExtraLanguage * Math.max(0, languages.length - 1)
+          )
+        )
+        emit?.({
+          type: 'languages_resolved',
+          languages: [...new Set([...(latest?.languages ?? []), ...languages])].sort(
+            (a, b) => LANGUAGES[a].priority - LANGUAGES[b].priority
+          ),
+          otherLanguages: resolved.otherLanguages,
+        })
+        // Prime all selected primaries before ancestor expansion can consume
+        // budget or memoise another selected language as a reduced lookup.
+        await session.lookupMany(
+          languages.map((language) => ({ word: normalizedWord, language })),
+          { primary: true, skipOptionalSources: false }
+        )
+        const attempted = new Set(latest?.attemptedLanguages ?? latest?.languages ?? [])
+        const incompleteLanguages = new Set<LanguageCode>()
+        const outcomes = await Promise.allSettled(
+          languages.map(async (language): Promise<EtymologyResult | null> => {
+            const progress = emit ? (event: StreamEvent) => emit({ ...event, language }) : undefined
+            let research
+            try {
+              research = await conductAgenticResearch(
+                normalizedWord,
+                { signal: request.signal, language, session, budget },
+                progress
+              )
+            } catch (error) {
+              const usage = getLlmUsageFromError(error)
+              if (usage) await recordSpend(usage)
+              throw error
+            }
+            // Root extraction can spend before the whole-word admission check.
+            if (research.llmUsage) await recordSpend(research.llmUsage)
+            if (research.incompleteResearch) incompleteLanguages.add(language)
+            if (!hasCredibleMainSource(research)) {
+              if (research.incompleteResearch)
+                throw new Error(`Source research incomplete for ${language}`)
+              attempted.add(language)
+              await incrLanguageCounter(language, 'no_source')
+              return null
+            }
+            progress?.({ type: 'synthesis_started' })
+            try {
+              const synthesis = await synthesizeFromResearch(research, {
+                signal: request.signal,
+                ...(progress
+                  ? {
+                      onSection: (section: string, data: unknown) =>
+                        progress({ type: 'synthesis_section', section, data }),
+                    }
+                  : {}),
+              })
+              await recordSpend(synthesis.usage)
+              attempted.add(language)
+              return synthesis.result
+            } catch (error) {
+              const usage = getLlmUsageFromError(error)
+              if (usage) await recordSpend(usage)
+              if (safeError(error).toLowerCase().includes('schema validation')) {
+                await incrLanguageCounter(language, 'schema_failure')
+              }
+              throw error
+            }
+          })
+        )
+        request.signal.throwIfAborted()
+        const entries = { ...latest?.entries }
+        const successfulLanguages = new Set<LanguageCode>()
+        const failures: unknown[] = []
+        outcomes.forEach((outcome, index) => {
+          const language = languages[index]
+          if (outcome.status === 'fulfilled') {
+            if (outcome.value) {
+              entries[language] = outcome.value
+              successfulLanguages.add(language)
+            }
+          } else {
+            failures.push(outcome.reason)
+            emit?.({
+              type: 'language_failed',
+              language,
+              message: classifyApiError(outcome.reason).message,
+            })
+          }
+        })
+        if (!successfulLanguages.size && failures.length) throw failures[0]
+        if (!successfulLanguages.size && resolved.incomplete)
+          throw new Error('Language resolution incomplete; source availability is unknown')
+        if (!successfulLanguages.size && !latest) {
+          await cacheNegative(normalizedWord, 'no_sources', hint)
+          return { kind: 'no_sources' }
+        }
+        if (!successfulLanguages.size && refresh)
+          throw new Error('Retrace found no supported sources; the saved entry remains available')
+        const retained = latest?.languages.some((language) => !successfulLanguages.has(language))
+        const incomplete =
+          !!resolved.incomplete ||
+          failures.length > 0 ||
+          incompleteLanguages.size > 0 ||
+          !!(retained && latest?.incomplete)
+        const result: WordEntry = {
+          word: normalizedWord,
+          languages: (Object.keys(entries) as LanguageCode[]).sort(
+            (a, b) => LANGUAGES[a].priority - LANGUAGES[b].priority
+          ),
+          entries,
+          otherLanguages: [
+            ...new Set([...(latest?.otherLanguages ?? []), ...resolved.otherLanguages]),
+          ],
+          tracedAt: new Date(
+            Math.max(Date.now(), (Date.parse(latest?.tracedAt ?? '') || 0) + 1)
+          ).toISOString(),
+          ...(retained && latest ? { freshnessAt: latest.freshnessAt ?? latest.tracedAt } : {}),
+          revision:
+            retained && latest
+              ? Math.min(latest.revision, CONFIG.pipelineRevision)
+              : CONFIG.pipelineRevision,
+          attemptedLanguages: [...attempted],
+          ...(incomplete ? { incomplete: true } : {}),
+        }
+        await cacheEntry(normalizedWord, result, { incomplete })
         emitSecurityEvent({
           type: 'cache_miss',
           timestamp: Date.now(),
-          detail: { word: normalizedWord, language, sources: researchContext.totalSourcesFetched },
+          detail: {
+            word: normalizedWord,
+            languages: result.languages,
+            sourceAttempts: budget.attempts,
+          },
         })
         await incrCounter('cache_miss')
-
-        return { kind: 'result', result: synthesis.result }
+        if (hint && !result.entries[hint]) {
+          if (!attempted.has(hint)) {
+            throw new Error(`Source research incomplete for ${hint}`)
+          }
+          await cacheNegative(normalizedWord, 'no_sources', hint)
+          return { kind: 'no_sources' }
+        }
+        return { kind: 'result', result }
       } catch (error) {
-        // A synthesis attempt that failed AFTER the model ran (malformed
-        // output, schema validation) still billed us — count it toward
-        // the budget before surfacing the failure. recordSpend never throws.
-        const failedCallUsage = getLlmUsageFromError(error)
-        if (failedCallUsage) {
-          await recordSpend(failedCallUsage)
-        }
-        if (safeError(error).toLowerCase().includes('schema validation')) {
-          await incrLanguageCounter(language, 'schema_failure')
-        }
-
-        // Distinguish "holder failed" from "holder crashed" for waiters:
-        // written before the lock release below, checked before promotion.
-        // A client disconnect is neither — skip the marker so a waiting
-        // request can promote itself and finish the work.
-        if (!request.signal.aborted) {
-          await markLockFailure(lockKey, classifyApiError(error).message)
-        }
+        if (!request.signal.aborted) await markLockFailure(lockKey, classifyApiError(error).message)
         throw error
       } finally {
         stopHeartbeat()
-        await releaseLock(lockKey, lockToken)
+        await releaseLock(lockKey, token)
       }
     }
 
-    /**
-     * Streaming waiter: poll the cache while the holder works, emitting
-     * keepalive events so the SSE connection stays warm. Promotion only
-     * happens on a true holder crash — a lock that vanished with neither a
-     * cached result nor a failure marker. Failed holders (LLM error etc.)
-     * leave a marker, and waiters surface that error without re-running
-     * the pipeline; a promoted waiter that fails writes the marker too,
-     * so later waiters can't cascade into further promotions.
-     */
-    const waitAsStreamingWaiter = async (
-      emit: (event: StreamEvent) => void
-    ): Promise<WaiterOutcome> => {
-      console.log(`[Etymology API] Waiting for in-flight result for "${normalizedWord}" (stream)`)
-      const startedAt = Date.now()
-      const { waiterPollIntervalMs, streamWaiterMaxWaitMs } = CONFIG.singleflight
-
-      while (Date.now() - startedAt < streamWaiterMaxWaitMs) {
-        await sleep(waiterPollIntervalMs)
-
-        // A disconnected client can't receive the result — stop polling
-        // (and never promote) so the function isn't kept alive for up to
-        // 150s; the stream's abort handling closes things out.
-        if (request.signal.aborted) {
-          throw new DOMException('The operation was aborted', 'AbortError')
+    const waitForHolder = async (emit?: (event: StreamEvent) => void): Promise<Outcome> => {
+      const started = Date.now()
+      const maximum = shouldStream
+        ? CONFIG.singleflight.streamWaiterMaxWaitMs
+        : CONFIG.singleflight.unaryWaiterMaxWaitMs
+      while (Date.now() - started < maximum) {
+        await sleep(CONFIG.singleflight.waiterPollIntervalMs, request.signal)
+        const next = await getCachedEntry(normalizedWord)
+        // Refresh waiters must observe a new generation of the durable entry.
+        if (next && next.entry.tracedAt !== oldEntry?.tracedAt) {
+          if (!hint || next.entry.entries[hint]) return { kind: 'result', result: next.entry }
+          if (next.entry.attemptedLanguages?.includes(hint)) return { kind: 'no_sources' }
         }
-
-        const result = await getCachedEtymology(normalizedWord, language)
-        if (result) {
-          return { kind: 'result', result }
-        }
-
-        if (await getNegativeCache(normalizedWord, language)) {
-          return { kind: 'negative_cached' }
-        }
-
+        if (!refresh && (await getNegativeCache(normalizedWord, hint)))
+          return { kind: 'no_sources' }
         const promotion = await attemptPromotion(lockKey)
-        if (promotion.status === 'holder_failed') {
+        if (promotion.status === 'holder_failed')
           return { kind: 'holder_failed', message: promotion.message }
-        }
-        if (promotion.status === 'promoted') {
-          console.log(`[Etymology API] Promoted waiter to holder for "${normalizedWord}"`)
-          return runHolderPipeline(promotion.token, emit)
-        }
-        // 'held': holder still working (or another waiter won) — keep polling.
-
-        emit({ type: 'singleflight_wait', waitedMs: Date.now() - startedAt })
+        if (promotion.status === 'promoted') return runHolder(promotion.token, emit)
+        emit?.({ type: 'singleflight_wait', waitedMs: Date.now() - started })
       }
-
       return { kind: 'timeout' }
     }
-
     if (shouldStream) {
       const stream = new ReadableStream({
         async start(controller) {
@@ -334,75 +341,25 @@ export async function GET(request: NextRequest) {
             try {
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
             } catch {
-              // Client disconnected mid-stream; request.signal stops the pipeline
+              /* request.signal cancels disconnected-client work. */
             }
           }
-
           try {
-            let outcome: WaiterOutcome
-            if (acquisition.status === 'acquired') {
-              console.log(
-                `[Etymology API] Starting agentic research (streaming) for "${normalizedWord}"`
-              )
-              outcome = await runHolderPipeline(acquisition.token, emit)
-            } else {
-              outcome = await waitAsStreamingWaiter(emit)
-            }
-
-            if (outcome.kind === 'result') {
-              emit({
-                type: 'enrichment_done',
-                highConfidence: countConfidence(outcome.result, 'high'),
-                mediumConfidence: countConfidence(outcome.result, 'medium'),
-              })
-              emit({ type: 'result', data: outcome.result })
-            } else if (outcome.kind === 'no_sources') {
-              if (outcome.typoSuggestions && outcome.typoSuggestions.length > 0) {
-                emit({
-                  type: 'error',
-                  message: `Hmm, we couldn't find "${word}".`,
-                  errorType: 'typo',
-                  suggestions: outcome.typoSuggestions,
-                })
-              } else {
-                emit({
-                  type: 'error',
-                  message:
-                    language === 'en'
-                      ? getQuirkyMessage('nonsense')
-                      : `No ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
-                  errorType: 'nonsense',
-                })
-              }
-            } else if (outcome.kind === 'negative_cached') {
-              const suggestions =
-                language === 'en' ? getSuggestions(normalizedWord).map((s) => s.word) : []
+            const outcome =
+              acquisition.status === 'acquired'
+                ? await runHolder(acquisition.token, emit)
+                : await waitForHolder(emit)
+            if (outcome.kind === 'result') emit({ type: 'result', data: outcome.result })
+            else if (outcome.kind === 'no_sources') {
+              controller.enqueue(new Uint8Array(await (await noSources()).arrayBuffer()))
+            } else
               emit({
                 type: 'error',
-                message: `No supported ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
-                errorType: suggestions.length ? 'typo' : 'nonsense',
-                suggestions,
+                message: outcome.kind === 'holder_failed' ? outcome.message : IN_PROGRESS_MESSAGE,
+                errorType: outcome.kind === 'timeout' ? 'rate_limit' : 'unknown',
               })
-            } else if (outcome.kind === 'holder_failed') {
-              emit({
-                type: 'error',
-                message: outcome.message,
-                errorType: 'unknown',
-              })
-            } else {
-              emit({
-                type: 'error',
-                message: IN_PROGRESS_MESSAGE,
-                errorType: 'rate_limit',
-              })
-            }
           } catch (error) {
-            if (request.signal.aborted) {
-              console.log(
-                `[Etymology API] Client disconnected for "${normalizedWord}" — pipeline aborted`
-              )
-            } else {
-              console.error('[Etymology API] Streaming error:', safeError(error))
+            if (!request.signal.aborted) {
               await incrCounter('error')
               const classified = classifyApiError(error)
               emit({
@@ -411,15 +368,15 @@ export async function GET(request: NextRequest) {
                 errorType: classified.streamErrorType,
               })
             }
-          }
-          try {
-            controller.close()
-          } catch {
-            // Already closed by client cancellation
+          } finally {
+            try {
+              controller.close()
+            } catch {
+              /* Cancellation already closed the stream. */
+            }
           }
         },
       })
-
       return new Response(stream, {
         headers: {
           'Content-Type': 'text/event-stream',
@@ -429,61 +386,26 @@ export async function GET(request: NextRequest) {
         },
       })
     }
-
-    // Non-streaming waiter: short poll, then ask the client to retry.
-    if (acquisition.status === 'busy') {
-      console.log(`[Etymology API] Waiting for in-flight result for "${normalizedWord}"`)
-      const result = await pollForResult(() => getCachedEtymology(normalizedWord, language))
-      if (result) {
-        return respond.result(result, { cached: true })
-      }
+    const outcome =
+      acquisition.status === 'acquired' ? await runHolder(acquisition.token) : await waitForHolder()
+    if (outcome.kind === 'no_sources') return noSources()
+    if (outcome.kind === 'holder_failed') return respond.error(outcome.message, { status: 503 })
+    if (outcome.kind === 'timeout')
       return respond.error(IN_PROGRESS_MESSAGE, {
         status: 429,
         errorType: 'rate_limit',
         unaryHeaders: { 'Retry-After': '15' },
       })
-    }
-
-    console.log(`[Etymology API] Starting agentic research for "${normalizedWord}"`)
-    const outcome = await runHolderPipeline(acquisition.token)
-
-    if (outcome.kind === 'no_sources') {
-      if (outcome.typoSuggestions && outcome.typoSuggestions.length > 0) {
-        return respond.error(`Hmm, we couldn't find "${word}". Did you mean:`, {
-          status: 404,
-          errorType: 'typo',
-          suggestions: outcome.typoSuggestions,
-        })
-      }
-      return respond.error(
-        language === 'en'
-          ? getQuirkyMessage('nonsense')
-          : `No ${LANGUAGES[language].englishName} entry was found for “${normalizedWord}”.`,
-        {
-          status: 404,
-          errorType: 'nonsense',
-          ...(language === 'en' ? { unaryData: { suggestion: getRandomWord() } } : {}),
-        }
-      )
-    }
-
     return respond.result(outcome.result, {
       cached: false,
       headers: { 'X-Protection-Mode': costMode },
     })
   } catch (error) {
-    if (request.signal.aborted) {
-      // Client disconnected; the pipeline was aborted intentionally. Nobody
-      // is listening, but return a response to satisfy the route contract.
-      console.log('[Etymology API] Client disconnected — pipeline aborted')
-      return new Response(null, { status: 499 })
-    }
-
+    if (request.signal.aborted) return new Response(null, { status: 499 })
     console.error('Etymology API error:', safeError(error))
     await incrCounter('error')
     const classified = classifyApiError(error)
-
-    return createResponseAdapter(shouldStream).error(classified.message, {
+    return respond.error(classified.message, {
       status: classified.status,
       errorType: classified.streamErrorType,
     })

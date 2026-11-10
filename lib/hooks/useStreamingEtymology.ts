@@ -16,89 +16,131 @@ const RETRY_BASE_DELAY_MS = 600
  * EventSource lifecycle, reconnection with backoff, and the non-streaming
  * fallback fetch.
  */
-export function useStreamingEtymology(language: LanguageCode = 'en') {
+export function useStreamingEtymology(defaultHint?: LanguageCode) {
   const [progress, dispatch] = useReducer(streamReducer, initialStreamState)
 
   const eventSourceRef = useRef<EventSource | null>(null)
+  const fallbackControllerRef = useRef<AbortController | null>(null)
   const activeRequestRef = useRef(0)
   const completedRequestRef = useRef<number | null>(null)
 
-  const fallbackFetch = useCallback(
-    async (word: string, requestId: number) => {
-      try {
-        const response = await fetch(
-          `/api/etymology?word=${encodeURIComponent(word)}&language=${language}`
-        )
-        const payload = await response.json()
+  const fallbackFetch = useCallback(async (word: string, requestId: number, url: string) => {
+    try {
+      const controller = new AbortController()
+      fallbackControllerRef.current = controller
+      const response = await fetch(url, { signal: controller.signal })
+      const payload = await response.json()
 
-        if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
-          return
+      if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
+        return
 
-        if (!response.ok || !payload.success || !payload.data) {
-          completedRequestRef.current = requestId
-          dispatch({
-            type: 'fallback_error',
-            error: {
-              type: 'network-error',
-              message: payload.error ?? 'Search failed',
-              suggestions: [],
-            },
-          })
-          return
-        }
-
-        dispatch({ type: 'fallback_success', result: payload.data })
-        completedRequestRef.current = requestId
-        void recordRecentSearchIntent(word, language)
-      } catch {
-        if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
-          return
+      if (!response.ok || !payload.success || !payload.data) {
         completedRequestRef.current = requestId
         dispatch({
           type: 'fallback_error',
           error: {
             type: 'network-error',
-            message: 'Unable to load etymology right now',
+            message: payload.error ?? 'Search failed',
             suggestions: [],
           },
         })
+        return
       }
-    },
-    [language]
-  )
+
+      dispatch({ type: 'fallback_success', result: payload.data })
+      completedRequestRef.current = requestId
+      void recordRecentSearchIntent(word)
+    } catch {
+      if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
+        return
+      completedRequestRef.current = requestId
+      dispatch({
+        type: 'fallback_error',
+        error: {
+          type: 'network-error',
+          message: 'Unable to load etymology right now',
+          suggestions: [],
+        },
+      })
+    }
+  }, [])
 
   useEffect(() => {
     return () => {
       // Prevent pending backoff timers and fallback responses from reviving a
       // request after this hook has unmounted.
       activeRequestRef.current += 1
+      fallbackControllerRef.current?.abort()
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
         eventSourceRef.current = null
       }
     }
-  }, [language])
+  }, [defaultHint])
 
   const search = useCallback(
-    (word: string) => {
+    (
+      word: string,
+      hint: LanguageCode | undefined = defaultHint,
+      options?: { refresh?: boolean }
+    ) => {
       const trimmed = canonicalizeWord(word)
       if (!isValidWord(trimmed)) return
 
       const requestId = activeRequestRef.current + 1
       activeRequestRef.current = requestId
 
+      fallbackControllerRef.current?.abort()
       dispatch({ type: 'search_started' })
+      const params = new URLSearchParams({ word: trimmed })
+      if (hint) params.set('language', hint)
+      if (options?.refresh) params.set('refresh', '1')
+      const fallbackUrl = `/api/etymology?${params}`
 
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
+      }
+
+      const transportFailed = (attempt: number, source?: EventSource) => {
+        if (
+          activeRequestRef.current !== requestId ||
+          completedRequestRef.current === requestId ||
+          (source && eventSourceRef.current !== source)
+        )
+          return
+        source?.close()
+        eventSourceRef.current = null
+        // A partial refresh remains stale. Reconnecting could spend again after
+        // the server saved it but the terminal SSE event failed to reach us.
+        if (options?.refresh) {
+          completedRequestRef.current = requestId
+          dispatch({
+            type: 'fallback_error',
+            error: {
+              type: 'network-error',
+              message: 'Retrace interrupted. Your saved entry is still available.',
+              suggestions: [],
+            },
+          })
+        } else if (source && attempt < MAX_RETRIES) {
+          window.setTimeout(() => connect(attempt + 1), RETRY_BASE_DELAY_MS * Math.pow(2, attempt))
+        } else {
+          void fallbackFetch(trimmed, requestId, fallbackUrl)
+        }
       }
 
       const connect = (attempt: number) => {
         if (activeRequestRef.current !== requestId || completedRequestRef.current === requestId)
           return
 
-        const url = `/api/etymology?word=${encodeURIComponent(trimmed)}&language=${language}&stream=true`
-        const eventSource = new EventSource(url)
+        const url = `${fallbackUrl}&stream=true`
+        let eventSource: EventSource
+        try {
+          eventSource = new EventSource(url)
+        } catch {
+          transportFailed(attempt)
+          return
+        }
         eventSourceRef.current = eventSource
 
         eventSource.addEventListener('message', (event) => {
@@ -120,64 +162,19 @@ export function useStreamingEtymology(language: LanguageCode = 'en') {
               eventSource.close()
               eventSourceRef.current = null
               if (streamEvent.type === 'result') {
-                void recordRecentSearchIntent(trimmed, language)
+                void recordRecentSearchIntent(trimmed)
               }
             }
           } catch {
-            if (
-              activeRequestRef.current !== requestId ||
-              completedRequestRef.current === requestId
-            ) {
-              return
-            }
-
-            if (attempt < MAX_RETRIES) {
-              eventSource.close()
-              eventSourceRef.current = null
-              const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
-              window.setTimeout(() => {
-                connect(attempt + 1)
-              }, delay)
-              return
-            }
-
-            eventSource.close()
-            eventSourceRef.current = null
-            void fallbackFetch(trimmed, requestId)
+            transportFailed(attempt, eventSource)
           }
         })
-
-        eventSource.addEventListener('error', () => {
-          if (
-            activeRequestRef.current !== requestId ||
-            completedRequestRef.current === requestId ||
-            eventSourceRef.current !== eventSource
-          ) {
-            return
-          }
-
-          eventSource.close()
-          eventSourceRef.current = null
-
-          if (attempt < MAX_RETRIES) {
-            const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt)
-            window.setTimeout(() => {
-              connect(attempt + 1)
-            }, delay)
-            return
-          }
-
-          void fallbackFetch(trimmed, requestId)
-        })
+        eventSource.addEventListener('error', () => transportFailed(attempt, eventSource))
       }
 
-      try {
-        connect(0)
-      } catch {
-        void fallbackFetch(trimmed, requestId)
-      }
+      connect(0)
     },
-    [fallbackFetch, language]
+    [fallbackFetch, defaultHint]
   )
 
   return {

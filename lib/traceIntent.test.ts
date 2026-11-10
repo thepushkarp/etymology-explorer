@@ -49,10 +49,10 @@ beforeEach(() => {
 
 describe('consumeTraceIntent', () => {
   test('phrase direct loads never spend and valid in-app intents remain single-use', () => {
-    expect(consumeTraceIntent('pomme de terre', 'fr')).toBe(false)
+    expect(consumeTraceIntent('pomme de terre')).toBe(false)
     markTraceIntent('  Pomme\u00a0de  terre ', 'fr')
-    expect(consumeTraceIntent('pomme de terre', 'fr')).toBe(true)
-    expect(consumeTraceIntent('pomme de terre', 'fr')).toBe(false)
+    expect(consumeTraceIntent('pomme de terre')).toBe(true)
+    expect(consumeTraceIntent('pomme de terre')).toBe(false)
     markTraceIntent('red herring')
     expect(consumeTraceIntent('red-herring')).toBe(false)
     markTraceIntent('red\nherring')
@@ -61,9 +61,9 @@ describe('consumeTraceIntent', () => {
 
   test('combining encodings share intent but different accents do not', () => {
     markTraceIntent('cafe\u0301', 'fr')
-    expect(consumeTraceIntent('café', 'fr')).toBe(true)
+    expect(consumeTraceIntent('café')).toBe(true)
     markTraceIntent('café', 'fr')
-    expect(consumeTraceIntent('cafe', 'fr')).toBe(false)
+    expect(consumeTraceIntent('cafe')).toBe(false)
   })
 
   test('flag absent (direct load / crawler): no auto-trace', () => {
@@ -112,6 +112,19 @@ describe('consumeTraceIntent', () => {
 describe('scheduled auto-trace lifecycle', () => {
   const nextTask = () => new Promise((resolve) => setTimeout(resolve, 5))
 
+  test('word identity consumes across hints while the stored hint travels separately', async () => {
+    markTraceIntent('chat', 'fr')
+    expect(consumeTraceIntent('chat')).toBe(true)
+    markTraceIntent('chat', 'fr')
+    const starts: unknown[] = []
+    const cleanup = scheduleTraceIntent('chat', undefined, (word, hint) =>
+      starts.push([word, hint])
+    )
+    await nextTask()
+    expect(starts).toEqual([['chat', 'fr']])
+    cleanup()
+  })
+
   test('Strict Mode setup-cleanup-setup opens exactly one trace', async () => {
     markTraceIntent('red herring')
     const starts: string[] = []
@@ -131,7 +144,7 @@ describe('scheduled auto-trace lifecycle', () => {
     cleanup()
     await nextTask()
     expect(starts).toBe(0)
-    expect(consumeTraceIntent('pomme de terre', 'fr')).toBe(true)
+    expect(consumeTraceIntent('pomme de terre')).toBe(true)
   })
 
   test('direct phrase loads remain idle after deferred setup', async () => {

@@ -168,3 +168,33 @@ export const EtymologyResultSchema = z
       })
     }
   })
+
+/** Stored wrapper; never sent to the per-language synthesis model. */
+export const WordEntrySchema = z
+  .object({
+    word: z.string(),
+    languages: z.array(z.enum(SUPPORTED_LANGUAGE_CODES)).min(1),
+    entries: z.partialRecord(z.enum(SUPPORTED_LANGUAGE_CODES), EtymologyResultSchema),
+    otherLanguages: z.array(z.string()),
+    tracedAt: z.iso.datetime(),
+    freshnessAt: z.iso.datetime().optional(),
+    revision: z.number().int().nonnegative(),
+    attemptedLanguages: z.array(z.enum(SUPPORTED_LANGUAGE_CODES)).optional(),
+    incomplete: z.boolean().optional(),
+  })
+  .passthrough()
+  .superRefine((entry, context) => {
+    if (
+      new Set(entry.languages).size !== entry.languages.length ||
+      entry.languages.some(
+        (language) =>
+          entry.entries[language]?.language !== language ||
+          entry.entries[language]?.word !== entry.word
+      )
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Each unique language must identify an entry for this word',
+      })
+    }
+  })

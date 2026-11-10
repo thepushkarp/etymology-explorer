@@ -1,14 +1,22 @@
 import { describe, expect, test } from 'bun:test'
 import { createResponseAdapter } from '@/lib/responseAdapter'
-import type { EtymologyResult } from '@/lib/types'
+import type { WordEntry } from '@/lib/types'
 import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 
-const RESULT_FIXTURE: EtymologyResult = etymologyResult({
+const LANGUAGE_RESULT = etymologyResult({
   word: 'bread',
   pronunciation: '/brɛd/',
   definition: 'staple baked food',
   lore: 'A compact fixture for adapter tests.',
 })
+const RESULT_FIXTURE: WordEntry = {
+  word: LANGUAGE_RESULT.word,
+  languages: ['en'],
+  entries: { en: LANGUAGE_RESULT },
+  otherLanguages: [],
+  tracedAt: '2026-11-10T00:00:00.000Z',
+  revision: 1,
+}
 
 async function readSseEvent(response: Response): Promise<Record<string, unknown>> {
   const body = await response.text()
@@ -100,6 +108,11 @@ describe('createResponseAdapter — result parity', () => {
       data: RESULT_FIXTURE as unknown as Record<string, unknown>,
       cached: true,
     })
+    const incomplete = createResponseAdapter(false).result(
+      { ...RESULT_FIXTURE, incomplete: true },
+      { cached: true }
+    )
+    expect(incomplete.headers.get('cache-control')).toBe('no-store')
   })
 
   test('streaming results are one-shot SSE result events without CDN caching', async () => {

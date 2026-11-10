@@ -59,7 +59,8 @@ try {
       }
     })
     observer.observe(document.body, { childList: true, subtree: true, characterData: true })
-    window.__stream.send({ type: 'synthesis_started' })
+    window.__stream.send({ type: 'languages_resolved', languages: ['fr'], otherLanguages: [] })
+    window.__stream.send({ type: 'synthesis_started', language: 'fr' })
     for (const section of [
       'word',
       'pronunciation',
@@ -69,10 +70,25 @@ try {
       'lore',
       'partsOfSpeech',
     ]) {
-      window.__stream.send({ type: 'synthesis_section', section, data: entry[section] })
+      window.__stream.send({
+        type: 'synthesis_section',
+        language: 'fr',
+        section,
+        data: entry[section],
+      })
     }
     setTimeout(() => {
-      window.__stream.send({ type: 'result', data: entry })
+      window.__stream.send({
+        type: 'result',
+        data: {
+          word: entry.word,
+          languages: ['fr'],
+          entries: { fr: entry },
+          otherLanguages: [],
+          tracedAt: new Date().toISOString(),
+          revision: 1,
+        },
+      })
     }, 1500)
   }, result)
   await page.waitForTimeout(300)

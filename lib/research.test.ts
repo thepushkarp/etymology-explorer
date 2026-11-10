@@ -872,3 +872,34 @@ describe('source rate limits are temporary failures', () => {
     }
   })
 })
+
+test('research failure after root extraction retains billed usage for route accounting', async () => {
+  const previousKey = process.env.OPENROUTER_API_KEY
+  process.env.OPENROUTER_API_KEY = previousKey ?? 'test-openrouter-key'
+  const controller = new AbortController()
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    if (url.hostname === 'openrouter.ai')
+      return Response.json({
+        output_text: '{"roots":["fixture"]}',
+        usage: { input_tokens: 9, output_tokens: 2, cost: 0.03 },
+      })
+    if (url.hostname === 'www.etymonline.com' && url.pathname === '/word/fixture')
+      return new Response('<section class="prose-lg">From Latin nexus.</section>')
+    return new Response('', { status: 404 })
+  }) as typeof fetch
+  try {
+    await expect(
+      conductAgenticResearch('fixture', { signal: controller.signal }, (event) => {
+        if (event.type === 'roots_identified')
+          controller.abort(new Error('Trace cancelled after roots'))
+      })
+    ).rejects.toMatchObject({
+      message: 'Trace cancelled after roots',
+      usage: { inputTokens: 9, outputTokens: 2, costUSD: 0.03 },
+    })
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
+    else process.env.OPENROUTER_API_KEY = previousKey
+  }
+})

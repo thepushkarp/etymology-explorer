@@ -7,12 +7,7 @@ import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { EntryView } from '@/components/EntryView'
 import { WordTraceExperience } from '@/components/WordTraceExperience'
-import {
-  CACHE_VERSION,
-  BETA_CACHE_VERSION,
-  etymologyWordTag,
-  getCachedEtymology,
-} from '@/lib/cache'
+import { ENTRY_PREFIX, etymologyWordTag, getCachedEntry } from '@/lib/cache'
 import { LANGUAGES, isLanguageCode, wordPagePath, type LanguageCode } from '@/lib/languages'
 import { historyEntry } from '@/lib/resultHistories'
 import { SITE_SHORT_NAME } from '@/lib/site'
@@ -34,7 +29,7 @@ interface WordPageProps {
 }
 
 interface ResolvedWordRoute {
-  language: LanguageCode
+  language?: LanguageCode
   word: string
 }
 
@@ -54,28 +49,34 @@ async function resolveRoute(params: WordPageProps['params']): Promise<ResolvedWo
   if (segments.length === 1) {
     const word = resolveWord(segments[0])
     if (!word) notFound()
-    return { language: 'en', word }
+    return { word }
   }
 
   if (segments.length !== 2) notFound()
   const language = segments[0].toLowerCase()
   const word = resolveWord(segments[1])
   if (!isLanguageCode(language) || !word) notFound()
-  if (language === 'en') permanentRedirect(wordPagePath(word, 'en'))
   return { language, word }
 }
 
-// Metadata and page rendering share one in-flight read within this request.
-const loadCachedEtymology = cache((word: string, language: LanguageCode) => {
-  const cacheKey =
-    language === 'en'
-      ? ['word-page-etymology', CACHE_VERSION, word]
-      : ['multilingual-word-page-etymology', BETA_CACHE_VERSION, language, word]
-  return unstable_cache(() => getCachedEtymology(word, language), cacheKey, {
+// Metadata and page rendering share one in-flight read for every language route.
+const loadCachedEntry = cache((word: string) =>
+  unstable_cache(() => getCachedEntry(word), ['word-page-entry', ENTRY_PREFIX, word], {
     revalidate: CONFIG.incompleteEtymologyCacheTTL,
-    tags: [etymologyWordTag(word, language)],
+    tags: [etymologyWordTag(word)],
   })()
-})
+)
+
+async function resolveEntry(params: WordPageProps['params']) {
+  const route = await resolveRoute(params)
+  const cached = await loadCachedEntry(route.word)
+  if (cached && route.language === cached.entry.languages[0]) {
+    permanentRedirect(wordPagePath(route.word))
+  }
+  const language = route.language ?? cached?.entry.languages[0]
+  const result = language ? cached?.entry.entries[language] : undefined
+  return { ...route, cached, selectedLanguage: language, result }
+}
 
 function truncateAtWordBoundary(text: string): string {
   if (text.length <= DESCRIPTION_MAX_CHARS) return text
@@ -107,36 +108,27 @@ function buildDescription(result: EtymologyResult): string {
   )
 }
 
-function resultMatchesLanguage(result: EtymologyResult | null, language: LanguageCode): boolean {
-  return result?.language === language
-}
-
 export async function generateMetadata({ params }: WordPageProps): Promise<Metadata> {
-  const { language, word } = await resolveRoute(params)
-  const isEnglish = language === 'en'
-  const definition = LANGUAGES[language]
+  const { language, word, cached, result } = await resolveEntry(params)
   const canonicalPath = wordPagePath(word, language)
-  const title = isEnglish
-    ? `Etymology of ${word} — ${SITE_SHORT_NAME}`
-    : `${definition.englishName} etymology of ${word} — ${SITE_SHORT_NAME}`
-  const result = await loadCachedEtymology(word, language)
+  const languageNames = cached?.entry.languages.map((code) => LANGUAGES[code].englishName)
+  const heading = language
+    ? `${LANGUAGES[language].englishName} etymology of ${word}`
+    : `Etymology of ${word}`
+  const title = `${heading}${!language && languageNames?.length ? ` — ${languageNames.join(', ')}` : ''} — ${SITE_SHORT_NAME}`
 
-  if (!resultMatchesLanguage(result, language)) {
-    const description = isEnglish
-      ? `The etymology of “${word}” has not been traced yet. Run a live trace on ${SITE_SHORT_NAME} to follow it back to its roots.`
-      : `The ${definition.englishName} etymology of “${word}” has not been traced yet.`
+  if (!result) {
     return {
       title: { absolute: title },
-      description,
+      description: `The ${language ? `${LANGUAGES[language].englishName} ` : ''}etymology of “${word}” has not been traced yet. Run a live trace on ${SITE_SHORT_NAME} to follow it back to its roots.`,
       robots: { index: false, follow: true },
       alternates: { canonical: canonicalPath },
     }
   }
 
-  const description = buildDescription(result as EtymologyResult)
-  const languageQuery = isEnglish ? '' : `&language=${language}`
+  const description = buildDescription(result)
+  const languageQuery = language ? `&language=${language}` : ''
   const ogImage = `/og?word=${encodeURIComponent(word)}${languageQuery}`
-  const alt = isEnglish ? `Etymology of ${word}` : title
 
   return {
     title: { absolute: title },
@@ -148,25 +140,32 @@ export async function generateMetadata({ params }: WordPageProps): Promise<Metad
       url: canonicalPath,
       siteName: SITE_SHORT_NAME,
       type: 'article',
-      images: [{ url: ogImage, width: 1200, height: 630, alt }],
+      images: [{ url: ogImage, width: 1200, height: 630, alt: heading }],
     },
     twitter: { card: 'summary_large_image', title, description, images: [ogImage] },
   }
 }
 
 export default async function WordPage({ params }: WordPageProps) {
-  const { language, word } = await resolveRoute(params)
-  const result = await loadCachedEtymology(word, language)
+  const { language, word, cached, selectedLanguage, result } = await resolveEntry(params)
 
-  if (!resultMatchesLanguage(result, language)) {
-    return <WordTraceExperience key={`${language}:${word}`} word={word} language={language} />
+  if (!cached || !result || !selectedLanguage) {
+    return (
+      <WordTraceExperience
+        key={`${language ?? 'auto'}:${word}`}
+        word={word}
+        language={language}
+        initialEntry={cached?.entry}
+        stale={cached?.stale}
+      />
+    )
   }
 
   return (
     <>
-      <SiteHeader searchLanguage={language} />
+      <SiteHeader showSearch searchLanguage={language} />
       <main className="mx-auto w-full max-w-3xl px-4 pt-14 sm:px-6 sm:pt-20">
-        <EntryView result={result as EtymologyResult} />
+        <EntryView entry={cached.entry} language={selectedLanguage} stale={cached.stale} />
       </main>
       <SiteFooter />
     </>

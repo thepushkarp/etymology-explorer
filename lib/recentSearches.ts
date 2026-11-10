@@ -1,8 +1,8 @@
 import { randomInt } from 'node:crypto'
-import { getCachedEtymology } from './cache'
+import type { LanguageCode } from './languages'
+import { getCachedEntry } from './cache'
 import { safeError } from './errorUtils'
 import { getRedis } from './redis'
-import type { LanguageCode } from './languages'
 import { canonicalizeWord, isValidWord } from './validation'
 import {
   parseRecentSearchPreviews,
@@ -33,26 +33,23 @@ redis.call('SET', KEYS[1], cjson.encode(entries))
 return #entries
 `
 
-function recentSearchKey(language: LanguageCode): string {
-  return `recent-searches:v2:${language}`
-}
+const RECENT_SEARCH_KEY = 'recent-searches:v3'
 
 export async function recordRecentSearch(
   word: string,
-  language: LanguageCode,
   client: RecentSearchRedis | null = getRedis(),
-  loadResult = getCachedEtymology
+  loadEntry = getCachedEntry
 ): Promise<boolean> {
   if (!client || !isValidWord(word)) return false
   const normalized = canonicalizeWord(word)
   try {
-    const result = await loadResult(normalized, language)
-    if (!result || canonicalizeWord(result.word) !== normalized) return false
-    const preview = recentSearchPreview(result, language)
+    const cached = await loadEntry(normalized)
+    if (!cached || canonicalizeWord(cached.entry.word) !== normalized) return false
+    const preview = recentSearchPreview(cached.entry)
     if (!preview) return false
     await client.eval(
       RECORD_RECENT_SEARCH,
-      [recentSearchKey(language)],
+      [RECENT_SEARCH_KEY],
       [JSON.stringify(preview), RECENT_SEARCH_POOL_SIZE]
     )
     return true
@@ -63,12 +60,14 @@ export async function recordRecentSearch(
 }
 
 export async function getRecentSearches(
-  language: LanguageCode,
-  client: RecentSearchRedis | null = getRedis()
+  client: RecentSearchRedis | null = getRedis(),
+  language?: LanguageCode
 ): Promise<RecentSearchPreview[]> {
   if (!client) return []
   try {
-    const pool = parseRecentSearchPreviews(await client.get(recentSearchKey(language)))
+    const pool = parseRecentSearchPreviews(await client.get(RECENT_SEARCH_KEY)).filter(
+      (entry) => !language || entry.language === language
+    )
     // Partial Fisher–Yates samples without replacement and does not favor recency.
     const count = Math.min(RECENT_SEARCH_DISPLAY_COUNT, pool.length)
     for (let index = 0; index < count; index++) {

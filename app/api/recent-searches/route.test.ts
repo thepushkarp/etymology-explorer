@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { NextRequest } from 'next/server'
 import { GET, POST } from './route'
 
-test('rejects unsupported languages without loading recent searches', async () => {
+test('rejects unsupported language filters without loading recent searches', async () => {
   const response = await GET(new NextRequest('http://localhost/api/recent-searches?language=de'))
   expect(response.status).toBe(400)
   expect(response.headers.get('cache-control')).toBe('no-store')

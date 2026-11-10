@@ -1,10 +1,11 @@
-import type { EtymologyResult } from './types'
-import type { LanguageCode } from './languages'
+import type { WordEntry } from './types'
+import { SUPPORTED_LANGUAGE_CODES, type LanguageCode } from './languages'
 import { historyEntry } from './resultHistories'
 import { canonicalizeWord, isValidWord } from './validation'
 
 export interface RecentSearchPreview {
   word: string
+  language: LanguageCode
   teaser: string
 }
 
@@ -12,11 +13,10 @@ export const RECENT_SEARCH_POOL_SIZE = 20
 export const RECENT_SEARCH_DISPLAY_COUNT = 4
 const TEASER_LENGTH = 120
 
-export function recentSearchPreview(
-  result: EtymologyResult,
-  language: LanguageCode
-): RecentSearchPreview | null {
-  if (result.language !== language || !isValidWord(result.word)) return null
+export function recentSearchPreview(entry: WordEntry): RecentSearchPreview | null {
+  const language = entry.languages[0]
+  const result = entry.entries[language]
+  if (!result || result.language !== language || !isValidWord(result.word)) return null
   const primary = historyEntry(result)
   const lore = primary.lore.replace(/\s+/gu, ' ').trim()
   let teaser = lore || primary.definition.trim()
@@ -29,7 +29,7 @@ export function recentSearchPreview(
     const boundary = prefix.lastIndexOf(' ')
     teaser = `${(boundary > 0 ? prefix.slice(0, boundary) : prefix).trimEnd()}…`
   }
-  return { word: canonicalizeWord(result.word), teaser }
+  return { word: canonicalizeWord(result.word), language, teaser }
 }
 
 /** Validate the small public snapshot without loading full cached entries. */
@@ -42,6 +42,7 @@ export function parseRecentSearchPreviews(value: unknown): RecentSearchPreview[]
       !entry ||
       typeof entry !== 'object' ||
       typeof entry.word !== 'string' ||
+      !SUPPORTED_LANGUAGE_CODES.includes(entry.language) ||
       !isValidWord(entry.word) ||
       typeof entry.teaser !== 'string' ||
       !entry.teaser.trim() ||
@@ -52,7 +53,7 @@ export function parseRecentSearchPreviews(value: unknown): RecentSearchPreview[]
     const word = canonicalizeWord(entry.word)
     if (seen.has(word)) continue
     seen.add(word)
-    previews.push({ word, teaser: entry.teaser })
+    previews.push({ word, language: entry.language, teaser: entry.teaser })
     if (previews.length === RECENT_SEARCH_POOL_SIZE) break
   }
   return previews

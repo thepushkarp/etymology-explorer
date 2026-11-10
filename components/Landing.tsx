@@ -14,7 +14,7 @@ import {
 } from '@/lib/recentSearchPreview'
 import {
   LANGUAGES,
-  parseLanguageCode,
+  isLanguageCode,
   SUPPORTED_LANGUAGE_CODES,
   type LanguageCode,
 } from '@/lib/languages'
@@ -53,19 +53,20 @@ const CURATED_WORDS: Record<LanguageCode, Array<{ word: string; teaser: string }
 }
 
 export function Landing() {
-  const [language, setLanguage] = useState<LanguageCode>('en')
-  const [recent, setRecent] = useState<{
-    language: LanguageCode
-    words: RecentSearchPreview[]
-  } | null>(null)
-  const recentWords = recent?.language === language ? recent.words : []
-  const words = landingSearchPreviews(recentWords, CURATED_WORDS[language])
+  const [language, setLanguage] = useState<LanguageCode>()
+  const [recent, setRecent] = useState<RecentSearchPreview[]>([])
+  const recentWords = recent.filter((entry) => !language || entry.language === language).slice(0, 4)
+  const curated = language
+    ? CURATED_WORDS[language].map((entry) => ({ ...entry, language }))
+    : SUPPORTED_LANGUAGE_CODES.map((code) => ({ ...CURATED_WORDS[code][0], language: code }))
+  const words = landingSearchPreviews(recentWords, curated)
 
   useEffect(() => {
     const controller = new AbortController()
     async function loadRecentSearches() {
       try {
-        const response = await fetch(`/api/recent-searches?language=${language}`, {
+        const query = language ? `?language=${language}` : ''
+        const response = await fetch(`/api/recent-searches${query}`, {
           cache: 'no-store',
           signal: controller.signal,
         })
@@ -73,7 +74,7 @@ export function Landing() {
         const payload = await response.json()
         if (!payload.success) throw new Error('Recent searches unavailable')
         if (!controller.signal.aborted) {
-          setRecent({ language, words: parseRecentSearchPreviews(payload.data).slice(0, 4) })
+          setRecent(parseRecentSearchPreviews(payload.data))
         }
       } catch (error) {
         if (!controller.signal.aborted) console.warn('[RecentSearches] Preview unavailable:', error)
@@ -94,18 +95,19 @@ export function Landing() {
         </h1>
 
         <div className="animate-rise mt-12 [animation-delay:80ms]">
-          <SearchBox key={language} language={language} size="large" autoFocus />
+          <SearchBox key={language ?? 'auto'} language={language} size="large" autoFocus />
           <div className="mt-2 flex flex-wrap items-center gap-x-6">
             <div className="relative shrink-0">
               <select
                 aria-label="Word language"
-                value={language}
+                value={language ?? ''}
                 onChange={(event) => {
-                  const selectedLanguage = parseLanguageCode(event.target.value)
-                  if (selectedLanguage) setLanguage(selectedLanguage)
+                  const value = event.target.value
+                  setLanguage(isLanguageCode(value) ? value : undefined)
                 }}
                 className="cursor-pointer appearance-none bg-paper py-2 pr-5 text-sm text-ink [color-scheme:light] dark:[color-scheme:dark]"
               >
+                <option value="">Auto</option>
                 {SUPPORTED_LANGUAGE_CODES.map((code) => (
                   <option key={code} value={code}>
                     {LANGUAGES[code].nativeName}
@@ -131,7 +133,7 @@ export function Landing() {
           <ul className="mt-4 border-t border-rule">
             {words.map((entry, index) => (
               <li
-                key={`${language}:${entry.word}`}
+                key={entry.word}
                 className="animate-rise"
                 style={{ animationDelay: `${160 + index * 60}ms` }}
               >
@@ -141,7 +143,14 @@ export function Landing() {
                   className="group flex flex-col items-start gap-1 border-b border-rule py-4"
                 >
                   <span className="font-serif text-xl text-ink transition-colors group-hover:text-accent">
-                    {entry.word}
+                    <span lang={entry.language} dir="auto">
+                      {entry.word}
+                    </span>
+                    {!language && (
+                      <span className="label ml-3 text-muted">
+                        {LANGUAGES[entry.language].englishName}
+                      </span>
+                    )}
                   </span>
                   <span className="text-left font-serif text-sm italic text-muted transition-colors group-hover:text-ink">
                     {entry.teaser}
@@ -157,7 +166,7 @@ export function Landing() {
   )
 }
 
-function RandomWordButton({ language }: { language: LanguageCode }) {
+function RandomWordButton({ language }: { language?: LanguageCode }) {
   const navigateToWord = useWordNavigation()
   const [loading, setLoading] = useState(false)
 
@@ -165,7 +174,8 @@ function RandomWordButton({ language }: { language: LanguageCode }) {
     if (loading) return
     setLoading(true)
     try {
-      const response = await fetch(`/api/random-word?language=${language}`, { cache: 'no-store' })
+      const query = language ? `?language=${language}` : ''
+      const response = await fetch(`/api/random-word${query}`, { cache: 'no-store' })
       const payload = await response.json()
       if (payload.success && payload.data?.word) navigateToWord(payload.data.word, language)
     } catch {

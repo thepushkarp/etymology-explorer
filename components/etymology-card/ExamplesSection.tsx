@@ -20,12 +20,15 @@ export function ExamplesList({
         <li key={index}>
           <p
             lang={language}
+            dir="auto"
             className="font-serif text-lg italic leading-[1.7] text-ink [&_em]:not-italic"
           >
             {emphasize(example.text)}
           </p>
           {example.translation && (
-            <p className="mt-1 text-sm leading-relaxed text-muted">{example.translation}</p>
+            <p lang="en" className="mt-1 text-sm leading-relaxed text-muted">
+              {example.translation}
+            </p>
           )}
         </li>
       ))}

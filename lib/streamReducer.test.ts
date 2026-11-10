@@ -6,7 +6,7 @@ import {
   type StreamAction,
   type StreamState,
 } from './streamReducer'
-import type { EtymologyResult, StreamEvent } from './types'
+import type { WordEntry, StreamEvent } from './types'
 import type { PartialEtymology } from './streamReducer'
 import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 
@@ -18,12 +18,20 @@ function events(...list: StreamEvent[]): StreamAction[] {
   return list.map((event) => ({ type: 'stream_event', event }))
 }
 
-const RESULT: EtymologyResult = etymologyResult({
+const LANGUAGE_RESULT = etymologyResult({
   word: 'perfidious',
   pronunciation: '/pərˈfɪdiəs/',
   definition: 'Deceitful and untrustworthy.',
   lore: 'A story.',
 })
+const RESULT: WordEntry = {
+  word: LANGUAGE_RESULT.word,
+  languages: ['en'],
+  entries: { en: LANGUAGE_RESULT },
+  otherLanguages: [],
+  tracedAt: '2026-11-10T00:00:00.000Z',
+  revision: 1,
+}
 
 describe('search_started', () => {
   test('starts empty so source events define the providers for every language', () => {
@@ -53,6 +61,30 @@ describe('search_started', () => {
 })
 
 describe('source events', () => {
+  test('parallel language progress keeps source outcomes, sections, and failures independent', () => {
+    const state = run([
+      { type: 'search_started' },
+      ...events(
+        { type: 'source_started', source: 'wiktionaryEnglish' },
+        { type: 'languages_resolved', languages: ['en', 'fr'], otherLanguages: ['Dutch'] },
+        { type: 'source_complete', source: 'wiktionaryNative', timing: 12, language: 'en' },
+        { type: 'source_failed', source: 'wiktionaryNative', error: 'timeout', language: 'fr' },
+        { type: 'synthesis_section', section: 'definition', data: 'English entry', language: 'en' },
+        { type: 'language_failed', language: 'fr', message: 'French unavailable' },
+        { type: 'result', data: { ...RESULT, otherLanguages: ['Dutch'] } }
+      ),
+    ])
+    expect(state.sources).toHaveLength(1)
+    expect(state.byLanguage.en?.sources[0].status).toBe('complete')
+    expect(state.byLanguage.fr?.sources[0].status).toBe('failed')
+    expect(state.byLanguage.en?.sections.definition).toBe('English entry')
+    expect(state.byLanguage.fr?.sections).toEqual({})
+    expect(state.byLanguage.fr?.error).toBe('French unavailable')
+    expect(state.phase).toBe('done')
+    expect(state.languages).toEqual(['en', 'fr'])
+    expect(state.otherLanguages).toEqual(['Dutch'])
+  })
+
   test('completion records status and timing', () => {
     const state = run([
       { type: 'search_started' },

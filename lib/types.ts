@@ -279,6 +279,22 @@ export interface EtymologyResult extends HistoryEntryFields {
   }
 }
 
+/** Durable same-spelling entry. Freshness never removes its corpus identity. */
+export interface WordEntry {
+  word: string
+  languages: LanguageCode[]
+  entries: Partial<Record<LanguageCode, EtymologyResult>>
+  otherLanguages: string[]
+  tracedAt: string
+  /** Oldest retained research timestamp; tracedAt identifies the merged generation. */
+  freshnessAt?: string
+  revision: number
+  /** Languages actually researched, including confirmed absences; omitted candidates remain augmentable. */
+  attemptedLanguages?: LanguageCode[]
+  /** Incomplete traces become retraceable after the short retry interval, but remain durable. */
+  incomplete?: boolean
+}
+
 /**
  * The fields an entry renders: a result projected onto one of its histories,
  * or the sections of a streaming synthesis received so far.
@@ -451,7 +467,7 @@ export interface SecurityTelemetryEvent {
  * Server-sent event shapes for streaming etymology synthesis
  * Emitted during the research and synthesis pipeline to provide real-time progress
  */
-export type StreamEvent =
+export type StreamEvent = { language?: LanguageCode } & (
   | { type: 'source_started'; source: string }
   | {
       type: 'source_complete'
@@ -478,10 +494,13 @@ export type StreamEvent =
       highConfidence: number
       mediumConfidence: number
     }
-  | { type: 'result'; data: EtymologyResult }
+  | { type: 'languages_resolved'; languages: LanguageCode[]; otherLanguages: string[] }
+  | { type: 'language_failed'; language: LanguageCode; message: string }
+  | { type: 'result'; data: WordEntry }
   | {
       type: 'error'
       message: string
       errorType: 'rate_limit' | 'budget' | 'network' | 'nonsense' | 'typo' | 'unknown'
       suggestions?: string[]
     }
+)

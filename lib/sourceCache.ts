@@ -18,7 +18,11 @@ import type { LanguageCode } from './languages'
  */
 export interface SourceCacheRedis {
   get(key: string): Promise<unknown>
-  set(key: string, value: SourceData | SourceRecord[], opts?: { ex?: number }): Promise<unknown>
+  set(
+    key: string,
+    value: SourceData | SourceRecord[] | WiktionaryToc,
+    opts?: { ex?: number }
+  ): Promise<unknown>
 }
 
 export type CacheableSource =
@@ -33,7 +37,7 @@ export type CacheableSource =
   | 'dicionarioAberto'
   | 'incelsWiki'
 
-const SOURCE_CACHE_PREFIX = 'src:v8:'
+const SOURCE_CACHE_PREFIX = 'src:v9:'
 
 function sourceKey(source: CacheableSource, word: string, language: LanguageCode): string {
   const normalized = canonicalizeWord(word)
@@ -136,5 +140,50 @@ export async function cacheSourceBundle(
     })
   } catch (error) {
     console.error(`[SourceCache] ${provider} bundle write failed:`, safeError(error))
+  }
+}
+
+/** Confirmed page headings, including empty lists for authoritative missing pages. */
+export interface WiktionaryToc {
+  headings: string[]
+  nonemptyHeadings: string[]
+}
+
+function wiktionaryTocKey(word: string, edition: string): string {
+  return `${SOURCE_CACHE_PREFIX}wiktionaryToc:${edition === 'en' ? '' : `${edition}:`}${canonicalizeWord(word)}`
+}
+
+export async function getCachedWiktionaryToc(
+  word: string,
+  edition = 'en',
+  client: SourceCacheRedis | null = getRedis()
+): Promise<WiktionaryToc | null> {
+  if (!client) return null
+  try {
+    const raw = (await client.get(wiktionaryTocKey(word, edition))) as Partial<WiktionaryToc> | null
+    return raw &&
+      Array.isArray(raw.headings) &&
+      Array.isArray(raw.nonemptyHeadings) &&
+      raw.headings.every((heading) => typeof heading === 'string') &&
+      raw.nonemptyHeadings.every((heading) => typeof heading === 'string')
+      ? (raw as WiktionaryToc)
+      : null
+  } catch (error) {
+    console.error('[SourceCache] Wiktionary TOC read failed:', safeError(error))
+    return null
+  }
+}
+
+export async function cacheWiktionaryToc(
+  word: string,
+  edition: string,
+  toc: WiktionaryToc,
+  client: SourceCacheRedis | null = getRedis()
+): Promise<void> {
+  if (!client) return
+  try {
+    await client.set(wiktionaryTocKey(word, edition), toc, { ex: CONFIG.sourceCacheTTL })
+  } catch (error) {
+    console.error('[SourceCache] Wiktionary TOC write failed:', safeError(error))
   }
 }

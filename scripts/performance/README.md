@@ -6,7 +6,7 @@ navigation scenario has five samples; scroll and drag scenarios have three.
 JSON output includes individual samples and medians in `bench-results/performance/`.
 
 The fixture server emulates Redis with 100 ms latency, cached English and French
-entry shapes, and a 1,000-word index. Audio-cache and lock writes stay in local
+merged entry shapes, and a 1,000-word index. Audio-cache and lock writes stay in local
 memory. The expanded
 word list and French fixture are synthetic UI data, not a linguistic quality
 benchmark. Browser requests for Ngram data use fixed responses; EventSource is
@@ -37,6 +37,9 @@ normal environment.
 export KV_REST_API_URL=http://127.0.0.1:4198
 export KV_REST_API_TOKEN=benchmark
 export OPENROUTER_API_KEY=benchmark-no-provider
+export EXA_ENABLED=false
+export ELEVENLABS_API_KEY=
+export ADMIN_SECRET=
 export RATE_LIMIT_ENABLED=false
 export FORCE_CACHE_ONLY=true
 bun run build

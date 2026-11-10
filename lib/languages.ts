@@ -3,16 +3,29 @@ export const SUPPORTED_LANGUAGE_CODES = ['en', 'it', 'es', 'fr', 'pt'] as const
 
 export type LanguageCode = (typeof SUPPORTED_LANGUAGE_CODES)[number]
 
+export type ScriptId = 'Latin' | 'Devanagari' | 'Arabic' | 'Han' | 'Hiragana' | 'Katakana'
+
 export interface LanguageDefinition {
   code: LanguageCode
   englishName: string
   nativeName: string
-  wiktionaryEdition: string
+  scripts: readonly ScriptId[]
+  priority: number
   englishWiktionaryHeading: string
-  nativeWiktionaryHeading: string
-  etymologyHeading: RegExp
-  formHeading: RegExp
+  nativeWiktionary?: {
+    edition: string
+    heading: string
+    etymologyHeading: RegExp
+    formHeading: RegExp
+  }
+  historyPrimary: 'native' | 'english'
+  wikipediaEdition?: string
+  wikidataEntity?: string
+  freeDictionary?: boolean
   ngramCorpus: string | null
+  ttsLanguageCode?: string
+  direction?: 'rtl'
+  particles: readonly string[]
   /** Language-specific synthesis rules appended to the system prompt. */
   promptNotes?: string
 }
@@ -22,55 +35,105 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     code: 'en',
     englishName: 'English',
     nativeName: 'English',
-    wiktionaryEdition: 'en',
+    scripts: ['Latin'],
+    priority: 0,
+    nativeWiktionary: {
+      edition: 'en',
+      heading: 'English',
+      etymologyHeading: /^Etymology(?:\s+\d+)?$/i,
+      formHeading: /^(?:Noun|Verb|Adjective|Adverb|Pronoun|Participle)$/i,
+    },
+    historyPrimary: 'native',
+    wikipediaEdition: 'en',
+    wikidataEntity: 'Q1860',
+    freeDictionary: true,
+    ttsLanguageCode: 'en',
+    particles: ['the', 'of', 'and', 'a', 'an'],
     englishWiktionaryHeading: 'English',
-    nativeWiktionaryHeading: 'English',
-    etymologyHeading: /^Etymology(?:\s+\d+)?$/i,
-    formHeading: /^(?:Noun|Verb|Adjective|Adverb|Pronoun|Participle)$/i,
     ngramCorpus: 'eng-2019',
   },
   it: {
     code: 'it',
     englishName: 'Italian',
     nativeName: 'Italiano',
-    wiktionaryEdition: 'it',
+    scripts: ['Latin'],
+    priority: 1,
+    nativeWiktionary: {
+      edition: 'it',
+      heading: 'Italiano',
+      etymologyHeading: /^Etimologia(?:\s*\/\s*Derivazione)?(?:\s+\d+)?$/i,
+      formHeading: /^(?:Forma flessa|Voce verbale|Participio|Coniugazione)/i,
+    },
+    historyPrimary: 'native',
+    wikipediaEdition: 'it',
+    wikidataEntity: 'Q652',
+    freeDictionary: true,
+    ttsLanguageCode: 'it',
+    particles: ['di', 'da', 'del', 'della', 'il', 'lo', 'la', 'e'],
     englishWiktionaryHeading: 'Italian',
-    nativeWiktionaryHeading: 'Italiano',
-    etymologyHeading: /^Etimologia(?:\s*\/\s*Derivazione)?(?:\s+\d+)?$/i,
-    formHeading: /^(?:Forma flessa|Voce verbale|Participio|Coniugazione)/i,
     ngramCorpus: 'ita-2019',
   },
   es: {
     code: 'es',
     englishName: 'Spanish',
     nativeName: 'Español',
-    wiktionaryEdition: 'es',
+    scripts: ['Latin'],
+    priority: 2,
+    nativeWiktionary: {
+      edition: 'es',
+      heading: 'Español',
+      etymologyHeading: /^Etimología(?:\s+\d+)?$/i,
+      formHeading: /^(?:Forma verbal|Forma nominal|Participio|Conjugación)/i,
+    },
+    historyPrimary: 'native',
+    wikipediaEdition: 'es',
+    wikidataEntity: 'Q1321',
+    freeDictionary: true,
+    ttsLanguageCode: 'es',
+    particles: ['de', 'del', 'la', 'el', 'los', 'las', 'y'],
     englishWiktionaryHeading: 'Spanish',
-    nativeWiktionaryHeading: 'Español',
-    etymologyHeading: /^Etimología(?:\s+\d+)?$/i,
-    formHeading: /^(?:Forma verbal|Forma nominal|Participio|Conjugación)/i,
     ngramCorpus: 'spa-2019',
   },
   fr: {
     code: 'fr',
     englishName: 'French',
     nativeName: 'Français',
-    wiktionaryEdition: 'fr',
+    scripts: ['Latin'],
+    priority: 3,
+    nativeWiktionary: {
+      edition: 'fr',
+      heading: 'Français',
+      etymologyHeading: /^Étymologie(?:\s+\d+)?$/i,
+      formHeading: /^Forme de /i,
+    },
+    historyPrimary: 'native',
+    wikipediaEdition: 'fr',
+    wikidataEntity: 'Q150',
+    freeDictionary: true,
+    ttsLanguageCode: 'fr',
+    particles: ['de', 'du', 'des', 'la', 'le', 'les', 'un', 'une', 'et'],
     englishWiktionaryHeading: 'French',
-    nativeWiktionaryHeading: 'Français',
-    etymologyHeading: /^Étymologie(?:\s+\d+)?$/i,
-    formHeading: /^Forme de /i,
     ngramCorpus: 'fre-2019',
   },
   pt: {
     code: 'pt',
     englishName: 'Portuguese',
     nativeName: 'Português',
-    wiktionaryEdition: 'pt',
+    scripts: ['Latin'],
+    priority: 4,
+    nativeWiktionary: {
+      edition: 'pt',
+      heading: 'Português',
+      etymologyHeading: /^Etimologia(?:\s+\d+)?$/i,
+      formHeading: /^(?:Forma verbal|Forma nominal|Particípio|Conjugação)/i,
+    },
+    historyPrimary: 'native',
+    wikipediaEdition: 'pt',
+    wikidataEntity: 'Q5146',
+    freeDictionary: true,
+    ttsLanguageCode: 'pt',
+    particles: ['de', 'da', 'do', 'das', 'dos', 'a', 'o', 'as', 'os', 'e'],
     englishWiktionaryHeading: 'Portuguese',
-    nativeWiktionaryHeading: 'Português',
-    etymologyHeading: /^Etimologia(?:\s+\d+)?$/i,
-    formHeading: /^(?:Forma verbal|Forma nominal|Particípio|Conjugação)/i,
     ngramCorpus: null,
     promptNotes:
       'PORTUGUESE: write the example sentences in neutral Portuguese. When a Brazilian/European distinction matters, label it explicitly; never silently choose one regional variant.',
@@ -90,12 +153,63 @@ export function parseLanguageCode(value: string | null | undefined): LanguageCod
   return SUPPORTED_LANGUAGE_CODES.find((code) => code === normalized) ?? null
 }
 
-export function wordPagePath(word: string, language: LanguageCode = 'en'): string {
+export function wordPagePath(word: string, language?: LanguageCode): string {
   const normalizedWord = canonicalizeWord(word)
   const encodedWord = encodeURIComponent(normalizedWord)
-  return language === 'en' ? `/word/${encodedWord}` : `/word/${language}/${encodedWord}`
+  return !language ? `/word/${encodedWord}` : `/word/${language}/${encodedWord}`
 }
 
 export function lexemeKey(language: LanguageCode, word: string): string {
   return `${language}:${canonicalizeWord(word)}`
+}
+
+const SCRIPTS: readonly ScriptId[] = [
+  'Latin',
+  'Devanagari',
+  'Arabic',
+  'Han',
+  'Hiragana',
+  'Katakana',
+]
+
+/** Ignore punctuation and marks, but retain unsupported letters so mixed input cannot match. */
+export function detectScripts(word: string): ScriptId[] {
+  const letters = [...word].filter((letter) => /\p{L}/u.test(letter)).join('')
+  return SCRIPTS.filter((script) =>
+    new RegExp(`\\p{Script_Extensions=${script}}`, 'u').test(letters)
+  )
+}
+
+export function candidateLanguages(word: string): LanguageCode[] {
+  const letters = [...word].filter((letter) => /\p{L}/u.test(letter))
+  if (
+    !letters.length ||
+    letters.some(
+      (letter) =>
+        !SCRIPTS.some((script) => new RegExp(`\\p{Script_Extensions=${script}}`, 'u').test(letter))
+    )
+  )
+    return []
+  const scripts = detectScripts(word)
+  return Object.values(LANGUAGES)
+    .filter((language) => scripts.every((script) => language.scripts.includes(script)))
+    .sort((a, b) => a.priority - b.priority)
+    .map((language) => language.code)
+}
+
+export function languageFromName(name: string): LanguageCode | undefined {
+  const value = name.trim().toLowerCase()
+  return Object.values(LANGUAGES).find(
+    (language) => language.code === value || language.englishName.toLowerCase() === value
+  )?.code
+}
+
+export function lexicalLanguageName(name: string): string {
+  const language = languageFromName(name)
+  if (language) return LANGUAGES[language].englishName
+  return (
+    ['Old English', 'Latin', 'Ancient Greek'].find(
+      (heading) => heading.toLowerCase() === name.trim().toLowerCase()
+    ) ?? name.trim()
+  )
 }

@@ -14,21 +14,18 @@ cannot establish ancestry: a fallback-only history is explicitly unresolved and
 validation rejects nonempty roots or ancestry graphs. Word spelling and supplied
 language codes are checked before accepting entries.
 
-The shared source ceiling is 32 actual HTTP attempts, including redirects,
-Wikidata details, and recovery. Existing enrichment breadth and parallelism remain
-bounded. Ancestor and English root Wiktionary lookups retry one transient network,
-408, or 5xx failure. They do not retry 404, 429, or caller cancellation; a rate-limit
-signal stops further retries. Failed root attempts still count against the ceiling.
+The merged-entry source ceiling is 32 actual HTTP attempts for one language, plus
+16 per extra language, capped at 96. Resolution attempts, redirects, Wikidata
+details, and recovery share this counter. Ancestor and English root Wiktionary
+lookups share one retry for a transient network, 408, or 5xx failure. They do not
+retry 404, 429, or caller cancellation; a rate-limit signal stops further retries.
 
-Unrecovered root/component lookups, skipped root candidates, and missing primary
-etymology sources mark research incomplete. The final result still passes the same
-identity, bilingual, scoped-evidence, and schema checks, but Redis retains it for
-five minutes instead of approximately thirty days. This keeps singleflight waiters
-working while allowing a later lookup to recover missing evidence. Word-page data
-also revalidates every five minutes so its cache cannot hold an incomplete result
-for the former hourly interval. Complete Redis results retain their thirty-day TTL.
-Cache namespaces are English `etymology:v2.7:` and multilingual `etymology:beta:v9:`;
-older entries are retained under their previous namespaces.
+Unresolved research and language failures mark a merged entry incomplete without
+removing successful language histories. Entries remain durable for 365 days under
+`entry:v1:{word}`; incomplete entries become eligible for explicit retrace after
+five minutes. Revision changes or research older than 90 days also make an entry
+stale. A failed retrace preserves the saved entry. Legacy corpus discoveries
+migrate through cache-only reads within the index's 1,000-word bound.
 
 ## Controlled measurements
 

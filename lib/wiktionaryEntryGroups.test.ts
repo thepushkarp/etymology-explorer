@@ -206,7 +206,7 @@ function fixture(
     html,
     sections,
     languageHeading,
-    LANGUAGES[language].etymologyHeading
+    LANGUAGES[language].nativeWiktionary!.etymologyHeading
   )
 }
 
@@ -248,7 +248,7 @@ describe('MediaWiki tocdata language sections', () => {
         },
       ],
       'Italiano',
-      LANGUAGES.it.etymologyHeading
+      LANGUAGES.it.nativeWiktionary!.etymologyHeading
     )
     expect(groups[0].text).toContain('latino casa')
   })

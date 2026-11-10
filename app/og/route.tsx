@@ -118,7 +118,7 @@ function BrandCard() {
   )
 }
 
-function WordCard({ word, language }: { word: string; language: LanguageCode }) {
+function WordCard({ word, language }: { word: string; language?: LanguageCode }) {
   const [initial, rest] = splitLeadingGrapheme(word)
   return (
     <div
@@ -145,9 +145,7 @@ function WordCard({ word, language }: { word: string; language: LanguageCode }) 
           marginBottom: 34,
         }}
       >
-        {language === 'en'
-          ? 'the etymology of'
-          : `the ${LANGUAGES[language].englishName} etymology of`}
+        {language ? `the ${LANGUAGES[language].englishName} etymology of` : 'the etymology of'}
       </div>
       <div
         style={{
@@ -211,7 +209,8 @@ export async function GET(request: Request) {
   ]
 
   const rawWord = new URL(request.url).searchParams.get('word')
-  const language = parseLanguageCode(new URL(request.url).searchParams.get('language')) ?? 'en'
+  const languageHint = new URL(request.url).searchParams.get('language')
+  const language = languageHint ? (parseLanguageCode(languageHint) ?? undefined) : undefined
   const word = rawWord ? canonicalizeWord(rawWord) : ''
 
   if (word && isValidWord(word)) {

@@ -10,7 +10,7 @@ import { CONFIG } from '@/lib/config'
 import type { LanguageCode } from '@/lib/languages'
 
 interface SearchBoxProps {
-  language: LanguageCode
+  language?: LanguageCode
   size?: 'large' | 'compact'
   autoFocus?: boolean
 }
@@ -92,6 +92,8 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
         <input
           ref={inputRef}
           type="search"
+          lang={language}
+          dir="auto"
           value={value}
           autoFocus={autoFocus}
           onChange={(event) => {

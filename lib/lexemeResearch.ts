@@ -13,7 +13,7 @@ import {
 } from './multilingualSources'
 import { SPECIALIST_PROVIDERS, parseDiscoveredSpecialist } from './specialistSources'
 import { HISTORICAL_SOURCES } from './historicalSources'
-import { LANGUAGES, isLanguageCode, type LanguageCode } from './languages'
+import { LANGUAGES, languageFromName, lexicalLanguageName, type LanguageCode } from './languages'
 import { canonicalizeWord } from './orthography'
 import { sourceFamily } from './sourceProviders'
 import { sourceEvidenceRole } from './researchSources'
@@ -69,21 +69,6 @@ interface LookupOptions {
   skipOptionalSources?: boolean
   /** Core dictionary evidence can start CPU/LLM root extraction while other sources finish. */
   onCore?: (sources: SourceRecord[]) => void
-}
-
-export function modernLanguage(language: string): LanguageCode | undefined {
-  const value = language.toLowerCase()
-  if (isLanguageCode(value)) return value
-  return Object.values(LANGUAGES).find((entry) => entry.englishName.toLowerCase() === value)?.code
-}
-
-export function lexicalLanguageName(language: string): string {
-  const modern = modernLanguage(language)
-  if (modern) return LANGUAGES[modern].englishName
-  const exact = Object.keys(HISTORICAL_DOMAINS).find(
-    (name) => name.toLowerCase() === language.toLowerCase()
-  )
-  return exact ?? language.trim()
 }
 
 export function researchLexemeKey(lexeme: LexemeRef): string {
@@ -152,7 +137,7 @@ function discoveredContext(lexeme: LexemeRef, document: ExaDocument): SourceReco
     return
   }
   if (url.protocol !== 'https:' || url.username || url.password || url.port) return
-  const language = modernLanguage(lexeme.language)
+  const language = languageFromName(lexeme.language)
   let provider: SourceProviderId | undefined
   let form: string | undefined
   let path: string
@@ -223,6 +208,16 @@ export function createLexemeResearchSession(options: {
 }) {
   const { budget, signal } = options
   const memo = new Map<string, Promise<LexemeLookupResult>>()
+  const fetchMemo = new Map<string, Promise<unknown>>()
+  function fetchOnce<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
+    const existing = fetchMemo.get(key)
+    if (existing) return existing as Promise<T>
+    const pending = (async () => budget.run(fetcher))()
+    fetchMemo.set(key, pending)
+    // Rejections remain memoized: every subscriber observes the same source attempt.
+    void pending.catch(() => {})
+    return pending
+  }
   let etymonlineBlocked = false
   let recoveryPages = 0
   const exa = createExaSession({
@@ -240,7 +235,7 @@ export function createLexemeResearchSession(options: {
   }
 
   function jobs(lexeme: LexemeRef, settings: LookupOptions): SourceJob[] {
-    const language = modernLanguage(lexeme.language)
+    const language = languageFromName(lexeme.language)
     const heading = lexicalLanguageName(lexeme.language)
     const word = canonicalizeWord(lexeme.word)
     const general: SourceJob[] = []
@@ -260,7 +255,10 @@ export function createLexemeResearchSession(options: {
       general.push(
         simple(
           'wiktionary',
-          () => fetchWiktionary(word, signal, { retryTransient: !settings.primary }),
+          () =>
+            fetchOnce(`wiktionaryLanguage:English:${word}`, () =>
+              fetchWiktionary(word, signal, { retryTransient: !settings.primary, fetchOnce })
+            ),
           true
         )
       )
@@ -279,24 +277,42 @@ export function createLexemeResearchSession(options: {
       general.push(
         simple(
           'wiktionaryEnglish',
-          () => fetchEnglishWiktionaryLanguage(word, language, signal),
+          () =>
+            fetchOnce(`wiktionaryLanguage:${heading}:${word}`, () =>
+              fetchEnglishWiktionaryLanguage(word, language, signal, { fetchOnce })
+            ),
           true
         )
       )
-      general.push(
-        simple('wiktionaryNative', () => fetchNativeWiktionary(word, language, signal), true)
-      )
+      if (LANGUAGES[language].nativeWiktionary)
+        general.push(
+          simple(
+            'wiktionaryNative',
+            () =>
+              fetchOnce(`wiktionaryNative:${language}:${word}`, () =>
+                fetchNativeWiktionary(word, language, signal, { fetchOnce })
+              ),
+            true
+          )
+        )
     } else {
       general.push(
         simple(
           'wiktionary',
-          () => fetchSelectedWiktionaryLanguage(word, heading, signal, { retryTransient: true }),
+          () =>
+            fetchOnce(`wiktionaryLanguage:${heading}:${word}`, () =>
+              fetchSelectedWiktionaryLanguage(word, heading, signal, {
+                retryTransient: true,
+                fetchOnce,
+              })
+            ),
           true
         )
       )
     }
     if (!settings.skipOptionalSources) {
-      general.push(simple('wikipedia', () => fetchWikipedia(word, signal, language ?? 'en')))
+      if (!language || LANGUAGES[language].wikipediaEdition)
+        general.push(simple('wikipedia', () => fetchWikipedia(word, signal, language ?? 'en')))
       if (language === 'en')
         general.push({
           id: 'incelsWiki',
@@ -304,7 +320,8 @@ export function createLexemeResearchSession(options: {
         })
     }
     if (language && language !== 'en') {
-      general.push(simple('wikidataLexeme', () => fetchWikidataLexeme(word, language, signal)))
+      if (LANGUAGES[language].wikidataEntity)
+        general.push(simple('wikidataLexeme', () => fetchWikidataLexeme(word, language, signal)))
       if (language === 'pt')
         general.push(simple('dicionarioAberto', () => fetchDicionarioAberto(word, signal)))
     }
@@ -342,7 +359,8 @@ export function createLexemeResearchSession(options: {
 
   async function runJob(lexeme: LexemeRef, job: SourceJob, primary: boolean) {
     const start = Date.now()
-    if (primary) emit({ type: 'source_started', source: job.id })
+    const language = languageFromName(lexeme.language)
+    if (primary) emit({ type: 'source_started', source: job.id, language })
     let result: { records: SourceRecord[]; outcome: SourceOutcome }
     try {
       signal?.throwIfAborted()
@@ -369,12 +387,14 @@ export function createLexemeResearchSession(options: {
       if (result.records.length)
         emit({
           type: 'source_complete',
+          language,
           source: job.id,
           timing: Date.now() - start,
           preview: result.records[0].data.text.slice(0, 100),
         })
       emit({
         type: 'source_outcome',
+        language,
         source: job.id,
         outcome: result.outcome,
         timing: Date.now() - start,
@@ -457,14 +477,19 @@ export function createLexemeResearchSession(options: {
       }
       result.outcomes.push({ source: 'etymonlineRecovery', outcome })
       if (settings.primary && outcome.status === 'found')
-        emit({ type: 'source_outcome', source: 'etymonline', outcome })
+        emit({
+          type: 'source_outcome',
+          language: languageFromName(result.lexeme.language),
+          source: 'etymonline',
+          outcome,
+        })
     }
   }
 
   async function discover(result: LexemeLookupResult, settings: LookupOptions) {
     if (hasEtymologicalText(result.sources)) return
     const heading = lexicalLanguageName(result.lexeme.language)
-    const language = modernLanguage(result.lexeme.language)
+    const language = languageFromName(result.lexeme.language)
     const domains = language
       ? SPECIALIST_DOMAINS[language]
       : heading === 'Latin' || heading === 'Ancient Greek'
@@ -510,7 +535,7 @@ export function createLexemeResearchSession(options: {
     result.outcomes.push({ source: 'discovery', outcome })
     if (settings.primary && records.length)
       for (const source of records)
-        emit({ type: 'source_outcome', source: source.provider, outcome })
+        emit({ type: 'source_outcome', language, source: source.provider, outcome })
   }
 
   async function lookupMany(
@@ -571,9 +596,10 @@ export function createLexemeResearchSession(options: {
             addRecords(entry.result, outcome.records)
             entry.result.outcomes.push({ source: entry.jobs[index].id, outcome: outcome.outcome })
           })
-          const language = modernLanguage(entry.result.lexeme.language)
+          const language = languageFromName(entry.result.lexeme.language)
           if (
             language &&
+            LANGUAGES[language].freeDictionary &&
             !entry.result.sources.some((source) =>
               ['wiktionary', 'wiktionaryEnglish', 'wiktionaryNative'].includes(source.provider)
             )
@@ -631,6 +657,9 @@ export function createLexemeResearchSession(options: {
   }
 
   return {
+    fetchOnce,
+    signal,
+    getBudget: () => budget,
     lookupMany,
     lookup: async (lexeme: LexemeRef, settings?: LookupOptions) =>
       (await lookupMany([lexeme], settings))[0],

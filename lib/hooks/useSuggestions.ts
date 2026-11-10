@@ -11,7 +11,7 @@ const DEBOUNCE_MS = 150
 
 export interface SuggestionFetchState {
   query: string
-  language: LanguageCode | null
+  language: LanguageCode | undefined
   words: string[]
 }
 
@@ -23,7 +23,7 @@ export interface SuggestionFetchState {
 export function visibleFetchedWords(
   fetched: SuggestionFetchState,
   normalizedQuery: string,
-  language: LanguageCode
+  language?: LanguageCode
 ): string[] {
   if (fetched.language !== language) return []
   return fetched.query === normalizedQuery
@@ -31,12 +31,12 @@ export function visibleFetchedWords(
     : fetched.words.filter((word) => word.includes(normalizedQuery))
 }
 
-/** Debounced wordlist suggestions from /api/suggestions; stale requests are cancelled. */
-export function useSuggestions(query: string, language: LanguageCode): string[] {
+/** Debounced word suggestions from /api/suggestions; stale requests are cancelled. */
+export function useSuggestions(query: string, language?: LanguageCode): string[] {
   const normalizedQuery = canonicalizeWord(query)
   const [fetched, setFetched] = useState<SuggestionFetchState>({
     query: '',
-    language: null,
+    language: undefined,
     words: [],
   })
 
@@ -45,7 +45,9 @@ export function useSuggestions(query: string, language: LanguageCode): string[] 
 
     const controller = new AbortController()
     const timeout = setTimeout(() => {
-      fetch(`/api/suggestions?q=${encodeURIComponent(normalizedQuery)}&language=${language}`, {
+      const params = new URLSearchParams({ q: normalizedQuery })
+      if (language) params.set('language', language)
+      fetch(`/api/suggestions?${params}`, {
         signal: controller.signal,
       })
         .then((response) =>
@@ -54,7 +56,7 @@ export function useSuggestions(query: string, language: LanguageCode): string[] 
             : null
         )
         .then((payload) => {
-          if (payload?.success && payload.data) {
+          if (!controller.signal.aborted && payload?.success && payload.data) {
             setFetched({
               query: normalizedQuery,
               language,

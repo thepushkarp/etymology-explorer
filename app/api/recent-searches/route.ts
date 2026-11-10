@@ -9,14 +9,18 @@ export const revalidate = 0
 const headers = { 'Cache-Control': 'no-store' }
 
 export async function GET(request: NextRequest) {
-  const language = parseLanguageCode(request.nextUrl.searchParams.get('language'))
-  if (!language) {
+  const rawLanguage = request.nextUrl.searchParams.get('language')
+  const language = rawLanguage === null ? undefined : parseLanguageCode(rawLanguage)
+  if (language === null) {
     return NextResponse.json(
       { success: false, error: 'Unsupported language' },
       { status: 400, headers }
     )
   }
-  return NextResponse.json({ success: true, data: await getRecentSearches(language) }, { headers })
+  return NextResponse.json(
+    { success: true, data: await getRecentSearches(undefined, language) },
+    { headers }
+  )
 }
 
 export async function POST(request: NextRequest) {
@@ -33,18 +37,10 @@ export async function POST(request: NextRequest) {
   if (
     typeof input.word !== 'string' ||
     !isValidWord(input.word) ||
-    typeof input.language !== 'string' ||
-    Object.keys(input).some((key) => key !== 'word' && key !== 'language')
+    Object.keys(input).some((key) => key !== 'word')
   ) {
     return NextResponse.json({ success: false, error: 'Invalid search' }, { status: 400, headers })
   }
-  const language = parseLanguageCode(input.language)
-  if (!language) {
-    return NextResponse.json(
-      { success: false, error: 'Unsupported language' },
-      { status: 400, headers }
-    )
-  }
-  const recorded = await recordRecentSearch(input.word, language)
+  const recorded = await recordRecentSearch(input.word)
   return NextResponse.json({ success: true, data: { recorded } }, { headers })
 }

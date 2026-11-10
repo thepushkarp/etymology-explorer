@@ -145,7 +145,7 @@ export function deriveEntryContexts(
         matches.find((candidate) =>
           sourceName !== 'wiktionaryNative'
             ? /\b(?:plural|singular|form|inflection) of\b/i.test(candidate.text)
-            : LANGUAGES[language].formHeading.test(candidate.heading)
+            : LANGUAGES[language].nativeWiktionary?.formHeading.test(candidate.heading)
         ) ?? matches[0]
       return [{ section, target }]
     })

@@ -42,6 +42,6 @@ export const faqs: FaqItem[] = [
   {
     question: 'How can I use Etymology Explorer?',
     answer:
-      'Simply type any English word into the search bar and press Enter. The app will trace its origins, show you its root components, visualize its ancestry through different languages, and reveal fascinating stories about how the word evolved to its current meaning.',
+      'Type a word or phrase and press Enter. Auto discovers which supported languages use that spelling and traces their independent histories in language tabs. You can choose a language to include specialist-only entries. Explanations are in English, with examples in the word’s language and English translations. Saved entries remain readable; a Retrace link appears when their research is due for an update.',
   },
 ]

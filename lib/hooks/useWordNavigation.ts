@@ -16,11 +16,11 @@ export function useWordNavigation() {
   const router = useRouter()
 
   return useCallback(
-    (word: string, language: LanguageCode = 'en') => {
+    (word: string, language?: LanguageCode) => {
       const trimmed = canonicalizeWord(word)
       if (!isValidWord(trimmed)) return
       markTraceIntent(trimmed, language)
-      void recordRecentSearchIntent(trimmed, language)
+      void recordRecentSearchIntent(trimmed)
       router.push(wordPagePath(trimmed, language))
     },
     [router]

@@ -10,6 +10,10 @@ plain-text bullet under a `###` group. `Unreleased` stays out of the dialog.
 
 ### Changed
 
+- Auto discovers supported languages for a spelling and traces their histories together with language tabs.
+- Saved entries remain discoverable across pipeline updates, with an explicit retrace action for older research.
+- Autocomplete includes Wiktionary headwords beyond the vocabulary list.
+
 - Italian, Spanish, French, and Portuguese entries are written in English, with usage examples in the word's own language and their English translations.
 - Italian, Spanish, French, and Portuguese are no longer marked as beta.
 

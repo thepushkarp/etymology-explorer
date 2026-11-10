@@ -33,6 +33,10 @@ export const CONFIG = {
   maxRootsToExplore: 4,
   maxRelatedWordsPerRoot: 4,
   maxTotalFetches: 32,
+  maxFetchesPerExtraLanguage: 16,
+  maxEntryFetches: 96,
+  pipelineRevision: 1,
+  entryFreshDays: 90,
 
   // Exa's full-text search and recovery share their own paid-request allowance.
   exa: {
@@ -47,7 +51,7 @@ export const CONFIG = {
   },
 
   // Cache TTLs (seconds)
-  etymologyCacheTTL: 30 * 24 * 60 * 60, // 30 days
+  etymologyCacheTTL: 365 * 24 * 60 * 60, // durable corpus: 1 year
   incompleteEtymologyCacheTTL: 5 * 60,
   audioCacheTTL: 365 * 24 * 60 * 60, // 1 year
   negativeCacheTTL: 30 * 60, // 30m — limits repeat misses without cementing transient source failures

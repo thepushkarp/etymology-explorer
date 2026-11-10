@@ -2,18 +2,54 @@ import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
 
 // Local cache/lock state; this server never connects to a real Redis or provider.
-const records = new Map(
-  Object.entries(JSON.parse(readFileSync(new URL('./entries.json', import.meta.url))))
-)
-const base = records.get('etymology:v2.7:nice')
+const records = new Map()
+for (const result of Object.values(
+  JSON.parse(readFileSync(new URL('./entries.json', import.meta.url)))
+)) {
+  const key = `entry:v1:${result.word}`
+  const entry = records.get(key) ?? {
+    word: result.word,
+    languages: [],
+    entries: {},
+    otherLanguages: [],
+    tracedAt: new Date().toISOString(),
+    revision: 1,
+  }
+  entry.languages.push(result.language)
+  entry.entries[result.language] = result
+  records.set(key, entry)
+}
+const chat = {
+  word: 'chat',
+  languages: ['en', 'it', 'es', 'fr', 'pt'],
+  entries: {},
+  otherLanguages: ['Dutch', 'Tagalog'],
+  tracedAt: new Date().toISOString(),
+  revision: 1,
+}
+for (const language of chat.languages) {
+  const result = structuredClone(records.get('entry:v1:nice').entries.en)
+  Object.assign(result, {
+    word: chat.word,
+    language,
+    definition: `A synthetic ${language} headword.`,
+    lore: `The ${language} history has independent scoped evidence.`,
+  })
+  for (const history of result.histories)
+    Object.assign(history, { definition: result.definition, lore: result.lore })
+  chat.entries[language] = result
+}
+records.set('entry:v1:chat', chat)
+records.get('entry:v1:nice').revision = 0
+const base = records.get('entry:v1:nice')
 for (const word of ['muscle', 'window', 'telephone', 'bread', 'harvest', 'quarantine']) {
-  records.set(`etymology:v2.7:${word}`, { ...base, word })
+  records.set(`entry:v1:${word}`, { ...base, word, entries: { en: { ...base.entries.en, word } } })
 }
 const letters = 'abcdefghijklmnopqrstuvwxyz'
 for (let i = 0; records.size < 1000; i++) {
   const word =
     letters[i % 26] + letters[Math.floor(i / 26) % 26] + letters[Math.floor(i / 676) % 26] + 'word'
-  records.set(`etymology:v2.7:${word}`, { ...base, word })
+  records.set(`entry:v1:${word}`, { ...base, word, entries: { en: { ...base.entries.en, word } } })
 }
 const stats = { get: 0, scan: 0, other: 0 }
 const encode = (value) =>
@@ -30,7 +66,10 @@ const command = ([name, ...args]) => {
   }
   if (name === 'scan') {
     stats.scan++
-    return { result: ['0', [...records.keys()]] }
+    const matchIndex = args.findIndex((arg) => String(arg).toLowerCase() === 'match')
+    const pattern = matchIndex >= 0 ? String(args[matchIndex + 1]) : '*'
+    const prefix = pattern.replace(/\*$/, '')
+    return { result: ['0', [...records.keys()].filter((key) => key.startsWith(prefix))] }
   }
   stats.other++
   if (name === 'set') {
@@ -38,6 +77,16 @@ const command = ([name, ...args]) => {
       return { result: null }
     records.set(args[0], args[1])
     return { result: 'OK' }
+  }
+  if (name === 'eval' && String(args[2]).startsWith('recent-searches:')) {
+    const entry = JSON.parse(args[3])
+    const previous = records.get(args[2]) ?? []
+    const next = [entry, ...previous.filter((candidate) => candidate.word !== entry.word)].slice(
+      0,
+      Number(args[4])
+    )
+    records.set(args[2], next)
+    return { result: next.length }
   }
   if (name === 'del') return { result: Number(records.delete(args[0])) }
   if (name === 'expire' || name === 'exists') return { result: Number(records.has(args[0])) }

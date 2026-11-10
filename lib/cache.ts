@@ -1,166 +1,230 @@
-import { canonicalizeWord } from './orthography'
-/**
- * Upstash Redis caching for etymology results.
- * Reduces API costs by caching LLM synthesis results.
- */
-
+/** Durable corpus entries and independent pronunciation/negative caches. */
 import { revalidateTag } from 'next/cache'
 import { after } from 'next/server'
-import { EtymologyResult } from './types'
-import { EtymologyResultSchema } from './schemas/etymology'
+import type { EtymologyResult, WordEntry } from './types'
+import { EtymologyResultSchema, WordEntrySchema } from './schemas/etymology'
 import { CONFIG } from './config'
 import { getRedis } from './redis'
 import { safeError } from './errorUtils'
 import { emitSecurityEvent } from './telemetry'
 import type { LanguageCode } from './languages'
-import { lexemeKey, parseLanguageCode } from './languages'
+import { lexemeKey, SUPPORTED_LANGUAGE_CODES } from './languages'
+import { canonicalizeWord } from './orthography'
 
-/** Apply ±jitter to a TTL to prevent synchronized cache stampedes */
+/** Apply ±jitter to non-corpus TTLs to prevent synchronized cache stampedes. */
 function jitterTTL(ttl: number): number {
-  const jitter = CONFIG.cache.ttlJitterPercent
-  return Math.round(ttl * (1 + (Math.random() * 2 - 1) * jitter))
+  return Math.round(ttl * (1 + (Math.random() * 2 - 1) * CONFIG.cache.ttlJitterPercent))
 }
 
-// Bump version when EtymologyResult schema or sourcing behavior changes
-export const CACHE_VERSION = '2.7'
-export const ETYMOLOGY_PREFIX = `etymology:v${CACHE_VERSION}:`
-export const BETA_CACHE_VERSION = '9'
-export const BETA_ETYMOLOGY_PREFIX = `etymology:beta:v${BETA_CACHE_VERSION}:`
-export const ETYMOLOGY_SCAN_PATTERN = 'etymology:*'
-const ETYMOLOGY_TTL = CONFIG.etymologyCacheTTL
-
-// Audio cache (longer TTL - pronunciations don't change)
-const AUDIO_PREFIX = `audio:v2:`
+export const ENTRY_PREFIX = 'entry:v1:'
+export const ENTRY_SCAN_PATTERN = `${ENTRY_PREFIX}*`
+// Legacy prefixes remain readable until their original TTLs have elapsed.
+export const LEGACY_ETYMOLOGY_PREFIX = 'etymology:v2.7:'
+export const LEGACY_BETA_ETYMOLOGY_PREFIX = 'etymology:beta:v9:'
+export const LEGACY_SCAN_PATTERNS = [
+  `${LEGACY_ETYMOLOGY_PREFIX}*`,
+  `${LEGACY_BETA_ETYMOLOGY_PREFIX}*`,
+] as const
+const AUDIO_PREFIX = 'audio:v2:'
 const AUDIO_TTL = CONFIG.audioCacheTTL
 
-/**
- * Get cached etymology result
- * Returns null if not cached, invalid schema, or on error (fail open)
- * Uses Zod validation to detect schema mismatches from old cache entries
- */
-function etymologyKey(word: string, language: LanguageCode): string {
-  const normalized = canonicalizeWord(word)
-  return language === 'en'
-    ? `${ETYMOLOGY_PREFIX}${normalized}`
-    : `${BETA_ETYMOLOGY_PREFIX}${language}:${normalized}`
+export function etymologyWordTag(word: string): string {
+  return `etymology-word:${canonicalizeWord(word)}`
 }
 
-export function lexemeFromEtymologyCacheKey(
-  key: string
-): { language: LanguageCode; word: string } | null {
-  if (key.startsWith(BETA_ETYMOLOGY_PREFIX)) {
-    const suffix = key.slice(BETA_ETYMOLOGY_PREFIX.length)
-    const separator = suffix.indexOf(':')
-    if (separator <= 0) return null
-
-    const language = parseLanguageCode(suffix.slice(0, separator))
-    if (!language || language === 'en') return null
-    return { language, word: suffix.slice(separator + 1) }
+/** Walk legacy prose without changing identifiers, source scopes or lexical forms. */
+function upgradeLegacyValue(value: unknown, examples = false): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => {
+      if (examples && typeof item === 'string') return { text: item }
+      if (
+        examples &&
+        item &&
+        typeof item === 'object' &&
+        'en' in item &&
+        typeof item.en === 'string' &&
+        'local' in item &&
+        typeof item.local === 'string'
+      ) {
+        return { text: item.local, translation: item.en }
+      }
+      return upgradeLegacyValue(item)
+    })
   }
-
-  if (key.startsWith(ETYMOLOGY_PREFIX)) {
-    return { language: 'en', word: key.slice(ETYMOLOGY_PREFIX.length) }
-  }
-
-  return null
+  if (!value || typeof value !== 'object') return value
+  if ('en' in value && typeof value.en === 'string' && 'local' in value) return value.en
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, upgradeLegacyValue(item, key === 'examples')])
+  )
 }
 
-export function etymologyWordTag(word: string, language: LanguageCode = 'en'): string {
-  const normalized = canonicalizeWord(word)
-  return language === 'en'
-    ? `etymology-word:${normalized}`
-    : `etymology-word:${lexemeKey(language, normalized)}`
-}
-
-export async function getCachedEtymology(
+/** Pure legacy migration: invalid siblings cannot discard a usable language entry. */
+export function upgradeLegacyEntry(
   word: string,
-  language: LanguageCode = 'en'
-): Promise<EtymologyResult | null> {
+  legacyValues: Partial<Record<LanguageCode, unknown>>
+): WordEntry | null {
+  const normalized = canonicalizeWord(word)
+  const entries: WordEntry['entries'] = {}
+  for (const language of SUPPORTED_LANGUAGE_CODES) {
+    const raw = legacyValues[language]
+    if (
+      !raw ||
+      typeof raw !== 'object' ||
+      !('word' in raw) ||
+      typeof raw.word !== 'string' ||
+      canonicalizeWord(raw.word) !== normalized ||
+      ('language' in raw && raw.language !== language)
+    )
+      continue
+    const upgraded = upgradeLegacyValue(raw) as Record<string, unknown>
+    upgraded.language = language
+    // Legacy English entries have one unsplit narrative. Its unresolved
+    // display scope records that no source-local history identity was stored;
+    // it contributes no evidence and never enters new synthesis research.
+    if (upgraded.histories === undefined && upgraded.primaryHistoryId === undefined) {
+      const id = `legacy:${language}:${encodeURIComponent(normalized)}`
+      upgraded.primaryHistoryId = id
+      upgraded.histories = [
+        {
+          id,
+          label: 'Legacy entry',
+          entryKind: 'unresolved',
+          queryNodeId: `${id}:query`,
+          lemmaNodeId: `${id}:query`,
+          evidenceScopeIds: [`${id}:unresolved`],
+          ...Object.fromEntries(
+            [
+              'pronunciation',
+              'definition',
+              'roots',
+              'lore',
+              'examples',
+              'ancestryGraph',
+              'partsOfSpeech',
+            ]
+              .filter((key) => upgraded[key] !== undefined)
+              .map((key) => [key, upgraded[key]])
+          ),
+        },
+      ]
+    }
+    const parsed = EtymologyResultSchema.safeParse(upgraded)
+    if (!parsed.success) continue
+    const result = parsed.data as EtymologyResult
+    entries[result.language] = { ...result, word: normalized }
+  }
+  const languages = SUPPORTED_LANGUAGE_CODES.filter((language) => entries[language])
+  if (!languages.length) return null
+  return {
+    word: normalized,
+    languages,
+    entries,
+    otherLanguages: [],
+    tracedAt: new Date(0).toISOString(),
+    revision: 0,
+  }
+}
+
+function entryIsStale(entry: WordEntry): boolean {
+  const age = Date.now() - Date.parse(entry.freshnessAt ?? entry.tracedAt)
+  return (
+    entry.revision < CONFIG.pipelineRevision ||
+    age >= CONFIG.entryFreshDays * 86400_000 ||
+    (entry.incomplete === true && age >= CONFIG.incompleteEtymologyCacheTTL * 1000)
+  )
+}
+
+/** Validate on read; freshness never removes a word from the durable corpus. */
+export async function getCachedEntry(
+  word: string
+): Promise<{ entry: WordEntry; stale: boolean } | null> {
   const redis = getRedis()
   if (!redis) return null
-
-  const key = etymologyKey(word, language)
+  const normalized = canonicalizeWord(word)
   try {
-    const raw = await redis.get(key)
-    if (!raw) return null
+    const raw = await redis.get(`${ENTRY_PREFIX}${normalized}`)
+    if (raw) {
+      const parsed = WordEntrySchema.safeParse(raw)
+      if (!parsed.success) {
+        emitSecurityEvent({
+          type: 'schema_validation_fail',
+          timestamp: Date.now(),
+          detail: {
+            word: normalized,
+            source: 'cache_read',
+            issue: parsed.error.issues[0]?.message,
+          },
+        })
+        return null
+      }
+      if (parsed.data.word !== normalized) return null
+      const entry = parsed.data as WordEntry
+      return { entry, stale: entryIsStale(entry) }
+    }
 
-    // Validate against current schema - treats invalid data as cache miss
-    const parsed = EtymologyResultSchema.safeParse(raw)
-    if (!parsed.success) {
-      console.warn(
-        `[Cache] Schema mismatch for "${word}":`,
-        parsed.error.issues[0]?.message || 'Unknown validation error'
+    const legacy = await Promise.allSettled(
+      SUPPORTED_LANGUAGE_CODES.map((language) =>
+        redis.get(
+          language === 'en'
+            ? `${LEGACY_ETYMOLOGY_PREFIX}${normalized}`
+            : `${LEGACY_BETA_ETYMOLOGY_PREFIX}${language}:${normalized}`
+        )
       )
-      emitSecurityEvent({
-        type: 'schema_validation_fail',
-        timestamp: Date.now(),
-        detail: { word, source: 'cache_read', issue: parsed.error.issues[0]?.message },
+    )
+    const entry = upgradeLegacyEntry(
+      normalized,
+      Object.fromEntries(
+        legacy.flatMap((result, index) => {
+          if (result.status === 'fulfilled')
+            return [[SUPPORTED_LANGUAGE_CODES[index], result.value]]
+          console.error('[Cache] Legacy read error:', safeError(result.reason))
+          return []
+        })
+      )
+    )
+    if (!entry) return null
+    // Persist only a fully read legacy set. A transient sibling failure must
+    // remain recoverable on the next read rather than hiding its old key.
+    if (legacy.some((result) => result.status === 'rejected')) return { entry, stale: true }
+    try {
+      // A trace that completes during migration owns the durable entry.
+      const stored = await redis.set(`${ENTRY_PREFIX}${normalized}`, entry, {
+        ex: CONFIG.etymologyCacheTTL,
+        nx: true,
       })
-      return null // Treat as cache miss, will re-fetch from LLM
+      if (stored === null) return getCachedEntry(normalized)
+    } catch (error) {
+      console.error('[Cache] Legacy migration write error:', safeError(error))
     }
-
-    const result = parsed.data as EtymologyResult
-    if (result.language !== language || canonicalizeWord(result.word) !== canonicalizeWord(word)) {
-      console.warn(
-        `[Cache] Language mismatch for "${word}": requested ${language}, cached ${result.language}`
-      )
-      return null
-    }
-    return result
+    return { entry, stale: true }
   } catch (error) {
-    console.error('[Cache] Etymology get error:', safeError(error))
-    return null // Fail open - continue without cache
+    console.error('[Cache] Entry get error:', safeError(error))
+    return null
   }
 }
 
-/**
- * Cache etymology result for future lookups.
- * No write-side schema validation: every result passing through here was
- * already validated by finalizeResult in lib/llm.ts, and reads re-validate
- * for forward compatibility.
- */
-export async function cacheEtymology(
+/** Results arrive validated from synthesis; partial traces remain durable and retraceable. */
+export async function cacheEntry(
   word: string,
-  result: EtymologyResult,
-  language: LanguageCode = result.language,
+  entry: WordEntry,
   options?: { incomplete?: boolean }
 ): Promise<void> {
   const redis = getRedis()
-  if (!redis) return
-
   const normalized = canonicalizeWord(word)
-  const key = etymologyKey(normalized, language)
+  if (!redis) throw new Error(`Could not store entry "${normalized}": Redis is not configured`)
+  const stored =
+    options?.incomplete === undefined ? entry : { ...entry, incomplete: options.incomplete }
   try {
-    await redis.set(key, result, {
-      ex: options?.incomplete ? CONFIG.incompleteEtymologyCacheTTL : jitterTTL(ETYMOLOGY_TTL),
-    })
-    console.log(`[Cache] Stored etymology for "${word}"`)
+    await redis.set(`${ENTRY_PREFIX}${normalized}`, stored, { ex: CONFIG.etymologyCacheTTL })
   } catch (error) {
-    console.error('[Cache] Etymology set error:', safeError(error))
-    // Fail silently - result was already returned to user
-    return
+    throw new Error(`Could not store entry "${normalized}": ${safeError(error)}`)
   }
 
-  // A freshly traced word must surface on /word/{word} immediately: purge
-  // the page's tagged data cache (tag planted by app/word/[word]/page.tsx)
-  // so the ISR miss page doesn't outlive the trace.
-  //
-  // Two subtleties, both verified against next@16 internals:
-  // - Streaming: pending tag revalidations are flushed when the route
-  //   handler RETURNS its Response — before a streaming body runs this
-  //   code. after() re-flushes new revalidations once the response
-  //   finishes (withExecuteRevalidates), so the purge lands on both the
-  //   streaming and unary paths.
-  // - { expire: 0 } hard-expires the tag. The 'max' profile would only
-  //   mark it stale-while-revalidate, letting the very next load still
-  //   serve the miss page.
-  //
-  // Best-effort — outside a Next request scope (tests, scripts) after()
-  // throws and the page refreshes on its configured data-cache interval instead.
+  // Streaming handlers finish before their body writes the entry. after()
+  // flushes these deferred invalidations once that body completes; expire: 0
+  // makes the next page load see the entry rather than a stale ISR miss.
   try {
-    after(() => {
-      revalidateTag(etymologyWordTag(normalized, language), { expire: 0 })
-    })
+    after(() => revalidateTag(etymologyWordTag(normalized), { expire: 0 }))
   } catch (error) {
     console.warn('[Cache] Word page revalidation skipped:', safeError(error))
   }
@@ -214,51 +278,34 @@ function audioKey(word: string, language: LanguageCode): string {
     : `${AUDIO_PREFIX}${lexemeKey(language, normalized)}`
 }
 
-/**
- * Check if a word is in the negative cache (known invalid/no-source words).
- * Returns false on error (fail open).
- */
-export async function getNegativeCache(
-  word: string,
-  language: LanguageCode = 'en'
-): Promise<boolean> {
+/** Auto misses and explicit language hints have independent admission scopes. */
+function negativeKey(word: string, hint?: LanguageCode): string {
+  const normalized = canonicalizeWord(word)
+  return hint ? `neg:v6:hint:${lexemeKey(hint, normalized)}` : `neg:v6:${normalized}`
+}
+
+export async function getNegativeCache(word: string, hint?: LanguageCode): Promise<boolean> {
   const redis = getRedis()
   if (!redis) return false
-
-  const normalized = canonicalizeWord(word)
-  const key =
-    language === 'en' ? `neg:v5:${normalized}` : `neg:v5:${lexemeKey(language, normalized)}`
   try {
-    const exists = await redis.exists(key)
-    return exists === 1
+    return (await redis.exists(negativeKey(word, hint))) === 1
   } catch (error) {
     console.error('[Cache] Negative cache get error:', safeError(error))
     return false
   }
 }
 
-/**
- * Mark a word in the negative cache to prevent repeated no-source fetches.
- * Only caches specific error types — transient errors should NOT be cached.
- * Fails silently.
- */
+/** Transient failures and failed retraces must never suppress a durable entry. */
 export async function cacheNegative(
   word: string,
   errorType: string,
-  language: LanguageCode = 'en'
+  hint?: LanguageCode
 ): Promise<void> {
   const redis = getRedis()
-  if (!redis) return
-
-  if (!CONFIG.cache.negativeCacheAdmitOnly.includes(errorType)) {
-    return
-  }
-
-  const normalized = canonicalizeWord(word)
-  const key =
-    language === 'en' ? `neg:v5:${normalized}` : `neg:v5:${lexemeKey(language, normalized)}`
+  if (!redis || !CONFIG.cache.negativeCacheAdmitOnly.includes(errorType)) return
   try {
-    await redis.set(key, '1', { ex: jitterTTL(CONFIG.negativeCacheTTL) })
+    if (await redis.exists(`${ENTRY_PREFIX}${canonicalizeWord(word)}`)) return
+    await redis.set(negativeKey(word, hint), '1', { ex: jitterTTL(CONFIG.negativeCacheTTL) })
   } catch (error) {
     console.error('[Cache] Negative cache set error:', safeError(error))
   }

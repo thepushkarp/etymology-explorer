@@ -36,7 +36,11 @@ export function EntryHeader({ result, actions, subheader, pending }: EntryHeader
   return (
     <header>
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <h1 className="min-w-0 break-words font-serif text-[clamp(2.75rem,11vw,4.5rem)] leading-none tracking-tight text-ink">
+        <h1
+          lang={result.language}
+          dir="auto"
+          className="min-w-0 break-words font-serif text-[clamp(2.75rem,11vw,4.5rem)] leading-none tracking-tight text-ink"
+        >
           {result.word}
         </h1>
         {actions && <div className="ml-auto self-center">{actions}</div>}
