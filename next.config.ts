@@ -3,9 +3,11 @@ import { version } from './package.json'
 
 const nextConfig: NextConfig = {
   trailingSlash: false,
-  // Inlines only the version string; importing package.json from client code
-  // would ship the whole file.
-  env: { NEXT_PUBLIC_APP_VERSION: version },
+  // Only public build metadata belongs here: these values are inlined into client bundles.
+  env: {
+    NEXT_PUBLIC_APP_VERSION: version,
+    NEXT_PUBLIC_APP_CHANNEL: process.env.APP_CHANNEL === 'beta' ? 'beta' : 'production',
+  },
   async headers() {
     return [
       {

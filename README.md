@@ -335,6 +335,8 @@ The Preview deployment retains `main` source metadata and receives `APP_CHANNEL=
 
 Keep `beta` as a deployment mirror: do not add commits directly to it. The workflow uses `GITHUB_TOKEN` with `contents: write` for the fast-forward and the same `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` secrets as production for deployment. Configure the application's Preview environment variables in Vercel and connect `beta.etymex.com` to the `beta` Preview branch so production releases cannot claim it. Automatic Git deployments for `main` and `beta` are disabled in `vercel.json`; other branches retain their previews.
 
+Builds with `APP_CHANNEL=beta` label the header version as beta and show nonempty `Unreleased` changelog groups first, without a release date or tag link. Default builds show released versions only.
+
 ### Releasing
 
 Production at `etymex.com` deploys only when a GitHub release is published. Pull requests still get Vercel previews; merging to `main` updates beta.

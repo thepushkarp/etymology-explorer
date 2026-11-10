@@ -51,3 +51,51 @@ test('the newest changelog release matches the package version', () => {
 
   expect(parseChangelog(changelog)[0]?.version).toBe(version)
 })
+
+test('beta includes Unreleased first without release metadata', () => {
+  const changelog = `# Changelog
+
+## [Unreleased]
+
+### Added
+
+- Available in beta.
+
+## [0.1.0] - 2026-11-07
+
+### Added
+
+- Released.
+`
+
+  expect(parseChangelog(changelog, { includeUnreleased: true })).toEqual([
+    {
+      version: 'Unreleased',
+      date: null,
+      groups: [{ title: 'Added', items: ['Available in beta.'] }],
+    },
+    ...parseChangelog(changelog),
+  ])
+})
+
+test('beta omits empty Unreleased at the next release boundary and end of file', () => {
+  const release = `## [0.1.0] - 2026-11-07
+
+### Added
+
+- Released.
+`
+
+  expect(parseChangelog(`## [Unreleased]\n\n${release}`, { includeUnreleased: true })).toEqual(
+    parseChangelog(release)
+  )
+  expect(parseChangelog('## [Unreleased]\n', { includeUnreleased: true })).toEqual([])
+})
+
+test('beta validates Unreleased groups and entries like released sections', () => {
+  for (const contents of ['- Ungrouped.', '### Added\n\nContinuation text.', '### Added']) {
+    expect(() =>
+      parseChangelog(`## [Unreleased]\n\n${contents}`, { includeUnreleased: true })
+    ).toThrow(/Invalid changelog entry|empty section/)
+  }
+})

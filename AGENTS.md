@@ -72,6 +72,9 @@ The header shows `NEXT_PUBLIC_APP_VERSION`, inlined from `package.json` by `next
 `components/VersionInfo.tsx` fetches the prerendered `/api/changelog` only when its dialog opens,
 which keeps changelog text out of every page. `lib/changelog.ts` must stay free of `node:fs`: it is
 in the client graph through `SiteHeader`, and only the route reads the file.
+`APP_CHANNEL=beta` at build time inlines a public beta channel, labels the header version as beta,
+and includes nonempty Unreleased groups first in the dialog without a release date or tag link.
+Default builds show released versions only.
 
 ## Architecture
 
@@ -353,7 +356,7 @@ When adding UI: _"Would this feel at home in a beautifully typeset etymology dic
 | `/api/pronunciation` | GET    | TTS audio - `?word=word` (ElevenLabs, bounded voice fallback)                     |
 | `/api/ngram`         | GET    | Google Books ngram usage data - `?word=word`                                      |
 | `/api/health`        | GET    | Liveness check                                                                    |
-| `/api/changelog`     | GET    | Released versions parsed from `CHANGELOG.md` (prerendered at build)               |
+| `/api/changelog`     | GET    | Changelog from `CHANGELOG.md`; beta includes Unreleased (prerendered)             |
 | `/api/admin/stats`   | GET    | Budget + counter stats (requires `x-admin-secret` header)                         |
 
 All return `{ success: boolean, data?: T, error?: string }` wrapper.

@@ -1,21 +1,23 @@
 'use client'
 
 import { useId, useRef, useState, type MouseEvent } from 'react'
-import { RELEASES_URL, releaseUrl, type ChangelogRelease } from '@/lib/changelog'
+import { RELEASES_URL, releaseUrl, type ChangelogEntry } from '@/lib/changelog'
 import type { ApiResponse } from '@/lib/types'
 
 // Inlined from package.json by next.config.ts, so it names the build this tab is
 // running even when a newer release has since been deployed.
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION
+const IS_BETA = process.env.NEXT_PUBLIC_APP_CHANNEL === 'beta'
+const VERSION_LABEL = `v${APP_VERSION}${IS_BETA ? ' beta' : ''}`
 
 type ChangelogState =
-  { status: 'idle' | 'loading' | 'error' } | { status: 'ready'; releases: ChangelogRelease[] }
+  { status: 'idle' | 'loading' | 'error' } | { status: 'ready'; releases: ChangelogEntry[] }
 
-async function fetchChangelog(): Promise<ChangelogRelease[]> {
+async function fetchChangelog(): Promise<ChangelogEntry[]> {
   const response = await fetch('/api/changelog')
   if (!response.ok) throw new Error(`GET /api/changelog returned ${response.status}`)
 
-  const body = (await response.json()) as ApiResponse<ChangelogRelease[]>
+  const body = (await response.json()) as ApiResponse<ChangelogEntry[]>
   if (!body.data) throw new Error(`GET /api/changelog failed: ${body.error}`)
   return body.data
 }
@@ -27,24 +29,35 @@ function formatDate(date: string): string {
   })
 }
 
-function ReleaseEntry({ release }: { release: ChangelogRelease }) {
+function ReleaseEntry({ release }: { release: ChangelogEntry }) {
   return (
     <li className="border-t border-rule py-5">
       <div className="flex flex-wrap items-baseline gap-x-3">
         <h3 className="font-serif text-lg">
-          <a
-            href={releaseUrl(release.version)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="link"
-          >
-            v{release.version}
-          </a>
+          {release.date === null ? (
+            'Unreleased'
+          ) : (
+            <a
+              href={releaseUrl(release.version)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="link"
+            >
+              v{release.version}
+            </a>
+          )}
         </h3>
-        <time dateTime={release.date} className="text-sm text-muted">
-          {formatDate(release.date)}
-        </time>
-        {release.version === APP_VERSION && <span className="label ml-auto">Current</span>}
+        {release.date !== null && (
+          <time dateTime={release.date} className="text-sm text-muted">
+            {formatDate(release.date)}
+          </time>
+        )}
+        {release.date === null ? (
+          <span className="label ml-auto">Beta</span>
+        ) : (
+          !IS_BETA &&
+          release.version === APP_VERSION && <span className="label ml-auto">Current</span>
+        )}
       </div>
       {release.groups.map((group) => (
         <section key={group.title} className="mt-4">
@@ -93,10 +106,10 @@ export function VersionInfo() {
         type="button"
         onClick={openDialog}
         aria-haspopup="dialog"
-        aria-label={`v${APP_VERSION}, open changelog`}
+        aria-label={`${VERSION_LABEL}, open changelog`}
         className="-m-2 cursor-pointer p-2 font-sans text-sm text-muted transition-colors hover:text-ink"
       >
-        v{APP_VERSION}
+        {VERSION_LABEL}
       </button>
       <dialog
         ref={dialogRef}
