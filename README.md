@@ -327,9 +327,15 @@ Deploy easily on [Vercel](https://vercel.com):
 
 **Important**: Set environment variables in your Vercel project settings (see Environment Configuration section above).
 
+### Beta
+
+Every push to `main` runs [Deploy Beta](.github/workflows/deploy-beta.yml), which fast-forwards the `beta` mirror branch to the latest `main` commit, builds a Vercel Preview deployment remotely, and assigns it to [beta.etymex.com](https://beta.etymex.com). Runs are serialized and superseded commits are skipped. The workflow can also be run manually from `main`.
+
+Keep `beta` as a deployment mirror: do not add commits directly to it. The workflow uses `GITHUB_TOKEN` with `contents: write` for the fast-forward and the same `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` secrets as production for deployment. Configure the application's Preview environment variables in Vercel and connect `beta.etymex.com` to the `beta` Preview branch so production releases cannot claim it. Automatic Git deployments for `main` and `beta` are disabled in `vercel.json`; other branches retain their previews.
+
 ### Releasing
 
-Production deploys only when a GitHub release is published. Pull requests still get Vercel previews, but merging to `main` does not change the live site.
+Production at `etymex.com` deploys only when a GitHub release is published. Pull requests still get Vercel previews; merging to `main` updates beta.
 
 Pre-1.0 versions use minor bumps for user-facing features and patch bumps for fixes.
 

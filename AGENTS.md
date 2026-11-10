@@ -53,6 +53,14 @@ Production deploys only from a published GitHub release; `vercel.json` disables 
 event after checking that the tagged commit is on `main` and the tag equals `v` + the `package.json`
 version, using the `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` repository secrets.
 
+`.github/workflows/deploy-beta.yml` fast-forwards the `beta` mirror branch to the latest `main`
+commit on each `main` push, using `GITHUB_TOKEN` with `contents: write`, then remotely builds a
+Vercel Preview deployment with the production workflow's Vercel secrets and `beta` branch metadata.
+Runs are serialized, skip superseded commits, and may be dispatched manually only from `main`. Keep
+`beta` free of independent commits; the workflow never force-pushes. Connect `beta.etymex.com` to the
+`beta` Preview branch so production releases cannot reassign it. `vercel.json` disables automatic
+Git deployments for both `main` and `beta`; other branches retain their previews.
+
 Record user-facing changes under `## [Unreleased]` in `CHANGELOG.md` as single-line, plain-text
 bullets under a `###` group. `lib/changelog.ts` rejects anything else, which fails the build. To
 release, follow the steps in the README's Releasing section. `lib/changelog.test.ts` fails if the
