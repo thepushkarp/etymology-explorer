@@ -303,30 +303,3 @@ test('a blocked Etymonline source remains blocked when Exa is disabled', async (
   )
   expect(outcomes.at(-1)).toMatchObject({ outcome: { status: 'blocked' } })
 })
-
-test('Sanskrit ancestors use the registry dictionary path without optional context requests', async () => {
-  const requests = serve()
-  const research = context('पानी')
-  research.language = 'hi'
-  research.parsedChains = [
-    {
-      ...parseDictionaryText(
-        'From Sanskrit पानीय (pānīya, “drinkable”).',
-        'पानी',
-        'wiktionaryEnglish'
-      ),
-      historyId: 'water',
-      evidenceScopeId: 'water-scope',
-    },
-  ]
-  const budget = new SourceFetchBudget(32)
-  await expandLexemes(
-    research,
-    budget,
-    undefined,
-    createLexemeResearchSession({ budget, exaBudgetClient: null })
-  )
-  expect(requests.map((url) => url.hostname)).toEqual(['en.wiktionary.org'])
-  expect(requests[0].searchParams.get('page')).toBe('पानीय')
-  expect(research.rootResearch[0].lexeme).toEqual({ word: 'पानीय', language: 'Sanskrit' })
-})

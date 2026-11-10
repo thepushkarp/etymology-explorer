@@ -14,7 +14,6 @@ import {
   type WiktionaryFetchOptions,
 } from './wiktionary'
 
-/** Languages researched through their own Wiktionary edition and lexical sources. */
 type NonEnglishLanguage = Exclude<LanguageCode, 'en'>
 
 export async function fetchWiktionaryEdition(
