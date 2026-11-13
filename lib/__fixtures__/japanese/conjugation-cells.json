@@ -1,0 +1,21 @@
+[
+  {
+    "word": "たたかう",
+    "sourceUrl": "https://en.wiktionary.org/w/index.php?title=たたかう&oldid=93736807",
+    "revisionId": 93736807,
+    "retrievedAt": "2026-11-13T07:20:50.576Z",
+    "license": "CC BY-SA 4.0; Wiktionary contributors",
+    "cells": ["<td><span class=\"Jpan\" lang=\"ja\">たたかわせる<br />たたかわす</span>\n</td>"]
+  },
+  {
+    "word": "化身",
+    "sourceUrl": "https://en.wiktionary.org/w/index.php?title=化身&oldid=92198791",
+    "revisionId": 92198791,
+    "retrievedAt": "2026-11-13T07:20:48.527Z",
+    "license": "CC BY-SA 4.0; Wiktionary contributors",
+    "cells": [
+      "<td><span class=\"Jpan\" lang=\"ja\">化身せよ&#185;<br />化身しろ&#178;</span>\n</td>",
+      "<td><span class=\"Jpan\" lang=\"ja\">けしんせよ&#185;<br />けしんしろ&#178;</span>\n</td>"
+    ]
+  }
+]

@@ -371,6 +371,47 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     expect(calls.synthesis).toBe(0)
   })
 
+  test('deferred dictionary links have JSON/SSE parity without synthesis or alias publication', async () => {
+    const sourceListed = [
+      {
+        word: '橋',
+        language: 'ja' as const,
+        relationship: 'romanization' as const,
+        sourceUrl: 'https://en.wiktionary.org/wiki/はし',
+        provenance: [
+          {
+            sourceUrl: 'https://en.wiktionary.org/wiki/はし',
+            verifiedAt: new Date().toISOString(),
+            evidence: 'はし spelling of 橋',
+          },
+        ],
+      },
+    ]
+    lookupResult = {
+      resolution: {
+        originalInput: 'hashi',
+        language: 'ja',
+        candidates: [],
+        sourceListed,
+        incomplete: true,
+      },
+    }
+    const response = await get('&language=ja', undefined, 'hashi')
+    expect(response.status).toBe(300)
+    const payload = await response.json()
+    expect(payload.lookupResolution.sourceListed).toEqual(sourceListed)
+    expect(payload.data.otherScripts).toEqual([])
+    const events = await sseEvents(await get('&language=ja&stream=true', undefined, 'hashi'))
+    expect(events.find((event) => event.type === 'lookup_resolution').resolution).toEqual(
+      payload.lookupResolution
+    )
+    expect(calls.locks).toEqual([])
+    expect(calls.synthesis).toBe(0)
+    expect(calls.writes).toBe(0)
+    expect(calls.published).toBe(0)
+    expect(calls.negative.some((item) => (item as string[])[0] === 'write')).toBe(false)
+  })
+
   test('cached aliases precede absence and concurrent spellings share the canonical lock', async () => {
     resultWord = '津波'
     const canonical: WordEntry = {

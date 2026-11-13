@@ -157,8 +157,63 @@ try {
     'Manual tracing must retain an explicit route language'
   )
   await hinted.close()
+  const listed = await context.newPage()
+  await listed.goto(`${base}/word/ja/readinglimitfixture`)
+  await listed.getByRole('button', { name: 'Trace its origins', exact: true }).click()
+  await listed.waitForFunction(() => window.__streams.length === 1)
+  await listed.evaluate(() => {
+    window.__streams[0].send({
+      type: 'lookup_resolution',
+      resolution: {
+        originalInput: 'readinglimitfixture',
+        language: 'ja',
+        candidates: [],
+        incomplete: true,
+        sourceListed: ['箸', '橋'].map((word) => ({
+          word,
+          language: 'ja',
+          relationship: 'romanization',
+          sourceUrl: 'https://en.wiktionary.org/wiki/はし',
+          provenance: [
+            {
+              sourceUrl: 'https://en.wiktionary.org/wiki/はし',
+              verifiedAt: new Date().toISOString(),
+              evidence: 'dictionary reading link',
+            },
+          ],
+        })),
+      },
+    })
+    window.__streams[0].send({
+      type: 'error',
+      errorType: 'unknown',
+      message: 'Choose a Japanese dictionary entry.',
+    })
+  })
+  await listed.getByText('More dictionary entries', { exact: true }).waitFor()
+  await listed
+    .getByText(
+      'These entries are listed by the dictionary but haven’t been checked yet. Choose one to look it up.',
+      { exact: true }
+    )
+    .waitFor()
+  const bridge = listed.getByRole('link', { name: '橋', exact: true })
+  assert.equal(await bridge.getAttribute('href'), `/word/ja/${encodeURIComponent('橋')}`)
+  await bridge.hover()
+  await bridge.focus()
+  assert.equal(await listed.evaluate(() => window.__streams.length), 1)
+  await bridge.click()
+  await listed.waitForURL((url) => url.pathname === `/word/ja/${encodeURIComponent('橋')}`)
+  await listed.getByRole('heading', { name: '橋', exact: true }).waitFor()
+  assert.equal(await listed.getByText('More dictionary entries', { exact: true }).count(), 0)
+  const newStreams = await listed.evaluate(() =>
+    window.__streams.slice(1).map((stream) => stream.url)
+  )
+  assert.ok(newStreams.length <= 1)
+  for (const url of newStreams) assert.equal(new URL(url, base).searchParams.get('word'), '橋')
+  await listed.close()
   console.log(
-    'Passed: native-script tabs, first-entry defaults, consistent typography, desktop/mobile layout, hidden unsupported notices, and no research before choosing a destination.'
+    'Passed: native-script tabs, first-entry defaults, consistent typography, desktop/mobile layout, hidden unsupported notices, deferred dictionary choices, and no research before choosing a destination.'
   )
 } finally {
   await browser.close()

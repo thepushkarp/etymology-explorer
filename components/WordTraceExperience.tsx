@@ -12,6 +12,7 @@ import {
 } from '@/lib/completedEntries'
 import { EntryView } from '@/components/EntryView'
 import { WordLink } from '@/components/WordLink'
+import { ScriptLinks } from '@/components/ScriptLinks'
 import { ErrorState } from '@/components/ErrorState'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { EntryHeader } from '@/components/etymology-card/EntryHeader'
@@ -277,6 +278,19 @@ export function WordTraceExperience({
             }
           />
         )}
+        <ScriptLinks
+          targets={
+            progress.status === 'error'
+              ? progress.lookupResolution?.sourceListed
+              : relevantScriptTargets(
+                  progress.lookupResolution?.sourceListed,
+                  Object.values(progress.result?.entries ?? {}),
+                  activeLanguage
+                )
+          }
+          heading="More dictionary entries"
+          description="These entries are listed by the dictionary but haven’t been checked yet. Choose one to look it up."
+        />
       </main>
       <SiteFooter />
     </>

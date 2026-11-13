@@ -146,7 +146,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v8:{word}` with a distinct explicit-hint scope. Source-attested romanization offers survive no-result responses. Transient resolution failures and retraces with a durable entry never write absence markers.
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v14:<source>:<word>` for English, `src:v14:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v14:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v14:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v15:<source>:<word>` for English, `src:v15:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v15:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v15:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
 
 - **`lib/redis.ts`** - Shared Redis client factory using KV_REST_API_URL and KV_REST_API_TOKEN (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 and Exa requires functioning accounting (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -272,7 +272,12 @@ resolution HTTP budget; incomplete, conflicting, or ambiguous results remain cho
 verified rōmaji uses a language-qualified `romanization` proof with reading evidence. Conjugations
 open dictionary forms with separate JSON/SSE lookup metadata and never become spelling aliases.
 An independently defined exact entry retains its own histories even when another sense is a
-grammatical form; verified form targets remain optional destinations.
+grammatical form; verified form targets remain optional destinations. Conjugation tables split
+explicit line-separated alternatives and exclude numeric footnote annotations while preserving
+spaces within phrases. Dictionary-linked destinations deferred by the four-candidate limit travel
+separately as `lookupResolution.sourceListed` in JSON and SSE. They are labelled unchecked links,
+never canonical identities, alias proofs, or durable entry offers; only explicit navigation may
+start their lookup. Truncation always prevents automatic selection.
 The optional `lib/lookupFallback.ts` proposal call requires `APP_CHANNEL=beta` and
 `LOOKUP_FALLBACK_ENABLED=true`, with one 15-second, 768-token call, existing spend accounting,
 and a normalized input/language lock released before the canonical word lock. Production stays

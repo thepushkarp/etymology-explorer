@@ -301,7 +301,7 @@ export async function GET(request: NextRequest) {
     knownOffers = normalizeScriptTargets([...knownOffers, ...(lookupResolution?.candidates ?? [])])
     const selectedLookup = lookupResolution?.selected
     if (
-      lookupResolution?.candidates.length &&
+      (lookupResolution?.candidates.length || lookupResolution?.sourceListed?.length) &&
       !selectedLookup &&
       !lookup.preserveExactEntry &&
       (hint || !lookup.originalTargets?.length)

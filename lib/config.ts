@@ -32,7 +32,7 @@ export const CONFIG = {
   maxTotalFetches: 32,
   maxFetchesPerExtraLanguage: 16,
   maxEntryFetches: 96,
-  pipelineRevision: 7,
+  pipelineRevision: 8,
   entryFreshDays: 90,
 
   // Exa's full-text search and recovery share their own paid-request allowance.

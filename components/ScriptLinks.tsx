@@ -2,7 +2,15 @@ import { WordLink } from '@/components/WordLink'
 import { LANGUAGES } from '@/lib/languages'
 import type { ScriptTarget } from '@/lib/types'
 
-export function ScriptLinks({ targets, heading }: { targets?: ScriptTarget[]; heading?: string }) {
+export function ScriptLinks({
+  targets,
+  heading,
+  description,
+}: {
+  targets?: ScriptTarget[]
+  heading?: string
+  description?: string
+}) {
   if (!targets?.length) return null
 
   return (
@@ -13,6 +21,7 @@ export function ScriptLinks({ targets, heading }: { targets?: ScriptTarget[]; he
             ? 'Japanese lookup'
             : 'Other language spellings')}
       </p>
+      {description && <p className="mt-1">{description}</p>}
       <ul className="mt-2 space-y-2">
         {targets.map((target) => (
           <li key={`${target.language}:${target.word}`}>

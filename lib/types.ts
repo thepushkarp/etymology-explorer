@@ -40,6 +40,8 @@ export interface LookupResolution {
   originalInput: string
   language: LanguageCode
   candidates: LookupCandidate[]
+  /** Explicit source links whose destination checks were deferred by the verification limit. */
+  sourceListed?: LookupCandidate[]
   selected?: LookupCandidate
   incomplete?: boolean
 }

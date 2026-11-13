@@ -435,10 +435,29 @@ export function extractWiktionaryLookup(
     const end = following ? anchorOffset(html, following.anchor) : selected.start + fragment.length
     const body = html.slice(start, Math.min(end, selected.start + fragment.length))
     for (const cell of body.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)) {
-      for (const term of cell[1].matchAll(/<(span|i|b)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
-        if (attribute(term[2], 'lang') !== language) continue
-        const form = cleanWiktionaryHtml(lexicalSpellingHtml(term[3]))
-        if (form) forms.add(form)
+      let consumed = 0
+      for (const opening of cell[1].matchAll(/<(?:span|i|b)\b([^>]*)>/gi)) {
+        if (opening.index < consumed || attribute(opening[1], 'lang') !== language) continue
+        const term = balancedElement(cell[1], opening.index)
+        if (!term) continue
+        consumed = term.end
+        // Table line breaks separate alternatives; ordinary whitespace can belong
+        // to a phrase. Footnote numbers annotate forms, never the query spelling.
+        const lexical = lexicalSpellingHtml(term.body).replace(
+          /<sup\b([^>]*)>([\s\S]*?)<\/sup>/gi,
+          (markup, attributes: string, content: string) =>
+            hasClass(attributes, 'reference') ||
+            /^[0-9⁰¹²³⁴⁵⁶⁷⁸⁹]+$/.test(cleanWiktionaryHtml(content))
+              ? ''
+              : markup
+        )
+        for (const alternative of lexical.split(/<br\b[^>]*>/i)) {
+          const form = cleanWiktionaryHtml(alternative.replace(/\s+/g, ' ')).replace(
+            /[⁰¹²³⁴⁵⁶⁷⁸⁹]+$/u,
+            ''
+          )
+          if (form) forms.add(form)
+        }
       }
     }
   }

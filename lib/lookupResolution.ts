@@ -146,6 +146,7 @@ export async function resolveLookup(
       originalInput: word,
       language: unique?.resolution?.language ?? candidates[0],
       candidates: verified,
+      sourceListed: results.flatMap((result) => result.resolution?.sourceListed ?? []),
       incomplete,
       selected: unique?.resolution?.selected,
     },
@@ -214,6 +215,7 @@ async function resolveLookupLanguage(
     proof?: LookupCandidate['provenance']
     depth: number
     discovered?: boolean
+    listed?: ScriptTarget
   }
   const queue: Pending[] = []
   const addLinks = (
@@ -232,6 +234,9 @@ async function resolveLookupLanguage(
           provenance(data, `${data.requestedWord} ${target.relationship} of ${target.word}`),
         ],
         depth,
+        ...(!data.incomplete && !data.lookup?.incomplete
+          ? { listed: { ...target, sourceUrl: data.url } }
+          : {}),
       })
     }
   }
@@ -249,6 +254,24 @@ async function resolveLookupLanguage(
       if (checked.has(target)) continue
       if (checked.size >= maximum || item.depth > 3) {
         resolution.incomplete = true
+        // Explicit dictionary links remain useful navigation when their terminal
+        // entries cannot be checked. They never enter the verified candidate set.
+        if (
+          checked.size >= maximum &&
+          item.depth <= 3 &&
+          item.listed &&
+          item.proof?.length &&
+          target !== word &&
+          isValidWord(target) &&
+          !resolution.sourceListed?.some((candidate) => candidate.word === target)
+        ) {
+          ;(resolution.sourceListed ??= []).push({
+            ...item.listed,
+            word: target,
+            relationship: item.relationship,
+            provenance: item.proof,
+          })
+        }
         continue
       }
       checked.add(target)

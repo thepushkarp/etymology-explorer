@@ -27,6 +27,9 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Changed
 
+- Recognize conjugated forms listed together in dictionary tables or marked with footnotes, including native-script and rōmaji input.
+- Keep additional dictionary-listed meanings available as explicitly unchecked links when a lookup reaches its verification limit.
+
 - Retain independent word meanings when the same spelling is also a grammatical form, with verified dictionary-form destinations kept as choices.
 
 - Preserve Auto for manually started traces and keep non-Japanese written-form destinations free of unsupported lookup context.

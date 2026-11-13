@@ -6,6 +6,7 @@ import { extractWiktionaryLanguage } from './wiktionary'
 import * as cache from './sourceCache'
 import * as fallback from './lookupFallback'
 import type { SourceData } from './types'
+import conjugationCells from './__fixtures__/japanese/conjugation-cells.json'
 
 const originalFetch = globalThis.fetch
 const restorers: Array<() => void> = []
@@ -106,6 +107,64 @@ test('kana and rōmaji conjugations resolve only through the lemma conjugation t
   }
 })
 
+test('recorded multi-form cells and footnotes resolve native and rōmaji inflections', async () => {
+  for (const fixture of conjugationCells) {
+    const html = `<h2 id="Japanese">Japanese</h2><h3 id="Verb">Verb</h3><p><strong class="headword" lang="ja">${fixture.word}</strong></p><ol><li>A verb.</li></ol><h4 id="Conjugation">Conjugation</h4><table><tr>${fixture.cells.join('')}</tr></table>`
+    const lemma = extractWiktionaryLanguage(
+      {
+        requestedWord: fixture.word,
+        title: fixture.word,
+        redirects: [],
+        html,
+        revid: fixture.revisionId,
+        fetchedAt: new Date().toISOString(),
+        sections: ['Japanese', 'Verb', 'Conjugation'].map((line, index) => ({
+          line,
+          anchor: line,
+          index: String(index),
+          number: String(index),
+          hLevel: index + 2,
+        })),
+      },
+      'Japanese'
+    )!
+    const session = setup({ [fixture.word]: lemma }, [fixture.word])
+    const inputs =
+      fixture.word === 'たたかう'
+        ? ['たたかわせる', 'tatakawaseru', 'たたかわす', 'tatakawasu']
+        : ['化身しろ', 'keshinshiro', 'けしんせよ', 'keshinseyo']
+    for (const input of inputs) {
+      const result = await resolveLookup(input, session, 'ja')
+      expect(result.resolution?.selected).toMatchObject({
+        word: fixture.word,
+        relationship: 'form',
+      })
+      expect(result.resolution?.selected?.provenance[0].revisionId).toBe(fixture.revisionId)
+    }
+  }
+})
+
+test('truncated explicit reading links remain separate from verified candidates', async () => {
+  const index = source('はし')
+  index.spellingLemma = false
+  index.lookup!.hasIndependentEntry = false
+  index.lookup!.targets = ['階', '端', '嘴', '箸', '橋'].map((word) => ({
+    word,
+    language: 'ja',
+    relationship: 'spelling',
+  }))
+  const entries = Object.fromEntries(
+    index.lookup!.targets.map(({ word }) => [word, source(word, 'hashi')])
+  )
+  const result = await resolveLookup('hashi', setup({ ...entries, はし: index }), 'ja')
+  expect(result.verifiedCount).toBe(4)
+  expect(result.resolution?.candidates.map(({ word }) => word)).toEqual(['階', '端', '嘴'])
+  expect(result.resolution?.sourceListed?.map(({ word }) => word)).toEqual(['箸', '橋'])
+  expect(result.resolution?.sourceListed?.[0].provenance.at(-1)?.sourceUrl).toBe(index.url)
+  expect(result.resolution?.selected).toBeUndefined()
+  expect(result.resolution?.incomplete).toBe(true)
+})
+
 test('independent exact histories survive a grammatical-form target, including through rōmaji', async () => {
   const headings = ['Japanese', 'Etymology 1', 'Verb', 'Etymology 2', 'Noun']
   const page = {
@@ -174,10 +233,13 @@ test('Auto preserves English sayonara while Japanese selection reuses the verifi
 test('truncation, contradictory readings and unavailable candidates prevent automatic selection', async () => {
   const lemma = source('たたかう')
   lemma.lookup!.forms = ['たたかえ']
-  expect(
-    (await resolveLookup('たたかえ', setup({ たたかう: lemma }, ['たたかう'], true), 'ja'))
-      .resolution?.selected
-  ).toBeUndefined()
+  const truncated = await resolveLookup(
+    'たたかえ',
+    setup({ たたかう: lemma }, ['たたかう'], true),
+    'ja'
+  )
+  expect(truncated.resolution?.selected).toBeUndefined()
+  expect(truncated.resolution?.sourceListed).toBeUndefined()
   const wrong = source('こども', 'different')
   wrong.lookup!.readings = ['different']
   expect(
@@ -201,7 +263,7 @@ test('model proposals require reading or form evidence and cannot override known
 
 test('conjugation parser excludes other-language tables and ordinary definition text', () => {
   const html =
-    '<h2 id="Japanese">Japanese</h2><h3 id="Verb">Verb</h3><p><strong class="headword" lang="ja">たたかう</strong></p><ol><li>fight; example うそ</li></ol><h4 id="Conjugation">Conjugation</h4><table><tr><th>Imperative</th><td><span lang="ja">たたかえ</span></td></tr></table><h2 id="Other">Other</h2><h3 id="Declension">Declension</h3><table><tr><td><span lang="ja">うそ</span></td></tr></table>'
+    '<h2 id="Japanese">Japanese</h2><h3 id="Verb">Verb</h3><p><strong class="headword" lang="ja">たたかう</strong></p><ol><li>fight; example うそ</li></ol><h4 id="Conjugation">Conjugation</h4><table><tr><th>Imperative</th><td><span lang="ja"><span>たたかえ</span><sup>1</sup><br /><ruby>戦<rt>たたか</rt></ruby>って ください<sup class="reference">[2]</sup></span></td></tr></table><h2 id="Other">Other</h2><h3 id="Declension">Declension</h3><table><tr><td><span lang="ja">うそ</span></td></tr></table>'
   const sections = ['Japanese', 'Verb', 'Conjugation', 'Other', 'Declension'].map(
     (line, index) => ({
       line,
@@ -215,5 +277,5 @@ test('conjugation parser excludes other-language tables and ordinary definition 
     { requestedWord: 'たたかう', title: 'たたかう', redirects: [], html, sections },
     'Japanese'
   )
-  expect(result?.lookup?.forms).toEqual(['たたかえ'])
+  expect(result?.lookup?.forms).toEqual(['たたかえ', '戦って ください'])
 })
