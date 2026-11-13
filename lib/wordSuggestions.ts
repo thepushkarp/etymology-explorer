@@ -48,7 +48,7 @@ export async function getWordSuggestions(
 
   // Alternative spelling searches and prefix autocomplete have different rankings.
   // Only autocomplete uses the prefix cache so neither mode can overwrite the other.
-  const cacheKey = `suggest:v1:${language ?? 'auto'}:${normalized}`
+  const cacheKey = `suggest:v2:${language ?? 'auto'}:${normalized}`
   if (client && !alternativesOnly) {
     try {
       const cached = await client.get(cacheKey)
@@ -117,8 +117,18 @@ export async function getWordSuggestions(
     .map((word) => ({ word, distance: sameSpelling(word, normalized) ? 0 : 1 }))
 
   const prefixes = local.filter(({ word }) => word.startsWith(normalized))
+  // Dictionary-returned affix headwords are distinct lookup choices, never aliases.
+  const affixes = remote.filter(
+    ({ word }) => word === `${normalized}-` || word === `-${normalized}`
+  )
   const seen = new Set<string>()
-  const suggestions = [...prefixes, ...remote, ...local]
+  const suggestions = [
+    ...remote.filter(({ word }) => word === normalized),
+    ...affixes,
+    ...prefixes,
+    ...remote,
+    ...local,
+  ]
     .filter(({ word }) => {
       if (seen.has(word)) return false
       seen.add(word)

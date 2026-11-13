@@ -108,7 +108,7 @@ describe('EntryView merged entries', () => {
   test('renders an unavailable requested language without dereferencing an absent result', () => {
     const html = renderToStaticMarkup(<EntryView entry={entry} language="fr" />)
     expect(html).toContain('No supported French entry was found')
-    expect(html).toContain('href="/word/sale"')
+    expect(html).toContain('href="/word/en/sale"')
     const incomplete = renderToStaticMarkup(
       <EntryView entry={{ ...entry, incomplete: true }} language="fr" />
     )
@@ -117,7 +117,18 @@ describe('EntryView merged entries', () => {
   })
 
   test('retains script offers alongside a successful English entry', () => {
-    const result = etymologyResult({ word: 'tsunami', definition: 'A large sea wave.' })
+    const result = etymologyResult({
+      word: 'tsunami',
+      definition: 'A large sea wave.',
+      ancestryGraph: {
+        branches: [
+          {
+            root: '津波',
+            stages: [{ stage: 'Japanese', form: '津波', note: 'Source of the English borrowing.' }],
+          },
+        ],
+      },
+    })
     const html = renderToStaticMarkup(
       <EntryView
         entry={{
@@ -130,7 +141,8 @@ describe('EntryView merged entries', () => {
       />
     )
     expect(html).toContain('A large sea wave.')
-    expect(html).toContain('In other scripts')
+    expect(html).toContain('Japanese</a>')
+    expect(html).not.toContain('Japanese lookup')
     expect(html).toContain(`href="/word/ja/${encodeURIComponent('津波')}"`)
   })
 
@@ -147,6 +159,43 @@ describe('EntryView merged entries', () => {
     )
     expect(html).toContain(`href="/word/ur/${encodeURIComponent('کتاب')}"`)
     expect(html).toContain('lang="ur" dir="auto"')
+    expect(html).toContain('Other written forms')
     expect(html).not.toContain(encodeURIComponent('書'))
   })
+})
+
+test('server rendering respects a requested history and never substitutes an unmatched grouped reading', () => {
+  const result = etymologyResult({
+    word: '白',
+    language: 'ja',
+    definition: 'Unrelated haku story.',
+  })
+  result.histories[0].id = 'haku'
+  result.primaryHistoryId = 'haku'
+  const saved: WordEntry = { ...entry, word: '白', languages: ['ja'], entries: { ja: result } }
+  const html = renderToStaticMarkup(
+    <EntryView
+      entry={saved}
+      language="ja"
+      selection={{ lookup: 'しろ' }}
+      lookupGroup={{
+        reading: 'しろ',
+        members: [{ word: '白', language: 'ja' }],
+        languages: [{ word: 'しろ', language: 'ja' }],
+        choices: [{ word: '白', language: 'ja', label: '白 — white' }],
+      }}
+    />
+  )
+  expect(html).not.toContain('Unrelated haku story.')
+  expect(html).toContain('This reading is not available')
+  result.histories.push({
+    ...result.histories[0],
+    id: 'shiro',
+    definition: 'The selected white reading.',
+  })
+  const focused = renderToStaticMarkup(
+    <EntryView entry={saved} language="ja" selection={{ historyId: 'shiro' }} />
+  )
+  expect(focused).toContain('The selected white reading.')
+  expect(focused).not.toContain('Unrelated haku story.</p>')
 })

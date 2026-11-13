@@ -183,7 +183,7 @@ function balancedElement(html: string, start: number) {
   return undefined
 }
 
-function languageFragment(
+export function languageFragment(
   html: string,
   sections: readonly WiktionaryTocSection[],
   languageHeading: string
@@ -348,6 +348,99 @@ export function extractWiktionaryRomanizations(
     }
   }
   return normalizeScriptTargets(targets)
+}
+
+/** Lookup relationships are extracted only from the selected language's lexical markup. */
+export function extractWiktionaryLookup(
+  html: string,
+  sections: readonly WiktionaryTocSection[],
+  heading: string,
+  word: string
+): SourceData['lookup'] {
+  const language = languageFromName(heading)
+  const selected = languageFragment(html, sections, heading)
+  if (!language || !selected) return undefined
+  const fragment = selected.html
+  const readings = new Set<string>()
+  const boundHeadword = selectedHeadwordLines(fragment, language).find(({ headword }) =>
+    sameSpelling(cleanWiktionaryHtml(lexicalSpellingHtml(headword[2])), word)
+  )
+  const transliteration = headwordTransliteration(fragment, word)
+  if (transliteration) readings.add(transliteration)
+  if (language === 'ja' && /^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(word))
+    readings.add(word)
+  const targets: NonNullable<SourceData['lookup']>['targets'] = extractWiktionaryRomanizations(
+    html,
+    sections,
+    word
+  )
+    .filter((target) => target.language === language)
+    .map((target) => ({ ...target, relationship: 'romanization' }))
+  let incomplete = false
+  for (const table of language === 'ja' ? japaneseSeeEntries(fragment, 'en') : []) {
+    if (!sameSpelling(table.subject ?? '', word)) continue
+    incomplete ||= table.targets.length !== table.targetCount
+    targets.push(
+      ...table.targets.map((target) => ({ ...target, relationship: 'spelling' as const }))
+    )
+  }
+  for (const definition of fragment.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)) {
+    if (!boundHeadword) break
+    if (!/\bform-of-definition\b/.test(definition[1])) continue
+    const marker = definition[1].search(
+      /<(?:span|i)\b[^>]*class=["'][^"']*\bform-of-definition-link\b/i
+    )
+    if (marker < 0) continue
+    const prefix = cleanWiktionaryHtml(definition[1].slice(0, marker))
+    if (
+      !/\b(?:imperative|inflection|conjugation|form|past|plural|participle|stem)\b.*\bof$/i.test(
+        prefix
+      )
+    )
+      continue
+    const link = balancedElement(definition[1], marker)
+    if (!link) continue
+    const linked = scriptLink(link.body, language, 'en')
+    targets.push(...linked.map((target) => ({ ...target, relationship: 'form' as const })))
+  }
+  // A conjugation table belongs to this lemma; example sentences and glosses do not.
+  const forms = new Set<string>()
+  for (const section of sections) {
+    if (!boundHeadword) break
+    if (!/^(?:Conjugation|Inflection|Declension)$/i.test(cleanHeading(section.line))) continue
+    const start = anchorOffset(html, section.anchor)
+    if (start < selected.start || start >= selected.start + fragment.length) continue
+    const following = sections
+      .slice(sections.indexOf(section) + 1)
+      .find((next) => headingLevel(next) <= headingLevel(section))
+    const end = following ? anchorOffset(html, following.anchor) : selected.start + fragment.length
+    const body = html.slice(start, Math.min(end, selected.start + fragment.length))
+    for (const cell of body.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)) {
+      for (const term of cell[1].matchAll(/<(span|i|b)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
+        if (attribute(term[2], 'lang') !== language) continue
+        const form = cleanWiktionaryHtml(lexicalSpellingHtml(term[3]))
+        if (form) forms.add(form)
+      }
+    }
+  }
+  const headwordBody = boundHeadword
+    ? fragment.slice(boundHeadword.start).split(/<h[1-6]\b/i)[0]
+    : ''
+  const listOpening = headwordBody.match(/<ol\b[^>]*>/i)
+  const definitions = listOpening && balancedElement(headwordBody, listOpening.index!)
+  const definition = definitions?.body
+    .match(/<li\b[^>]*>([\s\S]*?)<\/li>/i)?.[1]
+    .split(/<(?:ul|ol|dl)\b/i)[0]
+  return {
+    readings: [...readings],
+    meaning:
+      definition && !/form-of-definition/.test(definition)
+        ? cleanWiktionaryHtml(definition)
+        : undefined,
+    targets,
+    forms: [...forms],
+    incomplete,
+  }
 }
 
 export function extractWiktionarySpellingRedirect(

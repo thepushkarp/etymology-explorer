@@ -1,0 +1,144 @@
+import assert from 'node:assert/strict'
+import { chromium } from 'playwright'
+
+const base = process.env.PERF_BASE_URL ?? 'http://localhost:3000'
+const browser = await chromium.launch({
+  executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH,
+  headless: true,
+})
+try {
+  const context = await browser.newContext({ reducedMotion: 'reduce' })
+  await context.route('**/api/etymology**', (route) => route.abort())
+  await context.route('**/api/ngram**', (route) =>
+    route.fulfill({ status: 404, json: { success: false } })
+  )
+  await context.route('**/api/recent-searches**', (route) =>
+    route.fulfill({ json: { success: true, data: [] } })
+  )
+  await context.addInitScript(() => {
+    window.__streams = []
+    window.EventSource = class extends EventTarget {
+      constructor() {
+        super()
+        window.__streams.push(this)
+      }
+      close() {}
+      send(event) {
+        this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(event) }))
+      }
+    }
+  })
+  for (const multiple of [false, true]) {
+    const page = await context.newPage()
+    await page.setViewportSize({ width: multiple ? 390 : 1280, height: 900 })
+    const word = multiple ? 'scriptchoicefixture' : 'scriptlinkfixture'
+    await page.goto(`${base}/word/${word}`)
+    assert.equal(await page.evaluate(() => window.__streams.length), 0)
+    await page.getByRole('button', { name: 'Trace its origins', exact: true }).click()
+    await page.waitForFunction(() => window.__streams.length === 1)
+    await page.evaluate(() => {
+      window.__streams[0].send({
+        type: 'languages_resolved',
+        languages: ['en', 'fr'],
+        otherLanguages: ['Dutch', 'Indonesian', 'Polish'],
+      })
+    })
+    assert.equal(await page.getByText(/Also a word in/).count(), 0)
+    await page.evaluate(
+      ({ word, multiple }) => {
+        const history = {
+          id: 'history:fixture',
+          label: 'Fixture',
+          entryKind: 'lemma',
+          queryNodeId: 'query:fixture',
+          lemmaNodeId: 'query:fixture',
+          evidenceScopeIds: ['scope:fixture'],
+          pronunciation: '',
+          definition: 'A language navigation fixture.',
+          roots: [],
+          ancestryGraph: {
+            branches: [{ root: 'fixture', stages: [{ stage: 'Japanese', form: 'fixture' }] }],
+          },
+          lore: 'Fixture story.',
+        }
+        const targets = [
+          { word: '白', language: 'ja', reading: 'しろ', meaning: 'white' },
+          ...(multiple ? [{ word: '城', language: 'ja', reading: 'しろ', meaning: 'castle' }] : []),
+        ]
+        window.__streams[0].send({
+          type: 'result',
+          data: {
+            word,
+            languages: ['en', 'fr'],
+            otherLanguages: ['Dutch', 'Indonesian', 'Polish'],
+            otherScripts: targets,
+            entries: {
+              fr: {
+                ...history,
+                word,
+                language: 'fr',
+                primaryHistoryId: history.id,
+                histories: [{ ...history, definition: 'The French fixture.' }],
+                sources: [],
+              },
+              en: {
+                ...history,
+                word,
+                language: 'en',
+                primaryHistoryId: history.id,
+                histories: [history],
+                sources: [],
+              },
+            },
+            revision: 6,
+            tracedAt: new Date().toISOString(),
+          },
+        })
+      },
+      { word, multiple }
+    )
+    const nav = page.getByRole('navigation', { name: `Languages for ${word}` })
+    const japanese = nav.getByRole('link', { name: 'Japanese', exact: true })
+    await japanese.waitFor()
+    assert.equal(await page.getByText('Japanese lookup', { exact: true }).count(), 0)
+    assert.equal(await page.getByText(/Also a word in/).count(), 0)
+    const english = nav.getByRole('link', { name: 'English', exact: true })
+    assert.equal(
+      await japanese.evaluate((el) => getComputedStyle(el).fontFamily),
+      await english.evaluate((el) => getComputedStyle(el).fontFamily)
+    )
+    assert.equal(
+      await japanese.getAttribute('href'),
+      `/word/ja/${encodeURIComponent('白')}${multiple ? `?lookup=${word}` : ''}`
+    )
+    await nav.getByRole('link', { name: 'French', exact: true }).click()
+    await page.waitForURL(new RegExp(`/word/fr/${word}$`))
+    await page.getByText('The French fixture.', { exact: true }).waitFor()
+    await page.goBack()
+    await page.waitForURL(new RegExp(`/word/${word}$`))
+    await page.getByText('A language navigation fixture.', { exact: true }).waitFor()
+    await page.goForward()
+    await page.waitForURL(new RegExp(`/word/fr/${word}$`))
+    await page.getByText('The French fixture.', { exact: true }).waitFor()
+    await nav.getByRole('link', { name: 'English', exact: true }).click()
+    await page.waitForURL(new RegExp(`/word/en/${word}$`))
+    await japanese.focus()
+    assert.equal(await page.evaluate(() => window.__streams.length), 1)
+    assert.equal(
+      await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+      false
+    )
+    await page.screenshot({
+      path: `/tmp/etymex-language-navigation-${multiple ? 'choices' : 'single'}.png`,
+    })
+    await japanese.click()
+    await page.waitForURL((url) => url.pathname === `/word/ja/${encodeURIComponent('白')}`)
+    await page.getByRole('heading', { name: '白', exact: true }).waitFor()
+    await page.close()
+  }
+  console.log(
+    'Passed: native-script tabs, first-entry defaults, consistent typography, desktop/mobile layout, hidden unsupported notices, and no research before choosing a destination.'
+  )
+} finally {
+  await browser.close()
+}

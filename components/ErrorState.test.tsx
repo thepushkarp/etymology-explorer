@@ -16,7 +16,7 @@ describe('ErrorState script offers', () => {
       />
     )
     expect(html).toContain('No supported entry was found.')
-    expect(html).toContain('In other scripts')
+    expect(html).toContain('Other language spellings')
     expect(html).toContain(`href="/word/hi/${encodeURIComponent('किताब')}"`)
     expect(html).not.toContain('Perhaps')
   })
@@ -25,7 +25,7 @@ describe('ErrorState script offers', () => {
     const html = renderToStaticMarkup(
       <ErrorState language="en" error={{ type: 'nonsense', message: '', suggestions: [] }} />
     )
-    expect(html).not.toContain('In other scripts')
+    expect(html).not.toContain('Other language spellings')
     expect(html).not.toContain('href=')
   })
 })

@@ -31,7 +31,9 @@ try {
       }
     })
     await page.goto(`${base}/word/${word}`)
-    const button = page.getByRole('button', { name: `Play pronunciation of ${word}`, exact: true })
+    const button = page.getByRole('button', {
+      name: new RegExp(`^Play pronunciation of ${word}(?: |$)`),
+    })
     await button.waitFor()
     for (const scenario of ['first', 'repeat']) {
       await button.waitFor({ state: 'visible' })

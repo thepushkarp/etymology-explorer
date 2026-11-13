@@ -22,6 +22,7 @@ export const SOURCE_PROVIDER_IDS = [
   'lewisShort',
   'lsj',
   'jmdict',
+  'oncoj',
 ] as const
 
 export type SourceProviderId = (typeof SOURCE_PROVIDER_IDS)[number]
@@ -46,6 +47,7 @@ export const SOURCE_FAMILY_IDS = [
   'lewisShort',
   'lsj',
   'jmdict',
+  'oncoj',
   'other',
 ] as const
 

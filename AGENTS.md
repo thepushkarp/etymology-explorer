@@ -143,10 +143,10 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
   - Merged spelling entries: `entry:v1:{word}`, 365-day physical TTL. `pipelineRevision` and `entryFreshDays` (90) determine staleness using the oldest retained `freshnessAt` (or original `tracedAt`); incomplete traces become stale after five minutes. Stale entries remain readable and require an explicit Retrace click. Successful retrace languages merge with durable previous results. `attemptedLanguages` records completed coverage so an unattempted manual hint can augment a fresh entry under the same word lock.
   - TTS audio: 1 year TTL
-  - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v7:{word}` with a distinct explicit-hint scope. Source-attested romanization offers survive no-result responses. Transient resolution failures and retraces with a durable entry never write absence markers.
+  - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v8:{word}` with a distinct explicit-hint scope. Source-attested romanization offers survive no-result responses. Transient resolution failures and retraces with a durable entry never write absence markers.
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v12:<source>:<word>` for English, `src:v12:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v12:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v12:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v13:<source>:<word>` for English, `src:v13:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v13:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v13:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
 
 - **`lib/redis.ts`** - Shared Redis client factory using KV_REST_API_URL and KV_REST_API_TOKEN (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 and Exa requires functioning accounting (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -155,7 +155,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   persists the complete clip before releasing the lock, keeping cleanup alive on serverless
   runtimes. Concurrent listeners poll at `audioWaiterPollIntervalMs` (250 ms); cached clips
   remain available under budget pressure and retain the one-year HTTP cache lifetime.
-  The `eleven_v4` model receives the speech language code; Sanskrit retains `sa` lexical/cache/lock identity but uses `hi` speech, labelled as a Hindi reading. The configured voice is preferred for every language. Missing voice configuration or precise voice-specific provider errors permit one female premade stock voice selected from the [official catalog](https://elevenlabs.io/docs/api-reference/voices/search), ranked by language metadata before multilingual capability. Auth, quota, rate-limit, and general server failures never trigger that retry. Primary and fallback synthesis each have a 15-second timeout, plus a five-second catalog lookup, within the route’s 60-second duration. Hindi, Urdu, Sanskrit, and Japanese have no ngram corpus.
+  The `eleven_v4` model receives the speech language code; Sanskrit retains `sa` lexical/cache/lock identity but uses `hi` speech, labelled as a Hindi reading. Female default voices come from the [official catalog](https://elevenlabs.io/docs/api-reference/voices/search), ranked by speech-language label, verified language support, then multilingual capability; ties follow alphabetical name order. A precise voice-specific provider error permits one attempt with the next ranked voice. The API key needs catalog access. Auth, quota, rate-limit, and general server failures never trigger that retry. Primary and fallback synthesis each have a 15-second timeout, plus a five-second catalog lookup, within the route’s 60-second duration. Hindi, Urdu, Sanskrit, and Japanese have no ngram corpus.
 
 - **`lib/counters.ts`** - Best-effort monthly INCR counters (cache_hit / cache_miss / error), exposed via `/api/admin/stats`
 
@@ -184,7 +184,7 @@ New optional fields on `AncestryStage`: `isReconstructed`, `confidence`, `eviden
 
 ### Word and Phrase Identity
 
-`lib/orthography.ts` supplies the shared identity for navigation, cache keys, evidence, and API inputs: NFC lowercase, with Unicode horizontal space separators trimmed and collapsed to one ASCII space. Accents and apostrophe/hyphen forms remain lexical information; spaced and hyphenated phrases are distinct. Controls and line separators are preserved through normalization and rejected by `lib/validation.ts`, including at input boundaries. Canonical words/phrases may contain up to 120 characters. `SearchBox` validates before navigation and presents inline feedback for invalid input.
+`lib/orthography.ts` supplies the shared identity for navigation, cache keys, evidence, and API inputs: NFC lowercase, with Unicode horizontal space separators trimmed and collapsed to one ASCII space. Accents and apostrophe/hyphen forms remain lexical information; spaced and hyphenated phrases are distinct. Controls and line separators are preserved through normalization and rejected by `lib/validation.ts`, including at input boundaries. Canonical words/phrases may contain up to 120 characters. A single boundary hyphen also permits affix entries such as pan- or -ness; these remain distinct from bare spellings. `SearchBox` validates before navigation and presents inline feedback for invalid input.
 
 ### Word Pages (primary search URL)
 
@@ -193,21 +193,23 @@ URL. Crawler traffic must never cost LLM money:
 
 - **`app/word/[...segments]/page.tsx`** - SSR strictly from `getCachedEntry` (`lib/cache.ts`).
   The module graph must never include `lib/research.ts`, `lib/llm.ts`, or
-  `lib/openrouterResponses.ts` — enforced by `app/word/import-graph.test.ts`. ISR via
-  `revalidate = 86400`. Cache hit renders `EntryView`; cache miss renders a noindex page
+  `lib/openrouterResponses.ts` — enforced by `app/word/import-graph.test.ts`. Request-time rendering resolves validated `lookup` and `history` query parameters;
+  tagged `unstable_cache` reads retain the word data cache. Cache hit renders `EntryView`; cache miss renders a noindex page
   hosting `WordTraceExperience` (client), which streams the live trace via `/api/etymology`.
 - **Auto-trace gating** (`lib/traceIntent.ts`): an uncached word page auto-starts its trace
   ONLY when a short-lived sessionStorage flag written by the in-app navigation handler
   (`lib/hooks/useWordNavigation.ts`) is present. Direct loads and crawlers — even JS-executing
   ones — get the "Trace it live" button instead; a human click is required to spend budget.
   Auto-start uses a cancellable deferred task before consuming the flag, so React Strict Mode
-  effect replay cannot close the only stream and leave the page loading.
+  effect replay cannot close the only stream and leave the page loading. A bounded tab-local
+  completed-result store restores the latest twenty request-scoped results when browser history
+  restores a pre-trace payload; restoration grants no trace intent and makes no research requests.
 - **Revalidation**: after storing a merged entry, `cacheEntry` (`lib/cache.ts`) schedules
   `revalidateTag('etymology-word:{word}', { expire: 0 })` inside `after()` — the deferral is
   required because streaming responses flush pending revalidations when the handler returns,
   and `{ expire: 0 }` hard-expires the tag (the `'max'` profile would only mark it
   stale-while-revalidate). A freshly traced word's page serves content on the next load
-  instead of the ISR miss page.
+  instead of a cached miss payload.
 - **`lib/tracedWords.ts`** - SCANs durable entry keys and supported legacy prefixes during migration (cursor-paginated, capped at 1000; legacy discoveries migrate with four concurrent cache-only reads,
   daily `unstable_cache`). Shared by `app/sitemap.ts` and the `/words` A–Z index
   (`app/words/page.tsx`), which is the crawlable internal-link path to every cached word page;
@@ -229,6 +231,28 @@ they remain links alongside independent entries for the original spelling and in
 Only clicking a link marks trace intent. Foreign spellings are never guessed from a gloss or a Latin
 spelling alone.
 
+Japanese offers beside existing results require a Japanese entry or a Japanese ancestry stage
+in any retained history. A romanization match alone is not promoted there. Explicit Japanese
+lookup and unresolved-input choices keep verified alternatives; saved entries need no retrace
+for this presentation filter. `EntryNavigation` includes verified written-form destinations: the first listed target opens by default, with other meanings retained in lookup context. A default display choice never establishes a unique match or authorizes an alias. Existing language tabs take precedence over cross-spelling offers. Unsupported-language discovery notices are not displayed. Homepage and header searches share the themed `LanguageSelect`.
+
+Language rows remain visible for single-language entries. `lib/lookupGroupCache.ts` builds navigation
+groups from saved kana counterparts and explicit romanization offers, reading at most four counterpart
+targets and two romanizations. It performs no research or alias writes. Direct kanji searches stay
+focused; links chosen within a broader lookup carry `lookup` and `history` query parameters.
+`lib/entryNavigation.ts` supplies one language/meaning model to `EntryNavigation` for saved and live
+entries. All choices are real links; arrow keys and Home/End move focus, and Enter follows a link.
+Same-word selection uses the native History API to retain active streams while updating the URL.
+Each language defaults to its first listed meaning. Missing or invalid grouped histories remain
+unavailable rather than falling back to another reading. Successful and failed language tabs are
+retained together. Unresolved kana index histories with multiple counterparts and no ancestry are
+represented by their destinations. Grouped navigation retains only the requested reading; other
+readings belong to a direct kanji search. `EntryChoices` supplies shared geometry and headers reserve
+a pronunciation row. Server rendering supplies cache-only lookup context before hydration;
+`/api/lookup-group` refreshes that metadata only after completed traces. Both module graphs must
+exclude research and LLM modules. Passive loads, prefetching, and browser-history restoration never
+authorize a trace.
+
 Japanese spelling identity requires a complete source-language section with one explicit redirect
 and a verified terminal entry. Shared readings, alternative-spelling lists, and romanizations alone
 cannot establish equivalence. `lib/entryIdentity.ts` follows bounded source redirects before taking
@@ -236,11 +260,28 @@ the canonical word lock, sharing the trace's HTTP budget. The canonical `WordEnt
 `spellings`; its per-language results still match `WordEntry.word`. Language-qualified alias pointers
 are published only after canonical persistence and expire with their source proof. The request proxy
 checks known aliases for word-page GET/HEAD requests and sends uncached temporary redirects without
-fetching sources. Word pages retain their cache-only ISR behavior.
+fetching sources. Word pages retain cache-only data access during request-time rendering.
 Latin borrowing entries retain their own language histories. A unique verified standard
-kana reading supplies audio for a single-history Japanese entry; misspellings never select audio.
+kana reading supplies fallback audio for a single-history Japanese entry without usable IPA; misspellings never select audio. Supported speech languages send the selected IPA to Eleven v4. Audio URLs, v4 cache keys, and locks include language, spelling, and IPA. Sanskrit retains its labelled Hindi spelling reading.
 Existing entries without alias proof retain their saved contents until an explicit retrace establishes
 the relationship; pipeline revision changes make that retrace available without automatic LLM spend.
+
+`lib/lookupResolution.ts` verifies rōmaji readings and grammatical forms before the canonical lock.
+WanaKana supplies candidate kana, never evidence. Up to four dictionary candidates share the
+resolution HTTP budget; incomplete, conflicting, or ambiguous results remain choices. Unique
+verified rōmaji uses a language-qualified `romanization` proof with reading evidence. Conjugations
+open dictionary forms with separate JSON/SSE lookup metadata and never become spelling aliases.
+The optional `lib/lookupFallback.ts` proposal call requires `APP_CHANNEL=beta` and
+`LOOKUP_FALLBACK_ENABLED=true`, with one 15-second, 768-token call, existing spend accounting,
+and a normalized input/language lock released before the canonical word lock. Production stays
+disabled pending live evaluation. No lookup proposals run from autocomplete or cache-only pages.
+
+ONCOJ is an Old Japanese historical provider backed by pinned lexical annotation XML. Rebuild
+`data/oncoj-index.json` with `python3 scripts/build-oncoj-index.py`. Retain complete matched
+records, source IDs, annotation attribution, and exact Frellesvig–Whitman transcription. Explicit
+derivation references must match indexed IDs and forms. Never infer modern Japanese ancestry
+from similar spellings or glosses. Publisher admission findings are in `docs/source-admission.md`;
+pending publishers are not registered for runtime lookup or Exa discovery.
 
 ### Research Pipeline Limits
 
@@ -433,7 +474,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 - `app/word/[...segments]/page.tsx` - Cache-only SSR word pages (import graph must exclude research/LLM)
 - `app/word/import-graph.test.ts` - Enforces the no-LLM-in-module-graph budget invariant
-- `components/LanguageTabs.tsx` - Real language links for durable entries and local tab selection during traces
+- `components/EntryNavigation.tsx` - Shared URL-based language and meaning links for saved and live entries
 - `components/EntryView.tsx` - Client shell for a finished merged entry (cached page or completed trace)
 - `lib/resultHistories.ts` - Projects a result onto one of its histories and lists the history choices
 - `components/WordTraceExperience.tsx` - Live streaming trace UI for uncached word pages

@@ -88,3 +88,11 @@ describe('/words index module graph (LLM spend invariant)', () => {
     }
   })
 })
+
+describe('lookup navigation metadata (LLM spend invariant)', () => {
+  const graph = collectModuleGraph(join(REPO_ROOT, 'app/api/lookup-group/route.ts'))
+  test('reads only cached relationships without importing research', () => {
+    for (const file of ['lib/research.ts', 'lib/llm.ts', 'lib/openrouterResponses.ts'])
+      expect(graph.has(join(REPO_ROOT, file))).toBe(false)
+  })
+})

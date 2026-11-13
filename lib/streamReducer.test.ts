@@ -18,6 +18,38 @@ function events(...list: StreamEvent[]): StreamAction[] {
   return list.map((event) => ({ type: 'stream_event', event }))
 }
 
+test('lookup selection retains its language after unary or streaming completion', () => {
+  const selected = {
+    word: 'धर्म',
+    language: 'sa' as const,
+    relationship: 'form' as const,
+    provenance: [],
+  }
+  const resolution = {
+    originalInput: 'धर्मस्य',
+    language: 'sa' as const,
+    candidates: [selected],
+    selected,
+  }
+  const entry: WordEntry = {
+    word: 'धर्म',
+    languages: ['hi', 'sa'],
+    entries: {
+      hi: etymologyResult({ word: 'धर्म', language: 'hi' }),
+      sa: etymologyResult({ word: 'धर्म', language: 'sa' }),
+    },
+    otherLanguages: [],
+    tracedAt: new Date().toISOString(),
+    revision: 6,
+  }
+  const resolved = run(events({ type: 'lookup_resolution', resolution }))
+  const streaming = run(events({ type: 'result', data: entry }), resolved)
+  const unary = run([{ type: 'fallback_success', result: entry }], resolved)
+  expect(unary.identity).toEqual(streaming.identity)
+  expect(unary.identity).toMatchObject({ word: 'धर्म', language: 'sa' })
+  expect(run([{ type: 'search_started', word: 'new' }], unary).lookupResolution).toBeUndefined()
+})
+
 const LANGUAGE_RESULT = etymologyResult({
   word: 'perfidious',
   pronunciation: '/pərˈfɪdiəs/',

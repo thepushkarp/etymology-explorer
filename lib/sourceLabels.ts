@@ -22,6 +22,7 @@ const SOURCE_LABELS: Record<string, string> = {
   lewisshort: 'Lewis & Short',
   lsj: 'LSJ',
   jmdict: 'JMdict / EDRDG (via Jisho)',
+  oncoj: 'Oxford–NINJAL Corpus of Old Japanese',
   exa: 'Exa retrieval',
   synthesized: 'AI synthesis',
 }

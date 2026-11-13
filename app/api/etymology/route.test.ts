@@ -28,6 +28,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
   let read: ((word: string) => typeof saved) | undefined
   let identityTarget: string | undefined
   let identityIncomplete = false
+  let lookupResult: import('@/lib/lookupResolution').ResolvedLookup = {}
   let aliasHit: { entry: WordEntry; stale: boolean } | null = null
   let resultWord = 'chat'
   let exclusiveLock = false
@@ -121,6 +122,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
       if (!saved) negatives.set(hint, offers?.length ? { otherScripts: offers } : {})
     },
   }))
+  mock.module('@/lib/lookupResolution', () => ({ resolveLookup: async () => lookupResult }))
   mock.module('@/lib/entryIdentity', () => ({
     resolveEntryIdentity: async (word: string) => {
       calls.identity++
@@ -227,6 +229,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     read = undefined
     identityTarget = undefined
     identityIncomplete = false
+    lookupResult = {}
     aliasHit = null
     resultWord = 'chat'
     exclusiveLock = held = false
@@ -260,6 +263,75 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     calls.researchLanguages = []
     calls.failureMetadata = undefined
     negatives.clear()
+  })
+
+  test('form resolution has JSON/SSE parity, shares the lemma lock and never stores the conjugation as a spelling', async () => {
+    resultWord = 'たたかう'
+    languages = ['ja']
+    const candidate = {
+      word: resultWord,
+      language: 'ja' as const,
+      relationship: 'form' as const,
+      provenance: [
+        {
+          sourceUrl: 'https://en.wiktionary.org/wiki/たたかう',
+          verifiedAt: new Date().toISOString(),
+          evidence: 'たたかえ in conjugation table',
+        },
+      ],
+    }
+    lookupResult = {
+      resolution: {
+        originalInput: 'tatakae',
+        language: 'ja',
+        candidates: [candidate],
+        selected: candidate,
+      },
+    }
+    const first = await (await get('&language=ja', undefined, 'tatakae')).json()
+    expect(first.lookupResolution).toEqual(lookupResult.resolution)
+    expect(first.data.word).toBe('たたかう')
+    expect(first.data.spellings).toEqual([])
+    expect(calls.locks).toEqual(['lock:etymology:たたかう'])
+    const events = await sseEvents(await get('&language=ja&stream=true', undefined, 'tatakae'))
+    expect(events.find((event) => event.type === 'lookup_resolution').resolution).toEqual(
+      first.lookupResolution
+    )
+    expect(events.at(-1).data.word).toBe('たたかう')
+    expect(calls.synthesis).toBe(1)
+  })
+
+  test('ambiguous Japanese choices retain cached English without taking a word lock or synthesizing', async () => {
+    const original = entry()
+    original.word = 'shiro'
+    original.languages = ['en']
+    original.entries = { en: etymologyResult({ word: 'shiro', language: 'en' }) }
+    original.attemptedLanguages = ['en']
+    saved = { entry: original, stale: false }
+    const candidates = ['白', '城'].map((word) => ({
+      word,
+      language: 'ja' as const,
+      relationship: 'romanization' as const,
+      provenance: [
+        {
+          sourceUrl: 'https://en.wiktionary.org/wiki/しろ',
+          verifiedAt: new Date().toISOString(),
+          evidence: 'explicit reading link',
+        },
+      ],
+    }))
+    lookupResult = { resolution: { originalInput: 'shiro', language: 'ja', candidates } }
+    const response = await get('&language=ja', undefined, 'shiro')
+    expect(response.status).toBe(300)
+    const payload = await response.json()
+    expect(payload.lookupResolution.candidates).toEqual(candidates)
+    expect(payload.data.otherScripts.map((target: ScriptTarget) => target.word)).toEqual([
+      '白',
+      '城',
+    ])
+    expect(saved.entry).toEqual(original)
+    expect(calls.locks).toEqual([])
+    expect(calls.synthesis).toBe(0)
   })
 
   test('cached aliases precede absence and concurrent spellings share the canonical lock', async () => {
@@ -531,7 +603,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     saved = { entry: original, stale: false }
     languages = []
     resolutionIncomplete = true
-    expect((await get('&language=fr')).status).toBe(500)
+    expect((await get('&language=fr')).status).toBe(503)
     expect(saved.entry).toEqual(original)
     expect(calls.writes).toBe(0)
 
@@ -609,10 +681,14 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
   test('unknown source availability never writes negative cache', async () => {
     languages = []
     resolutionIncomplete = true
-    expect((await get()).status).toBe(500)
+    const unavailable = await get()
+    expect(unavailable.status).toBe(503)
+    expect((await unavailable.json()).error).toContain(
+      'Dictionary sources are temporarily unavailable'
+    )
     resolutionIncomplete = false
     identityIncomplete = true
-    expect((await get()).status).toBe(500)
+    expect((await get()).status).toBe(503)
     expect(calls.negative.some((item) => (item as string[])[0] === 'write')).toBe(false)
     languages = ['ja']
     resultWord = '電話'

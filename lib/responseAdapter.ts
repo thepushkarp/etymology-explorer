@@ -11,7 +11,13 @@
  */
 
 import { NextResponse } from 'next/server'
-import type { ApiResponse, ScriptTarget, WordEntry, StreamEvent } from '@/lib/types'
+import type {
+  ApiResponse,
+  ScriptTarget,
+  WordEntry,
+  StreamEvent,
+  LookupResolution,
+} from '@/lib/types'
 import { streamErrorResponse, streamResultResponse } from '@/lib/streamingResponse'
 
 type StreamErrorType = Extract<StreamEvent, { type: 'error' }>['errorType']
@@ -48,18 +54,29 @@ export interface ResponseAdapter {
   result(result: WordEntry, options: AdapterResultOptions): Response
 }
 
-export function createResponseAdapter(stream: boolean): ResponseAdapter {
+export function createResponseAdapter(
+  stream: boolean,
+  resolution: () => LookupResolution | undefined = () => undefined
+): ResponseAdapter {
   return {
     error(
       message,
       { status, errorType = 'unknown', headers, unaryHeaders, unaryData, suggestions, otherScripts }
     ) {
       if (stream) {
-        return streamErrorResponse(message, errorType, headers, suggestions, otherScripts)
+        return streamErrorResponse(
+          message,
+          errorType,
+          headers,
+          suggestions,
+          otherScripts,
+          resolution()
+        )
       }
       return NextResponse.json<ApiResponse<unknown>>(
         {
           success: false,
+          ...(resolution() ? { lookupResolution: resolution() } : {}),
           error: message,
           ...(suggestions || otherScripts
             ? {
@@ -79,14 +96,19 @@ export function createResponseAdapter(stream: boolean): ResponseAdapter {
 
     result(result, { cached, headers, identity }) {
       if (stream) {
-        return streamResultResponse(result, headers, identity)
+        return streamResultResponse(result, headers, identity, resolution())
       }
       return NextResponse.json<ApiResponse<WordEntry> & { cached: boolean }>(
-        { success: true, data: result, cached },
+        {
+          success: true,
+          data: result,
+          cached,
+          ...(resolution() ? { lookupResolution: resolution() } : {}),
+        },
         {
           headers: {
             ...UNARY_RESULT_HEADERS,
-            ...(result.incomplete ? { 'Cache-Control': 'no-store' } : {}),
+            ...(result.incomplete || resolution() ? { 'Cache-Control': 'no-store' } : {}),
             ...headers,
           },
         }

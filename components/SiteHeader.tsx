@@ -1,16 +1,13 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { SearchBox } from '@/components/SearchBox'
+import { LanguageSelect } from '@/components/LanguageSelect'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { VersionInfo } from '@/components/VersionInfo'
-import {
-  LANGUAGES,
-  isLanguageCode,
-  SUPPORTED_LANGUAGE_CODES,
-  type LanguageCode,
-} from '@/lib/languages'
+import { isLanguageCode, type LanguageCode } from '@/lib/languages'
 
 interface SiteHeaderProps {
   /** The landing page supplies its own search field. */
@@ -21,28 +18,19 @@ interface SiteHeaderProps {
 function HeaderSearch({ initialLanguage }: { initialLanguage?: LanguageCode }) {
   const [language, setLanguage] = useState(initialLanguage)
   return (
-    <div className="flex w-full items-center gap-2">
+    <div className="flex w-full items-start gap-2">
       <SearchBox language={language} />
-      <select
-        aria-label="Word language"
-        value={language ?? ''}
-        onChange={(event) =>
-          setLanguage(isLanguageCode(event.target.value) ? event.target.value : undefined)
-        }
-        className="max-w-20 cursor-pointer bg-paper py-2 text-sm text-muted [color-scheme:light] dark:[color-scheme:dark]"
-      >
-        <option value="">Auto</option>
-        {SUPPORTED_LANGUAGE_CODES.map((code) => (
-          <option key={code} value={code}>
-            {LANGUAGES[code].englishName}
-          </option>
-        ))}
-      </select>
+      <LanguageSelect value={language} onChange={setLanguage} compact />
     </div>
   )
 }
 
 export function SiteHeader({ showSearch, searchLanguage }: SiteHeaderProps) {
+  const segments = usePathname()?.split('/') ?? []
+  const routeLanguage =
+    segments[1] === 'word' && segments.length === 4 && isLanguageCode(segments[2])
+      ? segments[2]
+      : searchLanguage
   return (
     <header className="mx-auto grid w-full max-w-3xl grid-cols-[1fr_auto] items-center gap-3 px-4 pt-5 sm:flex sm:gap-6 sm:px-6 sm:pt-7">
       <Link
@@ -52,8 +40,8 @@ export function SiteHeader({ showSearch, searchLanguage }: SiteHeaderProps) {
         EtymEx
       </Link>
       {(showSearch || searchLanguage) && (
-        <div className="order-last col-span-2 min-w-0 sm:order-none sm:max-w-72 sm:flex-1">
-          <HeaderSearch key={searchLanguage ?? 'auto'} initialLanguage={searchLanguage} />
+        <div className="order-last col-span-2 min-w-0 sm:order-none sm:max-w-sm sm:flex-1">
+          <HeaderSearch key={routeLanguage ?? 'auto'} initialLanguage={routeLanguage} />
         </div>
       )}
       <div className="flex shrink-0 items-center gap-4">

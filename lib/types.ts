@@ -13,6 +13,35 @@ export interface LexemeRef {
 export interface ScriptTarget {
   word: string
   language: LanguageCode
+  reading?: string
+  meaning?: string
+  sourceUrl?: string
+}
+
+/** Navigation relationships only; members retain independent lexical/cache identities. */
+export interface LookupGroup {
+  reading: string
+  members: ScriptTarget[]
+  choices: (ScriptTarget & { historyId?: string; label: string })[]
+  languages: ScriptTarget[]
+}
+
+export type LookupRelationship = 'romanization' | 'form' | 'correction'
+export interface LookupCandidate extends ScriptTarget {
+  relationship: LookupRelationship
+  provenance: {
+    sourceUrl: string
+    revisionId?: number | string
+    verifiedAt: string
+    evidence: string
+  }[]
+}
+export interface LookupResolution {
+  originalInput: string
+  language: LanguageCode
+  candidates: LookupCandidate[]
+  selected?: LookupCandidate
+  incomplete?: boolean
 }
 
 export type LexicalRelation =
@@ -113,6 +142,8 @@ export interface SourceReference {
   word?: string // The specific word/root that was looked up (undefined for 'synthesized')
   sourceFamily?: SourceFamilyId
   license?: string
+  /** Explicit research owners; absent for shared entry context or older saved entries. */
+  historyIds?: string[]
 }
 
 /**
@@ -300,7 +331,8 @@ export interface EtymologyResult extends HistoryEntryFields {
 }
 
 export interface EntrySpelling extends ScriptTarget {
-  kind: 'spelling' | 'misspelling'
+  kind: 'spelling' | 'misspelling' | 'romanization'
+  readingEvidence?: string
   sourceUrl: string
   revisionId?: number | string
   verifiedAt: string
@@ -348,6 +380,7 @@ export interface ApiResponse<T> {
   success: boolean
   data?: T
   error?: string
+  lookupResolution?: LookupResolution
 }
 
 /**
@@ -362,6 +395,13 @@ export interface WordSuggestion {
  * Raw data fetched from a single external source
  */
 export interface SourceData {
+  lookup?: {
+    readings: string[]
+    meaning?: string
+    targets: (ScriptTarget & { relationship: 'romanization' | 'form' | 'spelling' })[]
+    forms: string[]
+    incomplete?: boolean
+  }
   license?: string
   text: string
   url: string
@@ -515,6 +555,7 @@ export interface SecurityTelemetryEvent {
  * Emitted during the research and synthesis pipeline to provide real-time progress
  */
 export type StreamEvent = { language?: LanguageCode; activityId?: string } & (
+  | { type: 'lookup_resolution'; resolution: LookupResolution }
   | {
       type: 'entry_identity'
       word: string

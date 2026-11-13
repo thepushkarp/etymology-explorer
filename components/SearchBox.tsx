@@ -25,6 +25,14 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
   const [error, setError] = useState('')
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
+  const composing = useRef(false)
+  const [previousLanguage, setPreviousLanguage] = useState(language)
+  if (previousLanguage !== language) {
+    setPreviousLanguage(language)
+    setError('')
+    setOpen(false)
+    setActive(-1)
+  }
   const inputRef = useRef<HTMLInputElement>(null)
   const listId = useId()
   const errorId = useId()
@@ -36,6 +44,7 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
   useHotkey('/', () => inputRef.current?.focus())
 
   const go = (word: string) => {
+    if (composing.current) return
     const trimmed = canonicalizeWord(word)
     if (!isValidWord(trimmed)) {
       setOpen(false)
@@ -55,6 +64,11 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
   }
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    // Safari can clear isComposing on the Enter that confirms an IME candidate.
+    if (composing.current || event.nativeEvent.isComposing || event.keyCode === 229) {
+      if (event.key === 'Enter') event.preventDefault()
+      return
+    }
     const count = suggestions.length
     if (event.key === 'ArrowDown' && count > 0) {
       event.preventDefault()
@@ -105,6 +119,13 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
           onKeyDown={onKeyDown}
+          onCompositionStart={() => {
+            composing.current = true
+            setOpen(false)
+          }}
+          onCompositionEnd={() => {
+            composing.current = false
+          }}
           placeholder={large ? 'Word or expression' : 'Look up…'}
           aria-label="Look up a word or expression"
           aria-invalid={Boolean(error)}

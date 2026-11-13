@@ -10,6 +10,11 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Added
 
+- Choose a search language from a theme-matched menu with language codes, keyboard navigation, and stable spacing when switching languages.
+- Show Japanese lookup options alongside existing results only when their language or etymology connects to Japanese, while preserving explicit Japanese searches.
+- Resolve verified Japanese romanizations and grammatical forms, with source-backed choices for ambiguous readings and an optional beta lookup assistant.
+- Research explicitly attested Old Japanese forms using pinned Oxford–NINJAL lexical annotations with source attribution.
+- Keep typed searches when changing language and protect Japanese input-method confirmation from accidental submission.
 - Open one Japanese entry through dictionary-confirmed spelling variants, with linked spellings and preserved misspelling labels.
 - See unreleased changes in the beta changelog, with the beta build identified in the header.
 - Preview the latest main changes at beta.etymex.com while production remains release-only.
@@ -22,6 +27,19 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Changed
 
+- Unify language and meaning navigation across saved and live results, render shared selections on reload, and retain failed-language tabs without substituting unrelated readings.
+
+- Open the first listed Japanese meaning by default when selecting its language tab, keeping alternative meanings available in the same selector.
+- Use one consistent history selector layout and stable header spacing, keeping Japanese reading groups focused when switching meanings.
+- Keep language navigation visible and group ambiguous Japanese lookups by meaning, while direct kanji searches retain their own readings and histories.
+- Preserve selected etymological histories and lookup context when sharing, reloading, or navigating Back and Forward.
+- Open verified native-script entries from the language tabs, with a spelling or meaning choice when several targets exist.
+- Keep language navigation focused on available entries without notices listing unsupported languages.
+- Select female default pronunciation voices by language, preferring language labels and verified language support before a multilingual fallback.
+- Play the selected language and IPA reading with separate audio clips for distinct pronunciations.
+- Restore completed traces when navigating Back and Forward without starting another trace.
+- Show source links for the selected etymological history and its forms.
+- Accept prefix and suffix searches such as pan- and prioritize dictionary-returned affixes in autocomplete.
 - Recover failed synthesis with a bounded corrective retry, retain failed-language tabs with targeted retry actions, and explain unavailable lineage.
 - Pronunciation playback follows language changes without stale audio resetting the selected entry.
 - Auto discovers supported languages for a spelling and traces their histories together with language tabs.

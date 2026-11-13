@@ -76,7 +76,7 @@ the retained production change.
 ## Reproduce
 
 Use any local MP3 fixture. To generate the live comparison clips with the
-configured ElevenLabs voice, run the following command; it makes six billable
+language-selected ElevenLabs voices, run the following command; it makes six billable
 provider requests, records no credentials or voice ID, and never uses Redis:
 
 ```sh
@@ -92,7 +92,6 @@ export KV_REST_API_URL=http://127.0.0.1:4198
 export KV_REST_API_TOKEN=benchmark
 export OPENROUTER_API_KEY=benchmark-no-provider
 export ELEVENLABS_API_KEY=benchmark
-export ELEVENLABS_VOICE_ID=benchmark
 export RATE_LIMIT_ENABLED=false
 export FORCE_CACHE_ONLY=false
 export AUDIO_PERF_FIXTURE=bench-results/audio-performance/provider-pairs/0-buffered.mp3

@@ -32,7 +32,7 @@ export const CONFIG = {
   maxTotalFetches: 32,
   maxFetchesPerExtraLanguage: 16,
   maxEntryFetches: 96,
-  pipelineRevision: 5,
+  pipelineRevision: 6,
   entryFreshDays: 90,
 
   // Exa's full-text search and recovery share their own paid-request allowance.
@@ -85,6 +85,8 @@ export const CONFIG = {
 
   // Feature flags
   features: {
+    lookupFallback:
+      process.env.APP_CHANNEL === 'beta' && process.env.LOOKUP_FALLBACK_ENABLED === 'true',
     publicSearchEnabled: process.env.PUBLIC_SEARCH_ENABLED !== 'false',
     pronunciationEnabled: process.env.PRONUNCIATION_ENABLED !== 'false',
     forceCacheOnly: process.env.FORCE_CACHE_ONLY === 'true',

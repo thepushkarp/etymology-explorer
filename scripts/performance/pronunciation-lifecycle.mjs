@@ -61,11 +61,14 @@ try {
       })
     }
   })
-  const play = page.getByRole('button', { name: `Play pronunciation of ${word}`, exact: true })
+  const play = page.getByRole('button', {
+    name: `Play pronunciation of ${word} /fixture/`,
+    exact: true,
+  })
   await play.click()
-  await page.getByRole('button', { name: 'French', exact: true }).click()
+  await page.getByRole('link', { name: 'French', exact: true }).click()
   await play.click()
-  await page.getByRole('button', { name: 'Italian', exact: true }).click()
+  await page.getByRole('link', { name: 'Italian', exact: true }).click()
   await play.click()
   await page.evaluate(() => window.__audio[2].resolve())
   await page.evaluate(() => {
@@ -79,9 +82,9 @@ try {
     window.__audio.map(({ src, paused }) => ({ src, paused }))
   )
   assert.deepEqual(audio, [
-    { src: `/api/pronunciation?word=${word}&language=en`, paused: true },
-    { src: `/api/pronunciation?word=${word}&language=fr`, paused: true },
-    { src: `/api/pronunciation?word=${word}&language=it`, paused: false },
+    { src: `/api/pronunciation?word=${word}&language=en&v=4&ipa=fixture`, paused: true },
+    { src: `/api/pronunciation?word=${word}&language=fr&v=4&ipa=fixture`, paused: true },
+    { src: `/api/pronunciation?word=${word}&language=it&v=4&ipa=fixture`, paused: false },
   ])
   console.log(
     'Late playback completion cannot replace the active language or create duplicate audio.'

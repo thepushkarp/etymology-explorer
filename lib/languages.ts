@@ -307,7 +307,7 @@ export function lexicalLanguageName(name: string): string {
   const language = languageFromName(name)
   if (language) return LANGUAGES[language].englishName
   return (
-    ['Old English', 'Latin', 'Ancient Greek'].find(
+    ['Old English', 'Latin', 'Ancient Greek', 'Old Japanese'].find(
       (heading) => heading.toLowerCase() === name.trim().toLowerCase()
     ) ?? name.trim()
   )

@@ -59,14 +59,14 @@ async function readElevenLabsError(response: Response): Promise<ElevenLabsApiErr
   )
 }
 
-/** A preferred voice is optional; the catalog can supply a female stock voice. */
+/** Voice selection comes from the account's default female catalog. */
 export function isElevenLabsConfigured(): boolean {
   return Boolean(process.env.ELEVENLABS_API_KEY)
 }
 
-async function stockVoice(language: string, excluded?: string): Promise<string> {
+async function stockVoices(language: string): Promise<string[]> {
   const query = new URLSearchParams({
-    category: 'premade',
+    voice_type: 'default',
     gender: 'female',
     page_size: '100',
     sort: 'name',
@@ -87,26 +87,26 @@ async function stockVoice(language: string, excluded?: string): Promise<string> 
       : voice.verified_languages?.some((verified) => verified.language === language)
         ? 1
         : 0
-  const voice = catalog.voices
+  const voices = catalog.voices
     .filter(
       (candidate) =>
-        candidate.voice_id !== excluded &&
-        candidate.category === 'premade' &&
         candidate.labels?.gender === 'female' &&
         (rank(candidate) > 0 ||
           candidate.high_quality_base_model_ids?.some((model) =>
             /multilingual|^eleven_v[34](?:_|$)/.test(model)
           ))
     )
-    .sort((left, right) => rank(right) - rank(left))[0]
-  if (!voice) throw new Error(`No available female stock voice for speech language ${language}`)
-  return voice.voice_id
+    .sort((left, right) => rank(right) - rank(left))
+  if (!voices.length)
+    throw new Error(`No available default female voice for speech language ${language}`)
+  return voices.map((voice) => voice.voice_id)
 }
 
-/** Generate one clip, with at most one stock retry for a voice-specific failure. */
+/** Generate one clip, with at most one alternate voice for a voice-specific failure. */
 export async function generatePronunciation(
   word: string,
-  language: LanguageCode = 'en'
+  language: LanguageCode = 'en',
+  ipa?: string
 ): Promise<ArrayBuffer> {
   const languageCode = LANGUAGES[language].ttsLanguageCode
   if (!languageCode)
@@ -123,7 +123,8 @@ export async function generatePronunciation(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: word,
+          // Eleven v4 accepts native IPA enclosed in slashes; SSML phoneme tags are unsupported.
+          text: ipa ? `"/${ipa}/"` : word,
           model_id: 'eleven_v4',
           language_code: languageCode,
           voice_settings: {
@@ -138,17 +139,17 @@ export async function generatePronunciation(
     if (!response.ok) throw await readElevenLabsError(response)
     return response.arrayBuffer()
   }
-  const configured = process.env.ELEVENLABS_VOICE_ID
-  if (!configured) return generate(await stockVoice(languageCode))
+  const [preferred, fallback] = await stockVoices(languageCode)
   try {
-    return await generate(configured)
+    return await generate(preferred)
   } catch (error) {
     // Authentication, credit, rate and model failures cannot be cured by another voice.
     if (
+      !fallback ||
       !(error instanceof ElevenLabsApiError) ||
       !VOICE_UNAVAILABLE[error.code ?? '']?.includes(error.status)
     )
       throw error
-    return generate(await stockVoice(languageCode, configured))
+    return generate(fallback)
   }
 }
