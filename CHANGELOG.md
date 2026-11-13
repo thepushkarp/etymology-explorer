@@ -27,6 +27,7 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Changed
 
+- Preserve Auto for manually started traces and keep non-Japanese written-form destinations free of unsupported lookup context.
 - Open cross-word links at the destination entry while preserving scroll for same-entry language and meaning selections.
 - Unify language and meaning navigation across saved and live results, render shared selections on reload, and retain failed-language tabs without substituting unrelated readings.
 

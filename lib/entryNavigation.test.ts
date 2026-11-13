@@ -62,3 +62,47 @@ test('selection URLs round-trip native text and history IDs without hash-only st
     historyId: undefined,
   })
 })
+
+test('Indic written-form offers open cached entries without Japanese lookup context', () => {
+  for (const [language, words] of [
+    ['hi', ['काला', 'कला']],
+    ['sa', ['कला', 'काल']],
+    ['ur', ['کالا', 'کلا']],
+  ] as const) {
+    const offered = entryNavigation({
+      word: 'kala',
+      language: 'en',
+      otherScripts: words.map((word) => ({ word, language })),
+    }).tabs.find((tab) => tab.language === language)!
+    const selection = parseEntrySelection(
+      new URL(entryPagePath(offered.word, language, offered), 'https://etymex.com').searchParams
+    )
+    expect(selection.lookup).toBeUndefined()
+    const result = etymologyResult({ word: words[0], language })
+    const target = entryNavigation({
+      word: result.word,
+      language,
+      selection,
+      entry: {
+        ...entry,
+        word: result.word,
+        languages: [language],
+        entries: { [language]: result },
+      },
+    })
+    expect(target.unresolved).toBe(false)
+    expect(target.historyId).toBe(result.primaryHistoryId)
+  }
+})
+
+test('Japanese groups retain their English member context without leaking it to other offers', () => {
+  const model = entryNavigation({
+    word: entry.word,
+    language: 'ja',
+    entry,
+    group: { ...group, languages: [...group.languages, { word: 'shiro', language: 'en' }] },
+    otherScripts: [{ word: 'कला', language: 'hi' }],
+  })
+  expect(model.tabs.find((tab) => tab.language === 'en')?.lookup).toBe('しろ')
+  expect(model.tabs.find((tab) => tab.language === 'hi')?.lookup).toBeUndefined()
+})

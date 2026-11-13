@@ -18,8 +18,9 @@ try {
   await context.addInitScript(() => {
     window.__streams = []
     window.EventSource = class extends EventTarget {
-      constructor() {
+      constructor(url) {
         super()
+        this.url = url
         window.__streams.push(this)
       }
       close() {}
@@ -36,6 +37,13 @@ try {
     assert.equal(await page.evaluate(() => window.__streams.length), 0)
     await page.getByRole('button', { name: 'Trace its origins', exact: true }).click()
     await page.waitForFunction(() => window.__streams.length === 1)
+    assert.equal(
+      await page.evaluate(() =>
+        new URL(window.__streams[0].url, location.href).searchParams.get('language')
+      ),
+      null,
+      'Manual tracing from an unqualified URL must preserve Auto'
+    )
     await page.evaluate(() => {
       window.__streams[0].send({
         type: 'languages_resolved',
@@ -136,6 +144,19 @@ try {
     await page.getByRole('heading', { name: '白', exact: true }).waitFor()
     await page.close()
   }
+  const hinted = await context.newPage()
+  await hinted.goto(`${base}/word/ja/manualhintfixture`)
+  assert.equal(await hinted.evaluate(() => window.__streams.length), 0)
+  await hinted.getByRole('button', { name: 'Trace its origins', exact: true }).click()
+  await hinted.waitForFunction(() => window.__streams.length === 1)
+  assert.equal(
+    await hinted.evaluate(() =>
+      new URL(window.__streams[0].url, location.href).searchParams.get('language')
+    ),
+    'ja',
+    'Manual tracing must retain an explicit route language'
+  )
+  await hinted.close()
   console.log(
     'Passed: native-script tabs, first-entry defaults, consistent typography, desktop/mobile layout, hidden unsupported notices, and no research before choosing a destination.'
   )

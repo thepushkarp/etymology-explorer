@@ -83,10 +83,14 @@ export function entryNavigation({
         ? { word, language: code }
         : (group?.languages.find((target) => target.language === code) ??
           related[0] ?? { word, language: code }))
+    // Lookup context describes Japanese reading groups and their verified language members.
+    const supportsLookup =
+      code === 'ja' ||
+      group?.languages.some((member) => member.language === code && member.word === target.word)
     return {
       ...target,
       historyId: first?.historyId,
-      lookup: lookup ?? (related.length > 1 ? word : undefined),
+      lookup: supportsLookup ? (lookup ?? (related.length > 1 ? word : undefined)) : undefined,
       label: LANGUAGES[code].englishName,
       local: target.word === word && saved.has(code),
     }

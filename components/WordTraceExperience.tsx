@@ -181,7 +181,7 @@ export function WordTraceExperience({
   }, [activeWord, selected, slice?.sections, ngram, navigation.grouped, navigation.historyId])
 
   const tabs = <EntryNavigation model={navigation} />
-  const start = () => search(activeWord, selected, { refresh: stale })
+  const start = () => search(activeWord, selection.language ?? activeLanguage, { refresh: stale })
 
   return (
     <>
