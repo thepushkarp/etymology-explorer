@@ -27,6 +27,7 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Changed
 
+- Open cross-word links at the destination entry while preserving scroll for same-entry language and meaning selections.
 - Unify language and meaning navigation across saved and live results, render shared selections on reload, and retain failed-language tabs without substituting unrelated readings.
 
 - Open the first listed Japanese meaning by default when selecting its language tab, keeping alternative meanings available in the same selector.

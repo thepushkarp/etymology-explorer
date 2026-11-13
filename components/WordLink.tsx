@@ -46,7 +46,7 @@ export function WordLink({
   return (
     <Link
       href={href}
-      scroll={false}
+      scroll={!localNavigation}
       prefetch={localNavigation ? false : prefetch}
       onMouseEnter={() => setPrefetch(true)}
       onFocus={() => setPrefetch(true)}

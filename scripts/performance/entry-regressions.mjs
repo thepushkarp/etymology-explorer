@@ -7,7 +7,7 @@ const browser = await chromium.launch({
   headless: true,
 })
 try {
-  const context = await browser.newContext()
+  const context = await browser.newContext({ reducedMotion: 'reduce' })
   await context.route('**/api/recent-searches**', (route) =>
     route.fulfill({ json: { success: true, data: [] } })
   )
@@ -63,7 +63,13 @@ try {
   await page.goto(`${base}/word/pan`)
   const sources = page.locator('#entry-sources')
   assert.ok((await sources.innerText()).includes('panne'))
-  await page.getByRole('link', { name: /camera movement/i }).click()
+  await page.setViewportSize({ width: 1280, height: 480 })
+  const camera = page.getByRole('link', { name: /camera movement/i })
+  await camera.evaluate((link) => link.scrollIntoView({ block: 'start' }))
+  const selectionScroll = await page.evaluate(() => window.scrollY)
+  assert.ok(selectionScroll > 0)
+  await camera.click()
+  assert.ok(Math.abs((await page.evaluate(() => window.scrollY)) - selectionScroll) < 2)
   assert.ok(!(await sources.innerText()).includes('panne'))
   assert.ok((await sources.innerText()).includes('pan'))
   await page.getByRole('link', { name: 'French', exact: true }).click()
@@ -93,7 +99,9 @@ try {
       definition: 'A completed navigation fixture.',
       roots: [],
       ancestryGraph: { branches: [] },
-      lore: 'A fixture story.',
+      lore: 'A fixture story with enough text to scroll before following a related word. '.repeat(
+        80
+      ),
     }
     const entry = {
       word,
@@ -108,6 +116,7 @@ try {
           primaryHistoryId: history.id,
           histories: [history],
           sources: [],
+          suggestions: { seeAlso: ['pain'] },
         },
       },
       tracedAt: new Date().toISOString(),
@@ -129,8 +138,18 @@ try {
     await page.goForward()
     await page.waitForURL(base + '/')
   }
+  await page.goBack()
+  const related = page.locator('#entry-related').getByRole('link', { name: 'pain', exact: true })
+  await related.scrollIntoViewIfNeeded()
+  assert.ok((await page.evaluate(() => window.scrollY)) > 500)
+  await related.click()
+  await page.waitForURL(`${base}/word/pain`)
+  await page.waitForFunction(() => {
+    const heading = document.querySelector('main h1')?.getBoundingClientRect()
+    return heading && heading.top >= 0 && heading.bottom <= window.innerHeight
+  })
   console.log(
-    'Passed: pain language/IPA audio identity, pan history source filtering, Back/Forward completion restoration, and no passive research.'
+    'Passed: language/IPA audio identity, history source filtering, Back/Forward restoration, same-entry scroll preservation, related-word scroll reset, and no passive research.'
   )
 } finally {
   await browser.close()
