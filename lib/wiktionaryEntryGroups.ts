@@ -362,9 +362,28 @@ export function extractWiktionaryLookup(
   if (!language || !selected) return undefined
   const fragment = selected.html
   const readings = new Set<string>()
-  const boundHeadword = selectedHeadwordLines(fragment, language).find(({ headword }) =>
+  const boundHeadwords = selectedHeadwordLines(fragment, language).filter(({ headword }) =>
     sameSpelling(cleanWiktionaryHtml(lexicalSpellingHtml(headword[2])), word)
   )
+  const boundHeadword = boundHeadwords[0]
+  // Identity requires a single lemma, but lookup must retain independent senses
+  // even when a sibling history or definition describes an inflected form.
+  const hasIndependentEntry = boundHeadwords.some(({ start }) => {
+    const body = fragment.slice(start).split(/<h[1-6]\b/i)[0]
+    const opening = body.match(/<ol\b[^>]*>/i)
+    const list = opening && balancedElement(body, opening.index!)
+    if (!list) return false
+    let consumed = 0
+    for (const item of list.body.matchAll(/<li\b[^>]*>/gi)) {
+      if (item.index < consumed) continue
+      const definition = balancedElement(list.body, item.index)
+      if (!definition) continue
+      consumed = definition.end
+      const gloss = definition.body.split(/<(?:ul|ol|dl)\b/i)[0]
+      if (!/\bform-of-definition\b/.test(gloss) && cleanWiktionaryHtml(gloss)) return true
+    }
+    return false
+  })
   const transliteration = headwordTransliteration(fragment, word)
   if (transliteration) readings.add(transliteration)
   if (language === 'ja' && /^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(word))
@@ -433,6 +452,7 @@ export function extractWiktionaryLookup(
     .split(/<(?:ul|ol|dl)\b/i)[0]
   return {
     readings: [...readings],
+    hasIndependentEntry,
     meaning:
       definition && !/form-of-definition/.test(definition)
         ? cleanWiktionaryHtml(definition)

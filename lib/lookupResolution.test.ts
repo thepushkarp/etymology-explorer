@@ -76,6 +76,7 @@ test('unique rōmaji readings produce source proof, while homophones remain choi
   expect(first.resolution?.selected?.provenance[0].sourceUrl).toContain('wiktionary.org')
   const reading = source('しろ')
   reading.spellingLemma = false
+  reading.lookup!.hasIndependentEntry = false
   reading.lookup!.targets = ['白', '城'].map((word) => ({
     word,
     language: 'ja',
@@ -105,9 +106,55 @@ test('kana and rōmaji conjugations resolve only through the lemma conjugation t
   }
 })
 
+test('independent exact histories survive a grammatical-form target, including through rōmaji', async () => {
+  const headings = ['Japanese', 'Etymology 1', 'Verb', 'Etymology 2', 'Noun']
+  const page = {
+    requestedWord: 'しろ',
+    title: 'しろ',
+    redirects: [],
+    fetchedAt: new Date().toISOString(),
+    html: `<h2 id="Japanese">Japanese</h2><h3 id="Etymology_1">Etymology 1</h3><h4 id="Verb">Verb</h4><p><strong class="headword" lang="ja">しろ</strong><span class="headword-tr">shiro</span></p><ol><li><span class="form-of-definition">imperative of <span class="form-of-definition-link"><i lang="ja"><a href="/wiki/する#Japanese">する</a></i></span></span></li></ol><h3 id="Etymology_2">Etymology 2</h3><h4 id="Noun">Noun</h4><p><strong class="headword" lang="ja">しろ</strong></p><ol><li>A white area.</li></ol>`,
+    sections: headings.map((line, index) => ({
+      line,
+      anchor: line.replace(' ', '_'),
+      index: String(index),
+      number: String(index),
+      hLevel: [2, 3, 4, 3, 4][index],
+    })),
+  }
+  const mixed = extractWiktionaryLanguage(page, 'Japanese')!
+  expect(mixed.entryGroups).toHaveLength(2)
+  expect(mixed.spellingLemma).toBe(false)
+  expect(mixed.lookup?.targets).toEqual([{ word: 'する', language: 'ja', relationship: 'form' }])
+  const session = setup({ しろ: mixed, する: source('する', 'suru', 'do') })
+  const exact = await resolveLookup('しろ', session, 'ja')
+  expect(exact.resolution?.selected).toBeUndefined()
+  expect(exact.preserveExactEntry).toBe(true)
+  expect(exact.resolution?.candidates.map(({ word }) => word)).toEqual(['する'])
+  const roman = await resolveLookup('shiro', session, 'ja')
+  expect(roman.resolution?.selected).toBeUndefined()
+  expect(roman.resolution?.candidates.map(({ word }) => word)).toEqual(['しろ', 'する'])
+  const formOnly = extractWiktionaryLanguage(
+    {
+      ...page,
+      html: page.html.split('<h3 id="Etymology_2">')[0],
+      sections: page.sections.slice(0, 3),
+    },
+    'Japanese'
+  )!
+  expect(formOnly.lookup?.hasIndependentEntry).toBe(false)
+  const pure = await resolveLookup(
+    'しろ',
+    setup({ しろ: formOnly, する: source('する', 'suru', 'do') }),
+    'ja'
+  )
+  expect(pure.resolution?.selected).toMatchObject({ word: 'する', relationship: 'form' })
+})
+
 test('Auto preserves English sayonara while Japanese selection reuses the verified native entry', async () => {
   const roman = source('sayonara')
   roman.spellingLemma = false
+  roman.lookup!.hasIndependentEntry = false
   roman.lookup!.targets = [{ word: 'さよなら', language: 'ja', relationship: 'romanization' }]
   const session = setup({ sayonara: roman, さよなら: source('さよなら', 'sayonara', 'goodbye') })
   const toc = spyOn(cache, 'getCachedWiktionaryToc').mockImplementation(async (word) =>

@@ -38,7 +38,7 @@ export type CacheableSource =
   | 'dicionarioAberto'
   | 'incelsWiki'
 
-const SOURCE_CACHE_PREFIX = 'src:v13:'
+const SOURCE_CACHE_PREFIX = 'src:v14:'
 
 function sourceKey(source: CacheableSource, word: string, language: LanguageCode): string {
   const normalized = canonicalizeWord(word)

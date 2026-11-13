@@ -397,6 +397,8 @@ export interface WordSuggestion {
 export interface SourceData {
   lookup?: {
     readings: string[]
+    /** At least one headword-bound definition is independent of form/redirect targets. */
+    hasIndependentEntry?: boolean
     meaning?: string
     targets: (ScriptTarget & { relationship: 'romanization' | 'form' | 'spelling' })[]
     forms: string[]

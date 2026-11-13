@@ -301,6 +301,43 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     expect(calls.synthesis).toBe(1)
   })
 
+  for (const stream of [false, true]) {
+    test(`independent exact entries retain form choices without redirecting (${stream ? 'SSE' : 'JSON'})`, async () => {
+      resultWord = 'しろ'
+      languages = ['ja']
+      lookupResult = {
+        preserveExactEntry: true,
+        resolution: {
+          originalInput: 'しろ',
+          language: 'ja',
+          candidates: [
+            {
+              word: 'する',
+              language: 'ja',
+              relationship: 'form',
+              provenance: [
+                {
+                  sourceUrl: 'https://en.wiktionary.org/wiki/しろ',
+                  verifiedAt: new Date().toISOString(),
+                  evidence: 'imperative of する',
+                },
+              ],
+            },
+          ],
+        },
+      }
+      const response = await get(`&language=ja${stream ? '&stream=true' : ''}`, undefined, 'しろ')
+      expect(response.status).toBe(200)
+      const payload = stream ? (await sseEvents(response)).at(-1) : await response.json()
+      expect(payload.data.word).toBe('しろ')
+      expect(payload.data.otherScripts).toContainEqual(
+        expect.objectContaining({ word: 'する', language: 'ja' })
+      )
+      expect(calls.locks).toEqual(['lock:etymology:しろ'])
+      expect(calls.synthesis).toBe(1)
+    })
+  }
+
   test('ambiguous Japanese choices retain cached English without taking a word lock or synthesizing', async () => {
     const original = entry()
     original.word = 'shiro'

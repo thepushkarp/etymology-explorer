@@ -83,6 +83,7 @@ async function discoverForms(word: string, language: LanguageCode, session: Lexe
 }
 
 export interface ResolvedLookup {
+  preserveExactEntry?: boolean
   resolution?: LookupResolution
   terminal?: SourceData
   originalTargets?: ScriptTarget[]
@@ -134,11 +135,13 @@ export async function resolveLookup(
   const verified = results.flatMap((result) => result.resolution?.candidates ?? [])
   const incomplete =
     results.length !== candidates.length || results.some((result) => result.resolution?.incomplete)
+  const preserveExactEntry = results.some((result) => result.preserveExactEntry)
   const unique =
-    !incomplete && verified.length === 1
+    !preserveExactEntry && !incomplete && verified.length === 1
       ? results.find((result) => result.resolution?.selected)
       : undefined
   return {
+    preserveExactEntry,
     resolution: {
       originalInput: word,
       language: unique?.resolution?.language ?? candidates[0],
@@ -288,7 +291,7 @@ async function resolveLookupLanguage(
         ]
         if (data.lookup?.targets.length) {
           addLinks(data, relationship, proofs, item.depth + 1)
-          continue
+          if (!data.lookup.hasIndependentEntry) continue
         }
         if (!data.entryGroups?.length) {
           resolution.incomplete = true
@@ -313,7 +316,13 @@ async function resolveLookupLanguage(
     }
   }
   await drain()
-  if (!resolution.candidates.length && checked.size < maximum && !preserveLatin) {
+  const preserveExactEntry = !!exact?.lookup?.hasIndependentEntry
+  if (
+    !preserveExactEntry &&
+    !resolution.candidates.length &&
+    checked.size < maximum &&
+    !preserveLatin
+  ) {
     try {
       const discovered = await run(() => discoverForms(readings[0] ?? word, language, session))
       resolution.incomplete ||= discovered.more || discovered.words.length > maximum - checked.size
@@ -326,7 +335,13 @@ async function resolveLookupLanguage(
       console.warn('[Lookup] Form discovery unavailable:', safeError(error))
     }
   }
-  if (!resolution.candidates.length && checked.size < maximum && !preserveLatin && allowFallback) {
+  if (
+    !preserveExactEntry &&
+    !resolution.candidates.length &&
+    checked.size < maximum &&
+    !preserveLatin &&
+    allowFallback
+  ) {
     const proposed = await proposeLookup(word, language, session.signal)
     fallbackAttempted = CONFIG.features.lookupFallback
     // An unverified proposal is neither an absence nor proof of uniqueness.
@@ -336,6 +351,7 @@ async function resolveLookupLanguage(
       resolution.incomplete = true
   }
   if (
+    !preserveExactEntry &&
     !preserveLatin &&
     !resolution.incomplete &&
     resolution.candidates.length === 1 &&
@@ -346,6 +362,7 @@ async function resolveLookupLanguage(
       resolution.selected = target
   }
   return {
+    preserveExactEntry,
     resolution,
     originalTargets,
     verifiedCount: checked.size,

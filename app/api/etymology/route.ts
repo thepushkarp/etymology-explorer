@@ -303,6 +303,7 @@ export async function GET(request: NextRequest) {
     if (
       lookupResolution?.candidates.length &&
       !selectedLookup &&
+      !lookup.preserveExactEntry &&
       (hint || !lookup.originalTargets?.length)
     ) {
       return respond.error(
