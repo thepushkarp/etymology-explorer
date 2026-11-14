@@ -85,6 +85,69 @@ async function send(page, event, index = -1) {
 }
 
 try {
+  for (const requested of ['はる', 'haru'])
+    await scenario(
+      `Explicit ${requested} search survives a cached default redirect without tracing passive visits`,
+      async (page, context) => {
+        await fetch('http://127.0.0.1:4198', {
+          method: 'POST',
+          body: JSON.stringify(['del', 'entry:v1:張る']),
+        })
+        const calls = []
+        const result = journeyEntry('張る', { ja: [['Recovered stretching meaning', '/haru/']] })
+        result.entries.ja.histories[0].transliteration = 'haru'
+        await context.route('**/api/etymology?**', async (route) => {
+          const word = new URL(route.request().url()).searchParams.get('word')
+          calls.push(word)
+          assert.equal(word, '張る', 'The cached owner and first meaning must not be retraced')
+          await fetch('http://127.0.0.1:4198', {
+            method: 'POST',
+            body: JSON.stringify(['set', 'entry:v1:張る', JSON.stringify(result)]),
+          })
+          await route.fulfill({ json: { success: true, data: result } })
+        })
+        const destination = (url) => url.pathname === `/word/ja/${encodeURIComponent('春')}`
+        await page.goto(
+          `${base}/word/${requested === 'haru' ? 'ja/' : ''}${encodeURIComponent(requested)}`
+        )
+        await page.waitForURL(destination)
+        await page.getByText('Cached spring meaning (journey fixture).', { exact: true }).waitFor()
+        await page.reload()
+        await page.getByText('Cached spring meaning (journey fixture).', { exact: true }).waitFor()
+        assert.deepEqual(calls, [])
+        assert.equal(await page.evaluate(() => window.__streams.length), 0)
+        await page.goto(base)
+        await auto(page)
+        const input = page.getByRole('combobox', { name: 'Look up a word or expression' })
+        if (requested === 'haru') {
+          await page.getByRole('combobox', { name: 'Word language' }).click()
+          await page.getByRole('option', { name: 'Japanese', exact: true }).click()
+        }
+        await input.fill(requested)
+        await input.press('Enter')
+        await page.waitForURL(destination)
+        const recovered = page
+          .getByRole('navigation', { name: 'Meanings for はる' })
+          .getByRole('link')
+          .filter({ hasText: '張る —' })
+        await recovered.waitFor()
+        assert.deepEqual(calls, ['張る'])
+        await recovered.click()
+        await page
+          .getByText('Recovered stretching meaning (journey fixture).', { exact: true })
+          .waitFor()
+        await page.goBack()
+        await page.waitForURL(destination)
+        await page.reload()
+        await page.getByText('Cached spring meaning (journey fixture).', { exact: true }).waitFor()
+        assert.deepEqual(calls, ['張る'])
+        await page
+          .getByRole('combobox', { name: 'Word language' })
+          .getByText(requested === 'haru' ? 'Japanese' : 'Auto', { exact: true })
+          .waitFor()
+      }
+    )
+
   await scenario(
     'Empty kana index retains content and opens the first recovered meaning',
     async (page, context) => {

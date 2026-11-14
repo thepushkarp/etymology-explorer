@@ -168,7 +168,8 @@ export default async function WordPage({ params, searchParams }: WordPageProps) 
   if (first) {
     redirect(
       entryPagePath(first.word, first.language, {
-        lookup: lookupGroup?.reading,
+        // The destination must consume intent for the original searched spelling.
+        lookup: selection.lookup ?? word,
         historyId: first.historyId,
       })
     )

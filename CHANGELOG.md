@@ -28,6 +28,7 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Changed
 
+- Preserve explicit search intent across default-meaning redirects so remaining verified-link alternatives can be checked without retracing cached meanings.
 - Give Auto searches 64 source requests before additional-language allowances, within the shared 96-request ceiling.
 - Keep optional Japanese alternatives from delaying primary entry research and preserve empty reading pages with explicit recovery actions.
 - Reuse canonical saved entries in Japanese meaning groups and retain sources for displayed related words.
