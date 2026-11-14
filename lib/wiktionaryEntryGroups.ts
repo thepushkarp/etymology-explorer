@@ -720,8 +720,9 @@ function etymologyRelations(html: string, subject: LexemeRef): SourceLexicalRela
  * structured sections inside the current group, including same-level native
  * edition headings such as a noun entry followed by an inflected-form entry.
  * Native Japanese labelled homographs (名詞:橋, 名詞:箸) own their nested
- * etymology sections. Ordinary POS sections alone do not establish different
- * origins.
+ * unnumbered etymology sections. Numbered origins within a homograph remain
+ * independent histories with their enclosing headword context. Ordinary POS
+ * sections alone do not establish different origins.
  */
 export function extractWiktionaryEntryGroups(
   html: string,
@@ -772,9 +773,27 @@ export function extractWiktionaryEntryGroups(
       etymologyIndexes.some((index) => headingLevel(sections[index]) > languageLevel + 1))
       ? nativeEntryIndexes
       : []
+  const nestedOwners = new Map<number, { index: number; contextEnd: number; end: number }>()
+  const nativeGroupIndexes = homographIndexes.flatMap((ownerIndex) => {
+    const ownerLevel = headingLevel(sections[ownerIndex])
+    const relativeEnd = sections
+      .slice(ownerIndex + 1, languageEndIndex)
+      .findIndex((section) => headingLevel(section) <= ownerLevel)
+    const ownerEnd = relativeEnd < 0 ? languageEndIndex : ownerIndex + 1 + relativeEnd
+    const numbered = etymologyIndexes.filter(
+      (index) =>
+        index > ownerIndex &&
+        index < ownerEnd &&
+        /[0-9０-９]+$/u.test(cleanHeading(sections[index].line))
+    )
+    if (!numbered.length) return [ownerIndex]
+    for (const index of numbered)
+      nestedOwners.set(index, { index: ownerIndex, contextEnd: numbered[0], end: ownerEnd })
+    return numbered
+  })
   const groupIndexes = homographIndexes.length
     ? [
-        ...homographIndexes,
+        ...nativeGroupIndexes,
         ...etymologyIndexes.filter((index) => headingLevel(sections[index]) === languageLevel + 1),
       ].sort((a, b) => a - b)
     : etymologyIndexes.length
@@ -800,13 +819,23 @@ export function extractWiktionaryEntryGroups(
     const start = anchorOffset(html, group.anchor)
     if (start < 0) return []
 
-    const nextGroupIndex = groupIndexes[position + 1] ?? languageEndIndex
+    const owner = nestedOwners.get(groupIndex)
+    const nextGroupIndex = Math.min(
+      groupIndexes[position + 1] ?? languageEndIndex,
+      owner?.end ?? languageEndIndex
+    )
     const nextGroupOffset =
       nextGroupIndex < sections.length
         ? anchorOffset(html, sections[nextGroupIndex].anchor)
         : languageEndOffset
     const end = nextGroupOffset > start ? nextGroupOffset : languageEndOffset
-    const fragment = html.slice(start, end)
+    // Shared POS/headword context belongs to each nested origin, but sibling
+    // origin statements must never enter its text or ancestry evidence scope.
+    const ownerStart = owner ? anchorOffset(html, sections[owner.index].anchor) : -1
+    const contextEnd = owner ? anchorOffset(html, sections[owner.contextEnd].anchor) : -1
+    const context =
+      ownerStart >= 0 && contextEnd > ownerStart ? html.slice(ownerStart, contextEnd) : ''
+    const fragment = context + html.slice(start, end)
     const transliteration = requestedWord
       ? headwordTransliteration(fragment, requestedWord)
       : undefined
@@ -901,7 +930,9 @@ export function extractWiktionaryEntryGroups(
       {
         index: group.index,
         number: group.number,
-        heading: cleanHeading(group.line),
+        heading: owner
+          ? `${cleanHeading(sections[owner.index].line)} — ${cleanHeading(group.line)}`
+          : cleanHeading(group.line),
         anchor: group.anchor,
         level: headingLevel(group),
         ...(transliteration ? { transliteration } : {}),

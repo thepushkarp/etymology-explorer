@@ -4,7 +4,61 @@ import { extractWiktionaryLanguage } from './wiktionary'
 import { deriveEntryContexts } from './lexemeEntries'
 import { ancestorCandidates, scopeEnglishHistories } from './research'
 import { japaneseEtymologyRelations } from './japaneseEtymology'
+import type { WiktionaryPage } from './wiktionary'
 import type { ResearchContext } from './types'
+
+test('numbered origins under a native POS retain independent evidence and enclosing headwords', () => {
+  for (const [pos, siblingOrigin] of [
+    ['名詞', '語源'],
+    ['名詞:甲', '語源3'],
+  ]) {
+    const headings = ['日本語', pos, '語源1', '語源２', '名詞:乙', siblingOrigin, '翻訳']
+    const levels = [2, 3, 4, 4, 3, 4, 4]
+    const bodies = [
+      '',
+      '<p><strong class="headword" lang="ja">こう</strong><span class="headword-tr">kō</span></p><p>Shared noun context.</p>',
+      '<p>古典日本語「かふ」から。</p>',
+      '<p>上代日本語「こふ」から。</p>',
+      '<p>Separate noun context.</p>',
+      '<p>日本語「おつ」から。</p>',
+      '<p>Unrelated translations.</p>',
+    ]
+    const page: WiktionaryPage = {
+      requestedWord: 'こう',
+      title: 'こう',
+      redirects: [],
+      fetchedAt: new Date().toISOString(),
+      sections: headings.map((line, index) => ({
+        line,
+        index: String(index),
+        number: String(index),
+        anchor: `s${index}`,
+        hLevel: levels[index],
+      })),
+      html: headings
+        .map((line, i) => `<h${levels[i]} id="s${i}">${line}</h${levels[i]}>${bodies[i]}`)
+        .join(''),
+    }
+    const data = extractWiktionaryLanguage(page, '日本語', 'ja')!
+    const entries = deriveEntryContexts('こう', 'ja', 'wiktionaryNative', data, null)
+    expect(entries).toHaveLength(3)
+    expect(new Set(entries.map((entry) => entry.evidenceScopeId)).size).toBe(3)
+    expect(
+      data.entryGroups!.map((group) => group.relations?.map((relation) => relation.target.word))
+    ).toEqual([['かふ'], ['こふ'], ['おつ']])
+    for (const [index, other] of [
+      [0, 'こふ'],
+      [1, 'かふ'],
+    ] as const) {
+      expect(entries[index].text).toContain('Shared noun context.')
+      expect(entries[index].text).not.toContain(other)
+      expect(entries[index].text).not.toContain('Separate noun context.')
+      expect(data.entryGroups![index].transliteration).toBe('kō')
+    }
+    expect(entries[2].text).not.toContain('Shared noun context.')
+    expect(data.entryGroups![2].etymologyText).not.toContain('Unrelated translations.')
+  }
+})
 
 test('native Japanese fallback preserves source-defined homographs and their local sections', () => {
   const data = extractWiktionaryLanguage(fixtures['はし'], '日本語', 'ja')!

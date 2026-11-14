@@ -37,7 +37,7 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 - Share language and meaning navigation rules across server, saved, and live views, with consistent grammatical labels and dictionary links.
 - Keep loaded meanings visible when an additional Japanese lookup times out, with a word-specific inline message and an explicit retry.
 - Look up Japanese senses and restricted readings locally from official JMdict XML, preserving original loanword metadata and source attribution.
-- Preserve Japanese Wiktionary numbered and nested meaning boundaries, and recognize explicit native-language derivation and shortening statements.
+- Preserve Japanese Wiktionary numbered origins within part-of-speech and homograph sections as independent histories, and recognize explicit native-language derivation and shortening statements.
 - Preserve the longer source expression before shortening in Japanese etymologies such as sayonara, so valid compound histories can be traced.
 - Keep Etym in the accent colour, highlight the full logo on hover or keyboard focus, and use the matching EtymEx wordmark for favicons.
 - Rank Japanese lookup alternatives by source evidence without a fixed candidate-count cutoff, automatically check source-linked destinations, and display all saved matching meanings.

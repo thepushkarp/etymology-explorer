@@ -54,7 +54,7 @@ describe('source cache', () => {
 
     await cacheSource('etymonline', 'Telephone', DATA, store)
 
-    expect(store.keys()).toContain('src:v17:etymonline:telephone')
+    expect(store.keys()).toContain('src:v18:etymonline:telephone')
     expect(await getCachedSource('etymonline', 'telephone', store)).toEqual(DATA)
   })
 
@@ -72,8 +72,8 @@ describe('source cache', () => {
     await cacheSource('wiktionaryNative', 'sale', DATA, store, 'fr')
 
     expect(store.keys().sort()).toEqual([
-      'src:v17:wiktionaryNative:fr:sale',
-      'src:v17:wiktionaryNative:it:sale',
+      'src:v18:wiktionaryNative:fr:sale',
+      'src:v18:wiktionaryNative:it:sale',
     ])
   })
 
@@ -113,7 +113,7 @@ describe('source cache', () => {
 
   test('treats malformed cache entries as misses', async () => {
     const store = createStore()
-    await store.set('src:v17:etymonline:telephone', {
+    await store.set('src:v18:etymonline:telephone', {
       text: 42,
       url: 'https://example.com',
     } as unknown as SourceData)
@@ -176,8 +176,8 @@ test('TOC cache preserves page-order headings and authoritative absence per edit
   await cacheWiktionaryToc('Fixture', 'en', toc, store)
   await cacheWiktionaryToc('fixture', 'fr', { headings: [], nonemptyHeadings: [] }, store)
   expect(store.keys()).toEqual([
-    'src:v17:wiktionaryToc:fixture',
-    'src:v17:wiktionaryToc:fr:fixture',
+    'src:v18:wiktionaryToc:fixture',
+    'src:v18:wiktionaryToc:fr:fixture',
   ])
   expect(await getCachedWiktionaryToc('fixture', 'en', store)).toEqual(toc)
   expect(await getCachedWiktionaryToc('fixture', 'fr', store)).toEqual({
