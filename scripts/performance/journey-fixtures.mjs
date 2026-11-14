@@ -71,7 +71,29 @@ Object.assign(kakiIndex.entries.ja.histories[0], {
   ],
 })
 
+const haruIndex = journeyEntry('はる', { ja: [['Haru reading index', '/haru/']] })
+Object.assign(haruIndex.entries.ja.histories[0], {
+  entryKind: 'unresolved',
+  transliteration: 'haru',
+  counterparts: [
+    { word: '春', language: 'ja' },
+    { word: '張る', language: 'ja' },
+  ],
+})
+const spring = journeyEntry('春', {
+  ja: [
+    ['Cached spring meaning', '/haru/'],
+    ['Second spring history', '/haru/'],
+  ],
+})
+for (const history of spring.entries.ja.histories) history.transliteration = 'haru'
+const romanHaru = journeyEntry('haru', { en: [['Independent Latin spelling fixture', '/test/']] })
+romanHaru.otherScripts = [{ word: 'はる', language: 'ja' }]
+
 export const journeyEntries = [
+  romanHaru,
+  haruIndex,
+  spring,
   kakiIndex,
   kouIndex,
   ...kouEntries,

@@ -264,7 +264,7 @@ An explicit search traces qualifying Japanese destinations sequentially through 
 etymology API. Each destination retains its own cache, lock and per-entry budgets. Saved matching histories are reused without retracing. Only successful
 matching histories enter the meaning list; missing or failed candidates remain undisplayed. Temporary
 failures offer an explicit retry; budget/rate/unavailability limits stop the batch. Leaving the page
-aborts it. Selecting a meaning within existing lookup context does not restart the batch.
+aborts it. Selecting a meaning within existing lookup context does not restart the batch. A default-entry redirect preserves the searched spelling in validated lookup context, so its single-use search intent can finish the remaining alternatives from the cached destination. Meaning links, reloads, and passive visits do not grant that intent.
 Both module graphs must
 exclude research and LLM modules. Passive loads, prefetching, and browser-history restoration never
 authorize a trace.

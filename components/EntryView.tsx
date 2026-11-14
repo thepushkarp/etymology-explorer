@@ -16,6 +16,7 @@ import { TraceStatus } from '@/components/TraceStatus'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
 import { scheduleTraceIntent } from '@/lib/traceIntent'
+import { lookupGroupForWord } from '@/lib/lookupGroups'
 import { LANGUAGES, type LanguageCode } from '@/lib/languages'
 import { historyEntry } from '@/lib/resultHistories'
 import { spellingPronunciation } from '@/lib/scriptTargets'
@@ -51,14 +52,28 @@ export function EntryView({
   const selection = useEntrySelection(displayed.word, language, initialSelection)
   const selected = selection.language ?? language ?? displayed.languages[0]
   const result = selected ? displayed.entries[selected] : undefined
-  const [explicitWord, setExplicitWord] = useState<string>()
+  const [explicitSearch, setExplicitSearch] = useState<{ word: string; lookup: string }>()
+  // Retained same-page state must not reauthorize a consumed search on Back.
+  if (
+    explicitSearch &&
+    (explicitSearch.word !== displayed.word ||
+      explicitSearch.lookup !== (selection.lookup ?? displayed.word))
+  ) {
+    setExplicitSearch(undefined)
+  }
+  const intentWord =
+    selection.lookup && lookupGroupForWord(selection.lookup, lookupGroup)
+      ? selection.lookup
+      : entry.word
   const related = useLookupGroup({
     word: displayed.word,
     initial: lookupGroup,
     entry: displayed,
     lookup: selection.lookup,
     activity:
-      (traceAlternatives || explicitWord === displayed.word || progress.result) && !selection.lookup
+      (explicitSearch?.word === displayed.word &&
+        explicitSearch.lookup === (selection.lookup ?? displayed.word)) ||
+      ((traceAlternatives || progress.result) && !selection.lookup)
         ? 'trace'
         : progress.result
           ? 'refresh'
@@ -81,8 +96,12 @@ export function EntryView({
   const showProgress = progress.status === 'loading' && (!retryLanguage || recovering)
 
   useEffect(() => {
-    return scheduleTraceIntent(entry.word, undefined, () => setExplicitWord(entry.word))
-  }, [entry.word])
+    // A server default redirect retains the validated lookup owner. A meaning
+    // click marks the destination instead, so it cannot restart the owner's batch.
+    return scheduleTraceIntent(intentWord, undefined, () =>
+      setExplicitSearch({ word: entry.word, lookup: intentWord })
+    )
+  }, [entry.word, intentWord])
 
   const tabs = (
     <>

@@ -35,7 +35,14 @@ export async function traceLookupAlternatives(
     const target = [...group.members]
       .filter(
         (candidate) =>
-          candidate.lookupSupport !== 'verified' && canTraceLookup(candidate.lookupSupport)
+          // A default redirect already passed through the saved Japanese index.
+          !(
+            entry.word !== word &&
+            candidate.language === 'ja' &&
+            candidate.word === group?.reading
+          ) &&
+          candidate.lookupSupport !== 'verified' &&
+          canTraceLookup(candidate.lookupSupport)
       )
       .sort((a, b) => compareLookupSupport(a.lookupSupport, b.lookupSupport))
       .find(
