@@ -144,7 +144,7 @@ test('recorded multi-form cells and footnotes resolve native and rōmaji inflect
   }
 })
 
-test('truncated explicit reading links remain separate from verified candidates', async () => {
+test('all source-backed homophones remain candidates beyond four without claiming uniqueness', async () => {
   const index = source('はし')
   index.spellingLemma = false
   index.lookup!.hasIndependentEntry = false
@@ -157,12 +157,38 @@ test('truncated explicit reading links remain separate from verified candidates'
     index.lookup!.targets.map(({ word }) => [word, source(word, 'hashi')])
   )
   const result = await resolveLookup('hashi', setup({ ...entries, はし: index }), 'ja')
-  expect(result.verifiedCount).toBe(4)
-  expect(result.resolution?.candidates.map(({ word }) => word)).toEqual(['階', '端', '嘴'])
-  expect(result.resolution?.sourceListed?.map(({ word }) => word)).toEqual(['箸', '橋'])
-  expect(result.resolution?.sourceListed?.[0].provenance.at(-1)?.sourceUrl).toBe(index.url)
+  expect(result.verifiedCount).toBe(6)
+  expect(result.resolution?.candidates.map(({ word }) => word)).toEqual([
+    '階',
+    '端',
+    '嘴',
+    '箸',
+    '橋',
+  ])
+  expect(result.resolution?.sourceListed).toBeUndefined()
   expect(result.resolution?.selected).toBeUndefined()
+  expect(result.resolution?.incomplete).toBeFalsy()
+})
+
+test('HTTP exhaustion retains unchecked source links and cannot establish a unique match', async () => {
+  const index = source('はし')
+  index.spellingLemma = false
+  index.lookup!.hasIndependentEntry = false
+  index.lookup!.targets = ['箸', '橋', '端'].map((word) => ({
+    word,
+    language: 'ja',
+    relationship: 'spelling',
+  }))
+  const session = setup({ はし: index, 箸: source('箸', 'hashi') })
+  session.getBudget().tighten(1)
+  const warnings = spyOn(console, 'warn').mockImplementation(() => {})
+  restorers.push(() => warnings.mockRestore())
+  const result = await resolveLookup('hashi', session, 'ja')
+  expect(session.getBudget().attempts).toBe(1)
+  expect(result.resolution?.candidates.map((candidate) => candidate.word)).toEqual(['箸'])
+  expect(result.resolution?.sourceListed?.map((candidate) => candidate.word)).toEqual(['橋', '端'])
   expect(result.resolution?.incomplete).toBe(true)
+  expect(result.resolution?.selected).toBeUndefined()
 })
 
 test('independent exact histories survive a grammatical-form target, including through rōmaji', async () => {
@@ -228,6 +254,44 @@ test('Auto preserves English sayonara while Japanese selection reuses the verifi
   const japanese = await resolveLookup('sayonara', session, 'ja')
   expect(japanese.resolution?.selected?.word).toBe('さよなら')
   expect(japanese.originalTargets).toEqual([{ word: 'sayonara', language: 'en' }])
+})
+
+test('Auto retains Romance entries alongside ambiguous Japanese romanizations', async () => {
+  const roman = source('ame')
+  roman.spellingLemma = false
+  roman.lookup!.hasIndependentEntry = false
+  roman.lookup!.targets = [{ word: 'あめ', language: 'ja', relationship: 'romanization' }]
+  const kana = source('あめ')
+  kana.spellingLemma = false
+  kana.lookup!.hasIndependentEntry = false
+  kana.lookup!.targets = ['雨', '飴'].map((word) => ({
+    word,
+    language: 'ja',
+    relationship: 'spelling',
+  }))
+  const session = setup({
+    ame: roman,
+    あめ: kana,
+    雨: source('雨', 'ame', 'rain'),
+    飴: source('飴', 'ame', 'candy'),
+  })
+  const toc = spyOn(cache, 'getCachedWiktionaryToc').mockImplementation(async (word) =>
+    word === 'ame'
+      ? {
+          headings: ['Spanish', 'Portuguese', 'Japanese'],
+          nonemptyHeadings: ['Spanish', 'Portuguese', 'Japanese'],
+        }
+      : null
+  )
+  restorers.push(() => toc.mockRestore())
+  const result = await resolveLookup('ame', session)
+  expect(result.originalTargets).toEqual([
+    { word: 'ame', language: 'es' },
+    { word: 'ame', language: 'pt' },
+  ])
+  expect(result.resolution?.candidates.map(({ word }) => word)).toEqual(['雨', '飴'])
+  expect(result.resolution?.selected).toBeUndefined()
+  expect(result.resolution?.incomplete).toBeFalsy()
 })
 
 test('truncation, contradictory readings and unavailable candidates prevent automatic selection', async () => {

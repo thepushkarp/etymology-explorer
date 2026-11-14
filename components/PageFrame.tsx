@@ -11,7 +11,7 @@ interface PageFrameProps {
 export function PageFrame({ title, subtitle, children }: PageFrameProps) {
   return (
     <>
-      <SiteHeader searchLanguage="en" />
+      <SiteHeader showSearch />
       <main className="mx-auto w-full max-w-3xl px-4 pt-16 sm:px-6 sm:pt-20">
         <header className="animate-rise mb-12">
           <h1 className="font-serif text-4xl leading-tight tracking-tight text-ink sm:text-5xl">

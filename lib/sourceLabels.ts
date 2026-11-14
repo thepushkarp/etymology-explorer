@@ -21,8 +21,9 @@ const SOURCE_LABELS: Record<string, string> = {
   bosworthtoller: 'Bosworth–Toller',
   lewisshort: 'Lewis & Short',
   lsj: 'LSJ',
-  jmdict: 'JMdict / EDRDG (via Jisho)',
+  jmdict: 'JMdict / EDRDG',
   oncoj: 'Oxford–NINJAL Corpus of Old Japanese',
+  ninjalhistorical: 'NINJAL historical dictionaries',
   exa: 'Exa retrieval',
   synthesized: 'AI synthesis',
 }

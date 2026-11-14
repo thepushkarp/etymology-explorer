@@ -9,7 +9,7 @@ export interface LexemeRef {
   language: string
 }
 
-/** A source-identified spelling that can open a supported-language word page. */
+/** A source-identified lookup destination; it does not assert a shared etymological origin. */
 export interface ScriptTarget {
   word: string
   language: LanguageCode
@@ -18,10 +18,13 @@ export interface ScriptTarget {
   sourceUrl?: string
 }
 
+/** Lookup relationship evidence, independent of etymological ancestry confidence. */
+export type LookupSupport = 'verified' | 'linked' | 'unverified'
+
 /** Navigation relationships only; members retain independent lexical/cache identities. */
 export interface LookupGroup {
   reading: string
-  members: ScriptTarget[]
+  members: (ScriptTarget & { lookupSupport: LookupSupport })[]
   choices: (ScriptTarget & { historyId?: string; label: string })[]
   languages: ScriptTarget[]
 }
@@ -40,7 +43,7 @@ export interface LookupResolution {
   originalInput: string
   language: LanguageCode
   candidates: LookupCandidate[]
-  /** Explicit source links whose destination checks were deferred by the verification limit. */
+  /** Explicit source links whose destination checks were deferred by source availability or the request budget. */
   sourceListed?: LookupCandidate[]
   selected?: LookupCandidate
   incomplete?: boolean
@@ -382,6 +385,7 @@ export interface ApiResponse<T> {
   success: boolean
   data?: T
   error?: string
+  errorType?: Extract<StreamEvent, { type: 'error' }>['errorType']
   lookupResolution?: LookupResolution
 }
 

@@ -14,10 +14,10 @@ import { ShareButton } from '@/components/ShareButton'
 import { TraceStatus } from '@/components/TraceStatus'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
-import { consumeTraceIntent } from '@/lib/traceIntent'
+import { scheduleTraceIntent } from '@/lib/traceIntent'
 import { LANGUAGES, type LanguageCode } from '@/lib/languages'
 import { historyEntry } from '@/lib/resultHistories'
-import { relevantScriptTargets, spellingPronunciation } from '@/lib/scriptTargets'
+import { spellingPronunciation } from '@/lib/scriptTargets'
 import { toPartialResult } from '@/lib/streamReducer'
 import type {
   EntrySpelling,
@@ -33,6 +33,7 @@ interface EntryViewProps {
   stale?: boolean
   lookupGroup?: LookupGroup
   selection?: EntrySelection
+  traceAlternatives?: boolean
 }
 
 export function EntryView({
@@ -41,6 +42,7 @@ export function EntryView({
   stale = false,
   selection: initialSelection,
   lookupGroup,
+  traceAlternatives = false,
 }: EntryViewProps) {
   const { progress, search } = useStreamingEtymology(undefined, entry.word)
   const [retryLanguage, setRetryLanguage] = useState<LanguageCode>()
@@ -48,24 +50,24 @@ export function EntryView({
   const selection = useEntrySelection(displayed.word, language, initialSelection)
   const selected = selection.language ?? language ?? displayed.languages[0]
   const result = selected ? displayed.entries[selected] : undefined
-  const group = useLookupGroup(
+  const [explicitWord, setExplicitWord] = useState<string>()
+  const related = useLookupGroup(
     displayed.word,
     lookupGroup,
     displayed,
     selection.lookup,
-    Boolean(progress.result)
+    Boolean(progress.result),
+    (traceAlternatives || explicitWord === displayed.word || Boolean(progress.result)) &&
+      !selection.lookup
   )
+  const { group } = related
   const navigation = entryNavigation({
     word: displayed.word,
     language: selected,
     entry: displayed,
     group,
     selection,
-    otherScripts: relevantScriptTargets(
-      displayed.otherScripts,
-      Object.values(displayed.entries),
-      selected
-    ),
+    otherScripts: displayed.otherScripts,
   })
   const { historyId } = navigation
   const failure = selected ? displayed.failedLanguages?.[selected] : undefined
@@ -75,10 +77,27 @@ export function EntryView({
   const showProgress = progress.status === 'loading' && (!retryLanguage || recovering)
 
   useEffect(() => {
-    consumeTraceIntent(entry.word)
+    return scheduleTraceIntent(entry.word, undefined, () => setExplicitWord(entry.word))
   }, [entry.word])
 
-  const tabs = <EntryNavigation model={navigation} />
+  const tabs = (
+    <>
+      <EntryNavigation model={navigation} />
+      {related.loading && (
+        <p role="status" className="mt-3 text-sm text-muted">
+          Checking related entries…
+        </p>
+      )}
+      {related.error && (
+        <p role="status" className="mt-3 text-sm text-muted">
+          {related.error}{' '}
+          <button type="button" className="link" onClick={related.retry}>
+            Retry
+          </button>
+        </p>
+      )}
+    </>
+  )
   const recovery = failure && (
     <FailedLanguage
       key={`${selected}:${failure.retryAt}`}

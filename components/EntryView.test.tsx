@@ -116,7 +116,7 @@ describe('EntryView merged entries', () => {
     expect(incomplete).not.toContain('No supported French entry was found')
   })
 
-  test('retains script offers alongside a successful English entry', () => {
+  test('shows a verified Japanese destination alongside a successful English entry', () => {
     const result = etymologyResult({
       word: 'tsunami',
       definition: 'A large sea wave.',
@@ -138,12 +138,21 @@ describe('EntryView merged entries', () => {
           entries: { en: result },
           otherScripts: [{ word: '津波', language: 'ja' }],
         }}
+        lookupGroup={{
+          reading: 'tsunami',
+          members: [{ word: '津波', language: 'ja', lookupSupport: 'verified' }],
+          choices: [{ word: '津波', language: 'ja', historyId: 'wave', label: '津波 — wave' }],
+          languages: [
+            { word: 'tsunami', language: 'en' },
+            { word: '津波', language: 'ja' },
+          ],
+        }}
       />
     )
     expect(html).toContain('A large sea wave.')
     expect(html).toContain('Japanese</a>')
     expect(html).not.toContain('Japanese lookup')
-    expect(html).toContain(`href="/word/ja/${encodeURIComponent('津波')}"`)
+    expect(html).toContain(`href="/word/ja/${encodeURIComponent('津波')}?lookup=tsunami`)
   })
 
   test('shows only the selected history’s source-attested counterpart', () => {
@@ -180,7 +189,7 @@ test('server rendering respects a requested history and never substitutes an unm
       selection={{ lookup: 'しろ' }}
       lookupGroup={{
         reading: 'しろ',
-        members: [{ word: '白', language: 'ja' }],
+        members: [{ word: '白', language: 'ja', lookupSupport: 'linked' }],
         languages: [{ word: 'しろ', language: 'ja' }],
         choices: [{ word: '白', language: 'ja', label: '白 — white' }],
       }}

@@ -225,7 +225,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     nativeWiktionary: {
       edition: 'ja',
       heading: '日本語',
-      etymologyHeading: /^語源(?:\s+\d+)?$/u,
+      etymologyHeading: /^語源(?:\s*[0-9０-９]+)?$/u,
       formHeading: /^(?:名詞|動詞|形容詞)$/u,
     },
     historyPrimary: 'english',

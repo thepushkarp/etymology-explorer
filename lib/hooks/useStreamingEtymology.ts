@@ -8,6 +8,7 @@ import { wordPagePath, type LanguageCode } from '@/lib/languages'
 import { normalizeScriptTargets } from '@/lib/scriptTargets'
 import { recordRecentSearchIntent } from '@/lib/recentSearchClient'
 import { rememberCompletedEntry } from '@/lib/completedEntries'
+import { toStreamingUiError } from '@/lib/streamingError'
 
 const MAX_RETRIES = 2
 const RETRY_BASE_DELAY_MS = 600
@@ -70,12 +71,15 @@ export function useStreamingEtymology(defaultHint?: LanguageCode, routeWord?: st
           const otherScripts = normalizeScriptTargets(payload.data?.otherScripts)
           dispatch({
             type: 'fallback_error',
-            error: {
-              type: 'network-error',
+            error: toStreamingUiError({
+              type: 'error',
+              errorType: payload.errorType ?? 'network',
               message: payload.error ?? 'Search failed',
-              suggestions: [],
+              suggestions: Array.isArray(payload.data?.suggestions)
+                ? payload.data.suggestions.filter((word: unknown) => typeof word === 'string')
+                : [],
               ...(otherScripts.length ? { otherScripts } : {}),
-            },
+            }),
           })
           return
         }

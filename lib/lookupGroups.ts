@@ -1,4 +1,5 @@
-import { normalizeScriptTargets, relevantScriptTargets } from './scriptTargets'
+import { compareLookupSupport } from './lookupEvidence'
+import { normalizeScriptTargets } from './scriptTargets'
 import { canonicalizeWord } from './orthography'
 import { isLanguageCode } from './languages'
 import type { LookupGroup, ScriptTarget, WordEntry } from './types'
@@ -12,7 +13,7 @@ export interface LookupGroupSeed {
   members: ScriptTarget[]
 }
 
-/** Only source-supplied counterparts create a reading group; similar sounds never do. */
+/** Saved readings propose cache reads; reverse links still require source confirmation. */
 export function lookupGroupSeed(entry: WordEntry): LookupGroupSeed | undefined {
   if (!isKanaWord(entry.word)) return
   const result = entry.entries.ja
@@ -27,29 +28,30 @@ export function lookupGroupSeed(entry: WordEntry): LookupGroupSeed | undefined {
         (spelling) => spelling.language === 'ja' && spelling.word === target.word
       )
   )
-  if (!targets.length) return
+  const romanizations = [
+    ...new Set(
+      result.histories
+        .map((h) => h.transliteration)
+        .filter((text): text is string => Boolean(text && /^[a-zāīūēōâîûêô' -]+$/i.test(text)))
+        .map(canonicalizeWord)
+    ),
+  ]
+  if (!targets.length && !romanizations.length) return
   return {
     reading: entry.word,
-    romanizations: [
-      ...new Set(
-        result.histories
-          .map((h) => h.transliteration)
-          .filter((text): text is string => Boolean(text && /^[a-zāīūēōâîûêô' -]+$/i.test(text)))
-          .map(canonicalizeWord)
-      ),
-    ],
-    members: [{ word: entry.word, language: 'ja' }, ...targets.slice(0, 4)],
+    romanizations,
+    members: [{ word: entry.word, language: 'ja' }, ...targets],
   }
 }
 
 export function assembleLookupGroup(seed: LookupGroupSeed, entries: WordEntry[]): LookupGroup {
   const byWord = new Map(entries.map((entry) => [entry.word, entry]))
-  const languages: ScriptTarget[] = [{ word: seed.reading, language: 'ja' }]
+  const languages: ScriptTarget[] = []
   // A transliteration proposes a cache read, but a saved source link must confirm
   // the reverse navigation. It does not turn unrelated Latin words into aliases.
   for (const entry of entries) {
     if (
-      !relevantScriptTargets(entry.otherScripts, Object.values(entry.entries)).some(
+      !normalizeScriptTargets(entry.otherScripts).some(
         (target) =>
           target.language === 'ja' &&
           (target.word === seed.reading ||
@@ -91,15 +93,14 @@ export function assembleLookupGroup(seed: LookupGroupSeed, entries: WordEntry[])
           reading: seed.reading,
           label: `${member.word} — ${history.definition.split(/[;；]/)[0] || history.label}`,
         })
-    } else if (member.word !== seed.reading) {
-      choices.push({
-        ...member,
-        reading: seed.reading,
-        label: member.meaning
-          ? `${member.word} — ${member.meaning}`
-          : `${member.word} · ${seed.reading}`,
-      })
     }
   }
-  return { reading: seed.reading, members: seed.members, choices, languages }
+  if (choices.length && !languages.some((target) => target.language === 'ja'))
+    languages.unshift({ word: choices[0].word, language: 'ja' })
+  const members: LookupGroup['members'] = seed.members.map((member) => ({
+    ...member,
+    lookupSupport: choices.some((choice) => choice.word === member.word) ? 'verified' : 'linked',
+  }))
+  members.sort((a, b) => compareLookupSupport(a.lookupSupport, b.lookupSupport))
+  return { reading: seed.reading, members, choices, languages }
 }

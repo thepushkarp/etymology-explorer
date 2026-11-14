@@ -191,7 +191,7 @@ export default async function WordPage({ params, searchParams }: WordPageProps) 
 
   return (
     <>
-      <SiteHeader showSearch searchLanguage={language} />
+      <SiteHeader showSearch />
       <main className="mx-auto w-full max-w-3xl px-4 pt-14 sm:px-6 sm:pt-20">
         <EntryView
           entry={cached.entry}

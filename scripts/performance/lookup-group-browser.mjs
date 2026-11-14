@@ -141,19 +141,9 @@ try {
   assert.equal(await meanings.getByRole('link').first().getAttribute('aria-current'), 'page')
   assert.equal(await page.getByText('Choose a meaning to see its origin.').count(), 0)
   assert.equal(streams.length, 0, JSON.stringify(streams))
-  await meanings.getByRole('link').filter({ hasText: '城' }).click()
-  await page.waitForURL(/%E5%9F%8E/)
-  await meanings.waitFor()
-  await assertStable()
-  // An explicit click may trace this one entry. No other member is researched.
-  assert.ok(streams.length <= 1)
-  if (streams.length) assert.equal(new URL(streams[0], base).searchParams.get('word'), '城')
+  assert.equal(await meanings.getByRole('link').filter({ hasText: '城' }).count(), 0)
+  assert.equal(await meanings.getByRole('link').filter({ hasText: '代' }).count(), 0)
   const count = streams.length
-  await page.goBack()
-  await meanings.locator('a[aria-current="page"]').waitFor()
-  assert.equal(await meanings.getByRole('link').first().getAttribute('aria-current'), 'page')
-  assert.equal(await page.getByText('Choose a meaning to see its origin.').count(), 0)
-  assert.equal(streams.length, count)
   assert.deepEqual(errors, [])
   console.log(JSON.stringify({ passed: true, explicitSelectedTraces: count, passiveTraces: 0 }))
 } finally {

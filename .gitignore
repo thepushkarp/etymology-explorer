@@ -50,3 +50,7 @@ docs/plans/
 
 # benchmark results
 bench-results/
+
+# Licensed, pinned runtime dictionary indexes
+!/data/jmdict/*.json.gz
+!/data/japanese-historical.json.gz

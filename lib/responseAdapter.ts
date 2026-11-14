@@ -30,7 +30,7 @@ const UNARY_RESULT_HEADERS = {
 export interface AdapterErrorOptions {
   /** HTTP status for the unary JSON response. */
   status: number
-  /** Terminal SSE error event type (streaming mode only). Defaults to 'unknown'. */
+  /** Shared error classification for SSE and JSON. Defaults to 'unknown'. */
   errorType?: StreamErrorType
   /** Headers applied in both modes (e.g. X-Protection-Mode). */
   headers?: Record<string, string>
@@ -78,6 +78,7 @@ export function createResponseAdapter(
           success: false,
           ...(resolution() ? { lookupResolution: resolution() } : {}),
           error: message,
+          errorType,
           ...(suggestions || otherScripts
             ? {
                 data: {

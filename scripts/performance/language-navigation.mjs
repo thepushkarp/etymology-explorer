@@ -15,6 +15,20 @@ try {
   await context.route('**/api/recent-searches**', (route) =>
     route.fulfill({ json: { success: true, data: [] } })
   )
+  await context.route('**/api/suggestions**', (route) =>
+    route.fulfill({ json: { success: true, data: { suggestions: [] } } })
+  )
+  async function expectPreference(page, name) {
+    await page
+      .getByRole('combobox', { name: 'Word language' })
+      .getByText(name, { exact: true })
+      .waitFor()
+  }
+  async function choosePreference(page, name) {
+    await page.getByRole('combobox', { name: 'Word language' }).click()
+    await page.getByRole('option', { name, exact: true }).click()
+    await expectPreference(page, name)
+  }
   await context.addInitScript(() => {
     window.__streams = []
     window.EventSource = class extends EventTarget {
@@ -64,9 +78,7 @@ try {
           pronunciation: '',
           definition: 'A language navigation fixture.',
           roots: [],
-          ancestryGraph: {
-            branches: [{ root: 'fixture', stages: [{ stage: 'Japanese', form: 'fixture' }] }],
-          },
+          ancestryGraph: { branches: [] },
           lore: 'Fixture story.',
         }
         const targets = [
@@ -122,14 +134,18 @@ try {
     await nav.getByRole('link', { name: 'French', exact: true }).click()
     await page.waitForURL(new RegExp(`/word/fr/${word}$`))
     await page.getByText('The French fixture.', { exact: true }).waitFor()
+    await expectPreference(page, 'Auto')
     await page.goBack()
     await page.waitForURL(new RegExp(`/word/${word}$`))
     await page.getByText('A language navigation fixture.', { exact: true }).waitFor()
     await page.goForward()
     await page.waitForURL(new RegExp(`/word/fr/${word}$`))
     await page.getByText('The French fixture.', { exact: true }).waitFor()
+    await expectPreference(page, 'Auto')
+    await choosePreference(page, 'Japanese')
     await nav.getByRole('link', { name: 'English', exact: true }).click()
     await page.waitForURL(new RegExp(`/word/en/${word}$`))
+    await expectPreference(page, 'Japanese')
     await japanese.focus()
     assert.equal(await page.evaluate(() => window.__streams.length), 1)
     assert.equal(
@@ -142,10 +158,12 @@ try {
     await japanese.click()
     await page.waitForURL((url) => url.pathname === `/word/ja/${encodeURIComponent('白')}`)
     await page.getByRole('heading', { name: '白', exact: true }).waitFor()
+    await expectPreference(page, 'Japanese')
     await page.close()
   }
   const hinted = await context.newPage()
   await hinted.goto(`${base}/word/ja/manualhintfixture`)
+  await expectPreference(hinted, 'Auto')
   assert.equal(await hinted.evaluate(() => window.__streams.length), 0)
   await hinted.getByRole('button', { name: 'Trace its origins', exact: true }).click()
   await hinted.waitForFunction(() => window.__streams.length === 1)
@@ -157,6 +175,58 @@ try {
     'Manual tracing must retain an explicit route language'
   )
   await hinted.close()
+  const preference = await context.newPage()
+  await preference.goto(`${base}/word/searchpreferencefixture`)
+  await preference.getByRole('button', { name: 'Trace its origins', exact: true }).click()
+  await preference.waitForFunction(() => window.__streams.length === 1)
+  await preference.evaluate(() => {
+    window.__streams[0].send({
+      type: 'entry_identity',
+      word: 'resolvedpreferencefixture',
+      requestedWord: 'searchpreferencefixture',
+      language: 'ja',
+    })
+  })
+  await preference
+    .getByRole('heading', { name: 'resolvedpreferencefixture', exact: true })
+    .waitFor()
+  await expectPreference(preference, 'Auto')
+  await choosePreference(preference, 'French')
+  await preference.reload()
+  await expectPreference(preference, 'French')
+  await preference.getByRole('link', { name: 'EtymEx', exact: true }).click()
+  await preference.waitForURL(`${base}/`)
+  await expectPreference(preference, 'French')
+  const input = preference.getByRole('combobox', { name: 'Look up a word or expression' })
+  await input.fill('explicitpreferencefixture')
+  await input.press('Enter')
+  await preference.waitForURL(`${base}/word/fr/explicitpreferencefixture`)
+  await expectPreference(preference, 'French')
+  await preference.waitForFunction(() => window.__streams.length > 0)
+  assert.equal(
+    await preference.evaluate(() =>
+      new URL(window.__streams.at(-1).url, location.href).searchParams.get('language')
+    ),
+    'fr'
+  )
+  await input.fill('autopreferencefixture')
+  await choosePreference(preference, 'Auto')
+  assert.equal(await input.inputValue(), 'autopreferencefixture')
+  await input.press('Enter')
+  await preference.waitForURL(`${base}/word/autopreferencefixture`)
+  await expectPreference(preference, 'Auto')
+  await preference.waitForFunction(() =>
+    window.__streams.some((stream) => {
+      const url = new URL(stream.url, location.href)
+      return (
+        url.searchParams.get('word') === 'autopreferencefixture' &&
+        !url.searchParams.has('language')
+      )
+    })
+  )
+  await preference.reload()
+  await expectPreference(preference, 'Auto')
+  await preference.close()
   const listed = await context.newPage()
   await listed.goto(`${base}/word/ja/readinglimitfixture`)
   await listed.getByRole('button', { name: 'Trace its origins', exact: true }).click()
@@ -213,7 +283,7 @@ try {
   for (const url of newStreams) assert.equal(new URL(url, base).searchParams.get('word'), '橋')
   await listed.close()
   console.log(
-    'Passed: native-script tabs, first-entry defaults, consistent typography, desktop/mobile layout, hidden unsupported notices, deferred dictionary choices, and no research before choosing a destination.'
+    'Passed: independent search preferences across tabs, identity resolution, navigation and reload; native-script tabs, first-entry defaults, desktop/mobile layout, deferred dictionary choices, and no research before choosing a destination.'
   )
 } finally {
   await browser.close()

@@ -27,7 +27,7 @@ import { consumeTraceIntent, scheduleTraceIntent } from '@/lib/traceIntent'
 import { toPartialResult, type StreamState } from '@/lib/streamReducer'
 import { LANGUAGES, type LanguageCode } from '@/lib/languages'
 import type { LookupGroup, WordEntry } from '@/lib/types'
-import { relevantScriptTargets, spellingPronunciation } from '@/lib/scriptTargets'
+import { spellingPronunciation } from '@/lib/scriptTargets'
 
 interface WordTraceExperienceProps {
   word: string
@@ -82,7 +82,7 @@ export function WordTraceExperience({
   const activeWord = progress.identity?.word ?? progress.result?.word ?? progress.word ?? word
   const activeLanguage = progress.identity?.language ?? language
   const selection = useEntrySelection(activeWord, activeLanguage, initialSelection)
-  const group = useLookupGroup(
+  const { group } = useLookupGroup(
     activeWord,
     lookupGroup,
     progress.result ?? restored ?? initialEntry,
@@ -109,16 +109,7 @@ export function WordTraceExperience({
     otherScripts:
       progress.status === 'error'
         ? undefined
-        : relevantScriptTargets(
-            progress.result?.otherScripts ?? progress.otherScripts ?? initialEntry?.otherScripts,
-            [
-              ...Object.values(
-                progress.result?.entries ?? (savedTabs ? initialEntry?.entries : undefined) ?? {}
-              ),
-              ...Object.values(progress.byLanguage).map((slice) => slice.sections),
-            ],
-            activeLanguage
-          ),
+        : (progress.result?.otherScripts ?? progress.otherScripts ?? initialEntry?.otherScripts),
   })
   const firstChoice = navigation.defaultTarget
   const openingDefault = Boolean(firstChoice)
@@ -147,10 +138,11 @@ export function WordTraceExperience({
   )
 
   useEffect(() => {
+    // The restored EntryView owns the explicit intent for related-entry checks.
+    if (restored) return
     if (
       navigation.unresolved ||
       openingDefault ||
-      restored ||
       savedFailure ||
       unavailable ||
       (initialEntry && stale)
@@ -186,7 +178,7 @@ export function WordTraceExperience({
 
   return (
     <>
-      <SiteHeader showSearch searchLanguage={selection.language ?? activeLanguage} />
+      <SiteHeader showSearch />
       <main className="mx-auto w-full max-w-3xl px-4 pt-14 sm:px-6 sm:pt-20">
         <div aria-live="polite" role="status" className="sr-only">
           {announcementFor(progress, activeWord)}
@@ -225,6 +217,7 @@ export function WordTraceExperience({
         ) : progress.status === 'success' && progress.result ? (
           <EntryView
             entry={progress.result}
+            traceAlternatives
             lookupGroup={group}
             language={selected}
             selection={selection}
@@ -271,7 +264,11 @@ export function WordTraceExperience({
                   </>
                 ) : (
                   progress.error && (
-                    <ErrorState error={progress.error} language={selected} onRetry={start} />
+                    <ErrorState
+                      error={progress.error}
+                      language={selection.language ?? activeLanguage}
+                      onRetry={start}
+                    />
                   )
                 )}
               </>
@@ -279,15 +276,7 @@ export function WordTraceExperience({
           />
         )}
         <ScriptLinks
-          targets={
-            progress.status === 'error'
-              ? progress.lookupResolution?.sourceListed
-              : relevantScriptTargets(
-                  progress.lookupResolution?.sourceListed,
-                  Object.values(progress.result?.entries ?? {}),
-                  activeLanguage
-                )
-          }
+          targets={progress.lookupResolution?.sourceListed}
           heading="More dictionary entries"
           description="These entries are listed by the dictionary but haven’t been checked yet. Choose one to look it up."
         />

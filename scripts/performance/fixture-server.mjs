@@ -1,5 +1,6 @@
 import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
+import { journeyEntries } from './journey-fixtures.mjs'
 
 // Local cache/lock state; this server never connects to a real Redis or provider.
 const records = new Map()
@@ -40,6 +41,9 @@ for (const language of chat.languages) {
   chat.entries[language] = result
 }
 records.set('entry:v1:chat', chat)
+if (process.env.PERF_JOURNEYS === 'true') {
+  for (const entry of journeyEntries) records.set(`entry:v1:${entry.word}`, entry)
+}
 records.get('entry:v1:nice').revision = 0
 const base = records.get('entry:v1:nice')
 for (const word of ['muscle', 'window', 'telephone', 'bread', 'harvest', 'quarantine']) {

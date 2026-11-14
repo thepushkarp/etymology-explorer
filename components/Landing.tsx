@@ -7,6 +7,7 @@ import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { WordLink } from '@/components/WordLink'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
+import { useSearchLanguage } from '@/lib/hooks/useSearchLanguage'
 import {
   landingSearchPreviews,
   parseRecentSearchPreviews,
@@ -72,7 +73,7 @@ const CURATED_WORDS: Record<LanguageCode, Array<{ word: string; teaser: string }
 }
 
 export function Landing() {
-  const [language, setLanguage] = useState<LanguageCode>()
+  const [language, setLanguage] = useSearchLanguage()
   const [recent, setRecent] = useState<RecentSearchPreview[]>([])
   const recentWords = recent.filter((entry) => !language || entry.language === language).slice(0, 4)
   const curated = language

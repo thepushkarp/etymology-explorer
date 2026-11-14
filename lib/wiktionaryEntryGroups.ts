@@ -2,6 +2,7 @@ import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
 import { sameSpelling } from './orthography'
 import { LANGUAGES, languageFromName, lexicalLanguageName, type LanguageCode } from './languages'
 import { normalizeScriptTargets } from './scriptTargets'
+import { japaneseEtymologyRelations } from './japaneseEtymology'
 import type { LexemeRef, ScriptTarget, SourceData, SourceLexicalRelation } from './types'
 /** A section returned by MediaWiki's `prop=tocdata` parser response. */
 export interface WiktionaryTocSection {
@@ -659,7 +660,7 @@ function etymologyRelations(html: string, subject: LexemeRef): SourceLexicalRela
     for (const term of terms) {
       const prefix = cleanWiktionaryHtml(body.slice(0, term.start))
       if (
-        affirmativeOriginPrefix(prefix, /\bclipping of$/i) &&
+        affirmativeOriginPrefix(prefix, /\b(?:clipping|shortening) of(?: earlier)?$/i) &&
         term.lexeme.language === subject.language
       ) {
         relations.push({ subject, target: term.lexeme, relation: 'derived_from', snippet })
@@ -718,8 +719,9 @@ function etymologyRelations(html: string, subject: LexemeRef): SourceLexicalRela
  * Numbered etymology headings are group boundaries. Other headings remain
  * structured sections inside the current group, including same-level native
  * edition headings such as a noun entry followed by an inflected-form entry.
- * If an edition has no etymology heading, the language section is returned as
- * one fallback group rather than being confused with a same-spelling language.
+ * Native Japanese labelled homographs (名詞:橋, 名詞:箸) own their nested
+ * etymology sections. Ordinary POS sections alone do not establish different
+ * origins.
  */
 export function extractWiktionaryEntryGroups(
   html: string,
@@ -751,7 +753,33 @@ export function extractWiktionaryEntryGroups(
     if (matchesHeading(etymologyHeading, sections[index].line)) etymologyIndexes.push(index)
   }
 
-  const groupIndexes = etymologyIndexes.length > 0 ? etymologyIndexes : [languageIndex]
+  const nativeJapanese = pageIdentity?.edition === 'ja' && languageHeading === '日本語'
+  const nativeEntryIndexes = nativeJapanese
+    ? sections.flatMap((section, index) =>
+        index > languageIndex &&
+        index < languageEndIndex &&
+        headingLevel(section) === languageLevel + 1 &&
+        /^(?:名詞|動詞|形容詞|形容動詞|副詞|感動詞|接辞|接頭辞|接尾辞|造語成分)(?:\s*[:：]\s*\S.*)?$/u.test(
+          cleanHeading(section.line)
+        )
+          ? [index]
+          : []
+      )
+    : []
+  const homographIndexes =
+    nativeEntryIndexes.some((index) => /[:：]/u.test(cleanHeading(sections[index].line))) ||
+    (nativeEntryIndexes.length &&
+      etymologyIndexes.some((index) => headingLevel(sections[index]) > languageLevel + 1))
+      ? nativeEntryIndexes
+      : []
+  const groupIndexes = homographIndexes.length
+    ? [
+        ...homographIndexes,
+        ...etymologyIndexes.filter((index) => headingLevel(sections[index]) === languageLevel + 1),
+      ].sort((a, b) => a - b)
+    : etymologyIndexes.length
+      ? etymologyIndexes
+      : [languageIndex]
   const selectedLanguage = languageFromName(languageHeading)
   const languageStart = anchorOffset(html, language.anchor)
   const headwordLines = selectedLanguage
@@ -820,17 +848,32 @@ export function extractWiktionaryEntryGroups(
     const firstSectionOffset = assignedSections.length
       ? anchorOffset(html, assignedSections[0].anchor)
       : end
-    const etymologyHtml = etymologyIndexes.length
+    const etymologyHtml = etymologyIndexes.includes(groupIndex)
       ? html
           .slice(start, firstSectionOffset > start ? firstSectionOffset : end)
           .replace(/^[\s\S]*?<\/h[1-6]>/i, '')
-      : undefined
+      : nativeJapanese && homographIndexes.includes(groupIndex)
+        ? assignedSections
+            .flatMap((section, index) => {
+              if (!matchesHeading(etymologyHeading, section.line)) return []
+              const sectionStart = anchorOffset(html, section.anchor)
+              const next = assignedSections[index + 1]
+              const sectionEnd = next ? anchorOffset(html, next.anchor) : end
+              return sectionStart >= 0 && sectionEnd > sectionStart
+                ? [html.slice(sectionStart, sectionEnd).replace(/^[\s\S]*?<\/h[1-6]>/i, '')]
+                : []
+            })
+            .join('\n') || undefined
+        : undefined
     const relations =
       requestedWord && etymologyHtml
-        ? etymologyRelations(etymologyHtml, {
-            word: requestedWord,
-            language: lexicalLanguageName(languageHeading),
-          })
+        ? (nativeJapanese ? japaneseEtymologyRelations : etymologyRelations)(
+            nativeJapanese ? cleanWiktionaryHtml(etymologyHtml) : etymologyHtml,
+            {
+              word: requestedWord,
+              language: nativeJapanese ? 'Japanese' : lexicalLanguageName(languageHeading),
+            }
+          )
         : []
 
     const structuredSections = assignedSections.flatMap((section, sectionPosition) => {

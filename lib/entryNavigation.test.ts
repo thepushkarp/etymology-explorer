@@ -22,7 +22,7 @@ const entry: WordEntry = {
 }
 const group: LookupGroup = {
   reading: 'しろ',
-  members: [{ word: '白', language: 'ja' }],
+  members: [{ word: '白', language: 'ja', lookupSupport: 'linked' }],
   choices: [{ word: '白', language: 'ja', label: '白 — white', reading: 'しろ' }],
   languages: [{ word: 'しろ', language: 'ja' }],
 }
@@ -105,4 +105,20 @@ test('Japanese groups retain their English member context without leaking it to 
   })
   expect(model.tabs.find((tab) => tab.language === 'en')?.lookup).toBe('しろ')
   expect(model.tabs.find((tab) => tab.language === 'hi')?.lookup).toBeUndefined()
+})
+
+test('Japanese offers become tabs only after a matching entry is available', () => {
+  const input = {
+    word: 'shiro',
+    language: 'en' as const,
+    languages: ['en' as const],
+    otherScripts: [{ word: '城', language: 'ja' as const }],
+  }
+  expect(entryNavigation(input).tabs.map((tab) => tab.language)).toEqual(['en'])
+  expect(
+    entryNavigation({ ...input, group: { ...group, choices: [], languages: [] } }).tabs.map(
+      (tab) => tab.language
+    )
+  ).toEqual(['en'])
+  expect(entryNavigation({ ...input, group }).tabs.map((tab) => tab.language)).toEqual(['en', 'ja'])
 })

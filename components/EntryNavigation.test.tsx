@@ -13,6 +13,12 @@ test('successful, failed, and cross-script languages share ordered navigation li
       { word: 'しろ', language: 'ja' },
       { word: '白', language: 'ja' },
     ],
+    group: {
+      reading: 'chat',
+      members: [{ word: 'しろ', language: 'ja', lookupSupport: 'linked' }],
+      choices: [{ word: 'しろ', language: 'ja', label: 'しろ' }],
+      languages: [{ word: 'しろ', language: 'ja' }],
+    },
   })
   const html = renderToStaticMarkup(<EntryNavigation model={model} />)
   expect(model.tabs.map((tab) => tab.language)).toEqual(['en', 'fr', 'pt', 'ja'])

@@ -1,5 +1,6 @@
 import { toHiragana } from 'wanakana'
 import { CONFIG } from './config'
+import { compareLookupSupport } from './lookupEvidence'
 import { LANGUAGES, candidateLanguages, languageFromName, type LanguageCode } from './languages'
 import type { LexemeResearchSession } from './lexemeResearch'
 import type { LookupCandidate, LookupResolution, SourceData, ScriptTarget } from './types'
@@ -102,7 +103,7 @@ export async function resolveLookup(
   )
   if (hint || candidates.length < 2) return resolveLookupLanguage(word, session, hint)
   // Devanagari alone cannot choose Hindi over Sanskrit. Exact entries take precedence;
-  // otherwise both languages share the same four-candidate verification allowance.
+  // otherwise both languages share the same source HTTP verification budget.
   try {
     const exact = await session
       .getBudget()
@@ -122,14 +123,11 @@ export async function resolveLookup(
       },
     }
   }
-  let remaining = 4
   const results: ResolvedLookup[] = []
   let fallbackAttempted = false
   for (const code of candidates) {
-    if (!remaining) break
-    const result = await resolveLookupLanguage(word, session, code, remaining, !fallbackAttempted)
+    const result = await resolveLookupLanguage(word, session, code, !fallbackAttempted)
     fallbackAttempted ||= !!result.fallbackAttempted
-    remaining -= result.verifiedCount ?? 0
     results.push(result)
   }
   const verified = results.flatMap((result) => result.resolution?.candidates ?? [])
@@ -158,7 +156,6 @@ async function resolveLookupLanguage(
   word: string,
   session: LexemeResearchSession,
   hint?: LanguageCode,
-  maximum = 4,
   allowFallback = true
 ): Promise<ResolvedLookup> {
   const scripts = candidateLanguages(word)
@@ -246,43 +243,54 @@ async function resolveLookupLanguage(
     for (const reading of readings)
       queue.push({ word: reading, relationship: 'romanization', depth: 0 })
 
+  const defer = (item: Pending) => {
+    resolution.incomplete = true
+    const target = canonicalizeWord(item.word)
+    // Preserve explicit source links when verification cannot finish. These are
+    // never promoted to verified candidates or used to prove uniqueness.
+    if (
+      item.depth <= 3 &&
+      item.listed &&
+      item.proof?.length &&
+      target !== word &&
+      isValidWord(target) &&
+      !resolution.sourceListed?.some((candidate) => candidate.word === target)
+    ) {
+      ;(resolution.sourceListed ??= []).push({
+        ...item.listed,
+        word: target,
+        relationship: item.relationship,
+        provenance: item.proof,
+      })
+    }
+  }
   const drain = async () => {
     while (queue.length) {
       session.signal?.throwIfAborted()
+      // Direct source relationships take priority over conversion/search/model
+      // proposals. Every destination must still pass the relationship checks.
+      queue.sort((a, b) =>
+        compareLookupSupport(
+          a.proof?.length ? 'linked' : 'unverified',
+          b.proof?.length ? 'linked' : 'unverified'
+        )
+      )
       const item = queue.shift()!
       const target = canonicalizeWord(item.word)
       if (checked.has(target)) continue
-      if (checked.size >= maximum || item.depth > 3) {
-        resolution.incomplete = true
-        // Explicit dictionary links remain useful navigation when their terminal
-        // entries cannot be checked. They never enter the verified candidate set.
-        if (
-          checked.size >= maximum &&
-          item.depth <= 3 &&
-          item.listed &&
-          item.proof?.length &&
-          target !== word &&
-          isValidWord(target) &&
-          !resolution.sourceListed?.some((candidate) => candidate.word === target)
-        ) {
-          ;(resolution.sourceListed ??= []).push({
-            ...item.listed,
-            word: target,
-            relationship: item.relationship,
-            provenance: item.proof,
-          })
-        }
+      if (item.depth > 3) {
+        defer(item)
         continue
       }
       checked.add(target)
       try {
         const data = await source(target)
         if (!data) {
-          if (item.proof?.length || item.discovered) resolution.incomplete = true
+          if (item.proof?.length || item.discovered) defer(item)
           continue
         }
         if (!data.retrieval?.retrievedAt || data.incomplete) {
-          resolution.incomplete = true
+          defer(item)
           continue
         }
         const declared = data.lookup?.readings ?? []
@@ -333,7 +341,7 @@ async function resolveLookupLanguage(
         terminals.set(target, data)
       } catch (error) {
         session.signal?.throwIfAborted()
-        resolution.incomplete = true
+        defer(item)
         console.warn('[Lookup] Candidate verification unavailable:', safeError(error))
       }
     }
@@ -343,12 +351,12 @@ async function resolveLookupLanguage(
   if (
     !preserveExactEntry &&
     !resolution.candidates.length &&
-    checked.size < maximum &&
+    budget.attempts < CONFIG.maxTotalFetches &&
     !preserveLatin
   ) {
     try {
       const discovered = await run(() => discoverForms(readings[0] ?? word, language, session))
-      resolution.incomplete ||= discovered.more || discovered.words.length > maximum - checked.size
+      resolution.incomplete ||= discovered.more
       for (const target of discovered.words)
         queue.push({ word: target, relationship: 'form', depth: 0, discovered: true })
       await drain()
@@ -361,7 +369,7 @@ async function resolveLookupLanguage(
   if (
     !preserveExactEntry &&
     !resolution.candidates.length &&
-    checked.size < maximum &&
+    budget.attempts < CONFIG.maxTotalFetches &&
     !preserveLatin &&
     allowFallback
   ) {
@@ -373,6 +381,12 @@ async function resolveLookupLanguage(
     if (CONFIG.features.lookupFallback && !resolution.candidates.length)
       resolution.incomplete = true
   }
+  resolution.candidates.sort((a, b) =>
+    compareLookupSupport(
+      a.relationship === 'correction' ? 'unverified' : 'verified',
+      b.relationship === 'correction' ? 'unverified' : 'verified'
+    )
+  )
   if (
     !preserveExactEntry &&
     !preserveLatin &&

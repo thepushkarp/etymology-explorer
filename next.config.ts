@@ -3,6 +3,9 @@ import { version } from './package.json'
 
 const nextConfig: NextConfig = {
   trailingSlash: false,
+  outputFileTracingIncludes: {
+    '/api/etymology': ['./data/jmdict/*.json.gz', './data/japanese-historical.json.gz'],
+  },
   // Only public build metadata belongs here: these values are inlined into client bundles.
   env: {
     NEXT_PUBLIC_APP_VERSION: version,

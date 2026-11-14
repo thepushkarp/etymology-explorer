@@ -1,0 +1,32 @@
+{
+  "datasets": {
+    "wamyo": {
+      "title": "Wamyō ruijushō (1617 edition)",
+      "url": "https://www2.ninjal.ac.jp/textdb_dataset/en/kwrs/",
+      "scope": "Historical lexicographical commentary. Chinese character explanations do not establish Japanese word ancestry. Transcription generally modernizes character shapes.",
+      "attribution": "NINJAL / NIHU"
+    },
+    "tetsugaku": {
+      "title": "Tetsugaku jii (1881)",
+      "url": "https://www2.ninjal.ac.jp/textdb_dataset/en/tgzi/",
+      "scope": "Dated terminology and translation attestations; neither first coinage nor borrowing direction is established.",
+      "attribution": "Prof. Okajima Akihiro, Osaka University; published by NINJAL"
+    },
+    "genkai": {
+      "title": "Genkai headword data (1889–1891; dataset 202510)",
+      "url": "https://www2.ninjal.ac.jp/textdb_dataset/en/genk/index.html",
+      "scope": "Historical headwords and metadata only; dictionary definitions and etymology prose are not included. Linked facsimiles and JapanKnowledge entries are outside this dataset.",
+      "attribution": "NINJAL"
+    },
+    "nippo": {
+      "title": "Nippojisho headword data (1603; dataset 202510)",
+      "url": "https://www2.ninjal.ac.jp/textdb_dataset/en/nipp/",
+      "scope": "Historical romanized headwords with editorial katakana transcriptions, not full Portuguese definitions. Modernized verb forms are editorial metadata, not historical attestations. Linked facsimiles are outside this dataset.",
+      "attribution": "NINJAL"
+    }
+  },
+  "records": 69897,
+  "sha256": "9759a8110eb497076ebc2833f32ac30b676b6a61a08a534540fe6cde288ad3c6",
+  "license": "CC BY 4.0 (released transcriptions and headword data only)",
+  "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+}

@@ -19,7 +19,7 @@ The primary Wiktionary edition defines source-local history boundaries, with Ety
 
 Hindi, Urdu, and Sanskrit use English Wiktionary as their history primary; Hindi also queries its native edition. Optional Platts, Wisdom Library, and Cologne Monier-Williams adapters and provider IDs are omitted pending source admission. The [Platts digitization](https://dsal.uchicago.edu/dictionaries/platts/) links CC BY-NC-ND terms; [Wisdom Library's site information](https://www.wisdomlib.org/m/about.html) does not establish a blanket glossary reuse license; the [Cologne digital MW header](https://raw.githubusercontent.com/sanskrit-lexicon/csl-orig/master/v02/mw/mwheader.xml) specifies noncommercial, share-alike terms. Do not register these sources based solely on accessible lookup pages.
 
-Japanese uses English Wiktionary as its history primary, with native Japanese Wiktionary as independent context. JMdict via Jisho supplies licensed supplementary lexical senses and raw loan-source material, with EDRDG and CC BY-SA 4.0 attribution retained in sources and display. An unspecified full/partial loan-source status cannot establish whole-word borrowing. A live Jisho request after a source-cache miss needs a global 40-second Redis pacing reservation; unavailable Redis or an occupied interval skips Jisho. Complete raw data uses the seven-day source cache. Review publisher terms, license, and response schema when changing the adapter. Kotobank and gogen adapters are omitted pending source admission.
+Japanese uses English Wiktionary as its history primary and native Japanese Wiktionary as independent context or fallback. Native Japanese numbered 語源 headings and labelled homographs retain separate histories; a nested etymology belongs only to its enclosing homograph. Affirmative native origin and shortening statements are extracted only inside etymology sections; uncertain accounts remain prose. JMdict supplies supplementary lexical evidence from the official English XML snapshot in `data/jmdict/`. Exact spelling/reading pairs must satisfy reading and sense restrictions together. Complete matched XML, original full/partial loan-source fields, wasei markers, POS inheritance, stable entry IDs and EDRDG attribution are retained. Local index reads consume no HTTP budget and bypass Redis source caching. Refresh JMdict at least monthly using `scripts/build-jmdict-index.py` with a reviewed download and SHA-256; snapshots older than 31 days report unavailable. NINJAL historical dictionaries supply exact-spelling, dated context only, never modern identity, standalone lexical admission, or ancestry. Their pinned transcriptions and headword rows are rebuilt with `scripts/build-japanese-historical-index.py`. Source licences and scope are documented in `docs/source-admission.md`. Kotobank, gogen and JapanKnowledge are not enabled without an appropriate reuse agreement.
 
 Japanese strata (`wago`, `kango`, `gairaigo`, `wasei-eigo`, `wasei-kango`, `hybrid`) require affirmative scoped evidence. 電話 is Japanese wasei-kango compounding of 電 and 話, not whole-word Middle Chinese borrowing. Preserve the disputed coinage accounts of サラリーマン and its source-attested Japanese サラリー + マン components; do not invent English salary/man branches. コンセント clips a longer Japanese coinage with explicitly attested English concentric + plug components. Entry prose remains English.
 
@@ -143,10 +143,10 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
   - Merged spelling entries: `entry:v1:{word}`, 365-day physical TTL. `pipelineRevision` and `entryFreshDays` (90) determine staleness using the oldest retained `freshnessAt` (or original `tracedAt`); incomplete traces become stale after five minutes. Stale entries remain readable and require an explicit Retrace click. Successful retrace languages merge with durable previous results. `attemptedLanguages` records completed coverage so an unattempted manual hint can augment a fresh entry under the same word lock.
   - TTS audio: 1 year TTL
-  - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v8:{word}` with a distinct explicit-hint scope. Source-attested romanization offers survive no-result responses. Transient resolution failures and retraces with a durable entry never write absence markers.
+  - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v10:{word}` with a distinct explicit-hint scope. Source-attested romanization offers survive no-result responses. Transient resolution failures and retraces with a durable entry never write absence markers.
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v15:<source>:<word>` for English, `src:v15:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v15:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v15:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v17:<source>:<word>` for English, `src:v17:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v17:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v17:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
 
 - **`lib/redis.ts`** - Shared Redis client factory using KV_REST_API_URL and KV_REST_API_TOKEN (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 and Exa requires functioning accounting (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -228,17 +228,19 @@ Attested lineage forms link from their details panel when their language is supp
 `counterparts` belong to each history and follow history selection. Explicit Wiktionary romanization
 sections supply `WordEntry.otherScripts` offers, including one bounded explicit written-form redirect;
 they remain links alongside independent entries for the original spelling and in no-result responses.
-Only clicking a link marks trace intent. Foreign spellings are never guessed from a gloss or a Latin
+An explicit search or link click marks trace intent. Foreign spellings are never guessed from a gloss or a Latin
 spelling alone.
 
-Japanese offers beside existing results require a Japanese entry or a Japanese ancestry stage
-in any retained history. A romanization match alone is not promoted there. Explicit Japanese
-lookup and unresolved-input choices keep verified alternatives; saved entries need no retrace
-for this presentation filter. `EntryNavigation` includes verified written-form destinations: the first listed target opens by default, with other meanings retained in lookup context. A default display choice never establishes a unique match or authorizes an alias. Existing language tabs take precedence over cross-spelling offers. Unsupported-language discovery notices are not displayed. Homepage and header searches share the themed `LanguageSelect`.
+Japanese meaning choices require saved, matching histories; an ancestry graph is not required.
+`otherScripts` comes from explicit dictionary romanization/redirect links or verified lookup
+candidates; deterministic conversions and model proposals alone cannot populate it. A language
+tab identifies a usable entry, not a claim of shared etymological origin.
+`EntryNavigation` includes verified written-form destinations: the first available target opens by default, with other meanings retained in lookup context. A default display choice never establishes a unique match or authorizes an alias. Existing language tabs take precedence over cross-spelling offers. Unsupported-language discovery notices are not displayed. Homepage and header searches share the themed `LanguageSelect`.
 
 Language rows remain visible for single-language entries. `lib/lookupGroupCache.ts` builds navigation
-groups from saved kana counterparts and explicit romanization offers, reading at most four counterpart
-targets and two romanizations. It performs no research or alias writes. Direct kanji searches stay
+groups from all saved kana readings, counterparts, and explicit romanization offers. Cache reads run
+four at a time without a candidate-count cutoff. Single-form kana entries can offer reverse language tabs only when a
+cached romanized entry links back to that kana form. It performs no research or alias writes. Direct kanji searches stay
 focused; links chosen within a broader lookup carry `lookup` and `history` query parameters.
 `lib/entryNavigation.ts` supplies one language/meaning model to `EntryNavigation` for saved and live
 entries. All choices are real links; arrow keys and Home/End move focus, and Enter follows a link.
@@ -249,7 +251,16 @@ retained together. Unresolved kana index histories with multiple counterparts an
 represented by their destinations. Grouped navigation retains only the requested reading; other
 readings belong to a direct kanji search. `EntryChoices` supplies shared geometry and headers reserve
 a pronunciation row. Server rendering supplies cache-only lookup context before hydration;
-`/api/lookup-group` refreshes that metadata only after completed traces. Both module graphs must
+`/api/lookup-group` refreshes that metadata after completed traces. Lookup support uses ordinal
+source-evidence tiers, independent of ancestry confidence: verified matching histories rank first,
+explicit source links qualify for research, and unverified proposals do not qualify for automatic
+tracing. Equal evidence retains source order; no popularity score or candidate-count cutoff applies.
+An explicit search traces qualifying Japanese destinations sequentially through the ordinary
+etymology API. Each destination retains its own cache, lock and per-entry budgets. Saved matching histories are reused without retracing. Only successful
+matching histories enter the meaning list; missing or failed candidates remain undisplayed. Temporary
+failures offer an explicit retry; budget/rate/unavailability limits stop the batch. Leaving the page
+aborts it. Selecting a meaning within existing lookup context does not restart the batch.
+Both module graphs must
 exclude research and LLM modules. Passive loads, prefetching, and browser-history restoration never
 authorize a trace.
 
@@ -267,14 +278,14 @@ Existing entries without alias proof retain their saved contents until an explic
 the relationship; pipeline revision changes make that retrace available without automatic LLM spend.
 
 `lib/lookupResolution.ts` verifies rōmaji readings and grammatical forms before the canonical lock.
-WanaKana supplies candidate kana, never evidence. Up to four dictionary candidates share the
-resolution HTTP budget; incomplete, conflicting, or ambiguous results remain choices. Unique
+WanaKana supplies candidate kana, never evidence. Dictionary candidates are checked within the
+shared resolution HTTP budget, with explicit source links prioritized over unverified proposals; incomplete, conflicting, or ambiguous results remain choices. Unique
 verified rōmaji uses a language-qualified `romanization` proof with reading evidence. Conjugations
 open dictionary forms with separate JSON/SSE lookup metadata and never become spelling aliases.
 An independently defined exact entry retains its own histories even when another sense is a
 grammatical form; verified form targets remain optional destinations. Conjugation tables split
 explicit line-separated alternatives and exclude numeric footnote annotations while preserving
-spaces within phrases. Dictionary-linked destinations deferred by the four-candidate limit travel
+spaces within phrases. Dictionary-linked destinations deferred by source failures or the HTTP budget travel
 separately as `lookupResolution.sourceListed` in JSON and SSE. They are labelled unchecked links,
 never canonical identities, alias proofs, or durable entry offers; only explicit navigation may
 start their lookup. Truncation always prevents automatic selection.
@@ -379,6 +390,8 @@ claiming that partial source research is complete.
 
 **Key hooks**:
 
+- JSON fallback responses carry the same error type and correction suggestions as SSE. Correction links preserve an explicit lookup language; Auto lookups do not inherit a display-only language default.
+- `lib/hooks/useSearchLanguage.ts` - Shared homepage/header search preference, defaulting to Auto. Only explicit selector changes update it; result languages, tabs, and canonical redirects do not. Session storage retains the preference across reloads in the same tab, with an in-memory fallback when storage is unavailable. Result URLs continue to identify the displayed language independently.
 - `lib/hooks/useStreamingEtymology.ts` - SSE transport for one merged spelling trace with an optional language hint; all progress
   state folds through the pure reducer in `lib/streamReducer.ts` (per-source states with
   timing, phase, accumulated `synthesis_section` events, final result)

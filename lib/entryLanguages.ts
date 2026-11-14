@@ -122,7 +122,7 @@ async function resolveLanguages(
     )
   )
   const romanizations = detectScripts(normalized).includes('Latin')
-    ? normalizeScriptTargets(englishToc?.otherScripts).slice(0, CONFIG.maxRootsToExplore)
+    ? normalizeScriptTargets(englishToc?.otherScripts)
     : []
   // A romanization can point at a reading page whose explicit redirect names
   // its written form. Inspect only that one hop, without researching its lexeme.

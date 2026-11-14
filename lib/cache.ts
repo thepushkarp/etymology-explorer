@@ -529,7 +529,7 @@ export async function cacheAudio(
 /** Auto misses and explicit language hints have independent admission scopes. */
 function negativeKey(word: string, hint?: LanguageCode): string {
   const normalized = canonicalizeWord(word)
-  return hint ? `neg:v8:hint:${lexemeKey(hint, normalized)}` : `neg:v8:${normalized}`
+  return hint ? `neg:v10:hint:${lexemeKey(hint, normalized)}` : `neg:v10:${normalized}`
 }
 
 export interface NegativeCacheMetadata {

@@ -571,13 +571,7 @@ function sourceStrata(
     )
     .join('\n')
   if (/\bwasei[ -]kango\b/i.test(affirmative)) supported.add('wasei-kango')
-  if (
-    /\bwasei[ -]eigo\b|\bpseudo-anglicism\b/i.test(affirmative) ||
-    (entry.source === 'jmdict' &&
-      /Wasei, word made in Japan/.test(entry.text) &&
-      /"language":"English"/.test(entry.text))
-  )
-    supported.add('wasei-eigo')
+  if (/\bwasei[ -]eigo\b|\bpseudo-anglicism\b/i.test(affirmative)) supported.add('wasei-eigo')
   if (
     /(?:^|\n)(?:(?:The (?:word|term) is|A|An) )?(?:wago|native Japanese)\b/i.test(affirmative) ||
     /\b(?:from|inherited from) (?:Old Japanese|Classical Japanese|Proto-Japonic)\b/i.test(

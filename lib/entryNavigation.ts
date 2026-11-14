@@ -31,7 +31,10 @@ export function entryNavigation({
 }) {
   const result = entry?.entries[language]
   const saved = new Set([...languages, ...Object.keys(failedLanguages ?? {})])
-  const offers = normalizeScriptTargets(otherScripts)
+  const offers = normalizeScriptTargets(otherScripts).filter(
+    (target) =>
+      target.language !== 'ja' || group?.choices.some((choice) => choice.word === target.word)
+  )
   const grouped = group?.choices.filter((choice) => choice.language === language) ?? []
   const lookup = group?.reading ?? selection.lookup
   const choices: EntryTarget[] = grouped.length
