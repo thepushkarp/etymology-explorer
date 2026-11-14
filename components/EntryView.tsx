@@ -53,6 +53,14 @@ export function EntryView({
   const selected = selection.language ?? language ?? displayed.languages[0]
   const result = selected ? displayed.entries[selected] : undefined
   const [explicitSearch, setExplicitSearch] = useState<{ word: string; lookup: string }>()
+  // Retained same-page state must not reauthorize a consumed search on Back.
+  if (
+    explicitSearch &&
+    (explicitSearch.word !== displayed.word ||
+      explicitSearch.lookup !== (selection.lookup ?? displayed.word))
+  ) {
+    setExplicitSearch(undefined)
+  }
   const intentWord =
     selection.lookup && lookupGroupForWord(selection.lookup, lookupGroup)
       ? selection.lookup

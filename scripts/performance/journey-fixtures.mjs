@@ -80,8 +80,13 @@ Object.assign(haruIndex.entries.ja.histories[0], {
     { word: '張る', language: 'ja' },
   ],
 })
-const spring = journeyEntry('春', { ja: [['Cached spring meaning', '/haru/']] })
-spring.entries.ja.histories[0].transliteration = 'haru'
+const spring = journeyEntry('春', {
+  ja: [
+    ['Cached spring meaning', '/haru/'],
+    ['Second spring history', '/haru/'],
+  ],
+})
+for (const history of spring.entries.ja.histories) history.transliteration = 'haru'
 const romanHaru = journeyEntry('haru', { en: [['Independent Latin spelling fixture', '/test/']] })
 romanHaru.otherScripts = [{ word: 'はる', language: 'ja' }]
 
