@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { assembleLookupGroup, lookupGroupSeed } from './lookupGroups'
+import { assembleLookupGroup, lookupGroupForWord, lookupGroupSeed } from './lookupGroups'
+import { entryNavigation } from './entryNavigation'
 import { etymologyResult } from './testSupport/etymologyResult'
 import type { WordEntry, EtymologyResult } from './types'
 
@@ -67,6 +68,11 @@ describe('source-backed lookup navigation', () => {
     expect(group.choices.some((choice) => choice.word === '城')).toBe(false)
     expect(white.entries.ja!.histories).toHaveLength(2)
     expect(lookupGroupSeed(white)).toBeUndefined()
+    const direct = entryNavigation({ word: white.word, language: 'ja', entry: white })
+    const grouped = entryNavigation({ word: white.word, language: 'ja', entry: white, group })
+    expect(grouped.active?.details).toBe(direct.active?.details)
+    expect(lookupGroupForWord(white.word, group)).toBe(group)
+    expect(lookupGroupForWord('unrelated', group)).toBeUndefined()
   })
 
   test('retains every matching history beyond four, ranks verified matches first and excludes other readings', () => {
@@ -116,5 +122,42 @@ describe('source-backed lookup navigation', () => {
       ],
     }
     expect(lookupGroupSeed(alias)?.members.map((member) => member.word)).toEqual(['しろ', '城'])
+  })
+
+  test('an empty reading group cannot expose other readings, but its English return entry still works', () => {
+    const index = structuredClone(kana)
+    index.entries.ja!.histories = [index.entries.ja!.histories[1]]
+    const unrelated = structuredClone(white)
+    unrelated.entries.ja!.histories = [unrelated.entries.ja!.histories[1]]
+    unrelated.entries.ja!.primaryHistoryId = 'haku'
+    const english = entry(etymologyResult({ word: 'shiro', language: 'en' }))
+    english.otherScripts = [{ word: 'しろ', language: 'ja' }]
+    const group = assembleLookupGroup(lookupGroupSeed(index)!, [index, unrelated, english])
+    expect(group.choices).toEqual([])
+    for (const selection of [{}, { lookup: 'しろ' }]) {
+      const model = entryNavigation({
+        word: '白',
+        language: 'ja',
+        entry: unrelated,
+        group,
+        selection,
+      })
+      expect(model.choices).toEqual([])
+      expect(model.historyId).toBeUndefined()
+      expect(model.unresolved).toBe(true)
+      expect(model.grouped).toBe(true)
+      expect(model.defaultTarget).toBeUndefined()
+      expect(model.tabs.find((tab) => tab.language === 'ja')?.lookup).toBe('しろ')
+    }
+    const back = entryNavigation({
+      word: 'shiro',
+      language: 'en',
+      entry: english,
+      group,
+      selection: { lookup: 'しろ' },
+    })
+    expect(back.historyId).toBe(english.entries.en!.primaryHistoryId)
+    expect(back.unresolved).toBe(false)
+    expect(entryNavigation({ word: '白', language: 'ja', entry: unrelated }).historyId).toBe('haku')
   })
 })

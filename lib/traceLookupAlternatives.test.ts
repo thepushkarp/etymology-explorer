@@ -157,3 +157,34 @@ test('evidence threshold excludes guesses regardless of position and keeps equal
   await traceLookupAlternatives('shiro', entry, new AbortController().signal, () => {})
   expect(requests).toEqual(['城', '代'])
 })
+
+test('related research uses the destination language and does not merge identical spellings', async () => {
+  const metadata: LookupGroup = {
+    reading: 'pain',
+    members: [
+      { word: 'pain', language: 'en', lookupSupport: 'verified' },
+      { word: 'pain', language: 'fr', lookupSupport: 'linked' },
+    ],
+    choices: [{ word: 'pain', language: 'en', label: 'English entry' }],
+    languages: [],
+  }
+  let attempts = 0
+  globalThis.fetch = (async (input) => {
+    const url = new URL(String(input), 'http://localhost')
+    if (url.pathname === '/api/lookup-group') return Response.json({ group: metadata })
+    attempts++
+    expect(url.searchParams.get('word')).toBe('pain')
+    expect(url.searchParams.get('language')).toBe('fr')
+    metadata.choices.push({ word: 'pain', language: 'fr', label: 'French entry' })
+    return Response.json({ success: true, data: { entries: { fr: {} } } })
+  }) as typeof fetch
+  await expect(
+    traceLookupAlternatives(
+      'pain',
+      { ...entry, word: 'pain' },
+      new AbortController().signal,
+      () => {}
+    )
+  ).resolves.toBeUndefined()
+  expect(attempts).toBe(1)
+})

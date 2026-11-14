@@ -12,20 +12,21 @@ export function ScriptLinks({
   description?: string
 }) {
   if (!targets?.length) return null
+  const languages = [...new Set(targets.map((target) => target.language))]
 
   return (
     <div className="mt-4 border-l border-rule pl-3 text-sm text-muted">
       <p>
         {heading ??
-          (targets.some((target) => target.language === 'ja')
-            ? 'Japanese lookup'
-            : 'Other language spellings')}
+          (languages.length === 1
+            ? `${LANGUAGES[languages[0]].englishName} entries`
+            : 'Other language entries')}
       </p>
       {description && <p className="mt-1">{description}</p>}
       <ul className="mt-2 space-y-2">
         {targets.map((target) => (
           <li key={`${target.language}:${target.word}`}>
-            {target.language !== 'ja' && `${LANGUAGES[target.language].englishName} `}
+            {languages.length > 1 && `${LANGUAGES[target.language].englishName} `}
             <WordLink
               word={target.word}
               language={target.language}

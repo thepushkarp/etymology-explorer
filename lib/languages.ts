@@ -241,8 +241,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
 
 export function isLanguageCode(value: unknown): value is LanguageCode {
   return (
-    typeof value === 'string' &&
-    (SUPPORTED_LANGUAGE_CODES as readonly string[]).includes(value.toLowerCase())
+    typeof value === 'string' && (SUPPORTED_LANGUAGE_CODES as readonly string[]).includes(value)
   )
 }
 

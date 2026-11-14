@@ -100,16 +100,12 @@ describe('historyChoices', () => {
       {
         id: 'river',
         label: 'river sense',
-        entryKind: 'lemma',
-        formOf: undefined,
-        partsOfSpeech: ['noun'],
+        details: 'noun',
       },
       {
         id: 'money',
         label: 'money sense',
-        entryKind: 'lemma',
-        formOf: undefined,
-        partsOfSpeech: ['noun'],
+        details: 'noun',
       },
     ])
   })

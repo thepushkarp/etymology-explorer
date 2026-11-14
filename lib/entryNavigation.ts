@@ -33,32 +33,37 @@ export function entryNavigation({
   const saved = new Set([...languages, ...Object.keys(failedLanguages ?? {})])
   const offers = normalizeScriptTargets(otherScripts).filter(
     (target) =>
-      target.language !== 'ja' || group?.choices.some((choice) => choice.word === target.word)
+      target.language !== 'ja' ||
+      group?.choices.some(
+        (choice) => choice.word === target.word && choice.language === target.language
+      )
   )
   const grouped = group?.choices.filter((choice) => choice.language === language) ?? []
+  // Members are constrained to the lookup's reading even when no matching
+  // history is saved. Return-language entries retain their independent histories.
+  const restrictToGroup = Boolean(group?.members.some((member) => member.language === language))
   const lookup = group?.reading ?? selection.lookup
-  const choices: EntryTarget[] = grouped.length
-    ? grouped.map((choice) => ({
-        ...choice,
-        lookup,
-        details: choice.reading,
-        local: choice.word === word && saved.has(choice.language),
-      }))
-    : !selection.lookup || group
-      ? result
-        ? historyChoices(result).map((choice) => ({
-            word,
-            language,
-            historyId: choice.id,
-            label: choice.label,
-            details: choice.formOf
-              ? `form of ${choice.formOf.word}`
-              : choice.partsOfSpeech.join(' · ') || choice.entryKind,
-            lookup,
-            local: true,
-          }))
+  const choices: EntryTarget[] =
+    restrictToGroup || grouped.length
+      ? grouped.map((choice) => ({
+          ...choice,
+          lookup,
+          details: choice.details,
+          local: choice.word === word && saved.has(choice.language),
+        }))
+      : !selection.lookup || group
+        ? result
+          ? historyChoices(result).map((choice) => ({
+              word,
+              language,
+              historyId: choice.id,
+              label: choice.label,
+              details: choice.details,
+              lookup,
+              local: true,
+            }))
+          : []
         : []
-      : []
   const current = choices.filter((choice) => choice.word === word)
   const active = selection.historyId
     ? current.find((choice) => choice.historyId === selection.historyId)
@@ -86,14 +91,17 @@ export function entryNavigation({
         ? { word, language: code }
         : (group?.languages.find((target) => target.language === code) ??
           related[0] ?? { word, language: code }))
-    // Lookup context describes Japanese reading groups and their verified language members.
+    // Context follows confirmed group membership, not a language's script or name.
     const supportsLookup =
-      code === 'ja' ||
-      group?.languages.some((member) => member.language === code && member.word === target.word)
+      first ||
+      (group &&
+        [...group.members, ...group.languages].some(
+          (member) => member.language === code && member.word === target.word
+        ))
     return {
       ...target,
       historyId: first?.historyId,
-      lookup: supportsLookup ? (lookup ?? (related.length > 1 ? word : undefined)) : undefined,
+      lookup: supportsLookup ? lookup : undefined,
       label: LANGUAGES[code].englishName,
       local: target.word === word && saved.has(code),
     }
@@ -106,7 +114,7 @@ export function entryNavigation({
     choices,
     active,
     historyId,
-    grouped: grouped.length > 0,
+    grouped: restrictToGroup || grouped.length > 0,
     unresolved: Boolean(result && !historyId) || Boolean(selection.lookup && !group),
     defaultTarget: grouped.length && !current.length ? grouped[0] : undefined,
   }

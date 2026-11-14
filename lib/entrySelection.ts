@@ -40,10 +40,10 @@ export function selectionFromLocation(href: string, word: string) {
   } catch {
     return
   }
-  const language = segments.length === 3 ? segments[1] : undefined
-  if (language && !isLanguageCode(language)) return
+  const language = segments.length === 3 ? segments[1].toLowerCase() : undefined
+  if (language !== undefined && !isLanguageCode(language)) return
   return {
     ...parseEntrySelection(url.searchParams),
-    language: language as LanguageCode | undefined,
+    language,
   }
 }

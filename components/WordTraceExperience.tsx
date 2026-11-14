@@ -82,13 +82,13 @@ export function WordTraceExperience({
   const activeWord = progress.identity?.word ?? progress.result?.word ?? progress.word ?? word
   const activeLanguage = progress.identity?.language ?? language
   const selection = useEntrySelection(activeWord, activeLanguage, initialSelection)
-  const { group } = useLookupGroup(
-    activeWord,
-    lookupGroup,
-    progress.result ?? restored ?? initialEntry,
-    selection.lookup,
-    Boolean(progress.result || restored)
-  )
+  const { group } = useLookupGroup({
+    word: activeWord,
+    initial: lookupGroup,
+    entry: progress.result ?? restored ?? initialEntry,
+    lookup: selection.lookup,
+    activity: progress.result || restored ? 'refresh' : undefined,
+  })
   const selected =
     selection.language ??
     activeLanguage ??

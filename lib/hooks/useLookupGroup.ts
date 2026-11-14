@@ -2,18 +2,24 @@
 
 import { useEffect, useState } from 'react'
 import type { LookupGroup, WordEntry } from '../types'
-import { lookupGroupSeed } from '../lookupGroups'
-import { traceLookupAlternatives } from '../traceLookupAlternatives'
+import { lookupGroupForWord, lookupGroupSeed } from '../lookupGroups'
+import { fetchLookupGroup, traceLookupAlternatives } from '../traceLookupAlternatives'
 
 /** Explicit lookup context travels with links; direct kanji URLs stay focused. */
-export function useLookupGroup(
-  word: string,
-  initial?: LookupGroup,
-  entry?: WordEntry,
-  lookup?: string,
-  refresh = false,
-  traceAlternatives = false
-) {
+export function useLookupGroup({
+  word,
+  initial,
+  entry,
+  lookup,
+  activity,
+}: {
+  word: string
+  initial?: LookupGroup
+  entry?: WordEntry
+  lookup?: string
+  /** Only explicit search intent may request research; refresh reads cached navigation. */
+  activity?: 'refresh' | 'trace'
+}) {
   const key = lookup ?? word
   const [loaded, setLoaded] = useState<{ key: string; group?: LookupGroup }>()
   const [status, setStatus] = useState<{ key: string; loading: boolean; error?: string }>()
@@ -22,25 +28,18 @@ export function useLookupGroup(
   const eligible = Boolean(lookup || initial || hasLinks)
   const group = eligible ? (loaded?.key === key ? loaded.group : initial) : undefined
   useEffect(() => {
-    if (!refresh && !traceAlternatives && !retry) return
+    if (!activity && !retry) return
     if (!lookup && !hasLinks) return
     const controller = new AbortController()
     const publish = (group: LookupGroup | undefined) => setLoaded({ key, group })
     async function load() {
       try {
-        if ((traceAlternatives || retry) && entry) {
+        if ((activity === 'trace' || retry) && entry) {
           setStatus({ key, loading: true })
           const error = await traceLookupAlternatives(key, entry, controller.signal, publish)
           setStatus({ key, loading: false, error })
         } else {
-          const response = await fetch(`/api/lookup-group?word=${encodeURIComponent(key)}`, {
-            signal: controller.signal,
-          })
-          if (!response.ok)
-            throw new Error(`Lookup navigation for “${key}” returned HTTP ${response.status}`)
-          const data: { group: LookupGroup | null } = await response.json()
-          controller.signal.throwIfAborted()
-          publish(data.group ?? undefined)
+          publish(await fetchLookupGroup(key, controller.signal))
         }
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -51,14 +50,10 @@ export function useLookupGroup(
     }
     void load()
     return () => controller.abort()
-  }, [key, lookup, entry, refresh, traceAlternatives, retry, hasLinks])
-  // Query parameters are navigation hints, never permission to join unrelated entries.
+  }, [key, lookup, entry, activity, retry, hasLinks])
   return {
-    group:
-      group && [...group.members, ...group.languages].some((target) => target.word === word)
-        ? group
-        : undefined,
-    loading: Boolean((traceAlternatives || retry) && status?.key === key && status.loading),
+    group: lookupGroupForWord(word, group),
+    loading: Boolean((activity === 'trace' || retry) && status?.key === key && status.loading),
     error: status?.key === key ? status.error : undefined,
     retry: () => setRetry((value) => value + 1),
   }

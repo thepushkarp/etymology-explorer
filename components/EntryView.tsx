@@ -51,15 +51,18 @@ export function EntryView({
   const selected = selection.language ?? language ?? displayed.languages[0]
   const result = selected ? displayed.entries[selected] : undefined
   const [explicitWord, setExplicitWord] = useState<string>()
-  const related = useLookupGroup(
-    displayed.word,
-    lookupGroup,
-    displayed,
-    selection.lookup,
-    Boolean(progress.result),
-    (traceAlternatives || explicitWord === displayed.word || Boolean(progress.result)) &&
-      !selection.lookup
-  )
+  const related = useLookupGroup({
+    word: displayed.word,
+    initial: lookupGroup,
+    entry: displayed,
+    lookup: selection.lookup,
+    activity:
+      (traceAlternatives || explicitWord === displayed.word || progress.result) && !selection.lookup
+        ? 'trace'
+        : progress.result
+          ? 'refresh'
+          : undefined,
+  })
   const { group } = related
   const navigation = entryNavigation({
     word: displayed.word,

@@ -28,6 +28,8 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Changed
 
+- Keep empty reading groups unavailable instead of displaying unrelated saved readings, while retaining direct-word access and return-language tabs.
+- Share language and meaning navigation rules across server, saved, and live views, with consistent grammatical labels and dictionary links.
 - Keep loaded meanings visible when an additional Japanese lookup times out, with a word-specific inline message and an explicit retry.
 - Look up Japanese senses and restricted readings locally from official JMdict XML, preserving original loanword metadata and source attribution.
 - Preserve Japanese Wiktionary numbered and nested meaning boundaries, and recognize explicit native-language derivation and shortening statements.

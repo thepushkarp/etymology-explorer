@@ -2,6 +2,7 @@ import { compareLookupSupport } from './lookupEvidence'
 import { normalizeScriptTargets } from './scriptTargets'
 import { canonicalizeWord } from './orthography'
 import { isLanguageCode } from './languages'
+import { historyChoice } from './resultHistories'
 import type { LookupGroup, ScriptTarget, WordEntry } from './types'
 
 export const isKanaWord = (word: string) =>
@@ -11,6 +12,13 @@ export interface LookupGroupSeed {
   reading: string
   romanizations: string[]
   members: ScriptTarget[]
+}
+
+/** URL lookup context cannot join a word that is absent from its saved group. */
+export function lookupGroupForWord(word: string, group?: LookupGroup): LookupGroup | undefined {
+  return group && [...group.members, ...group.languages].some((target) => target.word === word)
+    ? group
+    : undefined
 }
 
 /** Saved readings propose cache reads; reverse links still require source confirmation. */
@@ -92,6 +100,7 @@ export function assembleLookupGroup(seed: LookupGroupSeed, entries: WordEntry[])
           historyId: history.id,
           reading: seed.reading,
           label: `${member.word} — ${history.definition.split(/[;；]/)[0] || history.label}`,
+          details: historyChoice(history).details,
         })
     }
   }

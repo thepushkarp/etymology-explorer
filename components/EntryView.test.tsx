@@ -21,6 +21,40 @@ const entry: WordEntry = {
 }
 
 describe('EntryView merged entries', () => {
+  test('an empty reading group renders unavailable instead of another reading’s content', () => {
+    const saved: WordEntry = {
+      ...entry,
+      word: '白',
+      languages: ['ja'],
+      entries: {
+        ja: etymologyResult({
+          word: '白',
+          language: 'ja',
+          transliteration: 'haku',
+          definition: 'Unrelated haku history.',
+        }),
+      },
+    }
+    const html = renderToStaticMarkup(
+      <EntryView
+        entry={saved}
+        language="ja"
+        selection={{ lookup: 'しろ' }}
+        lookupGroup={{
+          reading: 'しろ',
+          members: [{ word: '白', language: 'ja', lookupSupport: 'linked' }],
+          choices: [],
+          languages: [{ word: 'shiro', language: 'en' }],
+        }}
+      />
+    )
+    expect(html).toContain('This reading is not available in the saved entry.')
+    expect(html).not.toContain('Unrelated haku history.')
+    expect(html).not.toContain('haku')
+    expect(html).toContain(`href="/word/ja/${encodeURIComponent('白')}"`)
+    expect(html).toContain('/word/en/shiro?lookup=')
+  })
+
   test('selects the requested language without mixing sibling definitions', () => {
     const html = renderToStaticMarkup(<EntryView entry={entry} language="it" />)
     expect(html).toContain('Salt, a mineral used in food.')

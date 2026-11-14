@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { entryNavigation } from './entryNavigation'
 import { entryPagePath, parseEntrySelection, selectionFromLocation } from './entrySelection'
 import { etymologyResult } from './testSupport/etymologyResult'
+import { SUPPORTED_LANGUAGE_CODES } from './languages'
 import type { LookupGroup, WordEntry } from './types'
 
 const result = etymologyResult({
@@ -48,6 +49,50 @@ test('direct selection uses the first history and invalid or unavailable context
     expect(
       entryNavigation({ word: entry.word, language: 'ja', entry: saved, selection }).unresolved
     ).toBe(true)
+  }
+})
+
+test('all languages share first-choice, explicit selection, and grouped destination rules', () => {
+  for (const language of SUPPORTED_LANGUAGE_CODES) {
+    const first = etymologyResult({ word: 'test', language })
+    const second = {
+      ...first.histories[0],
+      id: 'second',
+      entryKind: 'form' as const,
+      formOf: { word: 'lemma', language },
+    }
+    first.histories.push(second)
+    const saved = {
+      ...entry,
+      word: first.word,
+      languages: [language],
+      entries: { [language]: first },
+      failedLanguages: undefined,
+    }
+    const input = { word: saved.word, language, entry: saved }
+    const defaultChoice = entryNavigation(input)
+    expect(defaultChoice.historyId).toBe(first.primaryHistoryId)
+    expect(defaultChoice.tabs).toHaveLength(1)
+    const selected = entryNavigation({ ...input, selection: { historyId: 'second' } })
+    expect(selected.historyId).toBe('second')
+    expect(selected.active?.details).toBe('form of lemma')
+    expect(
+      selectionFromLocation(`/word/${language.toUpperCase()}/test?history=second`, 'test')
+    ).toEqual({ language, historyId: 'second', lookup: undefined })
+
+    const target = { word: 'destination', language, historyId: 'target', label: 'Target' }
+    const lookup = {
+      reading: 'test',
+      members: [{ ...target, lookupSupport: 'verified' as const }],
+      choices: [target],
+      languages: [target],
+    }
+    const grouped = entryNavigation({ ...input, group: lookup })
+    expect(grouped.defaultTarget).toMatchObject(target)
+    expect(grouped.tabs[0].lookup).toBe('test')
+    expect(
+      entryNavigation({ ...input, word: target.word, group: lookup }).defaultTarget
+    ).toBeUndefined()
   }
 })
 

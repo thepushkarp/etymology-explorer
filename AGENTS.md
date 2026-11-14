@@ -242,8 +242,13 @@ groups from all saved kana readings, counterparts, and explicit romanization off
 four at a time without a candidate-count cutoff. Single-form kana entries can offer reverse language tabs only when a
 cached romanized entry links back to that kana form. It performs no research or alias writes. Direct kanji searches stay
 focused; links chosen within a broader lookup carry `lookup` and `history` query parameters.
-`lib/entryNavigation.ts` supplies one language/meaning model to `EntryNavigation` for saved and live
-entries. All choices are real links; arrow keys and Home/End move focus, and Enter follows a link.
+`lib/entryNavigation.ts` supplies one language/meaning model for server redirects and saved/live
+navigation. `lookupGroupForWord` validates context membership on both server and client; context
+follows confirmed group destinations rather than language names. Direct and grouped histories share
+grammatical descriptions through `historyChoice`. The lookup hook distinguishes cache refresh from
+explicit research; both use the same cache-only navigation fetch. Research destinations are keyed by
+language and word. Japanese reading matching remains in group construction, not the request loop.
+All choices are real links; arrow keys and Home/End move focus, and Enter follows a link.
 Same-word selection uses the native History API to retain active streams while updating the URL.
 Each language defaults to its first listed meaning. Missing or invalid grouped histories remain
 unavailable rather than falling back to another reading. Successful and failed language tabs are

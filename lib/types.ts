@@ -25,7 +25,7 @@ export type LookupSupport = 'verified' | 'linked' | 'unverified'
 export interface LookupGroup {
   reading: string
   members: (ScriptTarget & { lookupSupport: LookupSupport })[]
-  choices: (ScriptTarget & { historyId?: string; label: string })[]
+  choices: (ScriptTarget & { historyId?: string; label: string; details?: string })[]
   languages: ScriptTarget[]
 }
 

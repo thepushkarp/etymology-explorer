@@ -12,6 +12,8 @@ import { LANGUAGES, isLanguageCode, wordPagePath, type LanguageCode } from '@/li
 import { historyEntry } from '@/lib/resultHistories'
 import { entryPagePath, parseEntrySelection } from '@/lib/entrySelection'
 import { getLookupGroup } from '@/lib/lookupGroupCache'
+import { lookupGroupForWord } from '@/lib/lookupGroups'
+import { entryNavigation } from '@/lib/entryNavigation'
 import { SITE_SHORT_NAME } from '@/lib/site'
 import type { EtymologyResult } from '@/lib/types'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
@@ -150,23 +152,20 @@ export default async function WordPage({ params, searchParams }: WordPageProps) 
     else if (value) for (const item of value) query.append(key, item)
   }
   const selection = parseEntrySelection(query)
-  const candidateGroup = await getLookupGroup(
-    selection.lookup ?? word,
-    selection.lookup ? undefined : cached?.entry
+  const lookupGroup = lookupGroupForWord(
+    word,
+    await getLookupGroup(selection.lookup ?? word, selection.lookup ? undefined : cached?.entry)
   )
-  const lookupGroup =
-    candidateGroup &&
-    [...candidateGroup.members, ...candidateGroup.languages].some((target) => target.word === word)
-      ? candidateGroup
-      : undefined
-  const first = lookupGroup?.choices.find((choice) => choice.language === selectedLanguage)
-  if (
-    first &&
-    first.word !== word &&
-    !lookupGroup?.choices.some(
-      (choice) => choice.word === word && choice.language === selectedLanguage
-    )
-  ) {
+  const first = selectedLanguage
+    ? entryNavigation({
+        word,
+        language: selectedLanguage,
+        entry: cached?.entry,
+        group: lookupGroup,
+        selection,
+      }).defaultTarget
+    : undefined
+  if (first) {
     redirect(
       entryPagePath(first.word, first.language, {
         lookup: lookupGroup?.reading,

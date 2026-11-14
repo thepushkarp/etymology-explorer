@@ -1,5 +1,16 @@
 import { canTraceLookup, compareLookupSupport } from './lookupEvidence'
+import { lexemeKey } from './languages'
 import type { ApiResponse, LookupGroup, WordEntry } from './types'
+
+/** Cache-only navigation refresh, shared by passive refreshes and explicit research. */
+export async function fetchLookupGroup(word: string, signal: AbortSignal) {
+  const response = await fetch(`/api/lookup-group?word=${encodeURIComponent(word)}`, { signal })
+  if (!response.ok)
+    throw new Error(`Lookup navigation for “${word}” returned HTTP ${response.status}`)
+  const data: { group: LookupGroup | null } = await response.json()
+  signal.throwIfAborted()
+  return data.group ?? undefined
+}
 
 /** Run only for an explicit search. Each distinct destination retains its normal
  * server budget, cache and lock. Source-linked candidates qualify regardless of count.
@@ -10,15 +21,12 @@ export async function traceLookupAlternatives(
   signal: AbortSignal,
   publish: (group: LookupGroup | undefined) => void
 ): Promise<string | undefined> {
-  const seen = new Set([entry.word])
+  const seen = new Set(entry.languages.map((language) => lexemeKey(language, entry.word)))
   let failure: string | undefined
   async function readGroup() {
-    const response = await fetch(`/api/lookup-group?word=${encodeURIComponent(word)}`, { signal })
-    if (!response.ok) throw new Error(`Lookup navigation returned HTTP ${response.status}`)
-    const data: { group: LookupGroup | null } = await response.json()
-    signal.throwIfAborted()
-    publish(data.group ?? undefined)
-    return data.group
+    const group = await fetchLookupGroup(word, signal)
+    publish(group)
+    return group
   }
   let group = await readGroup()
   if (!group) return
@@ -29,18 +37,19 @@ export async function traceLookupAlternatives(
       .sort((a, b) => compareLookupSupport(a.lookupSupport, b.lookupSupport))
       .find(
         (candidate) =>
-          candidate.language === 'ja' &&
-          !seen.has(candidate.word) &&
-          !group?.choices.some((choice) => choice.word === candidate.word)
+          !seen.has(lexemeKey(candidate.language, candidate.word)) &&
+          !group?.choices.some(
+            (choice) => choice.word === candidate.word && choice.language === candidate.language
+          )
       )
     if (!target) break
-    seen.add(target.word)
+    seen.add(lexemeKey(target.language, target.word))
     const params = new URLSearchParams({ word: target.word, language: target.language })
     try {
       const response = await fetch(`/api/etymology?${params}`, { signal, cache: 'no-store' })
       const payload: ApiResponse<WordEntry> = await response.json()
       signal.throwIfAborted()
-      if (!response.ok || !payload.success || !payload.data?.entries.ja) {
+      if (!response.ok || !payload.success || !payload.data?.entries[target.language]) {
         // Confirmed absence stays hidden. Outages and limits remain retryable,
         // and global/rate limits stop the batch instead of starting more work.
         if (response.status !== 404)

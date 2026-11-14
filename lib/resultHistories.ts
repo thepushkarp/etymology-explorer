@@ -4,9 +4,7 @@ import type { EtymologyEntry, EtymologyResult, LexicalHistory } from './types'
 export interface HistoryChoice {
   id: string
   label: string
-  entryKind: 'lemma' | 'form' | 'unresolved'
-  formOf?: { word: string; language: string }
-  partsOfSpeech: string[]
+  details: string
 }
 
 /**
@@ -66,11 +64,17 @@ function sourcesForHistory(result: EtymologyResult, history: LexicalHistory) {
 }
 
 export function historyChoices(result: EtymologyResult): HistoryChoice[] {
-  return result.histories.map((history) => ({
+  return result.histories.map(historyChoice)
+}
+
+/** Direct and cross-spelling histories share the same grammatical description. */
+export function historyChoice(history: LexicalHistory): HistoryChoice {
+  return {
     id: history.id,
     label: history.label,
-    entryKind: history.entryKind,
-    formOf: history.formOf,
-    partsOfSpeech: Array.from(new Set((history.partsOfSpeech ?? []).map((part) => part.pos))),
-  }))
+    details: history.formOf
+      ? `form of ${history.formOf.word}`
+      : [...new Set((history.partsOfSpeech ?? []).map((part) => part.pos))].join(' · ') ||
+        history.entryKind,
+  }
 }
