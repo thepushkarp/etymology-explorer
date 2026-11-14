@@ -64,16 +64,18 @@ describe('historyEntry', () => {
   test('scopes saved source links to the selected forms and explicit research owners', () => {
     const result = structuredClone(RESULT)
     result.histories[0].roots = [
-      { root: 'banki', origin: 'Old Norse', meaning: 'bank', relatedWords: [] },
+      { root: 'banki', origin: 'Old Norse', meaning: 'bank', relatedWords: ['embankment'] },
     ]
     result.sources.push(
       { name: 'wiktionary', word: 'banki', url: 'https://en.wiktionary.org/wiki/banki' },
       { name: 'etymonline', word: 'banca', historyIds: ['money'] },
+      { name: 'wiktionary', word: 'embankment' },
       { name: 'wiktionary', word: 'unrelated' }
     )
     expect(historyEntry(result, 'river').sources.map((source) => source.word)).toEqual([
       'bank',
       'banki',
+      'embankment',
     ])
     expect(historyEntry(result, 'money').sources.map((source) => source.word)).toEqual([
       'bank',

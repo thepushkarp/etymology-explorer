@@ -39,9 +39,12 @@ export function entryNavigation({
       )
   )
   const grouped = group?.choices.filter((choice) => choice.language === language) ?? []
-  // Members are constrained to the lookup's reading even when no matching
-  // history is saved. Return-language entries retain their independent histories.
-  const restrictToGroup = Boolean(group?.members.some((member) => member.language === language))
+  // Destinations stay constrained to the lookup's reading. An empty owner index
+  // retains its saved content and recovery actions until matching entries arrive.
+  const restrictToGroup = Boolean(
+    group?.members.some((member) => member.language === language) &&
+    (group.reading !== word || grouped.length)
+  )
   const lookup = group?.reading ?? selection.lookup
   const choices: EntryTarget[] =
     restrictToGroup || grouped.length

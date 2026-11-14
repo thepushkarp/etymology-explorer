@@ -28,6 +28,11 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Changed
 
+- Give Auto searches 64 source requests before additional-language allowances, within the shared 96-request ceiling.
+- Keep optional Japanese alternatives from delaying primary entry research and preserve empty reading pages with explicit recovery actions.
+- Reuse canonical saved entries in Japanese meaning groups and retain sources for displayed related words.
+- Keep model-suggested romanizations selectable without assuming uniqueness, and show retry guidance when lookup resolution is busy or unavailable.
+
 - Keep empty reading groups unavailable instead of displaying unrelated saved readings, while retaining direct-word access and return-language tabs.
 - Share language and meaning navigation rules across server, saved, and live views, with consistent grammatical labels and dictionary links.
 - Keep loaded meanings visible when an additional Japanese lookup times out, with a word-specific inline message and an explicit retry.

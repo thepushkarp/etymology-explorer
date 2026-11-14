@@ -47,12 +47,13 @@ async function scenario(name, run) {
     })
   })
   const page = await context.newPage()
+  const started = performance.now()
   page.setDefaultTimeout(12000)
   page.on('pageerror', (error) => errors.push(error.message))
   try {
     await run(page, context)
     assert.deepEqual(errors, [])
-    outcomes.push({ name, passed: true })
+    outcomes.push({ name, passed: true, elapsedMs: Math.round(performance.now() - started) })
   } catch (error) {
     outcomes.push({ name, passed: false, error: error.message })
     await page.screenshot({ path: `/tmp/etymex-journey-${outcomes.length}.png` })
@@ -84,6 +85,54 @@ async function send(page, event, index = -1) {
 }
 
 try {
+  await scenario(
+    'Empty kana index retains content and opens the first recovered meaning',
+    async (page, context) => {
+      let checked = false
+      const index = journeyEntry('かき', { ja: [['Saved kaki reading index', '/kaki/']] })
+      const destination = journeyEntry('柿', { ja: [['Persimmon recovery', '/kaki/']] })
+      destination.entries.ja.histories[0].transliteration = 'kaki'
+      const group = {
+        reading: 'かき',
+        members: [
+          { word: 'かき', language: 'ja', lookupSupport: 'linked' },
+          { word: '柿', language: 'ja', lookupSupport: 'linked' },
+        ],
+        languages: [],
+        choices: [],
+      }
+      await context.route('**/api/lookup-group?**', (route) => route.fulfill({ json: { group } }))
+      await context.route('**/api/etymology?**', async (route) => {
+        assert.equal(new URL(route.request().url()).searchParams.get('word'), '柿')
+        checked = true
+        group.members[1].lookupSupport = 'verified'
+        group.choices.push({
+          word: '柿',
+          language: 'ja',
+          label: '柿 — Persimmon recovery',
+          historyId: destination.entries.ja.primaryHistoryId,
+        })
+        group.languages.push({ word: '柿', language: 'ja' })
+        // Persist through the local fixture backend, just as the real route does.
+        await fetch('http://127.0.0.1:4198', {
+          method: 'POST',
+          body: JSON.stringify(['set', 'entry:v1:柿', JSON.stringify(destination)]),
+        })
+        await route.fulfill({ json: { success: true, data: destination } })
+      })
+      await page.goto(`${base}/word/ja/${encodeURIComponent(index.word)}`)
+      await page.getByText('Saved kaki reading index (journey fixture).', { exact: true }).waitFor()
+      await page.getByRole('button', { name: 'Retrace', exact: true }).waitFor()
+      assert.equal(checked, false)
+      assert.equal(await page.evaluate(() => window.__streams.length), 0)
+      await page.getByRole('button', { name: 'Check related entries', exact: true }).click()
+      await page.waitForURL(/%E6%9F%BF/)
+      await page.getByText('Persimmon recovery (journey fixture).', { exact: true }).waitFor()
+      assert.equal(checked, true)
+      await auto(page)
+    }
+  )
+
   await scenario(
     'All cached matching readings survive beyond four across selection and reload',
     async (page) => {

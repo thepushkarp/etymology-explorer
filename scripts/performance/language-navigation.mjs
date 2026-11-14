@@ -47,6 +47,32 @@ try {
     const page = await context.newPage()
     await page.setViewportSize({ width: multiple ? 390 : 1280, height: 900 })
     const word = multiple ? 'scriptchoicefixture' : 'scriptlinkfixture'
+    // Language tabs expose saved matching histories, not unchecked spelling offers.
+    await page.route('**/api/lookup-group?**', (route) =>
+      route.fulfill({
+        json: {
+          group: {
+            reading: word,
+            members: (multiple ? ['白', '城'] : ['白']).map((word) => ({
+              word,
+              language: 'ja',
+              lookupSupport: 'verified',
+            })),
+            languages: [
+              { word, language: 'en' },
+              { word, language: 'fr' },
+              { word: '白', language: 'ja' },
+            ],
+            choices: (multiple ? ['白', '城'] : ['白']).map((word) => ({
+              word,
+              language: 'ja',
+              historyId: 'history:fixture',
+              label: word,
+            })),
+          },
+        },
+      })
+    )
     await page.goto(`${base}/word/${word}`)
     assert.equal(await page.evaluate(() => window.__streams.length), 0)
     await page.getByRole('button', { name: 'Trace its origins', exact: true }).click()
@@ -127,24 +153,24 @@ try {
       await japanese.evaluate((el) => getComputedStyle(el).fontFamily),
       await english.evaluate((el) => getComputedStyle(el).fontFamily)
     )
-    assert.equal(
-      await japanese.getAttribute('href'),
-      `/word/ja/${encodeURIComponent('白')}${multiple ? `?lookup=${word}` : ''}`
-    )
+    const destination = new URL(await japanese.getAttribute('href'), base)
+    assert.equal(destination.pathname, `/word/ja/${encodeURIComponent('白')}`)
+    assert.equal(destination.searchParams.get('lookup'), word)
+    assert.equal(destination.searchParams.get('history'), 'history:fixture')
     await nav.getByRole('link', { name: 'French', exact: true }).click()
-    await page.waitForURL(new RegExp(`/word/fr/${word}$`))
+    await page.waitForURL((url) => url.pathname === `/word/fr/${word}`)
     await page.getByText('The French fixture.', { exact: true }).waitFor()
     await expectPreference(page, 'Auto')
     await page.goBack()
-    await page.waitForURL(new RegExp(`/word/${word}$`))
+    await page.waitForURL((url) => url.pathname === `/word/${word}`)
     await page.getByText('A language navigation fixture.', { exact: true }).waitFor()
     await page.goForward()
-    await page.waitForURL(new RegExp(`/word/fr/${word}$`))
+    await page.waitForURL((url) => url.pathname === `/word/fr/${word}`)
     await page.getByText('The French fixture.', { exact: true }).waitFor()
     await expectPreference(page, 'Auto')
     await choosePreference(page, 'Japanese')
     await nav.getByRole('link', { name: 'English', exact: true }).click()
-    await page.waitForURL(new RegExp(`/word/en/${word}$`))
+    await page.waitForURL((url) => url.pathname === `/word/en/${word}`)
     await expectPreference(page, 'Japanese')
     await japanese.focus()
     assert.equal(await page.evaluate(() => window.__streams.length), 1)

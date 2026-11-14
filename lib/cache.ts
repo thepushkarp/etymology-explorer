@@ -199,7 +199,7 @@ export async function getCachedSpellingEntry(
     )
     if (
       !raw ||
-      raw.revision !== 1 ||
+      ![1, 2].includes(raw.revision as number) ||
       typeof raw.word !== 'string' ||
       !Array.isArray(raw.proofs) ||
       raw.proofs.length > MAX_SPELLING_REDIRECTS ||
@@ -208,6 +208,9 @@ export async function getCachedSpellingEntry(
       return null
     const chain = proofChain(normalized, raw.word, raw.proofs, language)
     if (!chain) return null
+    // Older romanization pointers did not distinguish model-only discovery
+    // from source-defined uniqueness. Durable entry contents remain readable.
+    if (raw.revision === 1 && chain.some((proof) => proof.kind === 'romanization')) return null
     if (!hint) {
       const original = await getCachedEntry(normalized)
       if (original?.entry.languages.some((code) => code !== language)) return null
@@ -250,7 +253,7 @@ export async function publishSpellingAliases(
     try {
       await redis.set(
         `${SPELLING_ALIAS_PREFIX}${lexemeKey(language, word)}`,
-        { word: entry.word, revision: 1, proofs: chain },
+        { word: entry.word, revision: 2, proofs: chain },
         { ex: ttl }
       )
       published.push(word)

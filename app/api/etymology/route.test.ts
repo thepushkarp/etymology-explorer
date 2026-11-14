@@ -5,6 +5,8 @@ import { CONFIG } from '@/lib/config'
 import type { LanguageCode } from '@/lib/languages'
 import type { EtymologyResult, ScriptTarget, WordEntry } from '@/lib/types'
 import { etymologyResult } from '@/lib/testSupport/etymologyResult'
+import { LookupProposalUnavailable } from '@/lib/lookupFallback'
+import type { SourceFetchBudget } from '@/lib/sourceFetchBudget'
 
 // Module mocks stay in a child process so this suite cannot replace cache,
 // research, or accounting implementations for unrelated tests.
@@ -29,6 +31,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
   let identityTarget: string | undefined
   let identityIncomplete = false
   let lookupResult: import('@/lib/lookupResolution').ResolvedLookup = {}
+  let lookupError: Error | undefined
   let aliasHit: { entry: WordEntry; stale: boolean } | null = null
   let resultWord = 'chat'
   let exclusiveLock = false
@@ -64,6 +67,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     failureMetadata: undefined as unknown,
     published: 0,
     identity: 0,
+    budgets: [] as number[],
   }
   const usage = { inputTokens: 10, outputTokens: 5 }
   const result = (language: LanguageCode): EtymologyResult =>
@@ -122,7 +126,12 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
       if (!saved) negatives.set(hint, offers?.length ? { otherScripts: offers } : {})
     },
   }))
-  mock.module('@/lib/lookupResolution', () => ({ resolveLookup: async () => lookupResult }))
+  mock.module('@/lib/lookupResolution', () => ({
+    resolveLookup: async () => {
+      if (lookupError) throw lookupError
+      return lookupResult
+    },
+  }))
   mock.module('@/lib/entryIdentity', () => ({
     resolveEntryIdentity: async (word: string) => {
       calls.identity++
@@ -189,9 +198,10 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
   mock.module('@/lib/research', () => ({
     conductAgenticResearch: async (
       _word: string,
-      options: { language: LanguageCode; signal: AbortSignal }
+      options: { language: LanguageCode; signal: AbortSignal; budget: SourceFetchBudget }
     ) => {
       calls.research++
+      calls.budgets.push(options.budget.maximum)
       calls.researchLanguages.push(options.language)
       options.signal.throwIfAborted()
       if (rootError) throw Object.assign(new Error('Root lookup failed'), { usage })
@@ -230,6 +240,8 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     identityTarget = undefined
     identityIncomplete = false
     lookupResult = {}
+    lookupError = undefined
+    calls.budgets = []
     aliasHit = null
     resultWord = 'chat'
     exclusiveLock = held = false
@@ -264,6 +276,54 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     calls.failureMetadata = undefined
     negatives.clear()
   })
+
+  test.each([
+    ['', ['en'], 64],
+    ['', ['en', 'fr'], 80],
+    ['', ['en', 'fr', 'it'], 96],
+    ['&language=en', ['en'], 32],
+    ['&language=en', ['en', 'fr'], 48],
+  ] as const)(
+    'source allowance respects original search mode %s and languages %j',
+    async (query, resolved, expected) => {
+      languages = [...resolved]
+      expect((await get(query)).status).toBe(200)
+      expect(calls.budgets).toEqual(resolved.map(() => expected))
+    }
+  )
+
+  test('optional alternatives do not mark Auto incomplete, but hinted resolution failures do', async () => {
+    languages = ['en']
+    lookupResult = {
+      originalTargets: [{ word: 'chat', language: 'en' }],
+      resolution: {
+        originalInput: 'chat',
+        language: 'ja',
+        candidates: [],
+        incomplete: true,
+      },
+    }
+    expect((await (await get()).json()).data.incomplete).toBeUndefined()
+    saved = null
+    languages = ['ja']
+    expect((await (await get('&language=ja')).json()).data.incomplete).toBe(true)
+  })
+
+  test.each([429, 503] as const)(
+    'proposal contention/outage returns retry guidance with SSE parity: %i',
+    async (status) => {
+      lookupError = new LookupProposalUnavailable(status)
+      const response = await get()
+      expect(response.status).toBe(status)
+      expect(response.headers.get('retry-after')).toBe('5')
+      const payload = await response.json()
+      const stream = await (await get('&stream=true')).text()
+      expect(stream).toContain(payload.error)
+      expect(stream).toContain(payload.errorType)
+      expect(calls.synthesis).toBe(0)
+      expect(calls.negative.some((call) => (call as string[])[0] === 'write')).toBe(false)
+    }
+  )
 
   test('form resolution has JSON/SSE parity, shares the lemma lock and never stores the conjugation as a spelling', async () => {
     resultWord = 'たたかう'

@@ -44,6 +44,7 @@ function sourcesForHistory(result: EtymologyResult, history: LexicalHistory) {
       history.formOf?.word,
       graph.mergePoint?.form,
       ...history.roots.map((root) => root.root),
+      ...history.roots.flatMap((root) => root.relatedWords),
       ...stages.map((stage) => stage.form),
     ]
       .filter((form): form is string => Boolean(form))

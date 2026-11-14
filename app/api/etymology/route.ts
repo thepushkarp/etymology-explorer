@@ -27,6 +27,7 @@ import {
 } from '@/lib/cache'
 import { resolveEntryIdentity } from '@/lib/entryIdentity'
 import { resolveLookup } from '@/lib/lookupResolution'
+import { LookupProposalUnavailable } from '@/lib/lookupFallback'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { getCostMode, recordSpend } from '@/lib/costGuard'
 import {
@@ -141,6 +142,8 @@ export async function GET(request: NextRequest) {
     const rawHint = request.nextUrl.searchParams.get('language')
     let hint = rawHint === null ? undefined : parseLanguageCode(rawHint)
     if (hint === null) return respond.error('Unsupported language', { status: 400 })
+    // Resolution can change the hint; the user's original search mode owns the budget.
+    const baseFetches = hint ? CONFIG.maxTotalFetches : CONFIG.maxAutoFetches
     if (!word) return respond.error('Word is required', { status: 400 })
     const requestedWord = canonicalizeWord(word)
     let normalizedWord = requestedWord
@@ -323,7 +326,11 @@ export async function GET(request: NextRequest) {
           alias ? undefined : oldEntry
         )
       : initialIdentity
-    resolvedIdentity.incomplete ||= lookupResolution?.incomplete || initialIdentity.incomplete
+    resolvedIdentity.incomplete ||=
+      (!lookup.preserveExactEntry &&
+        !(rawHint === null && lookup.originalTargets?.length) &&
+        lookupResolution?.incomplete) ||
+      initialIdentity.incomplete
     if (selectedLookup) {
       const targetWord = resolvedIdentity.word
       resolvedIdentity.language = selectedLookup.language
@@ -464,12 +471,11 @@ export async function GET(request: NextRequest) {
         const languages = selectedLanguages.filter((language) => !failureCooldown(latest, language))
         if (!languages.length && latest && selectedLanguages.length)
           return { kind: 'result', result: latest }
-        // Resolution shares the ceiling: 32 attempts plus 16 per extra language.
+        // Resolution and primary research share the original search mode's ceiling.
         budget.tighten(
           Math.min(
             CONFIG.maxEntryFetches,
-            CONFIG.maxTotalFetches +
-              CONFIG.maxFetchesPerExtraLanguage * Math.max(0, languages.length - 1)
+            baseFetches + CONFIG.maxFetchesPerExtraLanguage * Math.max(0, languages.length - 1)
           )
         )
         emit?.({
@@ -810,6 +816,12 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     if (request.signal.aborted) return new Response(null, { status: 499 })
+    if (error instanceof LookupProposalUnavailable)
+      return respond.error(error.message, {
+        status: error.status,
+        errorType: error.status === 429 ? 'rate_limit' : 'network',
+        unaryHeaders: { 'Retry-After': '5' },
+      })
     console.error('Etymology API error:', safeError(error))
     await incrCounter('error')
     const classified = classifyRouteError(error)

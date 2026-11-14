@@ -61,7 +61,18 @@ const kouEntries = kouForms.map((word) => {
   return entry
 })
 
+const kakiIndex = journeyEntry('かき', { ja: [['Saved kaki reading index', '/kaki/']] })
+Object.assign(kakiIndex.entries.ja.histories[0], {
+  entryKind: 'unresolved',
+  transliteration: 'kaki',
+  counterparts: [
+    { word: '柿', language: 'ja' },
+    { word: '牡蠣', language: 'ja' },
+  ],
+})
+
 export const journeyEntries = [
+  kakiIndex,
   kouIndex,
   ...kouEntries,
   englishMamushi,

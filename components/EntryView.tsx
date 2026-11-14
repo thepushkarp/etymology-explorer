@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { WordLink } from '@/components/WordLink'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { EntryHeader } from '@/components/etymology-card/EntryHeader'
 import { EntryNavigation } from '@/components/EntryNavigation'
 import { entryNavigation } from '@/lib/entryNavigation'
-import type { EntrySelection } from '@/lib/entrySelection'
+import { entryPagePath, type EntrySelection } from '@/lib/entrySelection'
 import { useLookupGroup } from '@/lib/hooks/useLookupGroup'
 import { useEntrySelection } from '@/lib/hooks/useEntrySelection'
 import { ScriptLinks } from '@/components/ScriptLinks'
@@ -99,6 +100,11 @@ export function EntryView({
           </button>
         </p>
       )}
+      {group && !group.choices.length && !related.loading && !related.error && (
+        <button type="button" className="link mt-3 text-sm text-muted" onClick={related.retry}>
+          Check related entries
+        </button>
+      )}
     </>
   )
   const recovery = failure && (
@@ -115,9 +121,43 @@ export function EntryView({
       }}
     />
   )
+  const actions = (
+    <div className="flex items-center gap-4">
+      {stale && !progress.result && (
+        <button
+          type="button"
+          className="link text-sm text-muted"
+          disabled={progress.status === 'loading'}
+          onClick={() => {
+            setRetryLanguage(undefined)
+            search(entry.word, selected, { refresh: true })
+          }}
+        >
+          {progress.status === 'loading' ? 'Retracing…' : 'Retrace'}
+        </button>
+      )}
+      <ShareButton />
+    </div>
+  )
+  // Finish the explicit alternative batch before navigating, so unmounting
+  // this page cannot cancel the remaining source-linked destinations.
+  if (navigation.defaultTarget && !related.loading && progress.status !== 'loading') {
+    const target = navigation.defaultTarget
+    return (
+      <OpenDefaultEntry href={entryPagePath(target.word, target.language, target)}>
+        <EntryHeader
+          result={toPartialResult(displayed.word, {}, selected)}
+          subheader={tabs}
+          actions={actions}
+          pending
+        />
+      </OpenDefaultEntry>
+    )
+  }
   if (!result || navigation.unresolved) {
     return (
       <EntryHeader
+        actions={actions}
         result={toPartialResult(displayed.word, {}, selected)}
         subheader={
           <>
@@ -191,27 +231,18 @@ export function EntryView({
           {showProgress && <TraceStatus progress={progress} language={selected} />}
         </>
       }
-      actions={
-        <div className="flex items-center gap-4">
-          {stale && !progress.result && (
-            <button
-              type="button"
-              className="link text-sm text-muted"
-              disabled={progress.status === 'loading'}
-              onClick={() => {
-                setRetryLanguage(undefined)
-                search(entry.word, selected, { refresh: true })
-              }}
-            >
-              {progress.status === 'loading' ? 'Retracing…' : 'Retrace'}
-            </button>
-          )}
-          <ShareButton />
-        </div>
-      }
+      actions={actions}
       status={progress.status === 'error' && !failure ? progress.error?.message : undefined}
     />
   )
+}
+
+function OpenDefaultEntry({ href, children }: { href: string; children: ReactNode }) {
+  const router = useRouter()
+  useEffect(() => {
+    router.replace(href, { scroll: false })
+  }, [router, href])
+  return children
 }
 
 function FailedLanguage({

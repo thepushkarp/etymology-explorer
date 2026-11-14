@@ -33,7 +33,10 @@ export async function traceLookupAlternatives(
   while (group) {
     signal.throwIfAborted()
     const target = [...group.members]
-      .filter((candidate) => canTraceLookup(candidate.lookupSupport))
+      .filter(
+        (candidate) =>
+          candidate.lookupSupport !== 'verified' && canTraceLookup(candidate.lookupSupport)
+      )
       .sort((a, b) => compareLookupSupport(a.lookupSupport, b.lookupSupport))
       .find(
         (candidate) =>

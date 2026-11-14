@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { EntryView } from './EntryView'
 import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 import type { WordEntry } from '@/lib/types'
+import { assembleLookupGroup, lookupGroupSeed } from '@/lib/lookupGroups'
 
 const entry: WordEntry = {
   word: 'sale',
@@ -21,6 +22,31 @@ const entry: WordEntry = {
 }
 
 describe('EntryView merged entries', () => {
+  test('an empty kana index keeps saved content, recovery and direct dictionary links', () => {
+    const result = etymologyResult({
+      word: 'かき',
+      language: 'ja',
+      definition: 'Saved reading index.',
+    })
+    Object.assign(result.histories[0], {
+      entryKind: 'unresolved',
+      transliteration: 'kaki',
+      counterparts: [
+        { word: '柿', language: 'ja' },
+        { word: '牡蠣', language: 'ja' },
+      ],
+    })
+    const saved: WordEntry = { ...entry, word: 'かき', languages: ['ja'], entries: { ja: result } }
+    const group = assembleLookupGroup(lookupGroupSeed(saved)!, [saved])
+    const html = renderToStaticMarkup(
+      <EntryView entry={saved} language="ja" stale lookupGroup={group} />
+    )
+    expect(html).toContain('Saved reading index.')
+    expect(html).toContain('Retrace</button>')
+    expect(html).toContain('Check related entries')
+    expect(html).toContain(`/word/ja/${encodeURIComponent('柿')}`)
+    expect(html).not.toContain('This reading is not available')
+  })
   test('an empty reading group renders unavailable instead of another reading’s content', () => {
     const saved: WordEntry = {
       ...entry,

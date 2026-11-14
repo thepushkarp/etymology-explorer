@@ -66,7 +66,11 @@ const command = ([name, ...args]) => {
   name = name.toLowerCase()
   if (name === 'get') {
     stats.get++
-    return { result: records.has(args[0]) ? JSON.stringify(records.get(args[0])) : null }
+    const value = records.get(args[0])
+    return {
+      result:
+        value === undefined ? null : typeof value === 'string' ? value : JSON.stringify(value),
+    }
   }
   if (name === 'scan') {
     stats.scan++

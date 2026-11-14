@@ -1,11 +1,17 @@
-import { afterEach, expect, spyOn, test } from 'bun:test'
+import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test'
 import manifest from '../data/jmdict/manifest.json'
 import { fetchJmdict, selectJmdictEntries, type JmdictEntry } from './jmdict'
 import { SourceFetchBudget } from './sourceFetchBudget'
 
 const originalFetch = globalThis.fetch
+let restoreClock: () => void
+beforeEach(() => {
+  const clock = spyOn(Date, 'now').mockReturnValue(Date.parse(manifest.date))
+  restoreClock = () => clock.mockRestore()
+})
 afterEach(() => {
   globalThis.fetch = originalFetch
+  restoreClock()
 })
 
 test('official index preserves independent exact homographs without HTTP or Redis', async () => {

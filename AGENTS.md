@@ -23,7 +23,7 @@ Japanese uses English Wiktionary as its history primary and native Japanese Wikt
 
 Japanese strata (`wago`, `kango`, `gairaigo`, `wasei-eigo`, `wasei-kango`, `hybrid`) require affirmative scoped evidence. 電話 is Japanese wasei-kango compounding of 電 and 話, not whole-word Middle Chinese borrowing. Preserve the disputed coinage accounts of サラリーマン and its source-attested Japanese サラリー + マン components; do not invent English salary/man branches. コンセント clips a longer Japanese coinage with explicitly attested English concentric + plug components. Entry prose remains English.
 
-Every application source HTTP attempt shares one entry budget: 32 attempts for the first language plus 16 for each extra resolved language, capped at 96. Language resolution is limited to the first 32 attempts and its attempts count toward the final ceiling. Primary fetches, fallback attempts, Wikidata detail requests, enrichment, and Exa API calls all count. Exa's internal crawling is outside that application counter. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
+Every application source HTTP attempt shares one entry budget: 64 attempts for the first language in Auto, or 32 with an explicit hint, plus 16 for each extra resolved language, capped at 96. Language resolution is limited to the first 32 attempts and its attempts count toward the final ceiling. Primary fetches, fallback attempts, Wikidata detail requests, enrichment, and Exa API calls all count. Exa's internal crawling is outside that application counter. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
 
 **Live**: https://etymex.com
 
@@ -120,7 +120,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - USD monthly limit: $10/month (conservative fallback-chain pricing in `costTracking` when OpenRouter omits provider-reported cost)
   - Timeouts: source fetches 5s, synthesis LLM 90s, root-extraction LLM 15s, TTS 15s
   - Word/phrase validation: maximum 120 canonical characters; Unicode letters/marks, spaces, apostrophes, and hyphens
-  - Source HTTP budget: min(96, 32 + 16 × (resolved languages − 1)) actual attempts including resolution, primary, fallback, and enrichment requests; no source-text clipping
+  - Source HTTP budget: min(96, base + 16 × (resolved languages − 1)), where base is 64 in Auto and 32 with an explicit hint. Counts actual attempts including resolution, primary, fallback, and enrichment requests; no source-text clipping
   - Rate limits, singleflight settings, feature flags
 
 - **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENROUTER_API_KEY, ADMIN_SECRET, KV_REST_API_URL, KV_REST_API_TOKEN, Exa, and ElevenLabs config.
@@ -239,7 +239,7 @@ tab identifies a usable entry, not a claim of shared etymological origin.
 
 Language rows remain visible for single-language entries. `lib/lookupGroupCache.ts` builds navigation
 groups from all saved kana readings, counterparts, and explicit romanization offers. Cache reads run
-four at a time without a candidate-count cutoff. Single-form kana entries can offer reverse language tabs only when a
+four at a time without a candidate-count cutoff. Valid language-qualified aliases resolve to canonical cached entries; original forms retain context membership while canonical histories are deduplicated. Single-form kana entries can offer reverse language tabs only when a
 cached romanized entry links back to that kana form. It performs no research or alias writes. Direct kanji searches stay
 focused; links chosen within a broader lookup carry `lookup` and `history` query parameters.
 `lib/entryNavigation.ts` supplies one language/meaning model for server redirects and saved/live
@@ -253,7 +253,7 @@ Same-word selection uses the native History API to retain active streams while u
 Each language defaults to its first listed meaning. Missing or invalid grouped histories remain
 unavailable rather than falling back to another reading. Successful and failed language tabs are
 retained together. Unresolved kana index histories with multiple counterparts and no ancestry are
-represented by their destinations. Grouped navigation retains only the requested reading; other
+represented by their destinations when matching histories are available. Empty indexes retain saved content, Retrace, and an explicit Check related entries action; completed research opens the first successful meaning. Grouped navigation retains only the requested reading; other
 readings belong to a direct kanji search. `EntryChoices` supplies shared geometry and headers reserve
 a pronunciation row. Server rendering supplies cache-only lookup context before hydration;
 `/api/lookup-group` refreshes that metadata after completed traces. Lookup support uses ordinal
@@ -285,8 +285,9 @@ the relationship; pipeline revision changes make that retrace available without 
 `lib/lookupResolution.ts` verifies rōmaji readings and grammatical forms before the canonical lock.
 WanaKana supplies candidate kana, never evidence. Dictionary candidates are checked within the
 shared resolution HTTP budget, with explicit source links prioritized over unverified proposals; incomplete, conflicting, or ambiguous results remain choices. Unique
-verified rōmaji uses a language-qualified `romanization` proof with reading evidence. Conjugations
+verified rōmaji from deterministic or explicit source discovery uses a language-qualified `romanization` proof with reading evidence. Conjugations
 open dictionary forms with separate JSON/SSE lookup metadata and never become spelling aliases.
+Optional destinations for preserved Latin and independent exact entries are deferred to their explicit-search alternative batch; they cannot exhaust primary research or mark it incomplete. Language discovery enriches optional redirect offers from cache only.
 An independently defined exact entry retains its own histories even when another sense is a
 grammatical form; verified form targets remain optional destinations. Conjugation tables split
 explicit line-separated alternatives and exclude numeric footnote annotations while preserving
@@ -297,7 +298,7 @@ start their lookup. Truncation always prevents automatic selection.
 The optional `lib/lookupFallback.ts` proposal call requires `APP_CHANNEL=beta` and
 `LOOKUP_FALLBACK_ENABLED=true`, with one 15-second, 768-token call, existing spend accounting,
 and a normalized input/language lock released before the canonical word lock. Production stays
-disabled pending live evaluation. No lookup proposals run from autocomplete or cache-only pages.
+disabled pending live evaluation. Model-only romanization discoveries remain selectable suggestions even when their reading is verified; a model cannot prove uniqueness. Busy proposal locks return retryable 429 responses, and unavailable proposal storage returns 503, with Retry-After guidance. No lookup proposals run from autocomplete or cache-only pages.
 
 ONCOJ is an Old Japanese historical provider backed by pinned lexical annotation XML. Rebuild
 `data/oncoj-index.json` with `python3 scripts/build-oncoj-index.py`. Retain complete matched
@@ -312,7 +313,7 @@ Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API cos
 
 - `maxRootsToExplore = 4` - Max unique attested ancestors/root morphemes per expansion; repeated ancestors retain all parent-history attachments while sharing source lookups.
 - `maxRelatedWordsPerRoot = 4` - Related terms retained per extraction pass; only main-word related terms are fetched through the shared lookup, after primary and scoped enrichment.
-- `maxTotalFetches = 32`, `maxFetchesPerExtraLanguage = 16`, `maxEntryFetches = 96` - One hard cap of min(96, 32 + 16 × (resolved languages − 1)) on actual source HTTP attempts per merged trace, enforced by `lib/sourceFetchBudget.ts` through `lib/fetchUtils.ts`. The same budget object is tightened after resolution, retaining its consumed attempts. Primary requests, fallbacks, detail requests, and enrichment share the ceiling; source-cache hits and LLM calls do not consume it.
+- `maxAutoFetches = 64`, `maxTotalFetches = 32`, `maxFetchesPerExtraLanguage = 16`, `maxEntryFetches = 96` - One hard cap of min(96, base + 16 × (resolved languages − 1)), on actual source HTTP attempts, with base 64 in Auto or 32 with an explicit hint per merged trace, enforced by `lib/sourceFetchBudget.ts` through `lib/fetchUtils.ts`. The same budget object is tightened after resolution, retaining its consumed attempts. Primary requests, fallbacks, detail requests, and enrichment share the ceiling; source-cache hits and LLM calls do not consume it.
 - Attested ancestor and English root lookups retry a transient Wiktionary HTTP/network failure once within the shared budget; 404, 429, and caller cancellation are not retried.
 - Source text is sanitized for prompt embedding and retained in full. Context overflow returns an explicit error instead of silently truncating evidence.
 - `sourceCacheTTL = 7d` - Raw dictionary and Wikipedia source cache

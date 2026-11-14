@@ -30,9 +30,10 @@ export const CONFIG = {
   maxRootsToExplore: 4,
   maxRelatedWordsPerRoot: 4,
   maxTotalFetches: 32,
+  maxAutoFetches: 64,
   maxFetchesPerExtraLanguage: 16,
   maxEntryFetches: 96,
-  pipelineRevision: 11,
+  pipelineRevision: 12,
   entryFreshDays: 90,
 
   // Exa's full-text search and recovery share their own paid-request allowance.

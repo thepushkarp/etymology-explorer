@@ -52,7 +52,11 @@ export function lookupGroupSeed(entry: WordEntry): LookupGroupSeed | undefined {
   }
 }
 
-export function assembleLookupGroup(seed: LookupGroupSeed, entries: WordEntry[]): LookupGroup {
+export function assembleLookupGroup(
+  seed: LookupGroupSeed,
+  entries: WordEntry[],
+  aliases: ReadonlyMap<string, string> = new Map()
+): LookupGroup {
   const byWord = new Map(entries.map((entry) => [entry.word, entry]))
   const languages: ScriptTarget[] = []
   // A transliteration proposes a cache read, but a saved source link must confirm
@@ -77,7 +81,8 @@ export function assembleLookupGroup(seed: LookupGroupSeed, entries: WordEntry[])
   }
   const choices: LookupGroup['choices'] = []
   for (const member of seed.members) {
-    const result = byWord.get(member.word)?.entries.ja
+    const word = aliases.get(member.word) ?? member.word
+    const result = byWord.get(word)?.entries.ja
     const histories =
       result?.histories.filter((history) => {
         // The kana index's redirect-list history is represented by its destinations.
@@ -94,21 +99,38 @@ export function assembleLookupGroup(seed: LookupGroupSeed, entries: WordEntry[])
         )
       }) ?? []
     if (histories.length) {
-      for (const history of histories)
+      for (const history of histories) {
+        if (choices.some((choice) => choice.word === word && choice.historyId === history.id))
+          continue
         choices.push({
           ...member,
+          word,
           historyId: history.id,
           reading: seed.reading,
-          label: `${member.word} — ${history.definition.split(/[;；]/)[0] || history.label}`,
+          label: `${word} — ${history.definition.split(/[;；]/)[0] || history.label}`,
           details: historyChoice(history).details,
         })
+      }
     }
   }
   if (choices.length && !languages.some((target) => target.language === 'ja'))
     languages.unshift({ word: choices[0].word, language: 'ja' })
-  const members: LookupGroup['members'] = seed.members.map((member) => ({
+  // Original forms remain members so existing shared lookup URLs keep working.
+  const members: LookupGroup['members'] = normalizeScriptTargets([
+    ...seed.members,
+    ...seed.members
+      .filter((member) => aliases.has(member.word))
+      .map((member) => ({
+        ...member,
+        word: aliases.get(member.word)!,
+      })),
+  ]).map((member) => ({
     ...member,
-    lookupSupport: choices.some((choice) => choice.word === member.word) ? 'verified' : 'linked',
+    lookupSupport: choices.some(
+      (choice) => choice.word === (aliases.get(member.word) ?? member.word)
+    )
+      ? 'verified'
+      : 'linked',
   }))
   members.sort((a, b) => compareLookupSupport(a.lookupSupport, b.lookupSupport))
   return { reading: seed.reading, members, choices, languages }

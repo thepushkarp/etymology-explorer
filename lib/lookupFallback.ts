@@ -24,6 +24,20 @@ const proposals = z
   .strict()
 export type LookupProposal = z.infer<typeof proposals>['candidates'][number]
 
+export class LookupProposalUnavailable extends Error {
+  constructor(
+    public status: 429 | 503,
+    options?: ErrorOptions
+  ) {
+    super(
+      status === 429
+        ? 'This lookup is already being resolved. Please try again shortly.'
+        : 'Lookup resolution is temporarily unavailable. Please try again shortly.',
+      options
+    )
+  }
+}
+
 /** Cache only proposals briefly: every consumer must independently verify their relationships. */
 export async function proposeLookup(
   word: string,
@@ -34,16 +48,30 @@ export async function proposeLookup(
   const redis = getRedis()
   if (!redis || (await getCostMode()) !== 'normal') return []
   const key = `lookup-proposal:v1:${language}:${canonicalizeWord(word)}`
-  const saved = proposals.safeParse(await redis.get(key))
+  const read = async () => {
+    try {
+      return proposals.safeParse(await redis.get(key))
+    } catch (cause) {
+      throw new LookupProposalUnavailable(503, { cause })
+    }
+  }
+  const save = async (value: z.infer<typeof proposals>) => {
+    try {
+      await redis.set(key, value, { ex: 60 })
+    } catch (cause) {
+      throw new LookupProposalUnavailable(503, { cause })
+    }
+  }
+  const saved = await read()
   if (saved.success) return saved.data.candidates
   const lockKey = `lock:${key}`
   const lock = await tryAcquireLock(lockKey)
   if (lock.status !== 'acquired')
-    throw new Error('Lookup resolution in progress or unavailable; please retry shortly')
+    throw new LookupProposalUnavailable(lock.status === 'busy' ? 429 : 503)
   let usage: LlmUsage | undefined
   try {
     signal?.throwIfAborted()
-    const late = proposals.safeParse(await redis.get(key))
+    const late = await read()
     if (late.success) return late.data.candidates
     const response = await createOpenRouterResponse(
       {
@@ -90,15 +118,16 @@ export async function proposeLookup(
     )
     usage = extractUsage(response)
     const parsed = proposals.parse(JSON.parse(extractOutputText(response)))
-    await redis.set(key, parsed, { ex: 60 })
+    await save(parsed)
     return parsed.candidates
   } catch (error) {
     if (!usage && error && typeof error === 'object' && 'usage' in error)
       usage = error.usage as LlmUsage
     signal?.throwIfAborted()
+    if (error instanceof LookupProposalUnavailable) throw error
     console.warn('[Lookup] Proposal unavailable:', safeError(error))
     // Empty, malformed and unverified outputs remain retryable, without another paid call in this minute.
-    await redis.set(key, { candidates: [] }, { ex: 60 })
+    await save({ candidates: [] })
     return []
   } finally {
     if (usage) await recordSpend(usage)

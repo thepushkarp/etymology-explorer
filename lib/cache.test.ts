@@ -101,9 +101,12 @@ describe('durable entries', () => {
     expect(await getCachedSpellingEntry('sayonara', 'en')).toBeNull()
     expect(await getCachedSpellingEntry('sayonara')).toBeNull()
     expect((await getCachedEntry('sayonara'))?.entry.entries.en?.word).toBe('sayonara')
+    values.set('entry-alias:v1:ja:sayonara', { word: 'さよなら', revision: 1, proofs: [proof] })
+    expect(await getCachedSpellingEntry('sayonara', 'ja')).toBeNull()
+    expect((await getCachedEntry('さよなら'))?.entry.word).toBe('さよなら')
     values.set('entry-alias:v1:ja:sayonara', {
       word: 'さよなら',
-      revision: 1,
+      revision: 2,
       proofs: [{ ...proof, readingEvidence: undefined }],
     })
     expect(await getCachedSpellingEntry('sayonara', 'ja')).toBeNull()

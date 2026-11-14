@@ -26,9 +26,13 @@ if (process.env.LOOKUP_TEST_WORKER !== '1') {
   const spend: LlmUsage[] = []
   let gate: Promise<void> | undefined
   let invalid = false
+  let redisError = false
   const usage = { inputTokens: 20, outputTokens: 10, costUSD: 0.001 }
   const redis = {
-    get: async (key: string) => values.get(key) ?? null,
+    get: async (key: string) => {
+      if (redisError) throw new Error('offline')
+      return values.get(key) ?? null
+    },
     set: async (key: string, value: unknown, options?: { nx?: boolean }) => {
       if (options?.nx && values.has(key)) return null
       values.set(key, value)
@@ -79,6 +83,7 @@ if (process.env.LOOKUP_TEST_WORKER !== '1') {
     budget = 'normal'
     gate = undefined
     invalid = false
+    redisError = false
   })
 
   test('concurrent normalized lookups make one paid call and release the lookup lock', async () => {
@@ -88,7 +93,7 @@ if (process.env.LOOKUP_TEST_WORKER !== '1') {
     })
     const first = proposeLookup('tatakae', 'ja')
     while (!calls) await new Promise((resolve) => setTimeout(resolve, 1))
-    await expect(proposeLookup('TATAKAE', 'ja')).rejects.toThrow('in progress')
+    await expect(proposeLookup('TATAKAE', 'ja')).rejects.toMatchObject({ status: 429 })
     finish()
     const result = await first
     expect(await proposeLookup('tatakae', 'ja')).toEqual(result)
@@ -124,6 +129,12 @@ if (process.env.LOOKUP_TEST_WORKER !== '1') {
     budget = 'normal'
     available = false
     expect(await proposeLookup('x', 'ja')).toEqual([])
+    expect(calls).toBe(0)
+  })
+
+  test('proposal cache outages are retryable and do not dispatch a paid call', async () => {
+    redisError = true
+    await expect(proposeLookup('tatakae', 'ja')).rejects.toMatchObject({ status: 503 })
     expect(calls).toBe(0)
   })
 }

@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, spyOn, test } from 'bun:test'
+import jmdictManifest from '../data/jmdict/manifest.json'
 import fixtures from './__fixtures__/japanese/wiktionary.json'
 import sayounara from './__fixtures__/japanese/sayounara.json'
 import { extractWiktionaryEntryGroups, extractWiktionaryVariants } from './wiktionaryEntryGroups'
@@ -317,7 +318,8 @@ test('ordinary Japanese histories retain unmatched attested stages without a par
 
 test('the disputed salaryman source retains its phrase account without adopting an unaligned wasei tag', async () => {
   const research = context('ja-salaryman')
-  const supplemental = await fetchJmdict('サラリーマン')
+  const clock = spyOn(Date, 'now').mockReturnValue(Date.parse(jmdictManifest.date))
+  const supplemental = await fetchJmdict('サラリーマン').finally(() => clock.mockRestore())
   research.mainWord.sources!.push(...supplemental)
   scopeEnglishHistories(research)
   const value = result(research, {

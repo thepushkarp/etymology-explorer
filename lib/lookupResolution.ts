@@ -177,6 +177,7 @@ async function resolveLookupLanguage(
   const readings = language === 'ja' ? japaneseReadings(word) : []
   const matchingForms = new Set([word, ...readings])
   const terminals = new Map<string, SourceData>()
+  const modelOnly = new Set<string>()
   const checked = new Set<string>()
   let preserveLatin = !hint && LATIN.test(word)
   let exact: SourceData | null = null
@@ -206,6 +207,20 @@ async function resolveLookupLanguage(
     console.warn('[Lookup] Exact source unavailable:', safeError(error))
     return { resolution: { ...resolution, incomplete: true } }
   }
+  const preserveExactEntry = !!exact?.lookup?.hasIndependentEntry
+  if (preserveLatin || preserveExactEntry) {
+    // Optional destinations have their own explicit-search research batch. They
+    // must not spend the original entry's primary-source budget or freshness.
+    if (exact && !exact.incomplete && !exact.lookup?.incomplete) {
+      resolution.sourceListed = exact.lookup?.targets.map((target) => ({
+        ...target,
+        relationship: target.relationship === 'form' ? 'form' : 'romanization',
+        sourceUrl: exact.url,
+        provenance: [provenance(exact, `${word} ${target.relationship} of ${target.word}`)],
+      }))
+    }
+    return { preserveExactEntry, originalTargets, resolution, verifiedCount: 0 }
+  }
   type Pending = {
     word: string
     relationship: LookupCandidate['relationship']
@@ -213,13 +228,15 @@ async function resolveLookupLanguage(
     depth: number
     discovered?: boolean
     listed?: ScriptTarget
+    model?: boolean
   }
   const queue: Pending[] = []
   const addLinks = (
     data: SourceData,
     relationship: LookupCandidate['relationship'],
     proofs: LookupCandidate['provenance'],
-    depth: number
+    depth: number,
+    model = false
   ) => {
     resolution.incomplete ||= data.lookup?.incomplete
     for (const target of data.lookup?.targets ?? []) {
@@ -231,6 +248,7 @@ async function resolveLookupLanguage(
           provenance(data, `${data.requestedWord} ${target.relationship} of ${target.word}`),
         ],
         depth,
+        model,
         ...(!data.incomplete && !data.lookup?.incomplete
           ? { listed: { ...target, sourceUrl: data.url } }
           : {}),
@@ -301,6 +319,10 @@ async function resolveLookupLanguage(
         )
         const form = data.lookup?.forms.find((form) => matchingForms.has(canonicalizeWord(form)))
         const linked = !!item.proof?.length
+        if (item.relationship === 'form' && !linked && !form) {
+          resolution.incomplete = true
+          continue
+        }
         const correction =
           item.relationship === 'correction' &&
           Math.min(...[target, ...declared].map((value) => levenshteinDistance(word, value))) <= 2
@@ -321,7 +343,7 @@ async function resolveLookupLanguage(
           ),
         ]
         if (data.lookup?.targets.length) {
-          addLinks(data, relationship, proofs, item.depth + 1)
+          addLinks(data, relationship, proofs, item.depth + 1, item.model)
           if (!data.lookup.hasIndependentEntry) continue
         }
         if (!data.entryGroups?.length) {
@@ -338,6 +360,7 @@ async function resolveLookupLanguage(
           provenance: proofs,
         }
         resolution.candidates.push(candidate)
+        if (item.model) modelOnly.add(target)
         terminals.set(target, data)
       } catch (error) {
         session.signal?.throwIfAborted()
@@ -347,7 +370,6 @@ async function resolveLookupLanguage(
     }
   }
   await drain()
-  const preserveExactEntry = !!exact?.lookup?.hasIndependentEntry
   if (
     !preserveExactEntry &&
     !resolution.candidates.length &&
@@ -376,7 +398,8 @@ async function resolveLookupLanguage(
     const proposed = await proposeLookup(word, language, session.signal)
     fallbackAttempted = CONFIG.features.lookupFallback
     // An unverified proposal is neither an absence nor proof of uniqueness.
-    for (const candidate of proposed) queue.push({ ...candidate, depth: 0, discovered: true })
+    for (const candidate of proposed)
+      queue.push({ ...candidate, depth: 0, discovered: true, model: true })
     await drain()
     if (CONFIG.features.lookupFallback && !resolution.candidates.length)
       resolution.incomplete = true
@@ -395,7 +418,12 @@ async function resolveLookupLanguage(
     resolution.candidates[0].relationship !== 'correction'
   ) {
     const target = resolution.candidates[0]
-    if (target.relationship === 'form' || terminals.get(target.word)?.spellingLemma)
+    // A target's reading verifies a possible match, never the exhaustiveness of
+    // a model's suggestions. A source-attested inflection is a separate relation.
+    if (
+      target.relationship === 'form' ||
+      (!modelOnly.has(target.word) && terminals.get(target.word)?.spellingLemma)
+    )
       resolution.selected = target
   }
   return {

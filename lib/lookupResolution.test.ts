@@ -215,7 +215,8 @@ test('independent exact histories survive a grammatical-form target, including t
   const exact = await resolveLookup('しろ', session, 'ja')
   expect(exact.resolution?.selected).toBeUndefined()
   expect(exact.preserveExactEntry).toBe(true)
-  expect(exact.resolution?.candidates.map(({ word }) => word)).toEqual(['する'])
+  expect(exact.resolution?.sourceListed?.map(({ word }) => word)).toEqual(['する'])
+  expect(exact.verifiedCount).toBe(0)
   const roman = await resolveLookup('shiro', session, 'ja')
   expect(roman.resolution?.selected).toBeUndefined()
   expect(roman.resolution?.candidates.map(({ word }) => word)).toEqual(['しろ', 'する'])
@@ -250,10 +251,33 @@ test('Auto preserves English sayonara while Japanese selection reuses the verifi
   restorers.push(() => toc.mockRestore())
   const automatic = await resolveLookup('sayonara', session)
   expect(automatic.resolution?.selected).toBeUndefined()
-  expect(automatic.resolution?.candidates[0].word).toBe('さよなら')
+  expect(automatic.resolution?.sourceListed?.[0].word).toBe('さよなら')
+  expect(automatic.verifiedCount).toBe(0)
   const japanese = await resolveLookup('sayonara', session, 'ja')
   expect(japanese.resolution?.selected?.word).toBe('さよなら')
   expect(japanese.originalTargets).toEqual([{ word: 'sayonara', language: 'en' }])
+})
+
+test('optional fanout preserves every source link without spending the primary HTTP budget', async () => {
+  const roman = source('kou')
+  roman.spellingLemma = false
+  roman.lookup!.hasIndependentEntry = false
+  roman.lookup!.targets = Array.from({ length: 40 }, (_, index) => ({
+    word: String.fromCodePoint(0x4e00 + index),
+    language: 'ja' as const,
+    relationship: 'romanization' as const,
+  }))
+  const session = setup({ kou: roman })
+  const toc = spyOn(cache, 'getCachedWiktionaryToc').mockResolvedValue({
+    headings: ['English', 'Japanese'],
+    nonemptyHeadings: ['English', 'Japanese'],
+  })
+  restorers.push(() => toc.mockRestore())
+  const result = await resolveLookup('kou', session)
+  expect(session.getBudget().attempts).toBe(0)
+  expect(result.resolution?.sourceListed).toHaveLength(40)
+  expect(result.resolution?.incomplete).toBeFalsy()
+  expect(result.resolution?.selected).toBeUndefined()
 })
 
 test('Auto retains Romance entries alongside ambiguous Japanese romanizations', async () => {
@@ -289,7 +313,8 @@ test('Auto retains Romance entries alongside ambiguous Japanese romanizations', 
     { word: 'ame', language: 'es' },
     { word: 'ame', language: 'pt' },
   ])
-  expect(result.resolution?.candidates.map(({ word }) => word)).toEqual(['雨', '飴'])
+  expect(result.resolution?.sourceListed?.map(({ word }) => word)).toEqual(['あめ'])
+  expect(result.verifiedCount).toBe(0)
   expect(result.resolution?.selected).toBeUndefined()
   expect(result.resolution?.incomplete).toBeFalsy()
 })
@@ -323,6 +348,20 @@ test('model proposals require reading or form evidence and cannot override known
   const good = await resolveLookup('たたかえ', setup({ たたかう: lemma }), 'ja')
   expect(good.resolution?.selected?.relationship).toBe('form')
   expect(proposal).toHaveBeenCalledTimes(2)
+})
+
+test('one model-proposed homophone is a choice, never proof of unique romanization', async () => {
+  const proposal = spyOn(fallback, 'proposeLookup').mockResolvedValue([
+    { word: '白', reading: 'shiro', relationship: 'romanization' },
+  ])
+  restorers.push(() => proposal.mockRestore())
+  const result = await resolveLookup('shiro', setup({ 白: source('白', 'shiro') }), 'ja')
+  expect(result.resolution?.candidates.map(({ word }) => word)).toEqual(['白'])
+  expect(result.resolution?.selected).toBeUndefined()
+  expect(result.terminal).toBeUndefined()
+  proposal.mockResolvedValue([{ word: '白', reading: 'shiro', relationship: 'form' }])
+  const falseForm = await resolveLookup('shiro', setup({ 白: source('白', 'shiro') }), 'ja')
+  expect(falseForm.resolution?.candidates).toEqual([])
 })
 
 test('conjugation parser excludes other-language tables and ordinary definition text', () => {
