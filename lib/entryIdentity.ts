@@ -46,61 +46,63 @@ export async function resolveEntryIdentity(
     return data
   }
 
-  return session.getBudget().runLimited(CONFIG.maxTotalFetches, async () => {
-    const seen = new Set<string>()
-    const hops: Omit<SpellingProof, 'terminal'>[] = []
-    let current = requestedWord
-    while (true) {
-      session.signal?.throwIfAborted()
-      if (seen.has(current)) return unchanged
-      seen.add(current)
-      let data: SourceData | null
-      try {
-        data = await source(current)
-      } catch (error) {
+  return session
+    .getBudget()
+    .runLimited(Math.max(0, CONFIG.maxTotalFetches - session.getBudget().attempts), async () => {
+      const seen = new Set<string>()
+      const hops: Omit<SpellingProof, 'terminal'>[] = []
+      let current = requestedWord
+      while (true) {
         session.signal?.throwIfAborted()
-        console.warn('[EntryIdentity] Source verification unavailable:', safeError(error))
-        return { ...unchanged, incomplete: true }
-      }
-      if (!data) return unchanged
-      const redirect = data.spellingRedirect
-      if (!redirect) {
-        if (!hops.length) return unchanged
-        if (!data.spellingLemma || !data.retrieval?.retrievedAt) return unchanged
-        const terminal = {
+        if (seen.has(current)) return unchanged
+        seen.add(current)
+        let data: SourceData | null
+        try {
+          data = await source(current)
+        } catch (error) {
+          session.signal?.throwIfAborted()
+          console.warn('[EntryIdentity] Source verification unavailable:', safeError(error))
+          return { ...unchanged, incomplete: true }
+        }
+        if (!data) return unchanged
+        const redirect = data.spellingRedirect
+        if (!redirect) {
+          if (!hops.length) return unchanged
+          if (!data.spellingLemma || !data.retrieval?.retrievedAt) return unchanged
+          const terminal = {
+            word: current,
+            sourceUrl: data.url,
+            revisionId: data.revisionId,
+            verifiedAt: data.retrieval.retrievedAt,
+          }
+          const proofs = hops.map((hop) => ({ ...hop, terminal }))
+          return {
+            word: current,
+            language: 'ja',
+            proofs,
+            spellings: proofs.map((_proof, index) => spellingMetadata(proofs.slice(index))),
+          }
+        }
+        if (hops.length >= MAX_SPELLING_REDIRECTS) return unchanged
+        const targetWord = canonicalizeWord(redirect.word)
+        if (
+          redirect.language !== 'ja' ||
+          !isValidWord(targetWord) ||
+          !candidateLanguages(targetWord).includes('ja')
+        )
+          return unchanged
+        const verifiedAt = data.retrieval?.retrievedAt
+        if (!verifiedAt || !Number.isFinite(Date.parse(verifiedAt))) return unchanged
+        hops.push({
           word: current,
+          targetWord,
+          language: 'ja',
+          kind: redirect.kind,
           sourceUrl: data.url,
           revisionId: data.revisionId,
-          verifiedAt: data.retrieval.retrievedAt,
-        }
-        const proofs = hops.map((hop) => ({ ...hop, terminal }))
-        return {
-          word: current,
-          language: 'ja',
-          proofs,
-          spellings: proofs.map((_proof, index) => spellingMetadata(proofs.slice(index))),
-        }
+          verifiedAt,
+        })
+        current = targetWord
       }
-      if (hops.length >= MAX_SPELLING_REDIRECTS) return unchanged
-      const targetWord = canonicalizeWord(redirect.word)
-      if (
-        redirect.language !== 'ja' ||
-        !isValidWord(targetWord) ||
-        !candidateLanguages(targetWord).includes('ja')
-      )
-        return unchanged
-      const verifiedAt = data.retrieval?.retrievedAt
-      if (!verifiedAt || !Number.isFinite(Date.parse(verifiedAt))) return unchanged
-      hops.push({
-        word: current,
-        targetWord,
-        language: 'ja',
-        kind: redirect.kind,
-        sourceUrl: data.url,
-        revisionId: data.revisionId,
-        verifiedAt,
-      })
-      current = targetWord
-    }
-  })
+    })
 }

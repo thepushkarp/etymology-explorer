@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { LanguageCode } from '@/lib/languages'
+import { PRONUNCIATION_REVISION } from '@/lib/pronunciation'
 
 type PlaybackState = 'idle' | 'loading' | 'playing' | 'error'
 
@@ -10,8 +11,8 @@ type PlaybackState = 'idle' | 'loading' | 'playing' | 'error'
  * streams it (playback starts before the download finishes) and the response
  * is HTTP-cached for a year, so repeat plays never refetch.
  */
-export function usePronunciation(word: string, language: LanguageCode = 'en') {
-  const src = `/api/pronunciation?word=${encodeURIComponent(word)}&language=${language}`
+export function usePronunciation(word: string, language: LanguageCode = 'en', ipa?: string) {
+  const src = `/api/pronunciation?word=${encodeURIComponent(word)}&language=${language}&v=${PRONUNCIATION_REVISION}${ipa ? `&ipa=${encodeURIComponent(ipa)}` : ''}`
   // Keyed by src: a new word always starts idle, even if the old audio was
   // paused mid-play (pausing never fires onended).
   const [playback, setPlayback] = useState<{ src: string; state: PlaybackState }>({

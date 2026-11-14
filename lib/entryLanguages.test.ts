@@ -262,7 +262,7 @@ function romanizationPage() {
   return response
 }
 
-test('romanization offers retain English, follow one explicit written-form redirect, and reuse warm sources', async () => {
+test('romanization offers retain English and enrich redirects only from warm sources', async () => {
   const expected: ScriptTarget[] = [
     { word: 'つなみ', language: 'ja' },
     { word: '津波', language: 'ja' },
@@ -299,10 +299,11 @@ test('romanization offers retain English, follow one explicit written-form redir
     expect(await resolveEntryLanguages('tsunami', shared)).toEqual({
       languages: ['en'],
       otherLanguages: [],
-      otherScripts: expected,
+      otherScripts: expected.slice(0, 1),
     })
-    expect(requests.filter((url) => url.searchParams.get('page') === 'つなみ')).toHaveLength(1)
+    expect(requests.filter((url) => url.searchParams.get('page') === 'つなみ')).toHaveLength(0)
     expect(requests.some((url) => url.searchParams.get('page') === '津波')).toBe(false)
+    await fetchSelectedWiktionaryLanguage('つなみ', 'Japanese')
     const before = requests.length
     const warm = session()
     const hinted = await resolveEntryLanguages('tsunami', warm, 'ja')
@@ -315,7 +316,7 @@ test('romanization offers retain English, follow one explicit written-form redir
   }
 })
 
-test('an unavailable romanization redirect keeps the English entry and original offer', async () => {
+test('an uncached optional redirect cannot mark the English entry incomplete', async () => {
   serve((url) => {
     if (url.hostname !== 'en.wiktionary.org') return new Response('', { status: 404 })
     return url.searchParams.get('page') === 'tsunami'
@@ -326,6 +327,5 @@ test('an unavailable romanization redirect keeps the English entry and original 
     languages: ['en'],
     otherLanguages: [],
     otherScripts: [{ word: 'つなみ', language: 'ja' }],
-    incomplete: true,
   })
 })

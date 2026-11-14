@@ -5,7 +5,7 @@ https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;1,400
 
 The unmodified regular and italic TTFs contain Latin Extended Additional letters
 used by source romanizations, including IAST. Satori reads TTF, not WOFF2; these
-files serve only the Open Graph route. The application keeps its WOFF2 files.
+files serve the Open Graph route and the outlined and raster favicon wordmarks. The application keeps its WOFF2 files.
 No remote font fetching is needed when rendering a romanized headline.
 
 - `LibreBaskerville-Regular.ttf`: https://fonts.gstatic.com/s/librebaskerville/v24/kmKUZrc3Hgbbcjq75U4uslyuy4kn0olVQ-LglH6T17uj8Q4SCQ.ttf

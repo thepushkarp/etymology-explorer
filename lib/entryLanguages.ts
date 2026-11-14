@@ -122,22 +122,15 @@ async function resolveLanguages(
     )
   )
   const romanizations = detectScripts(normalized).includes('Latin')
-    ? normalizeScriptTargets(englishToc?.otherScripts).slice(0, CONFIG.maxRootsToExplore)
+    ? normalizeScriptTargets(englishToc?.otherScripts)
     : []
-  // A romanization can point at a reading page whose explicit redirect names
-  // its written form. Inspect only that one hop, without researching its lexeme.
+  // Cached redirect proof can enrich offers. Live alternative verification
+  // belongs to the explicit-search batch, after this entry's primary research.
   const writtenForms = await Promise.allSettled(
     romanizations.map(async (target) => {
       const heading = LANGUAGES[target.language].englishWiktionaryHeading
       const key = `wiktionaryLanguage:${encodeURIComponent(heading)}` as const
-      let source = await getCachedSource(key, target.word)
-      if (!source) {
-        const page = await fetchWiktionaryPage(target.word, 'en', session.signal, {
-          fetchOnce: session.fetchOnce,
-        })
-        source = page && extractWiktionaryLanguage(page, heading)
-        if (source) await cacheSource(key, target.word, source)
-      }
+      const source = await getCachedSource(key, target.word)
       const redirects = source?.variants?.filter((variant) => variant.relationship === 'redirect')
       return redirects?.length === 1 ? [{ word: redirects[0].word, language: target.language }] : []
     })
@@ -147,7 +140,6 @@ async function resolveLanguages(
   for (const outcome of writtenForms) {
     if (outcome.status === 'fulfilled') redirects.push(...outcome.value)
     else {
-      incomplete = true
       console.error('[Research] Romanization redirect lookup failed:', safeError(outcome.reason))
     }
   }

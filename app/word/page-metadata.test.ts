@@ -53,7 +53,10 @@ function entryFor(results: EtymologyResult[], stale = false) {
 }
 
 function paramsFor(word: string, language?: LanguageCode) {
-  return { params: Promise.resolve({ segments: language ? [language, word] : [word] }) }
+  return {
+    params: Promise.resolve({ segments: language ? [language, word] : [word] }),
+    searchParams: Promise.resolve({}),
+  }
 }
 
 describe('/word/[word] generateMetadata', () => {
@@ -124,7 +127,7 @@ describe('/word/[word] generateMetadata', () => {
     expect(metadata.robots).toBeUndefined()
     const page = await WordPage(paramsFor('chat'))
     const main = page.props.children[1]
-    expect(main.props.children.props).toEqual({
+    expect(main.props.children.props).toMatchObject({
       entry: cachedEntry.entry,
       language: 'fr',
       stale: true,
@@ -172,7 +175,7 @@ describe('/word/[word] generateMetadata', () => {
     expect(metadata.alternates?.canonical).toBe('/word/en/chat')
     expect(metadata.robots).toEqual({ index: false, follow: true })
     const page = await WordPage(paramsFor('chat', 'en'))
-    expect(page.props).toEqual({
+    expect(page.props).toMatchObject({
       word: 'chat',
       language: 'en',
       initialEntry: cachedEntry.entry,

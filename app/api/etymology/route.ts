@@ -5,6 +5,7 @@ import type {
   ScriptTarget,
   StreamEvent,
   WordEntry,
+  LookupResolution,
 } from '@/lib/types'
 import { synthesizeFromResearch, getLlmUsageFromError, isTransientSynthesisError } from '@/lib/llm'
 import { conductAgenticResearch, hasCredibleMainSource } from '@/lib/research'
@@ -25,6 +26,8 @@ import {
   isSpellingEntry,
 } from '@/lib/cache'
 import { resolveEntryIdentity } from '@/lib/entryIdentity'
+import { resolveLookup } from '@/lib/lookupResolution'
+import { LookupProposalUnavailable } from '@/lib/lookupFallback'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { getCostMode, recordSpend } from '@/lib/costGuard'
 import {
@@ -49,6 +52,15 @@ const IN_PROGRESS_MESSAGE = 'Request in progress, please retry in a few seconds.
 class EntryIdentityConflict extends Error {}
 
 function classifyRouteError(error: unknown) {
+  if (
+    error instanceof Error &&
+    /language resolution incomplete|source research incomplete/i.test(error.message)
+  )
+    return {
+      message: 'Dictionary sources are temporarily unavailable or incomplete. Please try again.',
+      status: 503,
+      streamErrorType: 'network' as const,
+    }
   return error instanceof EntryIdentityConflict
     ? { message: error.message, status: 409, streamErrorType: 'unknown' as const }
     : classifyApiError(error)
@@ -107,7 +119,8 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 export async function GET(request: NextRequest) {
   const shouldStream = request.nextUrl.searchParams.get('stream') === 'true'
-  const respond = createResponseAdapter(shouldStream)
+  let lookupResolution: LookupResolution | undefined
+  const respond = createResponseAdapter(shouldStream, () => lookupResolution)
   let knownOffers: ScriptTarget[] = []
   const requireSpellingEntry = (entry: WordEntry, language: LanguageCode) => {
     if (isSpellingEntry(entry, language)) return
@@ -129,6 +142,8 @@ export async function GET(request: NextRequest) {
     const rawHint = request.nextUrl.searchParams.get('language')
     let hint = rawHint === null ? undefined : parseLanguageCode(rawHint)
     if (hint === null) return respond.error('Unsupported language', { status: 400 })
+    // Resolution can change the hint; the user's original search mode owns the budget.
+    const baseFetches = hint ? CONFIG.maxTotalFetches : CONFIG.maxAutoFetches
     if (!word) return respond.error('Word is required', { status: 400 })
     const requestedWord = canonicalizeWord(word)
     let normalizedWord = requestedWord
@@ -145,8 +160,8 @@ export async function GET(request: NextRequest) {
       const offers = normalizeScriptTargets([...knownOffers, ...(otherScripts ?? [])])
       return respond.error(
         hint
-          ? `No supported ${LANGUAGES[hint].englishName} entry was found for “${normalizedWord}”.`
-          : `No supported entry was found for “${normalizedWord}”.`,
+          ? `No dictionary entry found for “${normalizedWord}” in ${LANGUAGES[hint].englishName}.`
+          : `No dictionary entry found for “${normalizedWord}”.`,
         {
           status: 404,
           errorType: suggestions.length ? 'typo' : 'nonsense',
@@ -159,6 +174,30 @@ export async function GET(request: NextRequest) {
     if (alias) {
       normalizedWord = alias.word
       hint = alias.language
+      const proof = alias.entry.spellings?.find(
+        (spelling) => spelling.word === requestedWord && spelling.kind === 'romanization'
+      )
+      if (proof) {
+        const selected = {
+          word: alias.word,
+          language: alias.language,
+          relationship: 'romanization' as const,
+          provenance: [
+            {
+              sourceUrl: proof.sourceUrl,
+              revisionId: proof.revisionId,
+              verifiedAt: proof.verifiedAt,
+              evidence: proof.readingEvidence!,
+            },
+          ],
+        }
+        lookupResolution = {
+          originalInput: requestedWord,
+          language: alias.language,
+          candidates: [selected],
+          selected,
+        }
+      }
     }
     let cached = alias ?? (await getCachedEntry(normalizedWord))
     let oldEntry = cached?.entry
@@ -219,7 +258,13 @@ export async function GET(request: NextRequest) {
         after(() => incrCounter('cache_hit'))
         return respond.result(oldEntry, { cached: true, identity })
       }
-      if (hint && !hintedFailure(oldEntry) && oldEntry.attemptedLanguages?.includes(hint))
+      if (
+        hint &&
+        (!['ja', 'hi', 'ur', 'sa'].includes(hint) ||
+          oldEntry.revision >= CONFIG.pipelineRevision) &&
+        !hintedFailure(oldEntry) &&
+        oldEntry.attemptedLanguages?.includes(hint)
+      )
         return noSources(knownOffers)
     }
     const requestedNegative =
@@ -247,22 +292,105 @@ export async function GET(request: NextRequest) {
       budget,
       onProgress: (event) => emitProgress?.(event),
     })
-    const resolvedIdentity = await resolveEntryIdentity(
+    const initialIdentity = await resolveEntryIdentity(
       requestedWord,
       session,
       hint,
       alias ? undefined : oldEntry
     )
+    const lookup =
+      alias || initialIdentity.language ? {} : await resolveLookup(requestedWord, session, hint)
+    lookupResolution = lookup.resolution ?? lookupResolution
+    knownOffers = normalizeScriptTargets([...knownOffers, ...(lookupResolution?.candidates ?? [])])
+    const selectedLookup = lookupResolution?.selected
+    if (
+      (lookupResolution?.candidates.length || lookupResolution?.sourceListed?.length) &&
+      !selectedLookup &&
+      !lookup.preserveExactEntry &&
+      (hint || !lookup.originalTargets?.length)
+    ) {
+      return respond.error(
+        `Choose a${hint ? ` ${LANGUAGES[hint].englishName}` : ''} dictionary entry for “${requestedWord}”.`,
+        {
+          status: 300,
+          errorType: 'unknown',
+          otherScripts: knownOffers,
+        }
+      )
+    }
+    const resolvedIdentity = selectedLookup
+      ? await resolveEntryIdentity(
+          selectedLookup.word,
+          session,
+          selectedLookup.language,
+          alias ? undefined : oldEntry
+        )
+      : initialIdentity
+    resolvedIdentity.incomplete ||=
+      (!lookup.preserveExactEntry &&
+        !(rawHint === null && lookup.originalTargets?.length) &&
+        lookupResolution?.incomplete) ||
+      initialIdentity.incomplete
+    if (selectedLookup) {
+      const targetWord = resolvedIdentity.word
+      resolvedIdentity.language = selectedLookup.language
+      if (
+        selectedLookup.relationship === 'romanization' &&
+        selectedLookup.language === 'ja' &&
+        lookup.terminal
+      ) {
+        const first = selectedLookup.provenance[0]
+        const terminal = resolvedIdentity.proofs[0]?.terminal ?? {
+          word: targetWord,
+          sourceUrl: lookup.terminal.url,
+          revisionId: lookup.terminal.revisionId,
+          verifiedAt: lookup.terminal.retrieval!.retrievedAt,
+        }
+        const proof = {
+          word: requestedWord,
+          targetWord: selectedLookup.word,
+          language: 'ja' as const,
+          kind: 'romanization' as const,
+          sourceUrl: first.sourceUrl,
+          revisionId: first.revisionId,
+          verifiedAt: new Date(
+            Math.min(...selectedLookup.provenance.map((item) => Date.parse(item.verifiedAt)))
+          ).toISOString(),
+          readingEvidence: selectedLookup.provenance.map((item) => item.evidence).join('; '),
+          terminal,
+        }
+        resolvedIdentity.proofs.unshift(proof)
+        resolvedIdentity.spellings.unshift({
+          ...proof,
+          verifiedAt: new Date(
+            Math.min(Date.parse(proof.verifiedAt), Date.parse(terminal.verifiedAt))
+          ).toISOString(),
+        })
+      }
+      lookupResolution = { ...lookupResolution!, selected: { ...selectedLookup, word: targetWord } }
+    }
     if (resolvedIdentity.language) {
+      const originalTargets =
+        normalizedWord !== resolvedIdentity.word
+          ? (oldEntry?.languages ?? []).map((language) => ({ word: normalizedWord, language }))
+          : []
       normalizedWord = resolvedIdentity.word
       hint = resolvedIdentity.language
       cached = await getCachedEntry(normalizedWord)
       oldEntry = cached?.entry
       recoveringSavedFailure ||= recoveryRequested(oldEntry)
-      if (oldEntry?.entries[hint]) requireSpellingEntry(oldEntry, hint)
+      if (oldEntry?.entries[hint] && resolvedIdentity.proofs.length)
+        requireSpellingEntry(oldEntry, hint)
       refresh = requestedRefresh && cached?.stale === true && !hintedFailure(oldEntry)
       missingHint = !oldEntry?.entries[hint]
-      knownOffers = normalizeScriptTargets(oldEntry?.otherScripts)
+      knownOffers = normalizeScriptTargets([
+        ...(oldEntry?.otherScripts ?? []),
+        ...(lookup.originalTargets ?? []),
+        ...originalTargets,
+        ...(lookupResolution?.candidates ?? []).filter(
+          (candidate) => candidate.word !== normalizedWord
+        ),
+      ])
       identity = {
         type: 'entry_identity',
         word: normalizedWord,
@@ -327,7 +455,7 @@ export async function GET(request: NextRequest) {
         ) {
           return { kind: 'result', result: await registerSpellings(latest) }
         }
-        knownOffers = normalizeScriptTargets(latest?.otherScripts ?? knownOffers)
+        knownOffers = normalizeScriptTargets([...knownOffers, ...(latest?.otherScripts ?? [])])
         if (hint && !refresh && !recovering && latest?.attemptedLanguages?.includes(hint)) {
           return { kind: 'no_sources', otherScripts: knownOffers }
         }
@@ -343,12 +471,11 @@ export async function GET(request: NextRequest) {
         const languages = selectedLanguages.filter((language) => !failureCooldown(latest, language))
         if (!languages.length && latest && selectedLanguages.length)
           return { kind: 'result', result: latest }
-        // Resolution shares the ceiling: 32 attempts plus 16 per extra language.
+        // Resolution and primary research share the original search mode's ceiling.
         budget.tighten(
           Math.min(
             CONFIG.maxEntryFetches,
-            CONFIG.maxTotalFetches +
-              CONFIG.maxFetchesPerExtraLanguage * Math.max(0, languages.length - 1)
+            baseFetches + CONFIG.maxFetchesPerExtraLanguage * Math.max(0, languages.length - 1)
           )
         )
         emit?.({
@@ -514,7 +641,8 @@ export async function GET(request: NextRequest) {
           resolvedIdentity.spellings
         )
         await cacheEntry(normalizedWord, result, { incomplete })
-        if (resolvedIdentity.language) requireSpellingEntry(result, resolvedIdentity.language)
+        if (resolvedIdentity.language && resolvedIdentity.proofs.length)
+          requireSpellingEntry(result, resolvedIdentity.language)
         await publishSpellingAliases(result, resolvedIdentity.proofs)
         emitSecurityEvent({
           type: 'cache_miss',
@@ -580,7 +708,7 @@ export async function GET(request: NextRequest) {
             (!hint || next.entry.entries[hint]) &&
             hasEntrySpellings(next.entry, resolvedIdentity.spellings)
           ) {
-            if (resolvedIdentity.language)
+            if (resolvedIdentity.language && resolvedIdentity.proofs.length)
               requireSpellingEntry(next.entry, resolvedIdentity.language)
             await publishSpellingAliases(next.entry, resolvedIdentity.proofs)
             return { kind: 'result', result: next.entry }
@@ -619,6 +747,7 @@ export async function GET(request: NextRequest) {
           }
           try {
             if (identity) emit(identity)
+            if (lookupResolution) emit({ type: 'lookup_resolution', resolution: lookupResolution })
             const outcome =
               acquisition.status === 'acquired'
                 ? await runHolder(acquisition.token, emit)
@@ -687,6 +816,12 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     if (request.signal.aborted) return new Response(null, { status: 499 })
+    if (error instanceof LookupProposalUnavailable)
+      return respond.error(error.message, {
+        status: error.status,
+        errorType: error.status === 429 ? 'rate_limit' : 'network',
+        unaryHeaders: { 'Retry-After': '5' },
+      })
     console.error('Etymology API error:', safeError(error))
     await incrCounter('error')
     const classified = classifyRouteError(error)

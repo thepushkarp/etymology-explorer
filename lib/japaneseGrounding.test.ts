@@ -1,12 +1,13 @@
-import { afterEach, expect, test } from 'bun:test'
+import { afterEach, expect, spyOn, test } from 'bun:test'
+import jmdictManifest from '../data/jmdict/manifest.json'
 import fixtures from './__fixtures__/japanese/wiktionary.json'
-import jisho from './__fixtures__/jmdict/jisho.json'
+import sayounara from './__fixtures__/japanese/sayounara.json'
 import { extractWiktionaryEntryGroups, extractWiktionaryVariants } from './wiktionaryEntryGroups'
 import { ancestorCandidates, expandLexemes, scopeEnglishHistories } from './research'
 import { createLexemeResearchSession } from './lexemeResearch'
 import { SourceFetchBudget } from './sourceFetchBudget'
 import { finalizeResult } from './llm'
-import { parseJmdictResponse } from './jmdict'
+import { fetchJmdict } from './jmdict'
 import { etymologyResult } from './testSupport/etymologyResult'
 import { canonicalizeWord } from './orthography'
 import { candidateLanguages, type LanguageCode } from './languages'
@@ -63,6 +64,71 @@ function result(research: ResearchContext, ancestryGraph: AncestryGraph) {
 }
 
 const stage = (language: string, form: string) => ({ stage: language, form, note: '' })
+
+test('a source-attested shortening merges at the longer expression before the query form', () => {
+  for (const prefix of ['Shortening of earlier', 'Shortening of', 'Clipping of']) {
+    const groups = extractWiktionaryEntryGroups(
+      sayounara.html.replace('Shortening of earlier', prefix),
+      sayounara.sections,
+      'Japanese',
+      /^Etymology/,
+      sayounara.word
+    )
+    expect(
+      groups[0].relations?.map(({ subject, target, relation }) => [
+        subject.word,
+        target.word,
+        relation,
+      ])
+    ).toEqual([
+      ['さようなら', '左様ならば', 'derived_from'],
+      ['左様ならば', '左様', 'compound_from'],
+      ['左様ならば', 'ならば', 'compound_from'],
+    ])
+    const research: ResearchContext = {
+      language: 'ja',
+      mainWord: {
+        word: sayounara.word,
+        etymonline: null,
+        wiktionary: null,
+        sources: [
+          {
+            provider: 'wiktionaryEnglish',
+            sourceFamily: 'wiktionary',
+            evidenceRole: 'etymology',
+            data: { text: groups[0].text, url: sayounara.url, entryGroups: groups },
+          },
+        ],
+      },
+      identifiedRoots: [],
+      rootResearch: [],
+      relatedResearch: [],
+      totalSourcesFetched: 0,
+    }
+    scopeEnglishHistories(research)
+    const graph: AncestryGraph = {
+      branches: ['左様', 'ならば'].map((form) => ({
+        root: form,
+        stages: [stage('Japanese', form)],
+      })),
+      mergePoint: { form: '左様ならば', note: '' },
+      postMerge: [stage('Japanese', 'さようなら')],
+    }
+    expect(
+      finalizeResult(result(research, graph), research, 'standard').ancestryGraph.mergePoint?.form
+    ).toBe('左様ならば')
+    const wrong = result(research, { ...graph, mergePoint: { form: 'さようなら', note: '' } })
+    expect(() => finalizeResult(wrong, research, 'standard')).toThrow('source-attested identity')
+  }
+  const rejected = extractWiktionaryEntryGroups(
+    sayounara.html.replace('Shortening of earlier', 'Not a shortening of earlier'),
+    sayounara.sections,
+    'Japanese',
+    /^Etymology/,
+    sayounara.word
+  )
+  expect(rejected[0].relations).toBeUndefined()
+})
 
 test('Japanese identity folds only half-width kana and accepts source spelling separators', () => {
   expect(canonicalizeWord(' ｻﾗﾘｰﾏﾝ ')).toBe('サラリーマン')
@@ -250,9 +316,10 @@ test('ordinary Japanese histories retain unmatched attested stages without a par
   }
 })
 
-test('the disputed salaryman source retains its phrase account without adopting an unaligned wasei tag', () => {
+test('the disputed salaryman source retains its phrase account without adopting an unaligned wasei tag', async () => {
   const research = context('ja-salaryman')
-  const supplemental = parseJmdictResponse('サラリーマン', jisho['サラリーマン'].response)
+  const clock = spyOn(Date, 'now').mockReturnValue(Date.parse(jmdictManifest.date))
+  const supplemental = await fetchJmdict('サラリーマン').finally(() => clock.mockRestore())
   research.mainWord.sources!.push(...supplemental)
   scopeEnglishHistories(research)
   const value = result(research, {

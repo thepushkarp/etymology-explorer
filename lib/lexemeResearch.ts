@@ -120,6 +120,7 @@ function classifyFailure(error: unknown): SourceOutcome {
 function hasEtymologicalText(records: SourceRecord[]): boolean {
   return records.some((source) => {
     if (sourceEvidenceRole(source) !== 'etymology') return false
+    if (source.data.entryGroups?.some((group) => group.relations?.length)) return true
     const texts = source.data.entryGroups?.length
       ? source.data.entryGroups.map((group) => group.text)
       : [source.data.text]
@@ -369,6 +370,7 @@ export function createLexemeResearchSession(options: {
           (provider) => ({
             id: provider.id,
             run: async () => {
+              if (provider.local) return found(await provider.fetch(word, signal))
               const cached = await getCachedSourceBundle(provider.id, word, heading)
               if (cached) return found(cached)
               const records = await provider.fetch(word, signal)

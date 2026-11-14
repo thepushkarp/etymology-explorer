@@ -19,11 +19,11 @@ The primary Wiktionary edition defines source-local history boundaries, with Ety
 
 Hindi, Urdu, and Sanskrit use English Wiktionary as their history primary; Hindi also queries its native edition. Optional Platts, Wisdom Library, and Cologne Monier-Williams adapters and provider IDs are omitted pending source admission. The [Platts digitization](https://dsal.uchicago.edu/dictionaries/platts/) links CC BY-NC-ND terms; [Wisdom Library's site information](https://www.wisdomlib.org/m/about.html) does not establish a blanket glossary reuse license; the [Cologne digital MW header](https://raw.githubusercontent.com/sanskrit-lexicon/csl-orig/master/v02/mw/mwheader.xml) specifies noncommercial, share-alike terms. Do not register these sources based solely on accessible lookup pages.
 
-Japanese uses English Wiktionary as its history primary, with native Japanese Wiktionary as independent context. JMdict via Jisho supplies licensed supplementary lexical senses and raw loan-source material, with EDRDG and CC BY-SA 4.0 attribution retained in sources and display. An unspecified full/partial loan-source status cannot establish whole-word borrowing. A live Jisho request after a source-cache miss needs a global 40-second Redis pacing reservation; unavailable Redis or an occupied interval skips Jisho. Complete raw data uses the seven-day source cache. Review publisher terms, license, and response schema when changing the adapter. Kotobank and gogen adapters are omitted pending source admission.
+Japanese uses English Wiktionary as its history primary and native Japanese Wiktionary as independent context or fallback. Native Japanese numbered 語源 headings and labelled homographs retain separate histories; numbered origins nested under a part-of-speech or homograph heading retain independent evidence scopes and share only the enclosing headword context. Affirmative native origin and shortening statements are extracted only inside etymology sections; uncertain accounts remain prose. JMdict supplies supplementary lexical evidence from the official English XML snapshot in `data/jmdict/`. Exact spelling/reading pairs must satisfy reading and sense restrictions together. Complete matched XML, original full/partial loan-source fields, wasei markers, POS inheritance, stable entry IDs and EDRDG attribution are retained. Local index reads consume no HTTP budget and bypass Redis source caching. Refresh JMdict at least monthly using `scripts/build-jmdict-index.py` with a reviewed download and SHA-256; snapshots older than 31 days report unavailable. NINJAL historical dictionaries supply exact-spelling, dated context only, never modern identity, standalone lexical admission, or ancestry. Their pinned transcriptions and headword rows are rebuilt with `scripts/build-japanese-historical-index.py`. Source licences and scope are documented in `docs/source-admission.md`. Kotobank, gogen and JapanKnowledge are not enabled without an appropriate reuse agreement.
 
 Japanese strata (`wago`, `kango`, `gairaigo`, `wasei-eigo`, `wasei-kango`, `hybrid`) require affirmative scoped evidence. 電話 is Japanese wasei-kango compounding of 電 and 話, not whole-word Middle Chinese borrowing. Preserve the disputed coinage accounts of サラリーマン and its source-attested Japanese サラリー + マン components; do not invent English salary/man branches. コンセント clips a longer Japanese coinage with explicitly attested English concentric + plug components. Entry prose remains English.
 
-Every application source HTTP attempt shares one entry budget: 32 attempts for the first language plus 16 for each extra resolved language, capped at 96. Language resolution is limited to the first 32 attempts and its attempts count toward the final ceiling. Primary fetches, fallback attempts, Wikidata detail requests, enrichment, and Exa API calls all count. Exa's internal crawling is outside that application counter. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
+Every application source HTTP attempt shares one entry budget: 64 attempts for the first language in Auto, or 32 with an explicit hint, plus 16 for each extra resolved language, capped at 96. Language resolution is limited to the first 32 attempts and its attempts count toward the final ceiling. Primary fetches, fallback attempts, Wikidata detail requests, enrichment, and Exa API calls all count. Exa's internal crawling is outside that application counter. Source-cache hits consume no HTTP budget; LLM calls are separate from this source budget.
 
 **Live**: https://etymex.com
 
@@ -120,7 +120,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   - USD monthly limit: $10/month (conservative fallback-chain pricing in `costTracking` when OpenRouter omits provider-reported cost)
   - Timeouts: source fetches 5s, synthesis LLM 90s, root-extraction LLM 15s, TTS 15s
   - Word/phrase validation: maximum 120 canonical characters; Unicode letters/marks, spaces, apostrophes, and hyphens
-  - Source HTTP budget: min(96, 32 + 16 × (resolved languages − 1)) actual attempts including resolution, primary, fallback, and enrichment requests; no source-text clipping
+  - Source HTTP budget: min(96, base + 16 × (resolved languages − 1)), where base is 64 in Auto and 32 with an explicit hint. Counts actual attempts including resolution, primary, fallback, and enrichment requests; no source-text clipping
   - Rate limits, singleflight settings, feature flags
 
 - **`lib/env.ts`** - Zod-based env validation with lazy init (build-time safe). Validates OPENROUTER_API_KEY, ADMIN_SECRET, KV_REST_API_URL, KV_REST_API_TOKEN, Exa, and ElevenLabs config.
@@ -143,10 +143,10 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
   - Merged spelling entries: `entry:v1:{word}`, 365-day physical TTL. `pipelineRevision` and `entryFreshDays` (90) determine staleness using the oldest retained `freshnessAt` (or original `tracedAt`); incomplete traces become stale after five minutes. Stale entries remain readable and require an explicit Retrace click. Successful retrace languages merge with durable previous results. `attemptedLanguages` records completed coverage so an unattempted manual hint can augment a fresh entry under the same word lock.
   - TTS audio: 1 year TTL
-  - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v7:{word}` with a distinct explicit-hint scope. Source-attested romanization offers survive no-result responses. Transient resolution failures and retraces with a durable entry never write absence markers.
+  - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v10:{word}` with a distinct explicit-hint scope. Source-attested romanization offers survive no-result responses. Transient resolution failures and retraces with a durable entry never write absence markers.
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v12:<source>:<word>` for English, `src:v12:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v12:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v12:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v18:<source>:<word>` for English, `src:v18:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v18:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v18:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
 
 - **`lib/redis.ts`** - Shared Redis client factory using KV_REST_API_URL and KV_REST_API_TOKEN (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 and Exa requires functioning accounting (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -155,7 +155,7 @@ The app operates in **public mode** with server-side cost controls (added in PR 
   persists the complete clip before releasing the lock, keeping cleanup alive on serverless
   runtimes. Concurrent listeners poll at `audioWaiterPollIntervalMs` (250 ms); cached clips
   remain available under budget pressure and retain the one-year HTTP cache lifetime.
-  The `eleven_v4` model receives the speech language code; Sanskrit retains `sa` lexical/cache/lock identity but uses `hi` speech, labelled as a Hindi reading. The configured voice is preferred for every language. Missing voice configuration or precise voice-specific provider errors permit one female premade stock voice selected from the [official catalog](https://elevenlabs.io/docs/api-reference/voices/search), ranked by language metadata before multilingual capability. Auth, quota, rate-limit, and general server failures never trigger that retry. Primary and fallback synthesis each have a 15-second timeout, plus a five-second catalog lookup, within the route’s 60-second duration. Hindi, Urdu, Sanskrit, and Japanese have no ngram corpus.
+  The `eleven_v4` model receives the speech language code; Sanskrit retains `sa` lexical/cache/lock identity but uses `hi` speech, labelled as a Hindi reading. Female default voices come from the [official catalog](https://elevenlabs.io/docs/api-reference/voices/search), ranked by speech-language label, verified language support, then multilingual capability; ties follow alphabetical name order. A precise voice-specific provider error permits one attempt with the next ranked voice. The API key needs catalog access. Auth, quota, rate-limit, and general server failures never trigger that retry. Primary and fallback synthesis each have a 15-second timeout, plus a five-second catalog lookup, within the route’s 60-second duration. Hindi, Urdu, Sanskrit, and Japanese have no ngram corpus.
 
 - **`lib/counters.ts`** - Best-effort monthly INCR counters (cache_hit / cache_miss / error), exposed via `/api/admin/stats`
 
@@ -184,7 +184,7 @@ New optional fields on `AncestryStage`: `isReconstructed`, `confidence`, `eviden
 
 ### Word and Phrase Identity
 
-`lib/orthography.ts` supplies the shared identity for navigation, cache keys, evidence, and API inputs: NFC lowercase, with Unicode horizontal space separators trimmed and collapsed to one ASCII space. Accents and apostrophe/hyphen forms remain lexical information; spaced and hyphenated phrases are distinct. Controls and line separators are preserved through normalization and rejected by `lib/validation.ts`, including at input boundaries. Canonical words/phrases may contain up to 120 characters. `SearchBox` validates before navigation and presents inline feedback for invalid input.
+`lib/orthography.ts` supplies the shared identity for navigation, cache keys, evidence, and API inputs: NFC lowercase, with Unicode horizontal space separators trimmed and collapsed to one ASCII space. Accents and apostrophe/hyphen forms remain lexical information; spaced and hyphenated phrases are distinct. Controls and line separators are preserved through normalization and rejected by `lib/validation.ts`, including at input boundaries. Canonical words/phrases may contain up to 120 characters. A single boundary hyphen also permits affix entries such as pan- or -ness; these remain distinct from bare spellings. `SearchBox` validates before navigation and presents inline feedback for invalid input.
 
 ### Word Pages (primary search URL)
 
@@ -193,21 +193,23 @@ URL. Crawler traffic must never cost LLM money:
 
 - **`app/word/[...segments]/page.tsx`** - SSR strictly from `getCachedEntry` (`lib/cache.ts`).
   The module graph must never include `lib/research.ts`, `lib/llm.ts`, or
-  `lib/openrouterResponses.ts` — enforced by `app/word/import-graph.test.ts`. ISR via
-  `revalidate = 86400`. Cache hit renders `EntryView`; cache miss renders a noindex page
+  `lib/openrouterResponses.ts` — enforced by `app/word/import-graph.test.ts`. Request-time rendering resolves validated `lookup` and `history` query parameters;
+  tagged `unstable_cache` reads retain the word data cache. Cache hit renders `EntryView`; cache miss renders a noindex page
   hosting `WordTraceExperience` (client), which streams the live trace via `/api/etymology`.
 - **Auto-trace gating** (`lib/traceIntent.ts`): an uncached word page auto-starts its trace
   ONLY when a short-lived sessionStorage flag written by the in-app navigation handler
   (`lib/hooks/useWordNavigation.ts`) is present. Direct loads and crawlers — even JS-executing
   ones — get the "Trace it live" button instead; a human click is required to spend budget.
   Auto-start uses a cancellable deferred task before consuming the flag, so React Strict Mode
-  effect replay cannot close the only stream and leave the page loading.
+  effect replay cannot close the only stream and leave the page loading. A bounded tab-local
+  completed-result store restores the latest twenty request-scoped results when browser history
+  restores a pre-trace payload; restoration grants no trace intent and makes no research requests.
 - **Revalidation**: after storing a merged entry, `cacheEntry` (`lib/cache.ts`) schedules
   `revalidateTag('etymology-word:{word}', { expire: 0 })` inside `after()` — the deferral is
   required because streaming responses flush pending revalidations when the handler returns,
   and `{ expire: 0 }` hard-expires the tag (the `'max'` profile would only mark it
   stale-while-revalidate). A freshly traced word's page serves content on the next load
-  instead of the ISR miss page.
+  instead of a cached miss payload.
 - **`lib/tracedWords.ts`** - SCANs durable entry keys and supported legacy prefixes during migration (cursor-paginated, capped at 1000; legacy discoveries migrate with four concurrent cache-only reads,
   daily `unstable_cache`). Shared by `app/sitemap.ts` and the `/words` A–Z index
   (`app/words/page.tsx`), which is the crawlable internal-link path to every cached word page;
@@ -226,8 +228,46 @@ Attested lineage forms link from their details panel when their language is supp
 `counterparts` belong to each history and follow history selection. Explicit Wiktionary romanization
 sections supply `WordEntry.otherScripts` offers, including one bounded explicit written-form redirect;
 they remain links alongside independent entries for the original spelling and in no-result responses.
-Only clicking a link marks trace intent. Foreign spellings are never guessed from a gloss or a Latin
+An explicit search or link click marks trace intent. Foreign spellings are never guessed from a gloss or a Latin
 spelling alone.
+
+Japanese meaning choices require saved, matching histories; an ancestry graph is not required.
+`otherScripts` comes from explicit dictionary romanization/redirect links or verified lookup
+candidates; deterministic conversions and model proposals alone cannot populate it. A language
+tab identifies a usable entry, not a claim of shared etymological origin.
+`EntryNavigation` includes verified written-form destinations: the first available target opens by default, with other meanings retained in lookup context. A default display choice never establishes a unique match or authorizes an alias. Existing language tabs take precedence over cross-spelling offers. Unsupported-language discovery notices are not displayed. Homepage and header searches share the themed `LanguageSelect`.
+
+Language rows remain visible for single-language entries. `lib/lookupGroupCache.ts` builds navigation
+groups from all saved kana readings, counterparts, and explicit romanization offers. Cache reads run
+four at a time without a candidate-count cutoff. Valid language-qualified aliases resolve to canonical cached entries; original forms retain context membership while canonical histories are deduplicated. Single-form kana entries can offer reverse language tabs only when a
+cached romanized entry links back to that kana form. It performs no research or alias writes. Direct kanji searches stay
+focused; links chosen within a broader lookup carry `lookup` and `history` query parameters.
+`lib/entryNavigation.ts` supplies one language/meaning model for server redirects and saved/live
+navigation. `lookupGroupForWord` validates context membership on both server and client; context
+follows confirmed group destinations rather than language names. Direct and grouped histories share
+grammatical descriptions through `historyChoice`. The lookup hook distinguishes cache refresh from
+explicit research; both use the same cache-only navigation fetch. Research destinations are keyed by
+language and word. Japanese reading matching remains in group construction, not the request loop.
+All choices are real links; arrow keys and Home/End move focus, and Enter follows a link.
+Same-word selection uses the native History API to retain active streams while updating the URL.
+Each language defaults to its first listed meaning. Missing or invalid grouped histories remain
+unavailable rather than falling back to another reading. Successful and failed language tabs are
+retained together. Unresolved kana index histories with multiple counterparts and no ancestry are
+represented by their destinations when matching histories are available. Empty indexes retain saved content, Retrace, and an explicit Check related entries action; completed research opens the first successful meaning. Grouped navigation retains only the requested reading; other
+readings belong to a direct kanji search. `EntryChoices` supplies shared geometry and headers reserve
+a pronunciation row. Server rendering supplies cache-only lookup context before hydration;
+`/api/lookup-group` refreshes that metadata after completed traces. Lookup support uses ordinal
+source-evidence tiers, independent of ancestry confidence: verified matching histories rank first,
+explicit source links qualify for research, and unverified proposals do not qualify for automatic
+tracing. Equal evidence retains source order; no popularity score or candidate-count cutoff applies.
+An explicit search traces qualifying Japanese destinations sequentially through the ordinary
+etymology API. Each destination retains its own cache, lock and per-entry budgets. Saved matching histories are reused without retracing. Only successful
+matching histories enter the meaning list; missing or failed candidates remain undisplayed. Temporary
+failures offer an explicit retry; budget/rate/unavailability limits stop the batch. Leaving the page
+aborts it. Selecting a meaning within existing lookup context does not restart the batch.
+Both module graphs must
+exclude research and LLM modules. Passive loads, prefetching, and browser-history restoration never
+authorize a trace.
 
 Japanese spelling identity requires a complete source-language section with one explicit redirect
 and a verified terminal entry. Shared readings, alternative-spelling lists, and romanizations alone
@@ -236,11 +276,36 @@ the canonical word lock, sharing the trace's HTTP budget. The canonical `WordEnt
 `spellings`; its per-language results still match `WordEntry.word`. Language-qualified alias pointers
 are published only after canonical persistence and expire with their source proof. The request proxy
 checks known aliases for word-page GET/HEAD requests and sends uncached temporary redirects without
-fetching sources. Word pages retain their cache-only ISR behavior.
+fetching sources. Word pages retain cache-only data access during request-time rendering.
 Latin borrowing entries retain their own language histories. A unique verified standard
-kana reading supplies audio for a single-history Japanese entry; misspellings never select audio.
+kana reading supplies fallback audio for a single-history Japanese entry without usable IPA; misspellings never select audio. Supported speech languages send the selected IPA to Eleven v4. Audio URLs, v4 cache keys, and locks include language, spelling, and IPA. Sanskrit retains its labelled Hindi spelling reading.
 Existing entries without alias proof retain their saved contents until an explicit retrace establishes
 the relationship; pipeline revision changes make that retrace available without automatic LLM spend.
+
+`lib/lookupResolution.ts` verifies rōmaji readings and grammatical forms before the canonical lock.
+WanaKana supplies candidate kana, never evidence. Dictionary candidates are checked within the
+shared resolution HTTP budget, with explicit source links prioritized over unverified proposals; incomplete, conflicting, or ambiguous results remain choices. Unique
+verified rōmaji from deterministic or explicit source discovery uses a language-qualified `romanization` proof with reading evidence. Conjugations
+open dictionary forms with separate JSON/SSE lookup metadata and never become spelling aliases.
+Optional destinations for preserved Latin and independent exact entries are deferred to their explicit-search alternative batch; they cannot exhaust primary research or mark it incomplete. Language discovery enriches optional redirect offers from cache only.
+An independently defined exact entry retains its own histories even when another sense is a
+grammatical form; verified form targets remain optional destinations. Conjugation tables split
+explicit line-separated alternatives and exclude numeric footnote annotations while preserving
+spaces within phrases. Dictionary-linked destinations deferred by source failures or the HTTP budget travel
+separately as `lookupResolution.sourceListed` in JSON and SSE. They are labelled unchecked links,
+never canonical identities, alias proofs, or durable entry offers; only explicit navigation may
+start their lookup. Truncation always prevents automatic selection.
+The optional `lib/lookupFallback.ts` proposal call requires `APP_CHANNEL=beta` and
+`LOOKUP_FALLBACK_ENABLED=true`, with one 15-second, 768-token call, existing spend accounting,
+and a normalized input/language lock released before the canonical word lock. Production stays
+disabled pending live evaluation. Model-only romanization discoveries remain selectable suggestions even when their reading is verified; a model cannot prove uniqueness. Busy proposal locks return retryable 429 responses, and unavailable proposal storage returns 503, with Retry-After guidance. No lookup proposals run from autocomplete or cache-only pages.
+
+ONCOJ is an Old Japanese historical provider backed by pinned lexical annotation XML. Rebuild
+`data/oncoj-index.json` with `python3 scripts/build-oncoj-index.py`. Retain complete matched
+records, source IDs, annotation attribution, and exact Frellesvig–Whitman transcription. Explicit
+derivation references must match indexed IDs and forms. Never infer modern Japanese ancestry
+from similar spellings or glosses. Publisher admission findings are in `docs/source-admission.md`;
+pending publishers are not registered for runtime lookup or Exa discovery.
 
 ### Research Pipeline Limits
 
@@ -248,7 +313,7 @@ Configured in `lib/config.ts` (consumed by `lib/research.ts`) to control API cos
 
 - `maxRootsToExplore = 4` - Max unique attested ancestors/root morphemes per expansion; repeated ancestors retain all parent-history attachments while sharing source lookups.
 - `maxRelatedWordsPerRoot = 4` - Related terms retained per extraction pass; only main-word related terms are fetched through the shared lookup, after primary and scoped enrichment.
-- `maxTotalFetches = 32`, `maxFetchesPerExtraLanguage = 16`, `maxEntryFetches = 96` - One hard cap of min(96, 32 + 16 × (resolved languages − 1)) on actual source HTTP attempts per merged trace, enforced by `lib/sourceFetchBudget.ts` through `lib/fetchUtils.ts`. The same budget object is tightened after resolution, retaining its consumed attempts. Primary requests, fallbacks, detail requests, and enrichment share the ceiling; source-cache hits and LLM calls do not consume it.
+- `maxAutoFetches = 64`, `maxTotalFetches = 32`, `maxFetchesPerExtraLanguage = 16`, `maxEntryFetches = 96` - One hard cap of min(96, base + 16 × (resolved languages − 1)), on actual source HTTP attempts, with base 64 in Auto or 32 with an explicit hint per merged trace, enforced by `lib/sourceFetchBudget.ts` through `lib/fetchUtils.ts`. The same budget object is tightened after resolution, retaining its consumed attempts. Primary requests, fallbacks, detail requests, and enrichment share the ceiling; source-cache hits and LLM calls do not consume it.
 - Attested ancestor and English root lookups retry a transient Wiktionary HTTP/network failure once within the shared budget; 404, 429, and caller cancellation are not retried.
 - Source text is sanitized for prompt embedding and retained in full. Context overflow returns an explicit error instead of silently truncating evidence.
 - `sourceCacheTTL = 7d` - Raw dictionary and Wikipedia source cache
@@ -331,6 +396,8 @@ claiming that partial source research is complete.
 
 **Key hooks**:
 
+- JSON fallback responses carry the same error type and correction suggestions as SSE. Correction links preserve an explicit lookup language; Auto lookups do not inherit a display-only language default.
+- `lib/hooks/useSearchLanguage.ts` - Shared homepage/header search preference, defaulting to Auto. Only explicit selector changes update it; result languages, tabs, and canonical redirects do not. Session storage retains the preference across reloads in the same tab, with an in-memory fallback when storage is unavailable. Result URLs continue to identify the displayed language independently.
 - `lib/hooks/useStreamingEtymology.ts` - SSE transport for one merged spelling trace with an optional language hint; all progress
   state folds through the pure reducer in `lib/streamReducer.ts` (per-source states with
   timing, phase, accumulated `synthesis_section` events, final result)
@@ -433,7 +500,7 @@ All return `{ success: boolean, data?: T, error?: string }` wrapper.
 
 - `app/word/[...segments]/page.tsx` - Cache-only SSR word pages (import graph must exclude research/LLM)
 - `app/word/import-graph.test.ts` - Enforces the no-LLM-in-module-graph budget invariant
-- `components/LanguageTabs.tsx` - Real language links for durable entries and local tab selection during traces
+- `components/EntryNavigation.tsx` - Shared URL-based language and meaning links for saved and live entries
 - `components/EntryView.tsx` - Client shell for a finished merged entry (cached page or completed trace)
 - `lib/resultHistories.ts` - Projects a result onto one of its histories and lists the history choices
 - `components/WordTraceExperience.tsx` - Live streaming trace UI for uncached word pages

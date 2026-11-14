@@ -57,12 +57,17 @@ describe('lexical spelling identity', () => {
       expect(isValidWord(canonicalizeWord(word))).toBe(true)
     }
   )
-  test.each(['\u0301e', "'word", 'word-', 'a--b', 'a-\u0301b', 'a\u200bb'])(
+  test.each(['\u0301e', "'word", '--word', 'word--', '-word-', 'a--b', 'a-\u0301b', 'a\u200bb'])(
     'rejects malformed %s',
     (word) => {
       expect(isValidWord(canonicalizeWord(word))).toBe(false)
     }
   )
+  test('preserves affix boundaries as distinct searchable entries', () => {
+    for (const word of ['pan-', '-ness', 'pré-']) expect(isValidWord(word)).toBe(true)
+    expect(sameSpelling('pan', 'pan-')).toBe(false)
+    expect(wordPagePath('pan-', 'en')).toBe('/word/en/pan-')
+  })
 })
 
 describe('historical forms and confidence', () => {

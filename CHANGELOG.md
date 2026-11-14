@@ -10,6 +10,12 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Added
 
+- Consult licensed NINJAL historical dictionary transcriptions and headword records as dated Japanese context.
+- Choose a search language from a theme-matched menu with language codes, keyboard navigation, and stable spacing when switching languages.
+- Show dictionary-attested Japanese lookup destinations alongside existing results, including entries whose ancestry is unavailable.
+- Resolve verified Japanese romanizations and grammatical forms, with source-backed choices for ambiguous readings and an optional beta lookup assistant.
+- Research explicitly attested Old Japanese forms using pinned Oxford–NINJAL lexical annotations with source attribution.
+- Keep typed searches when changing language and protect Japanese input-method confirmation from accidental submission.
 - Open one Japanese entry through dictionary-confirmed spelling variants, with linked spellings and preserved misspelling labels.
 - See unreleased changes in the beta changelog, with the beta build identified in the header.
 - Preview the latest main changes at beta.etymex.com while production remains release-only.
@@ -22,6 +28,42 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Changed
 
+- Give Auto searches 64 source requests before additional-language allowances, within the shared 96-request ceiling.
+- Keep optional Japanese alternatives from delaying primary entry research and preserve empty reading pages with explicit recovery actions.
+- Reuse canonical saved entries in Japanese meaning groups and retain sources for displayed related words.
+- Keep model-suggested romanizations selectable without assuming uniqueness, and show retry guidance when lookup resolution is busy or unavailable.
+
+- Keep empty reading groups unavailable instead of displaying unrelated saved readings, while retaining direct-word access and return-language tabs.
+- Share language and meaning navigation rules across server, saved, and live views, with consistent grammatical labels and dictionary links.
+- Keep loaded meanings visible when an additional Japanese lookup times out, with a word-specific inline message and an explicit retry.
+- Look up Japanese senses and restricted readings locally from official JMdict XML, preserving original loanword metadata and source attribution.
+- Preserve Japanese Wiktionary numbered origins within part-of-speech and homograph sections as independent histories, and recognize explicit native-language derivation and shortening statements.
+- Preserve the longer source expression before shortening in Japanese etymologies such as sayonara, so valid compound histories can be traced.
+- Keep Etym in the accent colour, highlight the full logo on hover or keyboard focus, and use the matching EtymEx wordmark for favicons.
+- Rank Japanese lookup alternatives by source evidence without a fixed candidate-count cutoff, automatically check source-linked destinations, and display all saved matching meanings.
+- Preserve source-confirmed language tabs in both directions for Japanese entries with a single written form, including on reload and direct navigation.
+- Preserve correction suggestions and error types when streaming falls back to a JSON response, and keep Auto searches in Auto when choosing a correction.
+- Keep the search language preference independent of result tabs and spelling redirects, retaining explicit choices across navigation and reloads in the same browser tab.
+- Recognize conjugated forms listed together in dictionary tables or marked with footnotes, including native-script and rōmaji input.
+- Keep additional dictionary-listed meanings available as explicitly unchecked links when a lookup reaches its verification limit.
+
+- Retain independent word meanings when the same spelling is also a grammatical form, with verified dictionary-form destinations kept as choices.
+
+- Preserve Auto for manually started traces and keep non-Japanese written-form destinations free of unsupported lookup context.
+- Open cross-word links at the destination entry while preserving scroll for same-entry language and meaning selections.
+- Unify language and meaning navigation across saved and live results, render shared selections on reload, and retain failed-language tabs without substituting unrelated readings.
+
+- Open the first listed Japanese meaning by default when selecting its language tab, keeping alternative meanings available in the same selector.
+- Use one consistent history selector layout and stable header spacing, keeping Japanese reading groups focused when switching meanings.
+- Keep language navigation visible and group ambiguous Japanese lookups by meaning, while direct kanji searches retain their own readings and histories.
+- Preserve selected etymological histories and lookup context when sharing, reloading, or navigating Back and Forward.
+- Open verified native-script entries from the language tabs, with a spelling or meaning choice when several targets exist.
+- Keep language navigation focused on available entries without notices listing unsupported languages.
+- Select female default pronunciation voices by language, preferring language labels and verified language support before a multilingual fallback.
+- Play the selected language and IPA reading with separate audio clips for distinct pronunciations.
+- Restore completed traces when navigating Back and Forward without starting another trace.
+- Show source links for the selected etymological history and its forms.
+- Accept prefix and suffix searches such as pan- and prioritize dictionary-returned affixes in autocomplete.
 - Recover failed synthesis with a bounded corrective retry, retain failed-language tabs with targeted retry actions, and explain unavailable lineage.
 - Pronunciation playback follows language changes without stale audio resetting the selected entry.
 - Auto discovers supported languages for a spelling and traces their histories together with language tabs.

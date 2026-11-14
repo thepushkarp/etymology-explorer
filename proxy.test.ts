@@ -31,6 +31,12 @@ test('known spelling pages redirect GET and HEAD without caching mutable identit
       expect(response.headers.get('cache-control')).toBe('private, no-store')
     }
     expect(lookup).toHaveBeenCalledWith('つなみ', 'ja')
+    const selected = await proxy(
+      new NextRequest('https://etymex.com/word/ja/つなみ?lookup=tsunami&history=first')
+    )
+    expect(selected.headers.get('location')).toBe(
+      `https://etymex.com/word/ja/${encodeURIComponent('津波')}?lookup=tsunami&history=first`
+    )
     lookup.mockClear()
     await proxy(new NextRequest('https://etymex.com/word/ja/%E0%A4%A'))
     await proxy(new NextRequest('https://etymex.com/word/unknown/つなみ'))

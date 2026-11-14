@@ -38,7 +38,18 @@ export function normalizeScriptTargets(value: unknown): ScriptTarget[] {
     if (!isLanguageCode(language)) continue
     const word = canonicalizeWord(item.word)
     if (!isValidWord(word) || !candidateLanguages(word).includes(language)) continue
-    targets.set(`${language}:${word}`, { word, language })
+    const key = `${language}:${word}`
+    const previous = targets.get(key)
+    targets.set(key, {
+      ...previous,
+      word,
+      language,
+      ...(typeof item.reading === 'string' ? { reading: item.reading } : {}),
+      ...(typeof item.meaning === 'string' ? { meaning: item.meaning } : {}),
+      ...(typeof item.sourceUrl === 'string' && /^https:\/\//.test(item.sourceUrl)
+        ? { sourceUrl: item.sourceUrl }
+        : {}),
+    })
   }
   return [...targets.values()]
 }

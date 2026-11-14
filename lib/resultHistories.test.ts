@@ -38,7 +38,7 @@ const RESULT: EtymologyResult = {
   lore: 'river story',
   examples: river.examples,
   partsOfSpeech: river.partsOfSpeech,
-  sources: [{ name: 'wiktionary', url: 'https://en.wiktionary.org/wiki/bank' }],
+  sources: [{ name: 'wiktionary', word: 'bank', url: 'https://en.wiktionary.org/wiki/bank' }],
 }
 
 describe('historyEntry', () => {
@@ -49,7 +49,7 @@ describe('historyEntry', () => {
     expect(selected.lore).toBe('money story')
     expect(selected.examples).toEqual(money.examples)
     expect(selected.partsOfSpeech).toEqual(money.partsOfSpeech)
-    expect(selected.sources).toBe(RESULT.sources)
+    expect(selected.sources).toEqual(RESULT.sources)
     expect('histories' in selected).toBe(false)
   })
 
@@ -59,6 +59,28 @@ describe('historyEntry', () => {
     result.histories[0].transliteration = 'primary reading'
     expect(historyEntry(result).transliteration).toBe('primary reading')
     expect(historyEntry(result, 'money').transliteration).toBeUndefined()
+  })
+
+  test('scopes saved source links to the selected forms and explicit research owners', () => {
+    const result = structuredClone(RESULT)
+    result.histories[0].roots = [
+      { root: 'banki', origin: 'Old Norse', meaning: 'bank', relatedWords: ['embankment'] },
+    ]
+    result.sources.push(
+      { name: 'wiktionary', word: 'banki', url: 'https://en.wiktionary.org/wiki/banki' },
+      { name: 'etymonline', word: 'banca', historyIds: ['money'] },
+      { name: 'wiktionary', word: 'embankment' },
+      { name: 'wiktionary', word: 'unrelated' }
+    )
+    expect(historyEntry(result, 'river').sources.map((source) => source.word)).toEqual([
+      'bank',
+      'banki',
+      'embankment',
+    ])
+    expect(historyEntry(result, 'money').sources.map((source) => source.word)).toEqual([
+      'bank',
+      'banca',
+    ])
   })
 
   test('projects counterparts only for the selected history', () => {
@@ -80,16 +102,12 @@ describe('historyChoices', () => {
       {
         id: 'river',
         label: 'river sense',
-        entryKind: 'lemma',
-        formOf: undefined,
-        partsOfSpeech: ['noun'],
+        details: 'noun',
       },
       {
         id: 'money',
         label: 'money sense',
-        entryKind: 'lemma',
-        formOf: undefined,
-        partsOfSpeech: ['noun'],
+        details: 'noun',
       },
     ])
   })

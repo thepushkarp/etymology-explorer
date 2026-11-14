@@ -16,7 +16,6 @@ const ServerEnvSchema = z.object({
   KV_REST_API_URL: optionalString(z.string().url()),
   KV_REST_API_TOKEN: optionalString(z.string().min(1)),
   ELEVENLABS_API_KEY: optionalString(),
-  ELEVENLABS_VOICE_ID: optionalString(),
   EXA_API_KEY: optionalString(),
   EXA_ENABLED: z.enum(['true', 'false']).optional(),
 })

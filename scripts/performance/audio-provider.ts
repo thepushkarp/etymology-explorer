@@ -1,4 +1,4 @@
-/** Paired ElevenLabs transport timings with the production voice, model and audio settings. */
+/** Paired ElevenLabs transport timings with language-selected voices and production settings. */
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { generatePronunciation } from '@/lib/elevenlabs'
@@ -29,6 +29,7 @@ try {
         const target = new URL(input instanceof Request ? input.url : String(input))
         if (target.hostname !== 'api.elevenlabs.io')
           throw new Error('Unexpected benchmark destination')
+        if (!target.pathname.startsWith('/v1/text-to-speech/')) return originalFetch(target, init)
         target.pathname = target.pathname.replace(/\/stream$/, '')
         if (variant === 'stream') target.pathname += '/stream'
         requestBody = JSON.parse(String(init?.body))
@@ -67,10 +68,7 @@ try {
     }
   }
 } catch (error) {
-  const message = safeError(error).replaceAll(
-    process.env.ELEVENLABS_VOICE_ID ?? '__unset_voice__',
-    '[voice]'
-  )
+  const message = safeError(error)
   writeFileSync(`${directory}/failure.json`, JSON.stringify({ error: message }, null, 2))
   throw new Error(message)
 } finally {

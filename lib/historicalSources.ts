@@ -1,4 +1,5 @@
 import { CONFIG } from './config'
+import { lookupOncoj } from './oncoj'
 import { fetchWithTimeout } from './fetchUtils'
 import { canonicalizeWord } from './orthography'
 import type { SourceFamilyId, SourceProviderId } from './sourceProviders'
@@ -202,5 +203,11 @@ export const HISTORICAL_SOURCES: HistoricalSourceDescriptor[] = [
     family: 'lsj',
     languages: ['Ancient Greek'],
     fetch: (word, signal) => fetchLogeionDictionary(word, 'LSJ', signal),
+  },
+  {
+    id: 'oncoj',
+    family: 'oncoj',
+    languages: ['Old Japanese'],
+    fetch: async (word) => lookupOncoj(word),
   },
 ]

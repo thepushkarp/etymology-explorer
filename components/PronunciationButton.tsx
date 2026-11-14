@@ -6,17 +6,28 @@ import { usePronunciation } from '@/lib/hooks/usePronunciation'
 import { LANGUAGES, languageFromName, type LanguageCode } from '@/lib/languages'
 
 /** Plays TTS audio for the word; `p` plays it from anywhere on the page. */
-export function PronunciationButton({ word, language }: { word: string; language: LanguageCode }) {
-  const { play, isPlaying, isLoading, error } = usePronunciation(word, language)
+export function PronunciationButton({
+  word,
+  language,
+  ipa,
+  hotkey = true,
+}: {
+  word: string
+  language: LanguageCode
+  ipa?: string
+  hotkey?: boolean
+}) {
   const speechLanguage = LANGUAGES[language].ttsLanguageCode
   const supported = Boolean(speechLanguage)
   const speechCode = languageFromName(speechLanguage ?? '')
+  const spokenIpa = speechCode === language ? ipa : undefined
+  const { play, isPlaying, isLoading, error } = usePronunciation(word, language, spokenIpa)
   const reading =
     speechCode && speechCode !== language
       ? `${LANGUAGES[speechCode].englishName} reading`
       : 'pronunciation'
   useHotkey('p', () => {
-    if (supported) void play()
+    if (supported && hotkey) void play()
   })
   if (!supported) return null
 
@@ -25,8 +36,11 @@ export function PronunciationButton({ word, language }: { word: string; language
       type="button"
       onClick={play}
       disabled={isLoading || isPlaying}
-      aria-label={`Play ${reading} of ${word}`}
-      title={error ?? (reading === 'pronunciation' ? 'Listen (p)' : `Listen to ${reading} (p)`)}
+      aria-label={`Play ${reading} of ${word}${spokenIpa ? ` /${spokenIpa}/` : ''}`}
+      title={
+        error ??
+        `Listen${reading === 'pronunciation' ? '' : ` to ${reading}`}${spokenIpa ? ` /${spokenIpa}/` : ''}${hotkey ? ' (p)' : ''}`
+      }
       className={`-m-1 p-1 transition-colors disabled:cursor-default ${
         error ? 'text-accent' : isPlaying ? 'text-ink' : 'text-muted hover:text-ink'
       } ${isLoading ? 'animate-pulse' : ''}`}

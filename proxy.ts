@@ -87,10 +87,9 @@ export async function proxy(request: NextRequest) {
             ? await getCachedSpellingEntry(word, language)
             : null
         if (alias) {
-          const response = NextResponse.redirect(
-            new URL(wordPagePath(alias.word, alias.language), request.nextUrl),
-            307
-          )
+          const destination = new URL(wordPagePath(alias.word, alias.language), request.nextUrl)
+          destination.search = request.nextUrl.search
+          const response = NextResponse.redirect(destination, 307)
           response.headers.set('Cache-Control', 'private, no-store')
           return response
         }

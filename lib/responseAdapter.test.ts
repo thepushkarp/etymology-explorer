@@ -37,7 +37,11 @@ describe('createResponseAdapter — error parity', () => {
     expect(response.status).toBe(503)
     expect(response.headers.get('x-protection-mode')).toBe('normal')
     expect(response.headers.get('retry-after')).toBe('60')
-    expect(await response.json()).toEqual({ success: false, error: 'Redis is down' })
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'Redis is down',
+      errorType: 'network',
+    })
   })
 
   test('streaming errors ship as 200 SSE with a terminal error event', async () => {
@@ -74,6 +78,7 @@ describe('createResponseAdapter — error parity', () => {
     expect(await unary.json()).toEqual({
       success: false,
       error: 'Not a word',
+      errorType: 'nonsense',
       data: { suggestion: 'perfidious' },
     })
 
@@ -97,6 +102,7 @@ describe('createResponseAdapter — error parity', () => {
     expect(await createResponseAdapter(false).error('No entry', options).json()).toEqual({
       success: false,
       error: 'No entry',
+      errorType: 'typo',
       data: { reason: 'absent', suggestions: ['namaste'], otherScripts },
     })
     expect(await readSseEvent(createResponseAdapter(true).error('No entry', options))).toEqual({

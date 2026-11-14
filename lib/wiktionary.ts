@@ -3,6 +3,7 @@ import type { SourceData } from './types'
 import { LANGUAGES, languageFromName } from './languages'
 import {
   cleanWiktionaryHtml,
+  extractWiktionaryLookup,
   extractWiktionaryEntryGroups,
   extractWiktionaryLanguageText,
   extractWiktionaryRomanizations,
@@ -197,6 +198,9 @@ export function extractWiktionaryLanguage(
   return {
     text,
     url,
+    ...(edition === 'en'
+      ? { lookup: extractWiktionaryLookup(page.html, page.sections, heading, page.requestedWord) }
+      : {}),
     entryGroups: extractWiktionaryEntryGroups(
       page.html,
       page.sections,

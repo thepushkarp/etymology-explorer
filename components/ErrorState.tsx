@@ -11,7 +11,7 @@ const DEFAULT_MESSAGES: Record<StreamingUiError['type'], string> = {
 
 interface ErrorStateProps {
   error: StreamingUiError
-  language: LanguageCode
+  language?: LanguageCode
   onRetry?: () => void
 }
 

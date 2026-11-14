@@ -1,38 +1,79 @@
 'use client'
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { WordLink } from '@/components/WordLink'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { EntryHeader } from '@/components/etymology-card/EntryHeader'
-import { EntrySelector } from '@/components/etymology-card/EntrySelector'
-import { LanguageTabs } from '@/components/LanguageTabs'
+import { EntryNavigation } from '@/components/EntryNavigation'
+import { entryNavigation } from '@/lib/entryNavigation'
+import { entryPagePath, type EntrySelection } from '@/lib/entrySelection'
+import { useLookupGroup } from '@/lib/hooks/useLookupGroup'
+import { useEntrySelection } from '@/lib/hooks/useEntrySelection'
 import { ScriptLinks } from '@/components/ScriptLinks'
 import { ShareButton } from '@/components/ShareButton'
 import { TraceStatus } from '@/components/TraceStatus'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
-import { consumeTraceIntent } from '@/lib/traceIntent'
-import { LANGUAGES, wordPagePath, type LanguageCode } from '@/lib/languages'
-import { historyChoices, historyEntry } from '@/lib/resultHistories'
+import { scheduleTraceIntent } from '@/lib/traceIntent'
+import { LANGUAGES, type LanguageCode } from '@/lib/languages'
+import { historyEntry } from '@/lib/resultHistories'
 import { spellingPronunciation } from '@/lib/scriptTargets'
 import { toPartialResult } from '@/lib/streamReducer'
-import type { EntrySpelling, EtymologyResult, LanguageFailure, WordEntry } from '@/lib/types'
+import type {
+  EntrySpelling,
+  EtymologyResult,
+  LanguageFailure,
+  LookupGroup,
+  WordEntry,
+} from '@/lib/types'
 
 interface EntryViewProps {
   entry: WordEntry
   language?: LanguageCode
   stale?: boolean
-  /** Live results switch tabs locally until a new page is loaded. */
-  onSelectLanguage?: (language: LanguageCode) => void
+  lookupGroup?: LookupGroup
+  selection?: EntrySelection
+  traceAlternatives?: boolean
 }
 
-export function EntryView({ entry, language, stale = false, onSelectLanguage }: EntryViewProps) {
+export function EntryView({
+  entry,
+  language,
+  stale = false,
+  selection: initialSelection,
+  lookupGroup,
+  traceAlternatives = false,
+}: EntryViewProps) {
   const { progress, search } = useStreamingEtymology(undefined, entry.word)
-  const [refreshedLanguage, setRefreshedLanguage] = useState<LanguageCode>()
   const [retryLanguage, setRetryLanguage] = useState<LanguageCode>()
   const displayed = progress.result ?? entry
-  const selected = refreshedLanguage ?? language ?? displayed.languages[0]
+  const selection = useEntrySelection(displayed.word, language, initialSelection)
+  const selected = selection.language ?? language ?? displayed.languages[0]
   const result = selected ? displayed.entries[selected] : undefined
+  const [explicitWord, setExplicitWord] = useState<string>()
+  const related = useLookupGroup({
+    word: displayed.word,
+    initial: lookupGroup,
+    entry: displayed,
+    lookup: selection.lookup,
+    activity:
+      (traceAlternatives || explicitWord === displayed.word || progress.result) && !selection.lookup
+        ? 'trace'
+        : progress.result
+          ? 'refresh'
+          : undefined,
+  })
+  const { group } = related
+  const navigation = entryNavigation({
+    word: displayed.word,
+    language: selected,
+    entry: displayed,
+    group,
+    selection,
+    otherScripts: displayed.otherScripts,
+  })
+  const { historyId } = navigation
   const failure = selected ? displayed.failedLanguages?.[selected] : undefined
   const spellings = displayed.spellings?.filter((spelling) => spelling.language === selected) ?? []
 
@@ -40,26 +81,31 @@ export function EntryView({ entry, language, stale = false, onSelectLanguage }: 
   const showProgress = progress.status === 'loading' && (!retryLanguage || recovering)
 
   useEffect(() => {
-    consumeTraceIntent(entry.word)
+    return scheduleTraceIntent(entry.word, undefined, () => setExplicitWord(entry.word))
   }, [entry.word])
 
   const tabs = (
-    <LanguageTabs
-      word={displayed.word}
-      languages={displayed.languages}
-      failedLanguages={displayed.failedLanguages}
-      otherLanguages={displayed.otherLanguages}
-      otherScripts={displayed.otherScripts}
-      language={selected}
-      onSelect={
-        onSelectLanguage || progress.status !== 'idle'
-          ? (code) => {
-              setRefreshedLanguage(code)
-              onSelectLanguage?.(code)
-            }
-          : undefined
-      }
-    />
+    <>
+      <EntryNavigation model={navigation} />
+      {related.loading && (
+        <p role="status" className="mt-3 text-sm text-muted">
+          Checking related entries…
+        </p>
+      )}
+      {related.error && (
+        <p role="status" className="mt-3 text-sm text-muted">
+          {related.error}{' '}
+          <button type="button" className="link" onClick={related.retry}>
+            Retry
+          </button>
+        </p>
+      )}
+      {group && !group.choices.length && !related.loading && !related.error && (
+        <button type="button" className="link mt-3 text-sm text-muted" onClick={related.retry}>
+          Check related entries
+        </button>
+      )}
+    </>
   )
   const recovery = failure && (
     <FailedLanguage
@@ -75,14 +121,61 @@ export function EntryView({ entry, language, stale = false, onSelectLanguage }: 
       }}
     />
   )
-  if (!result) {
+  const actions = (
+    <div className="flex items-center gap-4">
+      {stale && !progress.result && (
+        <button
+          type="button"
+          className="link text-sm text-muted"
+          disabled={progress.status === 'loading'}
+          onClick={() => {
+            setRetryLanguage(undefined)
+            search(entry.word, selected, { refresh: true })
+          }}
+        >
+          {progress.status === 'loading' ? 'Retracing…' : 'Retrace'}
+        </button>
+      )}
+      <ShareButton />
+    </div>
+  )
+  // Finish the explicit alternative batch before navigating, so unmounting
+  // this page cannot cancel the remaining source-linked destinations.
+  if (navigation.defaultTarget && !related.loading && progress.status !== 'loading') {
+    const target = navigation.defaultTarget
+    return (
+      <OpenDefaultEntry href={entryPagePath(target.word, target.language, target)}>
+        <EntryHeader
+          result={toPartialResult(displayed.word, {}, selected)}
+          subheader={tabs}
+          actions={actions}
+          pending
+        />
+      </OpenDefaultEntry>
+    )
+  }
+  if (!result || navigation.unresolved) {
     return (
       <EntryHeader
+        actions={actions}
         result={toPartialResult(displayed.word, {}, selected)}
         subheader={
           <>
             {tabs}
-            {failure ? (
+            {navigation.unresolved ? (
+              <div className="mt-8">
+                <p role="status" className="font-serif italic text-muted">
+                  This reading is not available in the saved entry.
+                </p>
+                <WordLink
+                  word={displayed.word}
+                  language={selected}
+                  className="link mt-4 inline-block text-sm text-muted"
+                >
+                  View all entries for {displayed.word}
+                </WordLink>
+              </div>
+            ) : failure ? (
               recovery
             ) : (
               <p role="status" className="mt-8 font-serif italic text-muted">
@@ -107,6 +200,8 @@ export function EntryView({ entry, language, stale = false, onSelectLanguage }: 
     <FinishedLanguage
       key={`${result.language}:${result.primaryHistoryId}`}
       result={result}
+      historyId={historyId!}
+      grouped={navigation.grouped}
       spellings={spellings}
       subheader={
         <>
@@ -117,15 +212,18 @@ export function EntryView({ entry, language, stale = false, onSelectLanguage }: 
               <span>Also written</span>
               {spellings.map((spelling) => (
                 <span key={spelling.word}>
-                  <Link
-                    href={wordPagePath(displayed.word, spelling.language)}
+                  <WordLink
+                    word={displayed.word}
+                    language={spelling.language}
+                    historyId={historyId}
+                    lookup={group?.reading}
                     lang={spelling.language}
-                    dir="auto"
                     className="link font-serif text-ink"
                   >
                     {spelling.word}
-                  </Link>
+                  </WordLink>
                   {spelling.kind === 'misspelling' && ' (misspelling)'}
+                  {spelling.kind === 'romanization' && ' (rōmaji)'}
                 </span>
               ))}
             </p>
@@ -133,27 +231,18 @@ export function EntryView({ entry, language, stale = false, onSelectLanguage }: 
           {showProgress && <TraceStatus progress={progress} language={selected} />}
         </>
       }
-      actions={
-        <div className="flex items-center gap-4">
-          {stale && !progress.result && (
-            <button
-              type="button"
-              className="link text-sm text-muted"
-              disabled={progress.status === 'loading'}
-              onClick={() => {
-                setRetryLanguage(undefined)
-                search(entry.word, language, { refresh: true })
-              }}
-            >
-              {progress.status === 'loading' ? 'Retracing…' : 'Retrace'}
-            </button>
-          )}
-          <ShareButton />
-        </div>
-      }
+      actions={actions}
       status={progress.status === 'error' && !failure ? progress.error?.message : undefined}
     />
   )
+}
+
+function OpenDefaultEntry({ href, children }: { href: string; children: ReactNode }) {
+  const router = useRouter()
+  useEffect(() => {
+    router.replace(href, { scroll: false })
+  }, [router, href])
+  return children
 }
 
 function FailedLanguage({
@@ -210,14 +299,17 @@ function FinishedLanguage({
   actions,
   status,
   spellings,
+  historyId,
+  grouped,
 }: {
   result: EtymologyResult
   subheader: ReactNode
   actions: ReactNode
   status?: string
   spellings: EntrySpelling[]
+  historyId: string
+  grouped: boolean
 }) {
-  const [historyId, setHistoryId] = useState(result.primaryHistoryId)
   const ngram = useNgram(result.word, result.language)
   const display = useMemo(
     () => ({
@@ -226,7 +318,6 @@ function FinishedLanguage({
     }),
     [result, ngram, historyId]
   )
-  const choices = historyChoices(result)
 
   return (
     <EtymologyCard
@@ -246,21 +337,18 @@ function FinishedLanguage({
               {status}
             </p>
           )}
-          <EntrySelector
-            word={result.word}
-            entries={choices}
-            activeEntryId={historyId}
-            onChange={setHistoryId}
-          />
-          <ScriptLinks
-            targets={display.counterparts?.filter(
-              (target) =>
-                !spellings.some(
-                  (spelling) =>
-                    spelling.word === target.word && spelling.language === target.language
-                )
-            )}
-          />
+          {!grouped && (
+            <ScriptLinks
+              heading="Other written forms"
+              targets={display.counterparts?.filter(
+                (target) =>
+                  !spellings.some(
+                    (spelling) =>
+                      spelling.word === target.word && spelling.language === target.language
+                  )
+              )}
+            />
+          )}
         </>
       }
     />

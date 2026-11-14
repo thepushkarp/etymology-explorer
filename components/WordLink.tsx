@@ -3,12 +3,19 @@
 import Link from 'next/link'
 import { useState, type ReactNode } from 'react'
 import { markTraceIntent } from '@/lib/traceIntent'
-import { wordPagePath, type LanguageCode } from '@/lib/languages'
+import type { LanguageCode } from '@/lib/languages'
 import { recordRecentSearchIntent } from '@/lib/recentSearchClient'
+import { entryPagePath } from '@/lib/entrySelection'
+import { navigateEntry } from '@/lib/hooks/useEntrySelection'
 
 interface WordLinkProps {
   word: string
   language?: LanguageCode
+  historyId?: string
+  lookup?: string
+  localNavigation?: boolean
+  /** Language of a custom label when it differs from the destination entry. */
+  lang?: LanguageCode
   className?: string
   title?: string
   'aria-current'?: 'page'
@@ -24,27 +31,40 @@ interface WordLinkProps {
 export function WordLink({
   word,
   language,
+  historyId,
+  lookup,
+  localNavigation = false,
+  lang = language,
   className = 'link',
   title,
   children,
   'aria-current': ariaCurrent,
 }: WordLinkProps) {
   const [prefetch, setPrefetch] = useState(false)
+  const href = entryPagePath(word, language, { historyId, lookup })
 
   return (
     <Link
-      href={wordPagePath(word, language)}
-      prefetch={prefetch}
+      href={href}
+      scroll={!localNavigation}
+      prefetch={localNavigation ? false : prefetch}
       onMouseEnter={() => setPrefetch(true)}
       onFocus={() => setPrefetch(true)}
-      onClick={() => {
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)
+          return
+        if (localNavigation) {
+          event.preventDefault()
+          navigateEntry(href)
+          return
+        }
         markTraceIntent(word, language)
         void recordRecentSearchIntent(word)
       }}
       className={className}
       title={title}
       aria-current={ariaCurrent}
-      lang={language}
+      lang={lang}
       dir="auto"
     >
       {children ?? word}

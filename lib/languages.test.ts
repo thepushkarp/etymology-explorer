@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   candidateLanguages,
   detectScripts,
+  isLanguageCode,
   languageFromName,
   lexemeKey,
   lexicalLanguageName,
@@ -16,6 +17,8 @@ describe('language registry and spelling identity', () => {
     expect(parseLanguageCode(null)).toBe('en')
     for (const code of SUPPORTED_LANGUAGE_CODES) {
       expect(parseLanguageCode(code.toUpperCase())).toBe(code)
+      expect(isLanguageCode(code)).toBe(true)
+      expect(isLanguageCode(code.toUpperCase())).toBe(false)
     }
     expect(parseLanguageCode('de')).toBeNull()
     expect(parseLanguageCode('<img src=x onerror=alert(1)>')).toBeNull()

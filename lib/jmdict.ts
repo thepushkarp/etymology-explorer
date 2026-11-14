@@ -1,118 +1,131 @@
-import { z } from 'zod'
-import { CONFIG } from './config'
-import { safeError } from './errorUtils'
-import { fetchWithTimeout } from './fetchUtils'
+import { createHash } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import { promisify } from 'node:util'
+import { gunzip } from 'node:zlib'
+import manifest from '../data/jmdict/manifest.json'
 import { canonicalizeWord } from './orthography'
-import { getRedis } from './redis'
-import { currentSourceFetchBudget, SourceFetchBudgetExceeded } from './sourceFetchBudget'
 import type { SpecialistSourceResult } from './specialistSources'
 import type { WiktionaryEntryGroup } from './wiktionaryEntryGroups'
 
-const responseSchema = z.object({
-  meta: z.object({ status: z.number() }),
-  data: z.array(
-    z
-      .object({
-        slug: z.string().min(1),
-        japanese: z.array(
-          z.object({ word: z.string().optional(), reading: z.string().optional() })
-        ),
-        senses: z.array(
-          z
-            .object({
-              english_definitions: z.array(z.string()),
-              parts_of_speech: z.array(z.string()),
-              restrictions: z.array(z.string()),
-              tags: z.array(z.string()),
-              source: z.array(z.object({ language: z.string(), word: z.string() }).passthrough()),
-              info: z.array(z.string()),
-            })
-            .passthrough()
-        ),
-        attribution: z.object({ jmdict: z.boolean() }).passthrough(),
-      })
-      .passthrough()
-  ),
-})
-
+interface Spelling {
+  word: string
+  info: string[]
+  priority: string[]
+}
+interface Reading extends Spelling {
+  noKanji: boolean
+  restrict: string[]
+}
+export interface JmdictEntry {
+  id: string
+  kanji: Spelling[]
+  readings: Reading[]
+  senses: Array<{
+    kanji: string[]
+    readings: string[]
+    pos: string[]
+    glosses: string[]
+    loans: Array<{ language: string; text: string; type: string; wasei: boolean }>
+    xml: string
+  }>
+  xml: string
+}
+const unzip = promisify(gunzip)
+const shards = new Map<string, Promise<unknown>>()
 const LICENSE =
   'JMdict © Electronic Dictionary Research and Development Group (EDRDG), ' +
   'https://www.edrdg.org/ — CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/; ' +
-  'https://www.edrdg.org/edrdg/licence.html'
+  'https://www.edrdg.org/edrdg/licence.html; indexed from original XML'
 
-// Jisho combines JMdict, JMnedict, and Wikipedia inside the same attributed entry.
-// Only recognized lexical classes admit a sense; an entry-level JMdict flag alone
-// cannot distinguish the proper-name senses contributed by JMnedict.
-const LEXICAL_POS =
-  /^(?:Noun(?:\b|$)|Pronoun$|(?:(?:Godan|Ichidan|Nidan|Yodan|Suru|Kuru|Su|Zuru|Transitive|Intransitive|Irregular(?: nu| ru)?|Ru[- ]irregular|Unspecified)\s+)?verb\b|.*\badjective.*|Adverb(?:\b|$)|Expression(?:s)?(?:\b|$)|Interjection(?:\b|$)|Conjunction$|Particle$|Counter$|Prefix$|Suffix$|Copula$|Auxiliary(?:\b|$)|Numeric$|Unclassified$)/i
+async function loadShard<T>(kind: 'forms' | 'entries', key: string): Promise<Record<string, T>> {
+  const bucket = parseInt(createHash('sha256').update(key).digest('hex').slice(0, 2), 16) % 64
+  const name = `${kind}-${bucket.toString(16).padStart(2, '0')}.json.gz`
+  const cached = shards.get(name)
+  if (cached) return cached as Promise<Record<string, T>>
+  const loading = (async () => {
+    const raw = await readFile(path.join(process.cwd(), 'data/jmdict', name))
+    const expected = manifest.shards[name as keyof typeof manifest.shards]
+    if (createHash('sha256').update(raw).digest('hex') !== expected)
+      throw new Error(`JMdict shard ${name} failed checksum verification; rebuild the index`)
+    return JSON.parse((await unzip(raw)).toString('utf8')) as Record<string, T>
+  })()
+  // Bound retained decompressed data; concurrent readers of one shard share work.
+  if (shards.size >= 4) shards.delete(shards.keys().next().value!)
+  shards.set(name, loading)
+  try {
+    return await loading
+  } catch (error) {
+    if (shards.get(name) === loading) shards.delete(name)
+    throw new Error(`JMdict lookup for ${key} could not read its local index`, { cause: error })
+  }
+}
 
-export function parseJmdictResponse(word: string, payload: unknown): SpecialistSourceResult[] {
-  const parsed = responseSchema.safeParse(payload)
-  if (!parsed.success)
-    throw new Error(
-      `JMdict response for ${word} has invalid dictionary data: ${parsed.error.message}`
-    )
-  if (parsed.data.meta.status !== 200)
-    throw new Error(`JMdict response for ${word} returned HTTP ${parsed.data.meta.status}`)
+/** Reading and sense restrictions intersect on a valid spelling/reading pair. */
+export function selectJmdictEntries(
+  word: string,
+  entries: JmdictEntry[]
+): SpecialistSourceResult[] {
   const canonical = canonicalizeWord(word)
-  const groups: WiktionaryEntryGroup[] = []
-  for (const entry of parsed.data.data) {
-    if (!entry.attribution.jmdict) continue
-    const matchingForms = entry.japanese.filter((form) =>
-      [form.word, form.reading].some((value) => value && canonicalizeWord(value) === canonical)
-    )
-    if (!matchingForms.length) continue
-    const url = `https://jisho.org/word/${encodeURIComponent(entry.slug)}`
+  const records: SpecialistSourceResult[] = []
+  for (const entry of entries) {
+    const pairs = entry.readings.flatMap((reading) => {
+      const spellings =
+        reading.noKanji || !entry.kanji.length
+          ? [undefined]
+          : entry.kanji.filter(
+              (kanji) => !reading.restrict.length || reading.restrict.includes(kanji.word)
+            )
+      return spellings
+        .filter((kanji) =>
+          [reading.word, kanji?.word].some((form) => form && canonicalizeWord(form) === canonical)
+        )
+        .map((kanji) => ({ reading, kanji }))
+    })
+    if (!pairs.length) continue
+    const url = `https://www.edrdg.org/jmwsgi/entr.py?svc=jmdict&sid=&q=${entry.id}`
+    const groups: WiktionaryEntryGroup[] = []
     for (const [index, sense] of entry.senses.entries()) {
       if (
-        !sense.parts_of_speech.length ||
-        !sense.parts_of_speech.every((pos) => LEXICAL_POS.test(pos)) ||
-        !sense.english_definitions.length
-      )
-        continue
-      if (
-        sense.restrictions.length &&
-        !matchingForms.some((form) =>
-          sense.restrictions.some((restriction) =>
-            [form.word, form.reading].some(
-              (value) => value && canonicalizeWord(value) === canonicalizeWord(restriction)
-            )
-          )
+        !sense.glosses.length ||
+        !pairs.some(
+          ({ reading, kanji }) =>
+            (!sense.kanji.length || (kanji && sense.kanji.includes(kanji.word))) &&
+            (!sense.readings.length || sense.readings.includes(reading.word))
         )
       )
         continue
-      const id = `jmdict:${entry.slug}:sense:${index + 1}`
-      const metadata = Object.fromEntries(Object.entries(entry).filter(([key]) => key !== 'senses'))
-      const heading = `${entry.slug}, sense ${index + 1}`
+      const id = `jmdict:${entry.id}:sense:${index + 1}`
+      const metadata = { kanji: entry.kanji, readings: entry.readings }
       groups.push({
         index: id,
-        number: `${index + 1}`,
+        number: String(index + 1),
         anchor: id,
-        heading,
+        heading: `${word}: ${sense.glosses.join('; ')}`,
         level: 2,
         sourceUrl: url,
-        // Jisho omits JMdict's full/partial loan-source distinction. Keep the
-        // source material verbatim as lexical context, without ancestry edges.
+        ...(sense.loans.some((loan) => loan.language === 'eng' && loan.wasei)
+          ? { etymologyText: 'wasei-eigo (JMdict ls_wasei on English source material).' }
+          : {}),
         text: [
-          `JMdict / EDRDG (via Jisho): ${heading}`,
-          `Entry metadata: ${JSON.stringify(metadata)}`,
-          `Sense metadata: ${JSON.stringify(sense)}`,
-          'Loan-source material extent: unknown; Jisho does not supply the full/partial distinction. ' +
-            'Source language/material fields alone do not establish a whole-word donor.',
+          `JMdict ${entry.id}, sense ${index + 1}`,
+          `Entry spelling metadata: ${JSON.stringify(metadata)}`,
+          `Applicable parts of speech (including XML inheritance): ${sense.pos.join('; ')}`,
+          `Loan-source metadata: ${JSON.stringify(sense.loans)}`,
+          'Loan-source full/part describes source material extent; wasei marks a Japanese coinage. Neither kanji shapes nor glosses establish ancestry.',
+          sense.xml,
         ].join('\n'),
         sections: [],
       })
     }
-  }
-  if (!groups.length) return []
-  return [
-    {
+    if (!groups.length) continue
+    records.push({
       provider: 'jmdict',
       sourceFamily: 'jmdict',
       evidenceRole: 'lexical',
       data: {
-        text: groups.map((group) => group.text).join('\n\n'),
-        url: `https://jisho.org/search/${encodeURIComponent(word)}`,
+        text: `${LICENSE}\nSnapshot ${manifest.date}; entry ${entry.id}\n${entry.xml}`,
+        url,
         language: 'ja',
         lexicalLanguage: 'Japanese',
         sourceFamily: 'jmdict',
@@ -120,55 +133,46 @@ export function parseJmdictResponse(word: string, payload: unknown): SpecialistS
         requestedWord: word,
         resolvedWord: word,
         license: LICENSE,
+        revisionId: manifest.sha256,
+        sourceEntryId: entry.id,
         entryGroups: groups,
+      },
+    })
+  }
+  if (!records.length) return []
+  return [
+    {
+      ...records[0],
+      data: {
+        ...records[0].data,
+        text: records.map((record) => record.data.text).join('\n\n'),
+        sourceEntryId: records.map((record) => record.data.sourceEntryId).join('|'),
+        entryGroups: records.flatMap((record) => record.data.entryGroups ?? []),
       },
     },
   ]
 }
 
-export interface JmdictGateRedis {
-  set(key: string, value: string, options: { nx: true; ex: number }): Promise<unknown>
-}
-
 export async function fetchJmdict(
   word: string,
-  signal?: AbortSignal,
-  client: JmdictGateRedis | null = getRedis()
+  signal?: AbortSignal
 ): Promise<SpecialistSourceResult[]> {
   signal?.throwIfAborted()
-  if (currentSourceFetchBudget()?.exhausted) throw new SourceFetchBudgetExceeded()
-  if (!client)
-    throw new Error(`JMdict lookup for ${word} unavailable: Redis crawl gate is not configured`)
-  let admitted: unknown
-  try {
-    // A global, expiring start gate enforces Jisho's crawl delay across workers
-    // and words. Never release it on completion or queue requests behind it.
-    admitted = await client.set('source:jmdict:jisho:crawl-gate', word, {
-      nx: true,
-      ex: CONFIG.jmdictCrawlDelaySeconds,
+  // EDRDG requests at least monthly updates for web dictionaries. An expired
+  // local snapshot is unavailable, never evidence that a word does not exist.
+  if (Date.now() - Date.parse(manifest.date) > 31 * 86_400_000)
+    throw new Error(
+      `JMdict snapshot ${manifest.date} needs a monthly refresh; run scripts/build-jmdict-index.py with a verified download`
+    )
+  const canonical = canonicalizeWord(word)
+  const forms = await loadShard<string[]>('forms', canonical)
+  const entries = await Promise.all(
+    (forms[canonical] ?? []).map(async (id) => {
+      const shard = await loadShard<JmdictEntry>('entries', id)
+      if (!shard[id]) throw new Error(`JMdict index has no record for entry ${id}`)
+      return shard[id]
     })
-  } catch (error) {
-    throw new Error(
-      `JMdict lookup for ${word} unavailable: Redis crawl gate failed: ${safeError(error)}`
-    )
-  }
-  if (admitted !== 'OK')
-    throw new Error(
-      `JMdict lookup for ${word} unavailable: Jisho crawl delay active; retry after ${CONFIG.jmdictCrawlDelaySeconds} seconds`
-    )
-  signal?.throwIfAborted()
-  const response = await fetchWithTimeout(
-    `https://jisho.org/api/v1/search/words?keyword=${encodeURIComponent(word)}`,
-    {
-      headers: { 'User-Agent': 'EtymologyExplorer/1.0 (educational project)' },
-      redirect: 'error',
-    },
-    CONFIG.timeouts.source,
-    signal
   )
-  if (!response.ok) throw new Error(`JMdict lookup for ${word} failed: HTTP ${response.status}`)
-  const records = parseJmdictResponse(word, await response.json())
-  for (const record of records)
-    record.data.retrieval = { method: 'direct', retrievedAt: new Date().toISOString() }
-  return records
+  signal?.throwIfAborted()
+  return selectJmdictEntries(canonical, entries)
 }

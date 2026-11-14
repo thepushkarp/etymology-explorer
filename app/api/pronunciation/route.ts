@@ -6,10 +6,11 @@ import { getCostMode } from '@/lib/costGuard'
 import { tryAcquireLock, releaseLock, pollForResult } from '@/lib/singleflight'
 import { safeError } from '@/lib/errorUtils'
 import { CONFIG } from '@/lib/config'
-import { LANGUAGES, lexemeKey, parseLanguageCode } from '@/lib/languages'
+import { LANGUAGES, parseLanguageCode } from '@/lib/languages'
+import { normalizePronunciation, pronunciationKey } from '@/lib/pronunciation'
 import { incrLanguageCounter } from '@/lib/counters'
 
-// A configured voice and one stock fallback each have a 15s timeout; catalog lookup is bounded.
+// Two voice attempts each have a 15s timeout; the single catalog lookup is bounded.
 export const maxDuration = 60
 
 export async function GET(request: NextRequest) {
@@ -22,6 +23,11 @@ export async function GET(request: NextRequest) {
 
   const word = request.nextUrl.searchParams.get('word')
   const language = parseLanguageCode(request.nextUrl.searchParams.get('language'))
+  const rawIpa = request.nextUrl.searchParams.get('ipa')
+  const ipa = rawIpa === null ? undefined : normalizePronunciation(rawIpa)
+  if (rawIpa !== null && !ipa) {
+    return NextResponse.json({ success: false, error: 'Invalid pronunciation' }, { status: 400 })
+  }
 
   if (!language) {
     return NextResponse.json({ success: false, error: 'Unsupported language' }, { status: 400 })
@@ -58,7 +64,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const cached = await getCachedAudio(normalized, language)
+    const cached = await getCachedAudio(normalized, language, ipa)
     if (cached) {
       const buffer = Buffer.from(cached, 'base64')
       return new NextResponse(buffer, {
@@ -73,12 +79,12 @@ export async function GET(request: NextRequest) {
     console.error('[Pronunciation] Cache read error:', safeError(error))
   }
 
-  const lockKey = `lock:audio:${lexemeKey(language, normalized)}`
+  const lockKey = `lock:${pronunciationKey(normalized, language, ipa)}`
   const [acquisition, costMode] = await Promise.all([tryAcquireLock(lockKey), getCostMode()])
 
   if (acquisition.status === 'busy') {
     console.log(`[Pronunciation] Waiting for in-flight audio for "${normalized}"`)
-    const result = await pollForResult(() => getCachedAudio(normalized, language), {
+    const result = await pollForResult(() => getCachedAudio(normalized, language, ipa), {
       intervalMs: CONFIG.singleflight.audioWaiterPollIntervalMs,
     })
     if (result) {
@@ -111,14 +117,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const audioBuffer = await generatePronunciation(normalized, language)
+    const audioBuffer = await generatePronunciation(normalized, language, ipa)
     const base64 = Buffer.from(audioBuffer).toString('base64')
 
     // Persistence must finish before releasing the lock, but neither operation
     // needs to delay playback. after() keeps both alive on serverless runtimes.
     after(async () => {
       try {
-        await cacheAudio(normalized, base64, language)
+        await cacheAudio(normalized, base64, language, ipa)
       } finally {
         if (lockToken) await releaseLock(lockKey, lockToken)
       }

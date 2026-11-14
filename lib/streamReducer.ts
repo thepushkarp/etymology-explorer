@@ -16,6 +16,7 @@ import type {
   SourceOutcome,
   ScriptTarget,
   EntrySpelling,
+  LookupResolution,
 } from './types'
 import { LANGUAGES, isLanguageCode, type LanguageCode } from './languages'
 import { StreamingUiError, toStreamingUiError } from './streamingError'
@@ -96,6 +97,7 @@ export interface LanguageStreamState {
 }
 
 export interface StreamState {
+  lookupResolution?: LookupResolution
   word?: string
   identity?: ScriptTarget & { spellings?: EntrySpelling[] }
   languages: LanguageCode[]
@@ -192,6 +194,20 @@ export const initialStreamState: StreamState = {
 }
 
 function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
+  if (event.type === 'lookup_resolution')
+    return {
+      ...state,
+      lookupResolution: event.resolution,
+      ...(event.resolution.selected
+        ? {
+            identity: {
+              ...state.identity,
+              word: event.resolution.selected.word,
+              language: event.resolution.selected.language,
+            },
+          }
+        : {}),
+    }
   if (event.type === 'entry_identity') {
     return {
       ...state,

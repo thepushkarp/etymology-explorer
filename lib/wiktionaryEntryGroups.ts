@@ -2,6 +2,7 @@ import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
 import { sameSpelling } from './orthography'
 import { LANGUAGES, languageFromName, lexicalLanguageName, type LanguageCode } from './languages'
 import { normalizeScriptTargets } from './scriptTargets'
+import { japaneseEtymologyRelations } from './japaneseEtymology'
 import type { LexemeRef, ScriptTarget, SourceData, SourceLexicalRelation } from './types'
 /** A section returned by MediaWiki's `prop=tocdata` parser response. */
 export interface WiktionaryTocSection {
@@ -183,7 +184,7 @@ function balancedElement(html: string, start: number) {
   return undefined
 }
 
-function languageFragment(
+export function languageFragment(
   html: string,
   sections: readonly WiktionaryTocSection[],
   languageHeading: string
@@ -348,6 +349,138 @@ export function extractWiktionaryRomanizations(
     }
   }
   return normalizeScriptTargets(targets)
+}
+
+/** Lookup relationships are extracted only from the selected language's lexical markup. */
+export function extractWiktionaryLookup(
+  html: string,
+  sections: readonly WiktionaryTocSection[],
+  heading: string,
+  word: string
+): SourceData['lookup'] {
+  const language = languageFromName(heading)
+  const selected = languageFragment(html, sections, heading)
+  if (!language || !selected) return undefined
+  const fragment = selected.html
+  const readings = new Set<string>()
+  const boundHeadwords = selectedHeadwordLines(fragment, language).filter(({ headword }) =>
+    sameSpelling(cleanWiktionaryHtml(lexicalSpellingHtml(headword[2])), word)
+  )
+  const boundHeadword = boundHeadwords[0]
+  // Identity requires a single lemma, but lookup must retain independent senses
+  // even when a sibling history or definition describes an inflected form.
+  const hasIndependentEntry = boundHeadwords.some(({ start }) => {
+    const body = fragment.slice(start).split(/<h[1-6]\b/i)[0]
+    const opening = body.match(/<ol\b[^>]*>/i)
+    const list = opening && balancedElement(body, opening.index!)
+    if (!list) return false
+    let consumed = 0
+    for (const item of list.body.matchAll(/<li\b[^>]*>/gi)) {
+      if (item.index < consumed) continue
+      const definition = balancedElement(list.body, item.index)
+      if (!definition) continue
+      consumed = definition.end
+      const gloss = definition.body.split(/<(?:ul|ol|dl)\b/i)[0]
+      if (!/\bform-of-definition\b/.test(gloss) && cleanWiktionaryHtml(gloss)) return true
+    }
+    return false
+  })
+  const transliteration = headwordTransliteration(fragment, word)
+  if (transliteration) readings.add(transliteration)
+  if (language === 'ja' && /^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(word))
+    readings.add(word)
+  const targets: NonNullable<SourceData['lookup']>['targets'] = extractWiktionaryRomanizations(
+    html,
+    sections,
+    word
+  )
+    .filter((target) => target.language === language)
+    .map((target) => ({ ...target, relationship: 'romanization' }))
+  let incomplete = false
+  for (const table of language === 'ja' ? japaneseSeeEntries(fragment, 'en') : []) {
+    if (!sameSpelling(table.subject ?? '', word)) continue
+    incomplete ||= table.targets.length !== table.targetCount
+    targets.push(
+      ...table.targets.map((target) => ({ ...target, relationship: 'spelling' as const }))
+    )
+  }
+  for (const definition of fragment.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)) {
+    if (!boundHeadword) break
+    if (!/\bform-of-definition\b/.test(definition[1])) continue
+    const marker = definition[1].search(
+      /<(?:span|i)\b[^>]*class=["'][^"']*\bform-of-definition-link\b/i
+    )
+    if (marker < 0) continue
+    const prefix = cleanWiktionaryHtml(definition[1].slice(0, marker))
+    if (
+      !/\b(?:imperative|inflection|conjugation|form|past|plural|participle|stem)\b.*\bof$/i.test(
+        prefix
+      )
+    )
+      continue
+    const link = balancedElement(definition[1], marker)
+    if (!link) continue
+    const linked = scriptLink(link.body, language, 'en')
+    targets.push(...linked.map((target) => ({ ...target, relationship: 'form' as const })))
+  }
+  // A conjugation table belongs to this lemma; example sentences and glosses do not.
+  const forms = new Set<string>()
+  for (const section of sections) {
+    if (!boundHeadword) break
+    if (!/^(?:Conjugation|Inflection|Declension)$/i.test(cleanHeading(section.line))) continue
+    const start = anchorOffset(html, section.anchor)
+    if (start < selected.start || start >= selected.start + fragment.length) continue
+    const following = sections
+      .slice(sections.indexOf(section) + 1)
+      .find((next) => headingLevel(next) <= headingLevel(section))
+    const end = following ? anchorOffset(html, following.anchor) : selected.start + fragment.length
+    const body = html.slice(start, Math.min(end, selected.start + fragment.length))
+    for (const cell of body.matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)) {
+      let consumed = 0
+      for (const opening of cell[1].matchAll(/<(?:span|i|b)\b([^>]*)>/gi)) {
+        if (opening.index < consumed || attribute(opening[1], 'lang') !== language) continue
+        const term = balancedElement(cell[1], opening.index)
+        if (!term) continue
+        consumed = term.end
+        // Table line breaks separate alternatives; ordinary whitespace can belong
+        // to a phrase. Footnote numbers annotate forms, never the query spelling.
+        const lexical = lexicalSpellingHtml(term.body).replace(
+          /<sup\b([^>]*)>([\s\S]*?)<\/sup>/gi,
+          (markup, attributes: string, content: string) =>
+            hasClass(attributes, 'reference') ||
+            /^[0-9⁰¹²³⁴⁵⁶⁷⁸⁹]+$/.test(cleanWiktionaryHtml(content))
+              ? ''
+              : markup
+        )
+        for (const alternative of lexical.split(/<br\b[^>]*>/i)) {
+          const form = cleanWiktionaryHtml(alternative.replace(/\s+/g, ' ')).replace(
+            /[⁰¹²³⁴⁵⁶⁷⁸⁹]+$/u,
+            ''
+          )
+          if (form) forms.add(form)
+        }
+      }
+    }
+  }
+  const headwordBody = boundHeadword
+    ? fragment.slice(boundHeadword.start).split(/<h[1-6]\b/i)[0]
+    : ''
+  const listOpening = headwordBody.match(/<ol\b[^>]*>/i)
+  const definitions = listOpening && balancedElement(headwordBody, listOpening.index!)
+  const definition = definitions?.body
+    .match(/<li\b[^>]*>([\s\S]*?)<\/li>/i)?.[1]
+    .split(/<(?:ul|ol|dl)\b/i)[0]
+  return {
+    readings: [...readings],
+    hasIndependentEntry,
+    meaning:
+      definition && !/form-of-definition/.test(definition)
+        ? cleanWiktionaryHtml(definition)
+        : undefined,
+    targets,
+    forms: [...forms],
+    incomplete,
+  }
 }
 
 export function extractWiktionarySpellingRedirect(
@@ -527,7 +660,7 @@ function etymologyRelations(html: string, subject: LexemeRef): SourceLexicalRela
     for (const term of terms) {
       const prefix = cleanWiktionaryHtml(body.slice(0, term.start))
       if (
-        affirmativeOriginPrefix(prefix, /\bclipping of$/i) &&
+        affirmativeOriginPrefix(prefix, /\b(?:clipping|shortening) of(?: earlier)?$/i) &&
         term.lexeme.language === subject.language
       ) {
         relations.push({ subject, target: term.lexeme, relation: 'derived_from', snippet })
@@ -586,8 +719,10 @@ function etymologyRelations(html: string, subject: LexemeRef): SourceLexicalRela
  * Numbered etymology headings are group boundaries. Other headings remain
  * structured sections inside the current group, including same-level native
  * edition headings such as a noun entry followed by an inflected-form entry.
- * If an edition has no etymology heading, the language section is returned as
- * one fallback group rather than being confused with a same-spelling language.
+ * Native Japanese labelled homographs (名詞:橋, 名詞:箸) own their nested
+ * unnumbered etymology sections. Numbered origins within a homograph remain
+ * independent histories with their enclosing headword context. Ordinary POS
+ * sections alone do not establish different origins.
  */
 export function extractWiktionaryEntryGroups(
   html: string,
@@ -619,7 +754,51 @@ export function extractWiktionaryEntryGroups(
     if (matchesHeading(etymologyHeading, sections[index].line)) etymologyIndexes.push(index)
   }
 
-  const groupIndexes = etymologyIndexes.length > 0 ? etymologyIndexes : [languageIndex]
+  const nativeJapanese = pageIdentity?.edition === 'ja' && languageHeading === '日本語'
+  const nativeEntryIndexes = nativeJapanese
+    ? sections.flatMap((section, index) =>
+        index > languageIndex &&
+        index < languageEndIndex &&
+        headingLevel(section) === languageLevel + 1 &&
+        /^(?:名詞|動詞|形容詞|形容動詞|副詞|感動詞|接辞|接頭辞|接尾辞|造語成分)(?:\s*[:：]\s*\S.*)?$/u.test(
+          cleanHeading(section.line)
+        )
+          ? [index]
+          : []
+      )
+    : []
+  const homographIndexes =
+    nativeEntryIndexes.some((index) => /[:：]/u.test(cleanHeading(sections[index].line))) ||
+    (nativeEntryIndexes.length &&
+      etymologyIndexes.some((index) => headingLevel(sections[index]) > languageLevel + 1))
+      ? nativeEntryIndexes
+      : []
+  const nestedOwners = new Map<number, { index: number; contextEnd: number; end: number }>()
+  const nativeGroupIndexes = homographIndexes.flatMap((ownerIndex) => {
+    const ownerLevel = headingLevel(sections[ownerIndex])
+    const relativeEnd = sections
+      .slice(ownerIndex + 1, languageEndIndex)
+      .findIndex((section) => headingLevel(section) <= ownerLevel)
+    const ownerEnd = relativeEnd < 0 ? languageEndIndex : ownerIndex + 1 + relativeEnd
+    const numbered = etymologyIndexes.filter(
+      (index) =>
+        index > ownerIndex &&
+        index < ownerEnd &&
+        /[0-9０-９]+$/u.test(cleanHeading(sections[index].line))
+    )
+    if (!numbered.length) return [ownerIndex]
+    for (const index of numbered)
+      nestedOwners.set(index, { index: ownerIndex, contextEnd: numbered[0], end: ownerEnd })
+    return numbered
+  })
+  const groupIndexes = homographIndexes.length
+    ? [
+        ...nativeGroupIndexes,
+        ...etymologyIndexes.filter((index) => headingLevel(sections[index]) === languageLevel + 1),
+      ].sort((a, b) => a - b)
+    : etymologyIndexes.length
+      ? etymologyIndexes
+      : [languageIndex]
   const selectedLanguage = languageFromName(languageHeading)
   const languageStart = anchorOffset(html, language.anchor)
   const headwordLines = selectedLanguage
@@ -640,13 +819,23 @@ export function extractWiktionaryEntryGroups(
     const start = anchorOffset(html, group.anchor)
     if (start < 0) return []
 
-    const nextGroupIndex = groupIndexes[position + 1] ?? languageEndIndex
+    const owner = nestedOwners.get(groupIndex)
+    const nextGroupIndex = Math.min(
+      groupIndexes[position + 1] ?? languageEndIndex,
+      owner?.end ?? languageEndIndex
+    )
     const nextGroupOffset =
       nextGroupIndex < sections.length
         ? anchorOffset(html, sections[nextGroupIndex].anchor)
         : languageEndOffset
     const end = nextGroupOffset > start ? nextGroupOffset : languageEndOffset
-    const fragment = html.slice(start, end)
+    // Shared POS/headword context belongs to each nested origin, but sibling
+    // origin statements must never enter its text or ancestry evidence scope.
+    const ownerStart = owner ? anchorOffset(html, sections[owner.index].anchor) : -1
+    const contextEnd = owner ? anchorOffset(html, sections[owner.contextEnd].anchor) : -1
+    const context =
+      ownerStart >= 0 && contextEnd > ownerStart ? html.slice(ownerStart, contextEnd) : ''
+    const fragment = context + html.slice(start, end)
     const transliteration = requestedWord
       ? headwordTransliteration(fragment, requestedWord)
       : undefined
@@ -688,17 +877,32 @@ export function extractWiktionaryEntryGroups(
     const firstSectionOffset = assignedSections.length
       ? anchorOffset(html, assignedSections[0].anchor)
       : end
-    const etymologyHtml = etymologyIndexes.length
+    const etymologyHtml = etymologyIndexes.includes(groupIndex)
       ? html
           .slice(start, firstSectionOffset > start ? firstSectionOffset : end)
           .replace(/^[\s\S]*?<\/h[1-6]>/i, '')
-      : undefined
+      : nativeJapanese && homographIndexes.includes(groupIndex)
+        ? assignedSections
+            .flatMap((section, index) => {
+              if (!matchesHeading(etymologyHeading, section.line)) return []
+              const sectionStart = anchorOffset(html, section.anchor)
+              const next = assignedSections[index + 1]
+              const sectionEnd = next ? anchorOffset(html, next.anchor) : end
+              return sectionStart >= 0 && sectionEnd > sectionStart
+                ? [html.slice(sectionStart, sectionEnd).replace(/^[\s\S]*?<\/h[1-6]>/i, '')]
+                : []
+            })
+            .join('\n') || undefined
+        : undefined
     const relations =
       requestedWord && etymologyHtml
-        ? etymologyRelations(etymologyHtml, {
-            word: requestedWord,
-            language: lexicalLanguageName(languageHeading),
-          })
+        ? (nativeJapanese ? japaneseEtymologyRelations : etymologyRelations)(
+            nativeJapanese ? cleanWiktionaryHtml(etymologyHtml) : etymologyHtml,
+            {
+              word: requestedWord,
+              language: nativeJapanese ? 'Japanese' : lexicalLanguageName(languageHeading),
+            }
+          )
         : []
 
     const structuredSections = assignedSections.flatMap((section, sectionPosition) => {
@@ -726,7 +930,9 @@ export function extractWiktionaryEntryGroups(
       {
         index: group.index,
         number: group.number,
-        heading: cleanHeading(group.line),
+        heading: owner
+          ? `${cleanHeading(sections[owner.index].line)} — ${cleanHeading(group.line)}`
+          : cleanHeading(group.line),
         anchor: group.anchor,
         level: headingLevel(group),
         ...(transliteration ? { transliteration } : {}),

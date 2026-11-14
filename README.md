@@ -86,7 +86,6 @@ EXA_ENABLED=true
 
 # Optional: ElevenLabs (pronunciation audio)
 ELEVENLABS_API_KEY=your_elevenlabs_key_here
-ELEVENLABS_VOICE_ID=your_voice_id_here
 
 # Optional: Feature flags
 PUBLIC_SEARCH_ENABLED=true
@@ -95,8 +94,8 @@ FORCE_CACHE_ONLY=false
 RATE_LIMIT_ENABLED=true
 ```
 
-`ELEVENLABS_API_KEY` enables pronunciation. Optional `ELEVENLABS_VOICE_ID` is the preferred voice for every language. If that voice is missing or the provider confirms it is inaccessible, the app selects one female premade stock voice from the [official catalog](https://elevenlabs.io/docs/api-reference/voices/search), preferring target-language labels or verified-language metadata, then multilingual capability. Authentication, quota, rate-limit, and general server errors do not trigger a voice retry.
-Pronunciation requests pass the speech language’s ISO 639-1 `language_code` to `eleven_v4`. Sanskrit entries keep their lexical identity and offer a labelled Hindi reading of their Devanagari spelling, rather than a claim of classical Sanskrit pronunciation. Audio uses a unique verified kana reading for a Japanese entry with one history when available, otherwise the headword, independently of the displayed IPA; voice quality and regional accent are not guaranteed by catalog metadata.
+`ELEVENLABS_API_KEY` enables pronunciation and needs voice catalog access. The app selects a female default voice from the [official catalog](https://elevenlabs.io/docs/api-reference/voices/search) for each speech language: language-labelled voices first, then verified-language matches, then multilingual female voices. Ties follow the catalog's alphabetical name order. Some languages may share a voice when separate language-specific defaults are unavailable. A precise voice-access failure permits one attempt with the next ranked voice; authentication, quota, rate-limit, and general server errors do not trigger a voice retry.
+Pronunciation requests pass the speech language’s ISO 639-1 `language_code` to `eleven_v4`. Sanskrit entries keep their lexical identity and offer a labelled Hindi reading of their Devanagari spelling, rather than a claim of classical Sanskrit pronunciation. Supported speech languages send the selected IPA reading using Eleven v4’s native IPA format. Browser audio URLs, Redis clips, and request locks distinguish spelling, language, and IPA; older word-only clips are not reused. Without usable IPA, Japanese uses a unique verified kana reading when available, otherwise the headword. The Sanskrit-to-Hindi fallback reads the spelling without supplying Sanskrit IPA. Voice quality and regional accent are not guaranteed by catalog metadata.
 
 See `.env.example` for full documentation.
 
@@ -106,7 +105,7 @@ allowance disable Exa while ordinary sources continue. Use a dedicated Exa key
 with a $10 provider-side budget as an additional limit; the provider's billing
 period may differ from a calendar month. Each trace permits at most two searches,
 eight Contents pages, and five Exa HTTP calls within the shared entry source
-budget (32 attempts for one language, plus 16 per extra language, capped at 96, including language resolution). Retrieved text is attributed to its publisher, and ambiguous entry
+budget (64 attempts in Auto or 32 with an explicit hint, plus 16 per extra language, capped at 96, including language resolution). Retrieved text is attributed to its publisher, and ambiguous entry
 boundaries cannot establish ancestry.
 
 For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and restart `bun dev`.
@@ -124,7 +123,7 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
   - [Etymonline](https://www.etymonline.com/) - Historical etymology
   - [Wiktionary](https://en.wiktionary.org/) - Definitions and linguistic data
   - Native Italian, Spanish, French, Portuguese, Hindi, and Japanese Wiktionary editions - selected-language sections; English Wiktionary defines Hindi, Urdu, Sanskrit, and Japanese history boundaries
-  - [JMdict via Jisho](https://jisho.org/) - licensed supplementary Japanese lexical senses and raw loan-source material, with EDRDG attribution retained
+  - [Official JMdict XML](https://www.edrdg.org/edrdg/licence.html) - indexed Japanese lexical senses, restricted readings and original loan-source metadata, with EDRDG attribution retained
   - [Wikidata Lexemes](https://www.wikidata.org/wiki/Wikidata:Lexicographical_data/Documentation) - language-tagged lemmas, forms, senses, and lexical claims
   - [FreeDictionaryAPI](https://freedictionaryapi.com/) - senses, forms, and IPA after direct Wiktionary misses (not etymology)
   - [Dicionário Aberto](https://api.dicionario-aberto.net/index.html) - older Portuguese dictionary evidence
@@ -138,11 +137,25 @@ For local load testing, set `RATE_LIMIT_ENABLED=false` in `.env.local` and resta
 
 Hindi, Urdu, and Sanskrit rely on Wiktionary lexical evidence; Wikipedia supplies context and cannot establish ancestry. Optional Platts, Wisdom Library, and Cologne Monier-Williams adapters are not enabled: the [Platts digitization links restrictive reuse terms](https://dsal.uchicago.edu/dictionaries/platts/), [Wisdom Library's published site information](https://www.wisdomlib.org/m/about.html) does not establish a blanket glossary reuse license, and the [Cologne digital edition specifies noncommercial, share-alike terms](https://raw.githubusercontent.com/sanskrit-lexicon/csl-orig/master/v02/mw/mwheader.xml). Their availability alone does not establish suitability for public synthesis.
 
-Japanese uses English Wiktionary as its history primary and native Japanese Wiktionary as independent context. JMdict via Jisho supplies licensed lexical senses and raw loan-source material; an unspecified full/partial status cannot establish a whole-word borrowing. Each live Jisho request after a source-cache miss requires a global 40-second Redis pacing reservation, which fails closed when Redis is unavailable or the interval is occupied; source-cache hits need no reservation. Complete raw source data is cached for seven days with its attribution retained. When updating the adapter, review the publisher terms, JMdict license, and Jisho response schema, preserve attribution through caching and display, and verify parsing and pacing with fixtures. Kotobank and gogen adapters are not enabled because their reuse terms have not been admitted.
+Japanese uses English Wiktionary as its history primary and native Japanese Wiktionary as independent context or fallback. Native Japanese numbered 語源 headings and labelled homographs retain separate histories; numbered origins nested under a part-of-speech or homograph heading retain independent evidence scopes and share only the enclosing headword context. Affirmative native origin and shortening statements are extracted only inside etymology sections; uncertain accounts remain prose. JMdict supplies supplementary lexical evidence from the official English XML snapshot in `data/jmdict/`. Exact spelling/reading pairs must satisfy reading and sense restrictions together. Complete matched XML, original full/partial loan-source fields, wasei markers, POS inheritance, stable entry IDs and EDRDG attribution are retained. Local index reads consume no HTTP budget and bypass Redis source caching. Refresh JMdict at least monthly using `scripts/build-jmdict-index.py` with a reviewed download and SHA-256; snapshots older than 31 days report unavailable. NINJAL historical dictionaries supply exact-spelling, dated context only, never modern identity, standalone lexical admission, or ancestry. Their pinned transcriptions and headword rows are rebuilt with `scripts/build-japanese-historical-index.py`. Source licences and scope are documented in `docs/source-admission.md`. Kotobank, gogen and JapanKnowledge are not enabled without an appropriate reuse agreement.
+
+Japanese lookup accepts kana, kanji, and rōmaji. Exact entries and explicit dictionary links precede server-side WanaKana conversion; all conversions require dictionary reading evidence. Candidates are ranked by source evidence and verified within the shared resolution budget, without a fixed candidate-count cutoff. Unique, complete romanization proofs from deterministic or explicit source discovery share the Japanese canonical entry and lock; ambiguous readings remain choices. A conjugation opens a verified dictionary form with an explanation and never becomes an alternative spelling. Latin-language entries keep their own spelling and appear as links when Japanese resolution changes the headword. Lookup metadata is separate from generated etymology and accompanies both JSON and SSE responses. Existing saved entries stay readable until an explicit retrace.
+
+The optional lookup proposal layer requires both `APP_CHANNEL=beta` and `LOOKUP_FALLBACK_ENABLED=true`. It runs only inside an explicitly requested trace after source-defined and deterministic lookup fails, for Japanese, Hindi, Urdu, or Sanskrit. One low-reasoning OpenRouter call has a 15-second timeout and a 768-token ceiling. A normalized input/language lock and a 60-second proposal cache deduplicate paid work; the lock is released before acquiring a canonical word lock. Every candidate relationship still requires dictionary evidence, and unverified output never establishes absence or etymology. Source failure, truncated candidate sets, and conflicting evidence prevent automatic resolution. Model-only romanization candidates remain suggestions after reading verification, never unique aliases. Proposal-lock contention returns retryable 429 responses; unavailable proposal storage returns 503, both with Retry-After guidance. Production remains disabled pending live fixed-sample accuracy, latency, and cost evaluation.
+
+The ONCOJ provider queries a local index of pinned Old Japanese lexical annotations, rebuilt with `python3 scripts/build-oncoj-index.py`. It retains complete matched XML records, IDs, the upstream revision and checksum, and CC BY 4.0 annotation attribution. Exact Frellesvig–Whitman transcriptions are distinct; modern Japanese spellings or glosses cannot establish historical links. See [source admission and evaluation](docs/source-admission.md) for scope, source shortlists, and rollout checks. Exa recovery remains confined to admitted publisher domains and exact entry/language validation; ONCOJ uses its pinned dataset rather than web recovery.
 
 Japanese word-origin labels require affirmative source evidence. Compounding and borrowing remain distinct: 電話 is a Japanese wasei-kango compound of 電 and 話, rather than a whole Middle Chinese borrowing. サラリーマン has disputed coinage accounts and source-attested Japanese サラリー and マン components; it does not imply English salary and man branches. コンセント is clipped from a longer Japanese coinage with explicit English concentric and plug components.
 
 Random discovery uses frequency-selected Romance pools and small curated Hindi, Urdu, Sanskrit, and Japanese headword pools. Refresh the curated pools without downloads using `python scripts/build-discovery-word-pools.py --languages hi ur sa ja`; the generator preserves unselected pools. Google Books usage charts are unavailable for these four languages.
+
+Japanese alternatives beside a result require source-linked destinations with saved matching histories; an ancestry graph is not required. Romanization, spelling identity and etymological ancestry remain separate relationships. Verified written-form destinations appear in the language tab row. The language tab opens the first listed target by default, with other meanings retained in lookup context. This default selection does not establish spelling equivalence or a unique dictionary match. Existing language entries keep their own tab. Unsupported-language discovery notices are not displayed. These presentation rules also apply to saved entries without retracing them.
+
+Language navigation remains visible for single-language entries. Ambiguous kana and source-linked rōmaji lookups share a meaning selector built from saved Japanese counterparts. Selecting a meaning carries its lookup context and history in URL query parameters, so the server renders the selected context on reload and Back/Forward. Every language uses the same link-based navigation and first-listed-history default, including streamed results. Failed-language tabs remain visible in grouped lookups; a missing matching reading never falls back to another reading. Direct kanji searches show only that spelling's histories and readings. Group membership is navigation metadata, never spelling equivalence: each word retains its own cache, pronunciation, sources, and etymology. Word pages render at request time from tagged cached entries; server-readable selection does not trigger research. `/api/lookup-group` refreshes navigation using cached entries only, follows all source-linked counterparts and romanizations with four concurrent cache reads, resolves valid language-qualified aliases to deduplicated canonical histories, and never initiates research. An explicit search can trace source-linked Japanese alternatives sequentially through the normal budget and lock controls; only saved matching meanings appear in navigation. Passive loads never start this research. Failed lookups retain loaded meanings and offer an explicit retry. Empty kana indexes preserve saved content and expose Retrace and Check related entries; completing that explicit check opens the first successful meaning. Optional Japanese alternatives cannot consume preserved Latin entries’ primary research budget or make those entries incomplete.
+
+The meaning selector retains the same reading group when switching entries; it does not append the selected character's other readings. Direct entries and grouped lookups share grammatical labels, the selector grid and title spacing. Server redirects and client navigation use the same default-choice model. The header reserves room for pronunciation even when no pronunciation is available.
+
+Affixes such as `pan-` and `-ness` are searchable entries distinct from their bare spellings. Autocomplete prioritizes matching affix headwords returned by the dictionary; it does not invent affixes. Sources follow the selected history’s research ownership and displayed forms, including displayed root-related words, with form-based filtering for older saved entries. A bounded tab-local cache retains twenty completed lookup results so browser history can restore a pre-trace page without new research.
 
 ## Project Structure
 
@@ -289,7 +302,7 @@ disabled until it completes the same etymology-quality and latency bakeoff.
 │ 1) Fetch direct sources; use a senses-only dictionary fallback on misses    │
 │ 2) Parse "from X, from Y" chains once etymonline+wiktionary land (CPU-only)  │
 │ 3) CPU root extraction from derivation formulas; LLM fallback if none found  │
-│ 4) Shared bounded language research: 32 + 16 per extra language, capped at 96      │
+│ 4) Shared bounded language research: Auto 64 / hinted 32 + 16 per extra language, cap 96      │
 │ 5) OpenRouter synthesis, json_schema strict (sections stream when stream=true)│
 │ 6) Enrich ancestry graph + confidence/evidence                               │
 │ 7) Merge successful languages into one durable WordEntry in Redis                                                     │
@@ -356,13 +369,13 @@ The [Deploy Production](.github/workflows/deploy.yml) workflow then deploys that
 
 ## License
 
-MIT
+Application code: MIT. Bundled source datasets retain their own licences: JMdict is CC BY-SA 4.0; the admitted NINJAL transcriptions/headword data and ONCOJ annotations are CC BY 4.0. See [source admission and attribution](docs/source-admission.md).
 
 ## Acknowledgments
 
 - Etymology data from [Etymonline](https://www.etymonline.com/) and [Wiktionary](https://en.wiktionary.org/)
 - Dictionary fallback from [FreeDictionaryAPI](https://freedictionaryapi.com/)
-- Japanese lexical data from [JMdict by EDRDG](https://www.edrdg.org/), via [Jisho](https://jisho.org/), under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+- Japanese lexical data from [JMdict by EDRDG](https://www.edrdg.org/), indexed from original XML, under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
 - Encyclopedic context from [Wikipedia](https://en.wikipedia.org/)
 - Supplemental community slang context from [Incel Wiki](https://incels.wiki/)
 - Pronunciation audio from [ElevenLabs](https://elevenlabs.io/)

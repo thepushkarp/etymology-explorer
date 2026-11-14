@@ -9,10 +9,44 @@ export interface LexemeRef {
   language: string
 }
 
-/** A source-identified spelling that can open a supported-language word page. */
+/** A source-identified lookup destination; it does not assert a shared etymological origin. */
 export interface ScriptTarget {
   word: string
   language: LanguageCode
+  reading?: string
+  meaning?: string
+  sourceUrl?: string
+}
+
+/** Lookup relationship evidence, independent of etymological ancestry confidence. */
+export type LookupSupport = 'verified' | 'linked' | 'unverified'
+
+/** Navigation relationships only; members retain independent lexical/cache identities. */
+export interface LookupGroup {
+  reading: string
+  members: (ScriptTarget & { lookupSupport: LookupSupport })[]
+  choices: (ScriptTarget & { historyId?: string; label: string; details?: string })[]
+  languages: ScriptTarget[]
+}
+
+export type LookupRelationship = 'romanization' | 'form' | 'correction'
+export interface LookupCandidate extends ScriptTarget {
+  relationship: LookupRelationship
+  provenance: {
+    sourceUrl: string
+    revisionId?: number | string
+    verifiedAt: string
+    evidence: string
+  }[]
+}
+export interface LookupResolution {
+  originalInput: string
+  language: LanguageCode
+  candidates: LookupCandidate[]
+  /** Explicit source links whose destination checks were deferred by source availability or the request budget. */
+  sourceListed?: LookupCandidate[]
+  selected?: LookupCandidate
+  incomplete?: boolean
 }
 
 export type LexicalRelation =
@@ -113,6 +147,8 @@ export interface SourceReference {
   word?: string // The specific word/root that was looked up (undefined for 'synthesized')
   sourceFamily?: SourceFamilyId
   license?: string
+  /** Explicit research owners; absent for shared entry context or older saved entries. */
+  historyIds?: string[]
 }
 
 /**
@@ -300,7 +336,8 @@ export interface EtymologyResult extends HistoryEntryFields {
 }
 
 export interface EntrySpelling extends ScriptTarget {
-  kind: 'spelling' | 'misspelling'
+  kind: 'spelling' | 'misspelling' | 'romanization'
+  readingEvidence?: string
   sourceUrl: string
   revisionId?: number | string
   verifiedAt: string
@@ -348,6 +385,8 @@ export interface ApiResponse<T> {
   success: boolean
   data?: T
   error?: string
+  errorType?: Extract<StreamEvent, { type: 'error' }>['errorType']
+  lookupResolution?: LookupResolution
 }
 
 /**
@@ -362,6 +401,15 @@ export interface WordSuggestion {
  * Raw data fetched from a single external source
  */
 export interface SourceData {
+  lookup?: {
+    readings: string[]
+    /** At least one headword-bound definition is independent of form/redirect targets. */
+    hasIndependentEntry?: boolean
+    meaning?: string
+    targets: (ScriptTarget & { relationship: 'romanization' | 'form' | 'spelling' })[]
+    forms: string[]
+    incomplete?: boolean
+  }
   license?: string
   text: string
   url: string
@@ -515,6 +563,7 @@ export interface SecurityTelemetryEvent {
  * Emitted during the research and synthesis pipeline to provide real-time progress
  */
 export type StreamEvent = { language?: LanguageCode; activityId?: string } & (
+  | { type: 'lookup_resolution'; resolution: LookupResolution }
   | {
       type: 'entry_identity'
       word: string

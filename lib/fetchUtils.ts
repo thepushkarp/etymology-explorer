@@ -21,7 +21,6 @@ const SOURCE_ORIGINS = [
   'https://ur.wikipedia.org',
   'https://sa.wikipedia.org',
   'https://ja.wikipedia.org',
-  'https://jisho.org',
   'https://www.wikidata.org',
   'https://freedictionaryapi.com',
   'https://api.dicionario-aberto.net',

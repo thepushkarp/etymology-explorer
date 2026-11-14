@@ -30,9 +30,10 @@ export const CONFIG = {
   maxRootsToExplore: 4,
   maxRelatedWordsPerRoot: 4,
   maxTotalFetches: 32,
+  maxAutoFetches: 64,
   maxFetchesPerExtraLanguage: 16,
   maxEntryFetches: 96,
-  pipelineRevision: 5,
+  pipelineRevision: 13,
   entryFreshDays: 90,
 
   // Exa's full-text search and recovery share their own paid-request allowance.
@@ -52,7 +53,6 @@ export const CONFIG = {
   incompleteEtymologyCacheTTL: 5 * 60,
   audioCacheTTL: 365 * 24 * 60 * 60, // 1 year
   negativeCacheTTL: 30 * 60, // 30m — limits repeat misses without cementing transient source failures
-  jmdictCrawlDelaySeconds: 40,
   sourceCacheTTL: 7 * 24 * 60 * 60, // 7 days — raw etymonline/wiktionary page data
 
   // Timeouts (milliseconds)
@@ -85,6 +85,8 @@ export const CONFIG = {
 
   // Feature flags
   features: {
+    lookupFallback:
+      process.env.APP_CHANNEL === 'beta' && process.env.LOOKUP_FALLBACK_ENABLED === 'true',
     publicSearchEnabled: process.env.PUBLIC_SEARCH_ENABLED !== 'false',
     pronunciationEnabled: process.env.PRONUNCIATION_ENABLED !== 'false',
     forceCacheOnly: process.env.FORCE_CACHE_ONLY === 'true',

@@ -488,19 +488,22 @@ export function isRecoverableValidationError(error: unknown): boolean {
 
 function attachSources(result: EtymologyResult, researchContext: ResearchContext): EtymologyResult {
   const sources: SourceReference[] = []
-  const seen = new Set<string>()
+  const seen = new Map<string, SourceReference>()
   const lookups = [
     { word: researchContext.mainWord.word, records: mainSourceRecords(researchContext.mainWord) },
     ...researchContext.rootResearch.map((root) => ({
       word: root.lexeme?.word ?? root.root,
       records: rootSourceRecords(root),
+      historyId: root.parentHistoryId,
     })),
     ...researchContext.relatedResearch.map((related) => ({
       word: related.lexeme?.word ?? related.term,
       records: relatedSourceRecords(related),
     })),
   ]
-  for (const { word, records } of lookups) {
+  for (const lookup of lookups) {
+    const { word, records } = lookup
+    const historyId = 'historyId' in lookup ? lookup.historyId : undefined
     for (const record of records) {
       if (record.provider === 'incelsWiki' && !hasIncelsUsageEvidence(record.data.text)) continue
       // A portal can host several independent dictionaries at the same URL.
@@ -512,19 +515,27 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
         ),
       ])
       for (const url of urls) {
-        const key = `${record.provider}:${url}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        sources.push({
+        const key = `${record.provider}:${url}:${word}`
+        const existing = seen.get(key)
+        if (existing) {
+          if (historyId && existing.historyIds && !existing.historyIds.includes(historyId))
+            existing.historyIds.push(historyId)
+          if (!historyId) delete existing.historyIds
+          continue
+        }
+        const source: SourceReference = {
           name: record.provider,
           url,
           word,
           sourceFamily: record.sourceFamily,
+          ...(historyId ? { historyIds: [historyId] } : {}),
           ...(record.data.license ? { license: record.data.license } : {}),
           ...(record.provider === 'multilingualDictionary'
             ? { license: 'Per-entry attribution and license are provided by FreeDictionaryAPI' }
             : {}),
-        })
+        }
+        sources.push(source)
+        seen.set(key, source)
       }
     }
   }
@@ -560,13 +571,7 @@ function sourceStrata(
     )
     .join('\n')
   if (/\bwasei[ -]kango\b/i.test(affirmative)) supported.add('wasei-kango')
-  if (
-    /\bwasei[ -]eigo\b|\bpseudo-anglicism\b/i.test(affirmative) ||
-    (entry.source === 'jmdict' &&
-      /Wasei, word made in Japan/.test(entry.text) &&
-      /"language":"English"/.test(entry.text))
-  )
-    supported.add('wasei-eigo')
+  if (/\bwasei[ -]eigo\b|\bpseudo-anglicism\b/i.test(affirmative)) supported.add('wasei-eigo')
   if (
     /(?:^|\n)(?:(?:The (?:word|term) is|A|An) )?(?:wago|native Japanese)\b/i.test(affirmative) ||
     /\b(?:from|inherited from) (?:Old Japanese|Classical Japanese|Proto-Japonic)\b/i.test(

@@ -225,7 +225,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
     nativeWiktionary: {
       edition: 'ja',
       heading: '日本語',
-      etymologyHeading: /^語源(?:\s+\d+)?$/u,
+      etymologyHeading: /^語源(?:\s*[0-9０-９]+)?$/u,
       formHeading: /^(?:名詞|動詞|形容詞)$/u,
     },
     historyPrimary: 'english',
@@ -241,8 +241,7 @@ export const LANGUAGES: Record<LanguageCode, LanguageDefinition> = {
 
 export function isLanguageCode(value: unknown): value is LanguageCode {
   return (
-    typeof value === 'string' &&
-    (SUPPORTED_LANGUAGE_CODES as readonly string[]).includes(value.toLowerCase())
+    typeof value === 'string' && (SUPPORTED_LANGUAGE_CODES as readonly string[]).includes(value)
   )
 }
 
@@ -307,7 +306,7 @@ export function lexicalLanguageName(name: string): string {
   const language = languageFromName(name)
   if (language) return LANGUAGES[language].englishName
   return (
-    ['Old English', 'Latin', 'Ancient Greek'].find(
+    ['Old English', 'Latin', 'Ancient Greek', 'Old Japanese'].find(
       (heading) => heading.toLowerCase() === name.trim().toLowerCase()
     ) ?? name.trim()
   )

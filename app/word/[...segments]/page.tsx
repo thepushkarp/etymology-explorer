@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { CONFIG } from '@/lib/config'
 import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { EntryView } from '@/components/EntryView'
@@ -10,6 +10,10 @@ import { WordTraceExperience } from '@/components/WordTraceExperience'
 import { ENTRY_PREFIX, etymologyWordTag, getCachedEntry } from '@/lib/cache'
 import { LANGUAGES, isLanguageCode, wordPagePath, type LanguageCode } from '@/lib/languages'
 import { historyEntry } from '@/lib/resultHistories'
+import { entryPagePath, parseEntrySelection } from '@/lib/entrySelection'
+import { getLookupGroup } from '@/lib/lookupGroupCache'
+import { lookupGroupForWord } from '@/lib/lookupGroups'
+import { entryNavigation } from '@/lib/entryNavigation'
 import { SITE_SHORT_NAME } from '@/lib/site'
 import type { EtymologyResult } from '@/lib/types'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
@@ -18,14 +22,9 @@ import { canonicalizeWord, isValidWord } from '@/lib/validation'
 // required because Next.js cannot place /word/[word] beside
 // /word/[language]/[word] with different dynamic parameter names. Keeping the
 // variants in this module also makes the cache-only import invariant uniform.
-export const revalidate = 86400
-
-export function generateStaticParams(): Array<{ segments: string[] }> {
-  return []
-}
-
 interface WordPageProps {
   params: Promise<{ segments: string[] }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
 interface ResolvedWordRoute {
@@ -105,7 +104,9 @@ function buildDescription(result: EtymologyResult): string {
   )
 }
 
-export async function generateMetadata({ params }: WordPageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: Pick<WordPageProps, 'params'>): Promise<Metadata> {
   const { language, word, cached, result } = await resolveEntry(params)
   const canonicalPath = wordPagePath(word, language)
   const languageNames = cached?.entry.languages.map((code) => LANGUAGES[code].englishName)
@@ -143,8 +144,35 @@ export async function generateMetadata({ params }: WordPageProps): Promise<Metad
   }
 }
 
-export default async function WordPage({ params }: WordPageProps) {
+export default async function WordPage({ params, searchParams }: WordPageProps) {
   const { language, word, cached, selectedLanguage, result } = await resolveEntry(params)
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(await searchParams)) {
+    if (typeof value === 'string') query.set(key, value)
+    else if (value) for (const item of value) query.append(key, item)
+  }
+  const selection = parseEntrySelection(query)
+  const lookupGroup = lookupGroupForWord(
+    word,
+    await getLookupGroup(selection.lookup ?? word, selection.lookup ? undefined : cached?.entry)
+  )
+  const first = selectedLanguage
+    ? entryNavigation({
+        word,
+        language: selectedLanguage,
+        entry: cached?.entry,
+        group: lookupGroup,
+        selection,
+      }).defaultTarget
+    : undefined
+  if (first) {
+    redirect(
+      entryPagePath(first.word, first.language, {
+        lookup: lookupGroup?.reading,
+        historyId: first.historyId,
+      })
+    )
+  }
 
   if (!cached || !result || !selectedLanguage) {
     return (
@@ -154,15 +182,23 @@ export default async function WordPage({ params }: WordPageProps) {
         language={language}
         initialEntry={cached?.entry}
         stale={cached?.stale}
+        selection={selection}
+        lookupGroup={lookupGroup}
       />
     )
   }
 
   return (
     <>
-      <SiteHeader showSearch searchLanguage={language} />
+      <SiteHeader showSearch />
       <main className="mx-auto w-full max-w-3xl px-4 pt-14 sm:px-6 sm:pt-20">
-        <EntryView entry={cached.entry} language={selectedLanguage} stale={cached.stale} />
+        <EntryView
+          entry={cached.entry}
+          language={selectedLanguage}
+          stale={cached.stale}
+          selection={selection}
+          lookupGroup={lookupGroup}
+        />
       </main>
       <SiteFooter />
     </>

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import type { EtymologyResult, WordEntry } from './types'
 import type { SpellingProof } from './cache'
 import { CONFIG } from './config'
+import { pronunciationKey } from './pronunciation'
 import { etymologyResult } from './testSupport/etymologyResult'
 
 interface FakeRedis {
@@ -64,6 +65,53 @@ beforeEach(() => {
 })
 
 describe('durable entries', () => {
+  test('rōmaji aliases require reading proof and preserve the independent English spelling', async () => {
+    const verifiedAt = new Date().toISOString()
+    const proof: SpellingProof = {
+      word: 'sayonara',
+      targetWord: 'さよなら',
+      language: 'ja',
+      kind: 'romanization',
+      readingEvidence: 'さよなら has the source reading sayonara',
+      sourceUrl: 'https://en.wiktionary.org/wiki/さよなら',
+      verifiedAt,
+      terminal: {
+        word: 'さよなら',
+        sourceUrl: 'https://en.wiktionary.org/wiki/さよなら',
+        verifiedAt,
+      },
+    }
+    const japanese = mergeEntrySpellings(
+      entry(etymologyResult({ word: 'さよなら', language: 'ja', definition: 'Goodbye.' })),
+      [spellingMetadata([proof])]
+    )
+    const english = entry(etymologyResult({ word: 'sayonara', language: 'en' }))
+    const values = new Map<string, unknown>()
+    currentRedis = fakeRedis({
+      get: mock(async (key: string) => values.get(key) ?? null),
+      set: mock(async (key: string, value: unknown) => {
+        values.set(key, structuredClone(value))
+        return 'OK'
+      }),
+    })
+    await cacheEntry(japanese.word, japanese)
+    await cacheEntry(english.word, english)
+    await publishSpellingAliases(japanese, [proof])
+    expect((await getCachedSpellingEntry('sayonara', 'ja'))?.word).toBe('さよなら')
+    expect(await getCachedSpellingEntry('sayonara', 'en')).toBeNull()
+    expect(await getCachedSpellingEntry('sayonara')).toBeNull()
+    expect((await getCachedEntry('sayonara'))?.entry.entries.en?.word).toBe('sayonara')
+    values.set('entry-alias:v1:ja:sayonara', { word: 'さよなら', revision: 1, proofs: [proof] })
+    expect(await getCachedSpellingEntry('sayonara', 'ja')).toBeNull()
+    expect((await getCachedEntry('さよなら'))?.entry.word).toBe('さよなら')
+    values.set('entry-alias:v1:ja:sayonara', {
+      word: 'さよなら',
+      revision: 2,
+      proofs: [{ ...proof, readingEvidence: undefined }],
+    })
+    expect(await getCachedSpellingEntry('sayonara', 'ja')).toBeNull()
+  })
+
   test('spelling redirects require fresh source and terminal proof, membership, and language scope', async () => {
     const verifiedAt = new Date(Date.now() - 1000).toISOString()
     const proof: SpellingProof = {
@@ -331,13 +379,13 @@ describe('independent negative and audio caches', () => {
     await cacheNegative(' NICE ', 'no_sources')
     await cacheNegative('nice', 'no_sources', 'fr')
     expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
-      'neg:v7:nice',
-      'neg:v7:hint:fr:nice',
+      'neg:v10:nice',
+      'neg:v10:hint:fr:nice',
     ])
     await getNegativeCache(' NICE ')
     await getNegativeCache('nice', 'en')
-    expect(currentRedis.get).toHaveBeenCalledWith('neg:v7:nice')
-    expect(currentRedis.get).toHaveBeenCalledWith('neg:v7:hint:en:nice')
+    expect(currentRedis.get).toHaveBeenCalledWith('neg:v10:nice')
+    expect(currentRedis.get).toHaveBeenCalledWith('neg:v10:hint:en:nice')
     currentRedis = fakeRedis({ exists: mock(async () => 1) })
     await cacheNegative('nice', 'no_sources')
     expect(currentRedis.set).not.toHaveBeenCalled()
@@ -351,7 +399,7 @@ describe('independent negative and audio caches', () => {
     currentRedis = fakeRedis()
     await cacheNegative('namaste', 'no_sources', undefined, otherScripts)
     expect(currentRedis.set).toHaveBeenCalledWith(
-      'neg:v7:namaste',
+      'neg:v10:namaste',
       { otherScripts: [{ word: 'नमस्ते', language: 'hi' }] },
       { ex: expect.any(Number) }
     )
@@ -376,19 +424,23 @@ describe('independent negative and audio caches', () => {
     expect(await getNegativeCache('namaste')).toEqual({})
   })
 
-  test('retains established audio namespaces and language isolation', async () => {
+  test('isolates audio by language and pronunciation without reusing earlier word-only clips', async () => {
     currentRedis = fakeRedis({ get: mock(async () => 'audio') })
     expect(await getCachedAudio(' NICE ')).toBe('audio')
     await cacheAudio('nice', 'audio')
     await cacheAudio('sale', 'italian', 'it')
     await cacheAudio('धर्म', 'hindi', 'hi')
     await cacheAudio('धर्म', 'hindi reading', 'sa')
-    expect(currentRedis.get).toHaveBeenCalledWith('audio:v2:nice')
+    await cacheAudio('pan', 'nasal', 'fr', 'pɑ̃')
+    await cacheAudio('pan', 'oral', 'fr', 'pan')
+    expect(currentRedis.get).toHaveBeenCalledWith(pronunciationKey('nice', 'en'))
     expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
-      'audio:v2:nice',
-      'audio:v2:it:sale',
-      'audio:v2:hi:धर्म',
-      'audio:v2:sa:धर्म',
+      pronunciationKey('nice', 'en'),
+      pronunciationKey('sale', 'it'),
+      pronunciationKey('धर्म', 'hi'),
+      pronunciationKey('धर्म', 'sa'),
+      pronunciationKey('pan', 'fr', 'pɑ̃'),
+      pronunciationKey('pan', 'fr', 'pan'),
     ])
   })
 })

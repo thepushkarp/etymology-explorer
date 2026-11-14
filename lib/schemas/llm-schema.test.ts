@@ -20,6 +20,7 @@ const POST_PROCESSING_ONLY_PATHS = new Set([
   'sources[].word',
   'sources[].sourceFamily',
   'sources[].license',
+  'sources[].historyIds',
 ])
 
 interface JsonSchemaNode {

@@ -2,22 +2,18 @@
 
 import { useEffect, useState } from 'react'
 import { SearchBox } from '@/components/SearchBox'
-import { ChevronDownIcon } from '@/components/Icons'
+import { LanguageSelect } from '@/components/LanguageSelect'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { WordLink } from '@/components/WordLink'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
+import { useSearchLanguage } from '@/lib/hooks/useSearchLanguage'
 import {
   landingSearchPreviews,
   parseRecentSearchPreviews,
   type RecentSearchPreview,
 } from '@/lib/recentSearchPreview'
-import {
-  LANGUAGES,
-  isLanguageCode,
-  SUPPORTED_LANGUAGE_CODES,
-  type LanguageCode,
-} from '@/lib/languages'
+import { LANGUAGES, SUPPORTED_LANGUAGE_CODES, type LanguageCode } from '@/lib/languages'
 
 const CURATED_WORDS: Record<LanguageCode, Array<{ word: string; teaser: string }>> = {
   en: [
@@ -77,7 +73,7 @@ const CURATED_WORDS: Record<LanguageCode, Array<{ word: string; teaser: string }
 }
 
 export function Landing() {
-  const [language, setLanguage] = useState<LanguageCode>()
+  const [language, setLanguage] = useSearchLanguage()
   const [recent, setRecent] = useState<RecentSearchPreview[]>([])
   const recentWords = recent.filter((entry) => !language || entry.language === language).slice(0, 4)
   const curated = language
@@ -118,28 +114,10 @@ export function Landing() {
           <em className="text-accent">a past.</em>
         </h1>
 
-        <div className="animate-rise mt-12 [animation-delay:80ms]">
-          <SearchBox key={language ?? 'auto'} language={language} size="large" autoFocus />
+        <div className="animate-rise relative z-20 mt-12 [animation-delay:80ms]">
+          <SearchBox language={language} size="large" autoFocus />
           <div className="mt-2 flex flex-wrap items-center gap-x-6">
-            <div className="relative shrink-0">
-              <select
-                aria-label="Word language"
-                value={language ?? ''}
-                onChange={(event) => {
-                  const value = event.target.value
-                  setLanguage(isLanguageCode(value) ? value : undefined)
-                }}
-                className="cursor-pointer appearance-none bg-paper py-2 pr-5 text-sm text-ink [color-scheme:light] dark:[color-scheme:dark]"
-              >
-                <option value="">Auto</option>
-                {SUPPORTED_LANGUAGE_CODES.map((code) => (
-                  <option key={code} value={code}>
-                    {LANGUAGES[code].englishName}
-                  </option>
-                ))}
-              </select>
-              <ChevronDownIcon className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-xs text-ink" />
-            </div>
+            <LanguageSelect value={language} onChange={setLanguage} />
             <p className="text-sm text-muted">
               Or <RandomWordButton language={language} />.
             </p>

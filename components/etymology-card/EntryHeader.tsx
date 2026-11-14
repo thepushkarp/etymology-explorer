@@ -4,6 +4,7 @@ import { languageFromName, type EtymologyStratum } from '@/lib/languages'
 import { PronunciationButton } from '../PronunciationButton'
 import { Skeleton } from './Section'
 import { FormText } from './StoryText'
+import { pronunciationReadings } from '@/lib/pronunciation'
 
 interface EntryHeaderProps {
   result: EtymologyEntry
@@ -55,6 +56,7 @@ export function EntryHeader({
   const hook = originHook(result)
   const partsOfSpeech = [...new Set(result.partsOfSpeech?.map((part) => part.pos) ?? [])]
   const attested = result.rawSources?.dateAttested
+  const readings = pronunciationReadings(result.pronunciation ?? '')
 
   return (
     <header>
@@ -69,7 +71,7 @@ export function EntryHeader({
         {actions && <div className="ml-auto self-center">{actions}</div>}
       </div>
 
-      <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted">
+      <p className="mt-4 flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1 text-muted">
         {result.transliteration && (
           <span lang="en" dir="ltr" className="font-serif">
             {result.transliteration}
@@ -78,10 +80,15 @@ export function EntryHeader({
         {result.pronunciation && (
           <span lang="en" dir="ltr" className="inline-flex items-center gap-1.5 font-serif">
             {result.pronunciation}
-            <PronunciationButton
-              word={pronunciationWord ?? result.word}
-              language={result.language}
-            />
+            {(readings.length ? readings : [undefined]).map((ipa, index) => (
+              <PronunciationButton
+                key={ipa ?? 'word'}
+                word={pronunciationWord ?? result.word}
+                language={result.language}
+                ipa={ipa}
+                hotkey={index === 0}
+              />
+            ))}
           </span>
         )}
         {partsOfSpeech.length > 0 && (

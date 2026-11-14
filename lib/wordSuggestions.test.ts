@@ -32,6 +32,17 @@ function cache() {
 }
 
 describe('Wiktionary autocomplete', () => {
+  test('offers attested affix spellings ahead of longer vocabulary prefixes', async () => {
+    provider(['pan', 'pancake', 'pan-'])
+    const suggestions = await getWordSuggestions('pan', 'en', false, undefined, null)
+    expect(suggestions.slice(0, 2).map(({ word }) => word)).toEqual(['pan', 'pan-'])
+    provider(['pan', 'pancake'])
+    expect(
+      (await getWordSuggestions('pan', 'en', false, undefined, null)).some(
+        ({ word }) => word === 'pan-'
+      )
+    ).toBe(false)
+  })
   test('Auto and English search English Wiktionary across scripts without GRE typo noise', async () => {
     const requests = provider(['津波', '津浪', '<invalid>', '津波'])
     for (const language of [undefined, 'en'] as const) {
@@ -94,9 +105,9 @@ describe('Wiktionary autocomplete', () => {
     await getWordSuggestions('café', undefined, false, undefined, client)
     await getWordSuggestions('café', 'en', false, undefined, client)
     expect(writes).toEqual([
-      { key: 'suggest:v1:fr:café', ttl: 86400 },
-      { key: 'suggest:v1:auto:café', ttl: 86400 },
-      { key: 'suggest:v1:en:café', ttl: 86400 },
+      { key: 'suggest:v2:fr:café', ttl: 86400 },
+      { key: 'suggest:v2:auto:café', ttl: 86400 },
+      { key: 'suggest:v2:en:café', ttl: 86400 },
     ])
   })
 
@@ -118,7 +129,7 @@ describe('Wiktionary autocomplete', () => {
 
   test('malformed cached values fall through to the provider', async () => {
     const { client, values } = cache()
-    values.set('suggest:v1:fr:café', [{ word: '<invalid>', distance: 0 }])
+    values.set('suggest:v2:fr:café', [{ word: '<invalid>', distance: 0 }])
     const requests = provider(['café'])
     expect(await getWordSuggestions('café', 'fr', false, undefined, client)).toEqual([
       { word: 'café', distance: 0 },

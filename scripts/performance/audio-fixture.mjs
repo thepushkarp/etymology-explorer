@@ -9,6 +9,17 @@ const requests = new Map()
 globalThis.fetch = async (input, init) => {
   const url = new URL(input instanceof Request ? input.url : String(input))
   if (url.hostname !== 'api.elevenlabs.io') return originalFetch(input, init)
+  if (url.pathname === '/v2/voices')
+    return Response.json({
+      has_more: false,
+      voices: [
+        {
+          voice_id: 'benchmark',
+          labels: { gender: 'female', language: 'en' },
+          high_quality_base_model_ids: ['eleven_multilingual_v2'],
+        },
+      ],
+    })
   const { text } = JSON.parse(String(init?.body))
   const attempt = (requests.get(text) ?? 0) + 1
   requests.set(text, attempt)

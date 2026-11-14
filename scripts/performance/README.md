@@ -14,6 +14,17 @@ replaced with a counter. These benchmarks never start provider research.
 
 ## Run
 
+The journey suite also checks evidence-qualified automatic alternative lookups after explicit searches and zero research on passive visits.
+
+For functional journeys, run the fixture server with `PERF_JOURNEYS=true` and use
+the isolated cache-only production environment below. Run
+`PERF_BASE_URL=http://127.0.0.1:4199 node scripts/performance/user-journeys.mjs`.
+The suite starts searches in Auto, selects meanings and languages, decodes a local
+audio fixture, follows related words, and checks Back, reload, and copied links.
+Controlled stream interruptions exercise cancellation, bounded reconnects, source
+outage retries, and saved-entry retention. Its synthetic entries are UI fixtures,
+not a benchmark of dictionary coverage or speech pronunciation quality.
+
 Install dependencies with `bun install --frozen-lockfile`, then install a test
 browser with `bunx playwright install chromium`. An existing Chrome installation
 can be selected using `PLAYWRIGHT_EXECUTABLE_PATH`.
@@ -118,3 +129,27 @@ existing warning in `.remember/tmp/last-ndc.ts`.
 Research, generation, quality constraints, and rejected provider experiments
 are measured separately in [RESEARCH.md](./RESEARCH.md).
 Pronunciation generation and playback are measured in [AUDIO.md](./AUDIO.md).
+
+## Repeatable lookup coverage
+
+`lookup-matrix.ts` runs 92 earlier examples and 14 additional homographs, forms, and
+scripts in Auto, each with cold and warm in-memory source caches. It disables
+Redis, Exa, and model fallback, and only permits Wiktionary HTTP requests.
+
+```sh
+bun --no-env-file scripts/performance/lookup-matrix.ts record /tmp/before.json /tmp/dictionary-http.json
+bun --no-env-file scripts/performance/lookup-matrix.ts replay /tmp/after.json /tmp/dictionary-http.json
+```
+
+Run the same harness on each revision with the same recording. Reports include
+resolution time, source attempts, selected targets, languages, and incomplete
+results. A 429 stops further live requests to that host; skipped requests and
+source failures remain incomplete coverage, not evidence of lexical absence.
+Recordings resume from existing files. Replay makes no live requests. These
+measurements exclude synthesis and speech; incomplete recordings cannot establish
+dictionary accuracy or healthy-service end-to-end latency.
+
+The journey suite reports elapsed time per scenario, including its deliberate
+waits. Run it alone against a production build for timing comparisons. JMdict
+fixtures pin the clock to the checked-in snapshot date; a separate expiry test
+verifies that stale snapshots require refresh.

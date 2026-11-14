@@ -12,6 +12,9 @@ const scriptTarget = z
   .object({
     word: z.string().refine((word) => isValidWord(word) && canonicalizeWord(word) === word),
     language: z.enum(SUPPORTED_LANGUAGE_CODES),
+    reading: z.string().optional(),
+    meaning: z.string().optional(),
+    sourceUrl: z.url().optional(),
   })
   .refine((target) => candidateLanguages(target.word).includes(target.language))
 
@@ -105,6 +108,7 @@ const source = z.object({
   word: z.string().optional(),
   sourceFamily: z.enum(SOURCE_FAMILY_IDS).optional(),
   license: z.string().optional(),
+  historyIds: z.array(z.string()).optional(),
 })
 
 const WordSuggestionsSchema = z
@@ -203,14 +207,27 @@ export const WordEntrySchema = z
     otherScripts: z.array(scriptTarget).optional(),
     spellings: z
       .array(
-        scriptTarget.and(
-          z.object({
-            kind: z.enum(['spelling', 'misspelling']),
-            sourceUrl: z.url(),
-            revisionId: z.union([z.number(), z.string()]).optional(),
-            verifiedAt: z.iso.datetime(),
+        z
+          .object({
+            word: z.string().refine((word) => isValidWord(word) && canonicalizeWord(word) === word),
+            language: z.enum(SUPPORTED_LANGUAGE_CODES),
           })
-        )
+          .and(
+            z.object({
+              kind: z.enum(['spelling', 'misspelling', 'romanization']),
+              readingEvidence: z.string().optional(),
+              sourceUrl: z.url(),
+              revisionId: z.union([z.number(), z.string()]).optional(),
+              verifiedAt: z.iso.datetime(),
+            })
+          )
+          .refine((spelling) =>
+            spelling.kind === 'romanization'
+              ? spelling.language === 'ja' &&
+                /^[\p{Script=Latin}\p{M}'’ -]+$/u.test(spelling.word) &&
+                !!spelling.readingEvidence?.trim()
+              : candidateLanguages(spelling.word).includes(spelling.language)
+          )
       )
       .optional(),
     tracedAt: z.iso.datetime(),

@@ -16,6 +16,7 @@ import {
 import { canonicalizeWord } from './orthography'
 import { normalizeScriptTargets } from './scriptTargets'
 import { isValidWord } from './validation'
+import { pronunciationKey } from './pronunciation'
 
 /** Apply ±jitter to non-corpus TTLs to prevent synchronized cache stampedes. */
 function jitterTTL(ttl: number): number {
@@ -31,7 +32,6 @@ export const LEGACY_SCAN_PATTERNS = [
   `${LEGACY_ETYMOLOGY_PREFIX}*`,
   `${LEGACY_BETA_ETYMOLOGY_PREFIX}*`,
 ] as const
-const AUDIO_PREFIX = 'audio:v2:'
 const AUDIO_TTL = CONFIG.audioCacheTTL
 const SPELLING_ALIAS_PREFIX = 'entry-alias:v1:'
 export const MAX_SPELLING_REDIRECTS = 3
@@ -51,14 +51,19 @@ function validProof(value: unknown): value is SpellingProof {
   const proof = value as SpellingProof
   if (
     !isLanguageCode(proof.language) ||
-    !['spelling', 'misspelling'].includes(proof.kind) ||
+    !['spelling', 'misspelling', 'romanization'].includes(proof.kind) ||
+    (proof.kind === 'romanization' && !proof.readingEvidence?.trim()) ||
     typeof proof.word !== 'string' ||
     typeof proof.targetWord !== 'string' ||
     ![proof.word, proof.targetWord].every(
       (word) =>
         isValidWord(word) &&
         canonicalizeWord(word) === word &&
-        candidateLanguages(word).includes(proof.language)
+        (candidateLanguages(word).includes(proof.language) ||
+          (word === proof.word &&
+            proof.kind === 'romanization' &&
+            proof.language === 'ja' &&
+            /^[\p{Script=Latin}\p{M}'’ -]+$/u.test(word)))
     ) ||
     typeof proof.verifiedAt !== 'string' ||
     !freshSpelling(proof) ||
@@ -112,7 +117,13 @@ export function spellingMetadata(chain: SpellingProof[]): EntrySpelling {
   return {
     word: first.word,
     language: first.language,
-    kind: chain.some((proof) => proof.kind === 'misspelling') ? 'misspelling' : 'spelling',
+    kind:
+      first.kind === 'romanization'
+        ? 'romanization'
+        : chain.some((proof) => proof.kind === 'misspelling')
+          ? 'misspelling'
+          : 'spelling',
+    ...(first.readingEvidence ? { readingEvidence: first.readingEvidence } : {}),
     sourceUrl: first.sourceUrl,
     ...(first.revisionId !== undefined ? { revisionId: first.revisionId } : {}),
     verifiedAt: new Date(
@@ -131,6 +142,7 @@ function sameSpellingProof(left: EntrySpelling, right: EntrySpelling): boolean {
     left.word === right.word &&
     left.language === right.language &&
     left.kind === right.kind &&
+    left.readingEvidence === right.readingEvidence &&
     left.sourceUrl === right.sourceUrl &&
     left.revisionId === right.revisionId &&
     left.verifiedAt === right.verifiedAt
@@ -177,7 +189,7 @@ export async function getCachedSpellingEntry(
 ): Promise<{ word: string; language: LanguageCode; entry: WordEntry; stale: boolean } | null> {
   const candidates = candidateLanguages(word)
   const language = hint ?? (candidates.length === 1 ? candidates[0] : undefined)
-  if (!language || !candidates.includes(language)) return null
+  if (!language || (!candidates.includes(language) && language !== 'ja')) return null
   const redis = getRedis()
   if (!redis) return null
   const normalized = canonicalizeWord(word)
@@ -187,7 +199,7 @@ export async function getCachedSpellingEntry(
     )
     if (
       !raw ||
-      raw.revision !== 1 ||
+      ![1, 2].includes(raw.revision as number) ||
       typeof raw.word !== 'string' ||
       !Array.isArray(raw.proofs) ||
       raw.proofs.length > MAX_SPELLING_REDIRECTS ||
@@ -196,6 +208,9 @@ export async function getCachedSpellingEntry(
       return null
     const chain = proofChain(normalized, raw.word, raw.proofs, language)
     if (!chain) return null
+    // Older romanization pointers did not distinguish model-only discovery
+    // from source-defined uniqueness. Durable entry contents remain readable.
+    if (raw.revision === 1 && chain.some((proof) => proof.kind === 'romanization')) return null
     if (!hint) {
       const original = await getCachedEntry(normalized)
       if (original?.entry.languages.some((code) => code !== language)) return null
@@ -238,7 +253,7 @@ export async function publishSpellingAliases(
     try {
       await redis.set(
         `${SPELLING_ALIAS_PREFIX}${lexemeKey(language, word)}`,
-        { word: entry.word, revision: 1, proofs: chain },
+        { word: entry.word, revision: 2, proofs: chain },
         { ex: ttl }
       )
       published.push(word)
@@ -478,12 +493,13 @@ export async function cacheEntry(
  */
 export async function getCachedAudio(
   word: string,
-  language: LanguageCode = 'en'
+  language: LanguageCode = 'en',
+  ipa?: string
 ): Promise<string | null> {
   const redis = getRedis()
   if (!redis) return null
 
-  const key = audioKey(word, language)
+  const key = pronunciationKey(word, language, ipa)
   try {
     return await redis.get<string>(key)
   } catch (error) {
@@ -498,12 +514,13 @@ export async function getCachedAudio(
 export async function cacheAudio(
   word: string,
   audioBase64: string,
-  language: LanguageCode = 'en'
+  language: LanguageCode = 'en',
+  ipa?: string
 ): Promise<void> {
   const redis = getRedis()
   if (!redis) return
 
-  const key = audioKey(word, language)
+  const key = pronunciationKey(word, language, ipa)
   try {
     await redis.set(key, audioBase64, { ex: jitterTTL(AUDIO_TTL) })
     console.log(`[Cache] Stored audio for "${word}"`)
@@ -512,19 +529,10 @@ export async function cacheAudio(
   }
 }
 
-function audioKey(word: string, language: LanguageCode): string {
-  const normalized = canonicalizeWord(word)
-  // Preserve the established English namespace; only other languages need a
-  // qualifier to prevent same-spelling pronunciations from colliding.
-  return language === 'en'
-    ? `${AUDIO_PREFIX}${normalized}`
-    : `${AUDIO_PREFIX}${lexemeKey(language, normalized)}`
-}
-
 /** Auto misses and explicit language hints have independent admission scopes. */
 function negativeKey(word: string, hint?: LanguageCode): string {
   const normalized = canonicalizeWord(word)
-  return hint ? `neg:v7:hint:${lexemeKey(hint, normalized)}` : `neg:v7:${normalized}`
+  return hint ? `neg:v10:hint:${lexemeKey(hint, normalized)}` : `neg:v10:${normalized}`
 }
 
 export interface NegativeCacheMetadata {
