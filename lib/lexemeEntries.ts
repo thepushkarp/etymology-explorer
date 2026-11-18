@@ -138,6 +138,53 @@ export function deriveEntryContexts(
   const contexts: ResearchEntryContext[] = []
 
   for (const group of groups) {
+    const references = group.sections.filter(
+      (s) =>
+        s.japaneseDefinitions?.length === 1 &&
+        s.japaneseDefinitions[0].target &&
+        s.japaneseDefinitions[0].glosses.length
+    )
+    if (
+      language === 'ja' &&
+      sourceName === 'wiktionaryEnglish' &&
+      group.heading === 'Japanese' &&
+      !source.incomplete &&
+      !group.etymologyText &&
+      !group.relations?.length &&
+      references.length &&
+      !identity.formTargets.length
+    ) {
+      for (const section of group.sections.filter(
+        (s) =>
+          references.includes(s) ||
+          /^(?:Symbol|Pronoun|Noun|Verb|Adjective|Adverb|Interjection|Prefix|Suffix|Particle|Proper noun|Counter|Conjunction|Determiner|Numeral|Proverb|Phrase|Expression|Idiom|Kanji|Letter|Affix)$/.test(
+            s.heading
+          )
+      )) {
+        const ref = references.includes(section) ? section.japaneseDefinitions![0] : undefined
+        contexts.push({
+          ...historyIdentity([language, word, sourceName, section.anchor, 'lemma']),
+          source: sourceName,
+          sourceUrl: source.url,
+          heading: section.heading,
+          text: section.text,
+          sectionHeadings: [section.heading],
+          entryKind: 'unresolved',
+          ...(ref?.target
+            ? {
+                definitionReference: {
+                  word: ref.target,
+                  heading: section.heading,
+                  glosses: ref.glosses,
+                },
+                counterparts: [{ word: ref.target, language }],
+                transliteration: group.transliteration,
+              }
+            : {}),
+        })
+      }
+      continue
+    }
     const groupContextStart = contexts.length
     const formSections = identity.formTargets.flatMap((target) => {
       const matches = group.sections.filter((section) => containsWholeLexeme(section.text, target))

@@ -78,11 +78,17 @@ export function WordTraceExperience({
     noCompletedEntry
   )
   const restored = progressEntry(completed, language)
-  const { progress, search } = useStreamingEtymology(language, word)
+  const { progress, search } = useStreamingEtymology(language, word, lookupGroup)
   const activeWord = progress.identity?.word ?? progress.result?.word ?? progress.word ?? word
   const activeLanguage = progress.identity?.language ?? language
   const selection = useEntrySelection(activeWord, activeLanguage, initialSelection)
-  const { group } = useLookupGroup({
+  const {
+    group,
+    preview,
+    loading: lookupLoading,
+    error: lookupError,
+    retry: retryLookup,
+  } = useLookupGroup({
     word: activeWord,
     initial: lookupGroup,
     entry: progress.result ?? restored ?? initialEntry,
@@ -97,12 +103,17 @@ export function WordTraceExperience({
     initialEntry?.languages[0] ??
     'en'
   const slice = progress.byLanguage[selected]
+  const previewHistories =
+    preview?.word === activeWord && preview.language === selected ? preview.histories : undefined
+  const liveHistory = previewHistories?.find((h) => h.id === selection.historyId)
   const savedTabs = progress.status === 'error' || activeWord === initialEntry?.word
   const navigation = entryNavigation({
     word: activeWord,
     language: selected,
     group,
     selection,
+    histories:
+      previewHistories ?? (progress.status === 'loading' ? slice?.sections.histories : undefined),
     entry: progress.result ?? restored ?? (savedTabs ? initialEntry : undefined),
     languages: progress.languages.length ? progress.languages : initialEntry?.languages,
     failedLanguages: progress.result?.failedLanguages ?? initialEntry?.failedLanguages,
@@ -139,7 +150,7 @@ export function WordTraceExperience({
 
   useEffect(() => {
     // The restored EntryView owns the explicit intent for related-entry checks.
-    if (restored) return
+    if (restored || lookupLoading) return
     if (
       navigation.unresolved ||
       openingDefault ||
@@ -160,6 +171,7 @@ export function WordTraceExperience({
     initialEntry,
     stale,
     restored,
+    lookupLoading,
     openingDefault,
     navigation.unresolved,
   ])
@@ -167,11 +179,26 @@ export function WordTraceExperience({
   const partial = useMemo(() => {
     const streamed = toPartialResult(
       activeWord,
-      navigation.grouped && !navigation.historyId ? {} : (slice?.sections ?? {}),
+      liveHistory ??
+        ((navigation.grouped || selection.historyId) && !navigation.historyId
+          ? {}
+          : {
+              ...slice?.sections,
+              ...slice?.sections.histories?.find((history) => history.id === navigation.historyId),
+            }),
       selected
     )
     return { ...streamed, ngram: ngram.status === 'ready' ? ngram.data : undefined }
-  }, [activeWord, selected, slice?.sections, ngram, navigation.grouped, navigation.historyId])
+  }, [
+    liveHistory,
+    activeWord,
+    selected,
+    slice?.sections,
+    ngram,
+    navigation.grouped,
+    navigation.historyId,
+    selection.historyId,
+  ])
 
   const tabs = <EntryNavigation model={navigation} />
   const start = () => search(activeWord, selection.language ?? activeLanguage, { refresh: stale })
@@ -198,7 +225,7 @@ export function WordTraceExperience({
         )}
 
         {openingDefault && progress.status === 'idle' ? (
-          <EntryHeader result={partial} subheader={tabs} pending />
+          <EntryHeader result={partial} navigation={tabs} pending />
         ) : progress.status === 'idle' && restored ? (
           <EntryView
             entry={restored}
@@ -214,7 +241,7 @@ export function WordTraceExperience({
             lookupGroup={group}
             selection={selection}
           />
-        ) : progress.status === 'success' && progress.result ? (
+        ) : progress.result ? (
           <EntryView
             entry={progress.result}
             traceAlternatives
@@ -227,10 +254,18 @@ export function WordTraceExperience({
             result={partial}
             pronunciationWord={spellingPronunciation(selected, progress.identity?.spellings)}
             pending={progress.status === 'loading'}
+            navigation={tabs}
             subheader={
               <>
-                {tabs}
-                {progress.status === 'idle' ? (
+                {(liveHistory || selection.historyId) && lookupLoading ? (
+                  <p role="status" className="mt-3 text-sm text-muted">
+                    Finishing related entries…
+                  </p>
+                ) : lookupError && selection.lookup ? (
+                  <p role="status">
+                    {lookupError} <button onClick={retryLookup}>Retry</button>
+                  </p>
+                ) : progress.status === 'idle' ? (
                   navigation.unresolved ? (
                     <div className="mt-8">
                       <p role="status" className="font-serif italic text-muted">

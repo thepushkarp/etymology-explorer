@@ -319,7 +319,7 @@ describe('source events', () => {
     expect(reconnected.sources).toEqual([])
     expect(reconnected.byLanguage.en?.sources[0].status).toBe('pending')
     expect(Object.keys(reconnected.byLanguage.en?.sources[0].activities ?? {})).toEqual(['1'])
-    expect(reconnected.byLanguage.en?.sections.definition).toBe('An entry.')
+    expect(reconnected.byLanguage.en?.sections.definition).toBeUndefined()
   })
 
   test('root_research events do not produce a new state reference', () => {

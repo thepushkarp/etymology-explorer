@@ -94,6 +94,10 @@ export function fetchWiktionaryPage(
             })
             return null
           }
+          if (response.headers.has('retry-after'))
+            throw new Error(
+              `Wiktionary ${edition}:${normalizedWord}: HTTP ${response.status} (Retry-After)`
+            )
           if (attempt + 1 < attempts && (response.status === 408 || response.status >= 500)) {
             await response.body?.cancel()
             continue
@@ -157,6 +161,7 @@ export function fetchWiktionaryPage(
     // Memoizing the retry separately prevents concurrent histories from multiplying attempts.
     if (
       options.retryTransient &&
+      !safeError(error).includes('Retry-After') &&
       !currentSourceFetchBudget()?.rateLimited &&
       (error instanceof TypeError || /Request timeout|HTTP (?:408|5\d\d)\b/i.test(safeError(error)))
     )

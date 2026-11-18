@@ -37,6 +37,7 @@ import { SourceFetchBudget } from './sourceFetchBudget'
 import { sourceEtymologyAccounts } from './sourceComparison'
 import {
   createLexemeResearchSession,
+  hasEtymologicalText,
   researchLexemeKey,
   type LexemeResearchSession,
   type LexemeLookupResult,
@@ -80,11 +81,51 @@ function completeResearch(context: ResearchContext, budget: SourceFetchBudget): 
     throw new Error('429: research sources are rate limited')
   }
   context.totalSourcesFetched = budget.attempts
+  const records = mainSourceRecords(context.mainWord)
+  const hasAccount =
+    hasEtymologicalText(records) ||
+    Boolean(context.entryContexts?.some((entry) => entry.originReference))
+  const mainKey = researchLexemeKey({
+    word: context.mainWord.word,
+    language: context.language ?? 'en',
+  })
+  context.originCoverage = {
+    hasAccount,
+    sources: (context.sourceOutcomes ?? []).flatMap(({ lexeme, source, outcome }) => {
+      const main = researchLexemeKey(lexeme) === mainKey
+      const reference =
+        !main &&
+        lexeme.language === 'ja' &&
+        source === 'wiktionaryEnglish' &&
+        context.entryContexts?.some((e) => e.definitionReference?.word === lexeme.word)
+      if (
+        (!main && !reference) ||
+        [
+          'discovery',
+          'wikipedia',
+          'incelsWiki',
+          'jmdict',
+          'ninjalHistorical',
+          'multilingualDictionary',
+          'wikidataLexeme',
+        ].includes(source)
+      )
+        return []
+      const contributed = main
+        ? hasEtymologicalText(records.filter((r) => r.provider === source))
+        : context.entryContexts?.some((e) => e.originReference?.word === lexeme.word)
+      return [
+        {
+          source,
+          ...(reference ? { word: lexeme.word } : {}),
+          status: outcome.status === 'found' && !contributed ? 'no_evidence' : outcome.status,
+        },
+      ]
+    }),
+  }
   if (
     hasCredibleMainSource(context) &&
-    (!mainSourceRecords(context.mainWord).some(
-      (source) => sourceEvidenceRole(source) === 'etymology'
-    ) ||
+    (!hasAccount ||
       context.rootResearch.some((root) => !lexicalSourceRecords(rootSourceRecords(root)).length))
   ) {
     context.incompleteResearch = true
@@ -403,6 +444,62 @@ export async function expandLexemes(
   const language = context.language ?? 'en'
   const word = context.mainWord.word
   const history = context.entryContexts?.length === 1 ? context.entryContexts[0] : undefined
+  if (language === 'ja') {
+    const references = (context.entryContexts ?? []).filter((entry) => entry.definitionReference)
+    const words = [...new Set(references.map((entry) => entry.definitionReference!.word))].slice(
+      0,
+      CONFIG.maxRootsToExplore
+    )
+    for (const target of words) {
+      if (target === word) continue
+      const result = await session.lookup(
+        { word: target, language },
+        { progressLanguage: language, skipOptionalSources: true }
+      )
+      recordLookup(context, result)
+      const source = result.sources.find(
+        (s) => s.provider === 'wiktionaryEnglish' && s.data.resolvedWord === target
+      )
+      if (!source || source.data.incomplete) continue
+      for (const entry of references) {
+        const ref = entry.definitionReference!
+        if (ref.word !== target) continue
+        const matches = source.data.entryGroups?.filter((g) =>
+          g.sections.some(
+            (s) =>
+              s.heading === ref.heading &&
+              s.japaneseDefinitions?.some(
+                (d) =>
+                  d.readings.includes(word) &&
+                  d.glosses.some((gloss) => ref.glosses.includes(gloss))
+              )
+          )
+        )
+        if (matches?.length !== 1 || !matches[0].etymologyText) continue
+        const group = matches[0]
+        const url = `${source.data.url}#${encodeURIComponent(group.anchor)}`
+        entry.etymologyText = group.etymologyText
+        entry.originReference = { word: target, url }
+        entry.text += `\n${target} (${group.heading}): ${group.etymologyText}`
+        const chains = entryChains(
+          {
+            ...entry,
+            sourceUrl: url,
+            text: group.etymologyText!,
+            relations: group.relations
+              ?.filter(
+                (r) =>
+                  r.subject.word === target &&
+                  lexicalLanguageName(r.subject.language) === 'Japanese'
+              )
+              .map((r) => ({ ...r, subject: { word, language } })),
+          },
+          word
+        )
+        context.parsedChains = [...(context.parsedChains ?? []), ...chains]
+      }
+    }
+  }
   const seen = new Set([researchLexemeKey({ word, language })])
   const variants = mainSourceRecords(context.mainWord).flatMap(
     (source) => source.data.variants ?? []

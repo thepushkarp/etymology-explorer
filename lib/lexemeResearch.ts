@@ -117,10 +117,24 @@ function classifyFailure(error: unknown): SourceOutcome {
   }
 }
 
-function hasEtymologicalText(records: SourceRecord[]): boolean {
+export function hasEtymologicalText(records: SourceRecord[]): boolean {
   return records.some((source) => {
     if (sourceEvidenceRole(source) !== 'etymology') return false
-    if (source.data.entryGroups?.some((group) => group.relations?.length)) return true
+    if (source.provider === 'etymonline' && source.data.text.trim()) return true
+    if (
+      source.data.entryGroups?.some((group) => {
+        const text = group.etymologyText?.replace(/\[edit\]/gi, '').trim()
+        return (
+          group.relations?.length ||
+          (text &&
+            !/^(?:(?:origin|etymology) (?:is )?)?(?:unknown|uncertain|unclear|missing|needed)[.!?]?$/i.test(
+              text
+            ))
+        )
+      })
+    )
+      return true
+    if (source.provider.startsWith('wiktionary') && source.data.entryGroups?.length) return false
     const texts = source.data.entryGroups?.length
       ? source.data.entryGroups.map((group) => group.text)
       : [source.data.text]
@@ -697,6 +711,56 @@ export function createLexemeResearchSession(options: {
             entry.result.outcomes.push({ source: entry.jobs[index].id, outcome: outcome.outcome })
           })
           const language = languageFromName(entry.result.lexeme.language)
+          if (
+            settings.primary &&
+            language &&
+            !budget.exhausted &&
+            !budget.rateLimited &&
+            !hasEtymologicalText(entry.result.sources)
+          ) {
+            const primary =
+              language === 'en'
+                ? 'wiktionary'
+                : LANGUAGES[language].historyPrimary === 'english'
+                  ? 'wiktionaryEnglish'
+                  : 'wiktionaryNative'
+            const failure = entry.result.outcomes.find(
+              (row) => row.source === primary && row.outcome.status === 'unavailable'
+            )
+            if (
+              failure &&
+              /HTTP (?:408|5\d\d)\b|request timeout|fetch failed|network error/i.test(
+                failure.outcome.reason ?? ''
+              ) &&
+              !failure.outcome.reason?.includes('Retry-After')
+            ) {
+              const word = entry.result.lexeme.word
+              const options = { retryTransient: true, fetchOnce }
+              const recovered = await runJob(entry.result.lexeme, {
+                id: primary,
+                run: async () => {
+                  const data =
+                    language === 'en'
+                      ? await fetchWiktionary(word, signal, options)
+                      : primary === 'wiktionaryEnglish'
+                        ? await fetchEnglishWiktionaryLanguage(word, language, signal, options)
+                        : await fetchNativeWiktionary(word, language, signal, options)
+                  return found(
+                    data
+                      ? [
+                          record(primary, {
+                            ...data,
+                            lexicalLanguage: lexicalLanguageName(language),
+                          }),
+                        ]
+                      : []
+                  )
+                },
+              })
+              addRecords(entry.result, recovered.records)
+              failure.outcome = recovered.outcome
+            }
+          }
           if (
             language &&
             LANGUAGES[language].freeDictionary &&

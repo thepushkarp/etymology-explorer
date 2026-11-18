@@ -1,6 +1,15 @@
 'use client'
 
-import { useCallback, useEffect, useReducer, useRef } from 'react'
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useReducer,
+  useRef,
+  type ReactNode,
+} from 'react'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
 import { StreamEvent, type WordEntry } from '@/lib/types'
 import { initialStreamState, streamReducer } from '@/lib/streamReducer'
@@ -9,6 +18,11 @@ import { normalizeScriptTargets } from '@/lib/scriptTargets'
 import { recordRecentSearchIntent } from '@/lib/recentSearchClient'
 import { rememberCompletedEntry } from '@/lib/completedEntries'
 import { toStreamingUiError } from '@/lib/streamingError'
+
+import { lookupSession } from '../lookupSession'
+import { lookupGroupForWord } from '../lookupGroups'
+import { parseEntrySelection } from '../entrySelection'
+import type { LookupGroup } from '../types'
 
 const MAX_RETRIES = 2
 const RETRY_BASE_DELAY_MS = 600
@@ -41,7 +55,7 @@ function finishEntry(
  * EventSource lifecycle, reconnection with backoff, and the non-streaming
  * fallback fetch.
  */
-export function useStreamingEtymology(defaultHint?: LanguageCode, routeWord?: string) {
+function useTraceTransport() {
   const [progress, dispatch] = useReducer(streamReducer, initialStreamState)
 
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -50,7 +64,13 @@ export function useStreamingEtymology(defaultHint?: LanguageCode, routeWord?: st
   const completedRequestRef = useRef<number | null>(null)
 
   const fallbackFetch = useCallback(
-    async (word: string, requestId: number, url: string, hint?: LanguageCode) => {
+    async (
+      word: string,
+      requestId: number,
+      url: string,
+      hint?: LanguageCode,
+      routeWord?: string
+    ) => {
       try {
         const controller = new AbortController()
         fallbackControllerRef.current = controller
@@ -106,28 +126,24 @@ export function useStreamingEtymology(defaultHint?: LanguageCode, routeWord?: st
         })
       }
     },
-    [routeWord]
+    []
   )
 
-  useEffect(() => {
-    return () => {
-      // Prevent pending backoff timers and fallback responses from reviving a
-      // request after this hook has unmounted.
-      activeRequestRef.current += 1
-      fallbackControllerRef.current?.abort()
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-        eventSourceRef.current = null
-      }
+  const cancel = useCallback(() => {
+    // Prevent pending backoff timers and fallback responses from reviving a
+    // request after this hook has unmounted.
+    activeRequestRef.current += 1
+    fallbackControllerRef.current?.abort()
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
     }
-  }, [defaultHint])
+    dispatch({ type: 'reset' })
+  }, [])
+  useEffect(() => cancel, [cancel])
 
   const search = useCallback(
-    (
-      word: string,
-      hint: LanguageCode | undefined = defaultHint,
-      options?: { refresh?: boolean }
-    ) => {
+    (word: string, hint?: LanguageCode, options?: { refresh?: boolean }, routeWord?: string) => {
       const trimmed = canonicalizeWord(word)
       if (!isValidWord(trimmed)) return
 
@@ -170,7 +186,7 @@ export function useStreamingEtymology(defaultHint?: LanguageCode, routeWord?: st
         } else if (source && attempt < MAX_RETRIES) {
           window.setTimeout(() => connect(attempt + 1), RETRY_BASE_DELAY_MS * Math.pow(2, attempt))
         } else {
-          void fallbackFetch(trimmed, requestId, fallbackUrl, hint)
+          void fallbackFetch(trimmed, requestId, fallbackUrl, hint, routeWord)
         }
       }
 
@@ -222,11 +238,61 @@ export function useStreamingEtymology(defaultHint?: LanguageCode, routeWord?: st
 
       connect(0)
     },
-    [fallbackFetch, defaultHint, routeWord]
+    [fallbackFetch]
   )
 
   return {
     progress,
     search,
+    cancel,
   }
+}
+
+const Transport = createContext<ReturnType<typeof useTraceTransport> | null>(null)
+export function WordTraceProvider({ children }: { children: ReactNode }) {
+  const transport = useTraceTransport()
+  useEffect(() => () => lookupSession.stop(), [])
+  return createElement(Transport.Provider, { value: transport }, children)
+}
+export function useStreamingEtymology(
+  defaultHint?: LanguageCode,
+  routeWord?: string,
+  group?: LookupGroup
+) {
+  const transport = useContext(Transport)
+  const progress = transport?.progress ?? initialStreamState
+  const owner = progress.word
+  const visible =
+    !routeWord ||
+    owner === routeWord ||
+    progress.identity?.word === routeWord ||
+    progress.result?.word === routeWord
+  const cancel = transport?.cancel
+  const start = transport?.search
+  useEffect(() => {
+    if (!routeWord) return
+    const lookup = parseEntrySelection(new URLSearchParams(window.location.search)).lookup
+    const related =
+      lookup &&
+      group?.reading === lookup &&
+      lookupGroupForWord(routeWord, group) &&
+      owner &&
+      lookupGroupForWord(owner, group)
+    if (
+      !visible &&
+      owner &&
+      !related &&
+      !(lookup && lookupSession.matches(routeWord, lookup) && lookupSession.matches(owner, lookup))
+    )
+      cancel?.()
+    if (lookupSession.getSnapshot() && !lookupSession.matches(routeWord, lookup ?? routeWord))
+      lookupSession.stop()
+  }, [owner, routeWord, group, visible, cancel])
+  const search = useCallback(
+    (word: string, hint = defaultHint, options?: { refresh?: boolean }) => {
+      start?.(word, hint, options, routeWord)
+    },
+    [start, defaultHint, routeWord]
+  )
+  return { progress: visible ? progress : initialStreamState, search }
 }

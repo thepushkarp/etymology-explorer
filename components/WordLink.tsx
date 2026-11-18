@@ -46,7 +46,7 @@ export function WordLink({
   return (
     <Link
       href={href}
-      scroll={!localNavigation}
+      scroll={!localNavigation && !lookup}
       prefetch={localNavigation ? false : prefetch}
       onMouseEnter={() => setPrefetch(true)}
       onFocus={() => setPrefetch(true)}
@@ -58,7 +58,7 @@ export function WordLink({
           navigateEntry(href)
           return
         }
-        markTraceIntent(word, language)
+        if (!lookup) markTraceIntent(word, language)
         void recordRecentSearchIntent(word)
       }}
       className={className}

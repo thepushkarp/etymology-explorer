@@ -149,6 +149,94 @@ try {
     )
 
   await scenario(
+    'Switching meanings during a streamed lookup retains one request and the selected story',
+    async (page, context) => {
+      await fetch('http://127.0.0.1:4198', {
+        method: 'POST',
+        body: JSON.stringify(['del', 'entry:v1:張る']),
+      })
+      await context.addInitScript(() => {
+        const original = window.fetch.bind(window)
+        window.__requests = 0
+        window.fetch = (input, init) => {
+          const url = new URL(
+            typeof input === 'string' ? input : (input.url ?? input),
+            location.href
+          )
+          if (url.pathname !== '/api/etymology' || url.searchParams.get('word') !== '張る')
+            return original(input, init)
+          if (url.searchParams.get('stream') !== 'true')
+            throw new Error('Expected a streamed lookup')
+          window.__requests++
+          return Promise.resolve(
+            new Response(
+              new ReadableStream({
+                start(controller) {
+                  window.emitAlternative = (event) =>
+                    controller.enqueue(
+                      new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)
+                    )
+                  init.signal.addEventListener('abort', () =>
+                    controller.error(new Error('Lookup aborted'))
+                  )
+                },
+              }),
+              { headers: { 'content-type': 'text/event-stream' } }
+            )
+          )
+        }
+      })
+      await page.goto(base)
+      await auto(page)
+      const input = page.getByRole('combobox', { name: 'Look up a word or expression' })
+      await input.fill('はる')
+      await input.press('Enter')
+      await page.waitForFunction(() => Boolean(window.emitAlternative))
+      const langs = page.getByRole('navigation', { name: 'Languages for はる' })
+      await langs.getByRole('link', { name: 'English', exact: true }).click()
+      await page
+        .getByText('Independent Latin spelling fixture (journey fixture).', { exact: true })
+        .waitFor()
+      await langs.getByRole('link', { name: 'Japanese', exact: true }).click()
+      const meanings = page.getByRole('navigation', { name: 'Meanings for はる' })
+      const selected = meanings.getByRole('link').filter({ hasText: 'Second spring history' })
+      await selected.click()
+      const current = page.url()
+      const history = journeyEntry('張る', { ja: [['Stretching preview', '/haru/']] }).entries.ja
+        .histories[0]
+      history.transliteration = 'haru'
+      await selected.focus()
+      const emit = (event) => page.evaluate((event) => window.emitAlternative(event), event)
+      await emit({
+        type: 'synthesis_section',
+        language: 'ja',
+        section: 'readyHistories',
+        data: [history],
+      })
+      const preview = meanings.getByRole('link').filter({ hasText: 'Stretching preview' })
+      await preview.waitFor()
+      assert.equal(page.url(), current)
+      assert.equal(await selected.evaluate((el) => document.activeElement === el), true)
+      await page.getByText('Second spring history (journey fixture).', { exact: true }).waitFor()
+      await preview.click()
+      await page.getByText('Stretching preview (journey fixture).', { exact: true }).waitFor()
+      await page.goBack()
+      await page.getByText('Second spring history (journey fixture).', { exact: true }).waitFor()
+      await emit({
+        type: 'synthesis_section',
+        language: 'ja',
+        section: 'synthesis_reset',
+        data: null,
+      })
+      await preview.waitFor({ state: 'hidden' })
+      await emit({ type: 'error', errorType: 'rate_limit', message: 'Rate limited' })
+      await page.getByRole('button', { name: 'Retry', exact: true }).waitFor()
+      assert.equal(await page.evaluate(() => window.__requests), 1)
+      assert.equal(await page.evaluate(() => window.__streams.length), 0)
+    }
+  )
+
+  await scenario(
     'Back after a same-word history change never retries a rate-limited alternative',
     async (page, context) => {
       await fetch('http://127.0.0.1:4198', {
@@ -241,14 +329,18 @@ try {
         if (request.url().includes('/api/etymology')) requests.push(request.url())
       })
       await page.goto(`${base}/word/ja/${encodeURIComponent('こう')}`)
+      const picker = page.getByRole('button', { name: /Change meaning/ })
+      await picker.click()
       const meanings = page.getByRole('navigation', { name: 'Meanings for こう' })
       await meanings.waitFor()
       assert.equal(await meanings.getByRole('link').count(), 6)
       assert.equal(await meanings.getByRole('link').filter({ hasText: '甲' }).count(), 0)
       await meanings.getByRole('link').filter({ hasText: '光 —' }).click()
       await page.waitForURL(/%E5%85%89/)
+      if (!(await meanings.isVisible())) await picker.click()
       assert.equal(await meanings.getByRole('link').count(), 6)
       await page.reload()
+      await picker.click()
       await meanings.waitFor()
       assert.equal(await meanings.getByRole('link').count(), 6)
       assert.equal(await page.getByRole('heading', { level: 1 }).innerText(), '光')
@@ -319,10 +411,9 @@ try {
       assert.deepEqual(calls, [])
       await page.goto(base)
       await search(page, 'mamushi')
-      await page.getByText('Checking related entries…', { exact: true }).waitFor()
-      await page
-        .getByText('Checking related entries…', { exact: true })
-        .waitFor({ state: 'hidden' })
+      const progress = page.getByRole('status').filter({ hasText: /Consulting sources for/ })
+      await progress.waitFor()
+      await progress.waitFor({ state: 'hidden' })
       await page.waitForFunction(() => document.querySelector('a[href*="history=viper"]'))
       assert.deepEqual(calls, ['城', '代', '余', '別', '他'])
       assert.equal(await page.getByRole('link').filter({ hasText: '城' }).count(), 0)
@@ -582,19 +673,39 @@ try {
   })
 
   await scenario(
-    'Interrupted retrace retains saved results without automatic paid retry',
+    'Explicit search refreshes a stale entry once while direct visits and reloads stay passive',
     async (page) => {
+      await page.goto(base + '/word/oldword')
+      await page.getByRole('button', { name: 'Retrace', exact: true }).waitFor()
+      await auto(page)
+      assert.equal(await page.evaluate(() => window.__streams.length), 0)
       await page.goto(base)
-      await search(page, 'mole')
-      await page.getByRole('button', { name: 'Retrace', exact: true }).click()
+      await search(page, 'oldword')
       await streams(page, 1)
+      assert.equal(
+        new URL(await page.evaluate(() => window.__streams[0].url), base).searchParams.get(
+          'refresh'
+        ),
+        '1'
+      )
+      await page.getByText('Saved old meaning (journey fixture).', { exact: true }).waitFor()
       await page.evaluate(() => window.__streams[0].fail())
       await page
         .getByText('Retrace interrupted. Your saved entry is still available.', { exact: true })
         .waitFor()
-      await page.getByText('Burrowing animal (journey fixture).', { exact: true }).waitFor()
+      await page.getByText('Saved old meaning (journey fixture).', { exact: true }).waitFor()
       await page.waitForTimeout(2000)
       assert.equal(await page.evaluate(() => window.__streams.length), 1)
+      await page.getByRole('button', { name: 'Retrace', exact: true }).click()
+      await streams(page, 2)
+      await send(page, {
+        type: 'result',
+        data: journeyEntry('oldword', { en: [['Refreshed meaning', '/test/']] }),
+      })
+      await page.getByText('Refreshed meaning (journey fixture).', { exact: true }).waitFor()
+      await page.reload()
+      await auto(page)
+      assert.equal(await page.evaluate(() => window.__streams.length), 0)
     }
   )
 } finally {

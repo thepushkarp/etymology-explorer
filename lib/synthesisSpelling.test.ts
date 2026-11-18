@@ -140,6 +140,7 @@ describe('synthesis spelling and publication', () => {
       'ancestryGraph',
       'roots',
       'lore',
+      'readyHistories',
       'primaryHistoryId',
       'histories',
       'sources',
