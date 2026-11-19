@@ -561,6 +561,37 @@ try {
     }
   )
 
+  await scenario(
+    'Searching the same spelling in another language starts its missing trace',
+    async (page) => {
+      await page.goto(base)
+      await auto(page)
+      for (const [index, [code, name, meaning]] of [
+        ['en', 'English', 'Cooking vessel'],
+        ['es', 'Spanish', 'Bread'],
+      ].entries()) {
+        await page.getByRole('combobox', { name: 'Word language' }).click()
+        await page.getByRole('option', { name, exact: true }).click()
+        const input = page.getByRole('combobox', { name: 'Look up a word or expression' })
+        await input.fill('pan')
+        await input.press('Enter')
+        await page.waitForURL(base + '/word/' + code + '/pan')
+        await streams(page, index + 1)
+        assert.equal(
+          new URL(await page.evaluate(() => window.__streams.at(-1).url), base).searchParams.get(
+            'language'
+          ),
+          code
+        )
+        await send(page, {
+          type: 'result',
+          data: journeyEntry('pan', { [code]: [[meaning, '/test/']] }),
+        })
+        await page.getByText(meaning + ' (journey fixture).', { exact: true }).waitFor()
+      }
+    }
+  )
+
   await scenario('Slow lookup → navigate away → ignore late completion → revisit', async (page) => {
     await page.goto(base)
     await search(page, 'slowjourney')

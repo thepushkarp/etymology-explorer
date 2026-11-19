@@ -151,7 +151,7 @@ function useTraceTransport() {
       activeRequestRef.current = requestId
 
       fallbackControllerRef.current?.abort()
-      dispatch({ type: 'search_started', word: trimmed })
+      dispatch({ type: 'search_started', word: trimmed, language: hint })
       const params = new URLSearchParams({ word: trimmed })
       if (hint) params.set('language', hint)
       if (options?.refresh) params.set('refresh', '1')
@@ -257,16 +257,23 @@ export function WordTraceProvider({ children }: { children: ReactNode }) {
 export function useStreamingEtymology(
   defaultHint?: LanguageCode,
   routeWord?: string,
-  group?: LookupGroup
+  group?: LookupGroup,
+  routeLanguage = defaultHint
 ) {
   const transport = useContext(Transport)
   const progress = transport?.progress ?? initialStreamState
   const owner = progress.word
   const visible =
-    !routeWord ||
-    owner === routeWord ||
-    progress.identity?.word === routeWord ||
-    progress.result?.word === routeWord
+    (!routeWord ||
+      owner === routeWord ||
+      progress.identity?.word === routeWord ||
+      progress.result?.word === routeWord) &&
+    (!routeLanguage ||
+      progress.requestedLanguage === routeLanguage ||
+      Boolean(
+        progress.result?.entries[routeLanguage] || progress.result?.failedLanguages?.[routeLanguage]
+      ) ||
+      (!progress.result && !progress.requestedLanguage))
   const cancel = transport?.cancel
   const start = transport?.search
   useEffect(() => {

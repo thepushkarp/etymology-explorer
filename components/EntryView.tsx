@@ -51,7 +51,7 @@ export function EntryView({
   lookupGroup,
   traceAlternatives = false,
 }: EntryViewProps) {
-  const { progress, search } = useStreamingEtymology(undefined, entry.word, lookupGroup)
+  const { progress, search } = useStreamingEtymology(undefined, entry.word, lookupGroup, language)
   const [backgroundWord, setBackgroundWord] = useState<string>()
   const [retryLanguage, setRetryLanguage] = useState<LanguageCode>()
   const completed = useSyncExternalStore(

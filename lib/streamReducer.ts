@@ -99,6 +99,7 @@ export interface LanguageStreamState {
 }
 
 export interface StreamState {
+  requestedLanguage?: LanguageCode
   lookupResolution?: LookupResolution
   word?: string
   identity?: ScriptTarget & { spellings?: EntrySpelling[] }
@@ -118,7 +119,7 @@ export interface StreamState {
 
 export type StreamAction =
   | { type: 'reset' }
-  | { type: 'search_started'; word?: string }
+  | { type: 'search_started'; word?: string; language?: LanguageCode }
   | { type: 'stream_reconnecting' }
   | { type: 'stream_event'; event: StreamEvent }
   | { type: 'fallback_success'; result: WordEntry }
@@ -385,9 +386,17 @@ export function streamReducer(state: StreamState, action: StreamAction): StreamS
       return {
         ...initialStreamState,
         word: action.word,
+        requestedLanguage: action.language,
         status: 'loading',
         phase: 'sources',
-        result: action.word && state.result?.word === action.word ? state.result : null,
+        result:
+          action.word &&
+          state.result?.word === action.word &&
+          (!action.language ||
+            state.result.entries[action.language] ||
+            state.result.failedLanguages?.[action.language])
+            ? state.result
+            : null,
       }
 
     case 'stream_reconnecting':
