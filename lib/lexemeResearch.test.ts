@@ -1,7 +1,12 @@
 import { afterEach, expect, mock, spyOn, test } from 'bun:test'
 import { createLexemeResearchSession, researchLexemeKey } from './lexemeResearch'
 import { SourceFetchBudget } from './sourceFetchBudget'
-import { ancestorCandidates, expandLexemes, hasCredibleMainSource } from './research'
+import {
+  ancestorCandidates,
+  conductAgenticResearch,
+  expandLexemes,
+  hasCredibleMainSource,
+} from './research'
 import { parseDictionaryText } from './etymologyParser'
 import type { ExaBudgetRedis } from './exaBudget'
 import * as sourceCache from './sourceCache'
@@ -411,3 +416,109 @@ test('cached discovery reports publisher progress without live Exa activity', as
   ).toMatchObject({ outcome: { status: 'found' }, language: 'en' })
   expect(events.some((event) => 'source' in event && event.source === 'exa')).toBe(false)
 })
+
+// The kana headword points to the kanji in its definition, not via a spelling redirect.
+test.each([false, true])(
+  'a definition link recovers only a uniquely matching pronunciation and sense (ambiguous=%s)',
+  async (ambiguous) => {
+    const word = 'なに'
+    const target = '何'
+    const what = '<a href="/wiki/what">what</a>'
+    const head = (spelling: string, gloss: string) =>
+      `<p><strong class="Jpan headword" lang="ja">${spelling}</strong></p><ol><li>${gloss}</li></ol>`
+    const page = (title: string, rows: [string, string, number, string][]) =>
+      Response.json({
+        parse: {
+          title,
+          text: rows
+            .map(([line, id, n, body]) => `<h${n} id="${id}">${line}</h${n}>${body}`)
+            .join(''),
+          tocdata: {
+            sections: rows.map(([line, anchor, hLevel], i) => ({
+              line,
+              anchor,
+              hLevel,
+              index: String(i + 1),
+              number: ['1', '1.1', '1.1.1', '1.2', '1.2.1'][i],
+            })),
+          },
+        },
+      })
+    serve((url) => {
+      if (url.hostname !== 'en.wiktionary.org') return new Response('', { status: 404 })
+      switch (url.searchParams.get('page')) {
+        case word:
+          return page(word, [
+            ['Japanese', 'Japanese', 2, ''],
+            [
+              'Pronoun',
+              'Pronoun',
+              3,
+              head(
+                word,
+                `<span lang="ja"><a href="/wiki/%E4%BD%95#Japanese">何</a></span>: interrogative pronoun; ${what}`
+              ),
+            ],
+            ['Symbol', 'Symbol', 3, '<p>A placeholder.</p>'],
+          ])
+        case target:
+          return page(target, [
+            ['Japanese', 'Japanese', 2, ''],
+            [
+              'Etymology 1',
+              'Etymology_1',
+              3,
+              '<p>From Old Japanese, from Proto-Japonic *n-anu-.</p>',
+            ],
+            ['Pronoun', 'Pronoun', 4, head('<ruby>何<rt>なに</rt></ruby>', what)],
+            ['Etymology 2', 'Etymology_2', 3, '<p>From Middle Chinese.</p>'],
+            [
+              'Pronoun',
+              'Pronoun_2',
+              4,
+              head('<ruby>何<rt>なに</rt></ruby>', ambiguous ? what : `in ${what} way`),
+            ],
+          ])
+        default:
+          return new Response('', { status: 404 })
+      }
+    })
+    const context = await conductAgenticResearch(word, { language: 'ja', exaBudgetClient: null })
+    const pronoun = context.entryContexts?.find((e) => e.heading === 'Pronoun')
+    expect(pronoun?.definitionReference?.word).toBe(target)
+    expect(
+      context.entryContexts?.find((e) => e.heading === 'Symbol')?.originReference
+    ).toBeUndefined()
+    expect(context.originCoverage?.sources).toContainEqual({
+      source: 'wiktionaryEnglish',
+      word: target,
+      status: ambiguous ? 'no_evidence' : 'found',
+    })
+    if (ambiguous) expect(pronoun?.originReference).toBeUndefined()
+    else {
+      expect(pronoun?.originReference?.url).toEndWith('#Etymology_1')
+      expect(pronoun?.etymologyText).toContain('*n-anu-')
+    }
+  }
+)
+
+test.each([
+  [503, false, 2],
+  [503, true, 1],
+  [429, false, 1],
+] as const)(
+  'primary recovery for HTTP %i with backoff=%s uses %i attempts',
+  async (status, backoff, count) => {
+    const requests = serve((url) =>
+      url.hostname === 'en.wiktionary.org'
+        ? new Response('', { status, headers: backoff ? { 'Retry-After': '5' } : {} })
+        : new Response('', { status: 404 })
+    )
+    const session = createLexemeResearchSession({
+      budget: new SourceFetchBudget(32),
+      exaBudgetClient: null,
+    })
+    await session.lookup({ word: 'なに', language: 'ja' }, { primary: true })
+    expect(requests.filter((u) => u.hostname === 'en.wiktionary.org')).toHaveLength(count)
+  }
+)

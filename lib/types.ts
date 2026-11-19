@@ -23,6 +23,7 @@ export type LookupSupport = 'verified' | 'linked' | 'unverified'
 
 /** Navigation relationships only; members retain independent lexical/cache identities. */
 export interface LookupGroup {
+  romanizations?: string[]
   reading: string
   members: (ScriptTarget & { lookupSupport: LookupSupport })[]
   choices: (ScriptTarget & { historyId?: string; label: string; details?: string })[]
@@ -321,6 +322,10 @@ export interface LexicalHistory extends HistoryEntryFields {
  * `examples[].text` is written in the word's own language.
  */
 export interface EtymologyResult extends HistoryEntryFields {
+  originCoverage?: {
+    hasAccount: boolean
+    sources: { source: string; word?: string; status: SourceOutcome['status'] }[]
+  }
   language: LanguageCode
   word: string
   primaryHistoryId: string
@@ -376,7 +381,9 @@ export interface WordEntry {
  * The fields an entry renders: a result projected onto one of its histories,
  * or the sections of a streaming synthesis received so far.
  */
-export type EtymologyEntry = Omit<EtymologyResult, 'primaryHistoryId' | 'histories'>
+export type EtymologyEntry = Omit<EtymologyResult, 'primaryHistoryId' | 'histories'> & {
+  formOf?: LexemeRef
+}
 
 /**
  * API response wrapper
@@ -453,6 +460,8 @@ export type SourceFetchOutcome =
   | { status: Exclude<SourceOutcome['status'], 'found'>; reason?: string; httpStatus?: number }
 
 export interface ResearchEntryContext {
+  definitionReference?: { word: string; heading: string; glosses: string[] }
+  originReference?: { word: string; url: string }
   counterparts?: ScriptTarget[]
   etymologyText?: string
   relations?: SourceLexicalRelation[]
@@ -529,6 +538,7 @@ export interface ResearchContext {
   rootResearch: RootResearchData[]
   relatedResearch: RelatedTermResearchData[]
   totalSourcesFetched: number
+  originCoverage?: EtymologyResult['originCoverage']
   incompleteResearch?: boolean
   sourceOutcomes?: Array<{ lexeme: LexemeRef; source: string; outcome: SourceOutcome }>
   parsedChains?: ParsedEtymChain[] // pre-parsed etymology chains from source text

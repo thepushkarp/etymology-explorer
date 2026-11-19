@@ -439,12 +439,16 @@ test.each([
       expect(visible.pronunciation).toBe('/x/')
       expect(visible.transliteration).toBe('source reading')
       expect(visible.definition).toBe('primary')
+      const ready = () =>
+        emissions.filter((e) => e.section === 'readyHistories').at(-1)?.data as { id: string }[]
+      expect(ready().map((history) => history.id)).toEqual(reordered ? ['h1', 'h2'] : ['h1'])
       expect(visible.ancestryGraph.branches).toEqual([])
       expect(emissions.filter(({ section }) => section === 'histories')).toHaveLength(0)
       expect(emissions.every((emission) => !emission.completed)).toBe(true)
       release()
       const finalized = await pending
       expect(finalized.result.histories).toHaveLength(2)
+      expect(ready().map((history) => history.id)).toEqual(['h1', 'h2'])
       expect(emissions.filter(({ section }) => section === 'histories')).toHaveLength(1)
       expect(finalized.usage).toEqual({ inputTokens: 10, outputTokens: 20, costUSD: 0.001 })
       for (const name of [

@@ -41,7 +41,7 @@ export function journeyEntry(word, definitions) {
     attemptedLanguages: Object.keys(entries),
     otherLanguages: [],
     tracedAt: new Date().toISOString(),
-    revision: 0,
+    revision: Number.MAX_SAFE_INTEGER,
   }
 }
 
@@ -94,7 +94,8 @@ export const journeyEntries = [
   romanHaru,
   haruIndex,
   spring,
-  kakiIndex,
+  { ...kakiIndex, revision: 0 },
+  { ...journeyEntry('oldword', { en: [['Saved old meaning', '/test/']] }), revision: 0 },
   kouIndex,
   ...kouEntries,
   englishMamushi,

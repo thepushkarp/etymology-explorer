@@ -55,6 +55,7 @@ export const SECTION_KEYS = [
   'suggestions',
   'modernUsage',
   'sources',
+  'histories',
 ] as const
 
 export type SectionKey = (typeof SECTION_KEYS)[number]
@@ -68,12 +69,13 @@ export type PartialEtymology = Partial<Pick<EtymologyResult, SectionKey>>
  */
 export function toPartialResult(
   word: string,
-  sections: PartialEtymology,
+  sections: PartialEtymology & Pick<EtymologyEntry, 'formOf'>,
   language: LanguageCode = 'en'
 ): EtymologyEntry {
   return {
     language,
     word: sections.word ?? word,
+    formOf: sections.formOf,
     stratum: sections.stratum,
     pronunciation: sections.pronunciation ?? '',
     transliteration: sections.transliteration,
@@ -97,6 +99,7 @@ export interface LanguageStreamState {
 }
 
 export interface StreamState {
+  requestedLanguage?: LanguageCode
   lookupResolution?: LookupResolution
   word?: string
   identity?: ScriptTarget & { spellings?: EntrySpelling[] }
@@ -115,7 +118,8 @@ export interface StreamState {
 }
 
 export type StreamAction =
-  | { type: 'search_started'; word?: string }
+  | { type: 'reset' }
+  | { type: 'search_started'; word?: string; language?: LanguageCode }
   | { type: 'stream_reconnecting' }
   | { type: 'stream_event'; event: StreamEvent }
   | { type: 'fallback_success'; result: WordEntry }
@@ -333,13 +337,15 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
       return { ...state, phase: 'synthesis' }
 
     case 'synthesis_section': {
-      if (!isSectionKey(event.section)) return state
+      if (event.section === 'synthesis_reset') return { ...state, sections: {} }
+      const section = event.section === 'readyHistories' ? 'histories' : event.section
+      if (!isSectionKey(section)) return state
       return {
         ...state,
         // Sections only stream while synthesis runs; tolerate a missing
         // synthesis_started rather than rendering them as source progress.
         phase: state.phase === 'done' || state.phase === 'error' ? state.phase : 'synthesis',
-        sections: { ...state.sections, [event.section]: event.data },
+        sections: { ...state.sections, [section]: event.data },
       }
     }
 
@@ -374,23 +380,34 @@ function applyStreamEvent(state: StreamState, event: StreamEvent): StreamState {
 
 export function streamReducer(state: StreamState, action: StreamAction): StreamState {
   switch (action.type) {
+    case 'reset':
+      return initialStreamState
     case 'search_started':
       return {
         ...initialStreamState,
         word: action.word,
+        requestedLanguage: action.language,
         status: 'loading',
         phase: 'sources',
-        result: action.word && state.result?.word === action.word ? state.result : null,
+        result:
+          action.word &&
+          state.result?.word === action.word &&
+          (!action.language ||
+            state.result.entries[action.language] ||
+            state.result.failedLanguages?.[action.language])
+            ? state.result
+            : null,
       }
 
     case 'stream_reconnecting':
       return {
         ...state,
+        sections: {},
         sources: [],
         byLanguage: Object.fromEntries(
           Object.entries(state.byLanguage).map(([language, slice]) => [
             language,
-            { ...slice, sources: [] },
+            { ...slice, sources: [], sections: {} },
           ])
         ),
         sharedWaitMs: null,

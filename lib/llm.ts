@@ -539,6 +539,15 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
       }
     }
   }
+  for (const entry of researchContext.entryContexts ?? []) {
+    if (entry.originReference)
+      sources.push({
+        name: entry.source,
+        ...entry.originReference,
+        historyIds: [entry.id],
+        sourceFamily: 'wiktionary',
+      })
+  }
   result.sources = sources.length ? sources : [{ name: 'synthesized' }]
   return result
 }
@@ -1065,6 +1074,7 @@ export function finalizeResult(
   }
   sanitizeModernUsage(result, researchContext)
   finalizeHistories(result, researchContext)
+  result.originCoverage = researchContext.originCoverage
   attachSources(result, researchContext)
 
   const validated = EtymologyResultSchema.safeParse(result)
@@ -1092,22 +1102,22 @@ export async function synthesizeFromResearch(
   )
 
   const totalUsage: LlmUsage = { inputTokens: 0, outputTokens: 0 }
-  // All recoverable failures share two calls. The unary recovery replaces any
-  // streamed first-attempt sections only through the terminal result.
+  // All recoverable failures share two calls. Clear visible sections before a retry.
   const maxAttempts = 2
   let correction = ''
   let retryTransport = false
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const publishedSections = new Set<string>()
     try {
       options?.signal?.throwIfAborted()
       if (retryTransport) await waitForSynthesisRetry(options?.signal)
       const pendingSections = new Map<string, unknown>()
-      const publishedSections = new Set<string>()
       let wordVerified = false
       let languageVerified = false
       let identityError: Error | undefined
-      let pendingPrimaryHistory: unknown
+      const pendingHistories = new Map<string, unknown>()
+      const ready = new Map<string, EtymologyResult['histories'][number]>()
       const entryFields = [
         'stratum',
         'pronunciation',
@@ -1129,41 +1139,47 @@ export async function synthesizeFromResearch(
         for (const name of entryFields)
           publish(name, (entry as unknown as Record<string, unknown>)[name])
       }
-      const publishPrimary = () => {
+      const publishHistories = () => {
         const graph = researchContext.lexicalGraph
         if (
           identityError ||
           !wordVerified ||
           !languageVerified ||
-          !pendingPrimaryHistory ||
-          publishedSections.has('definition') ||
           !graph?.histories.length ||
           pendingSections.get('primaryHistoryId') !== graph.histories[0].id
         )
           return
-        try {
-          // Only the expected history set narrows for this partial projection.
-          // Keep all source contexts and chains so foreign-history ancestry is
-          // rejected exactly as it is in the complete collection finalizer.
-          const primary = finalizeResult(
-            {
-              word: researchContext.mainWord.word,
-              language,
-              primaryHistoryId: pendingSections.get('primaryHistoryId'),
-              histories: [pendingPrimaryHistory],
-              sources: [],
-            } as unknown as EtymologyResult,
-            {
-              ...researchContext,
-              lexicalGraph: { ...graph, histories: graph.histories.slice(0, 1) },
-            },
-            'streaming'
-          )
-          publishEntry(primary)
-        } catch (error) {
-          // Preserve completed provider usage even when an early history fails.
-          identityError = error instanceof Error ? error : new Error(String(error))
+        let changed = false
+        for (const candidate of graph.histories) {
+          const raw = pendingHistories.get(candidate.id)
+          if (!raw || ready.has(candidate.id)) continue
+          try {
+            // Narrow only the expected set: foreign-history chains still participate in evidence validation.
+            const projection = finalizeResult(
+              {
+                word: researchContext.mainWord.word,
+                language,
+                primaryHistoryId: candidate.id,
+                histories: [raw],
+                sources: [],
+              } as unknown as EtymologyResult,
+              { ...researchContext, lexicalGraph: { ...graph, histories: [candidate] } },
+              'streaming'
+            )
+            ready.set(candidate.id, projection.histories[0])
+            changed = true
+            if (candidate === graph.histories[0]) publishEntry(projection)
+          } catch (error) {
+            identityError = error instanceof Error ? error : new Error(String(error))
+            return
+          }
         }
+        // Keep the default meaning stable even if the provider sends siblings out of order.
+        if (changed && ready.has(graph.histories[0].id))
+          options?.onSection?.(
+            'readyHistories',
+            graph.histories.flatMap((candidate) => ready.get(candidate.id) ?? [])
+          )
       }
       const onHistory = options?.onSection
         ? (history: unknown) => {
@@ -1171,10 +1187,10 @@ export async function synthesizeFromResearch(
               history &&
               typeof history === 'object' &&
               'id' in history &&
-              history.id === researchContext.lexicalGraph?.histories[0]?.id
+              typeof history.id === 'string'
             ) {
-              pendingPrimaryHistory = history
-              publishPrimary()
+              pendingHistories.set(history.id, history)
+              publishHistories()
             }
           }
         : undefined
@@ -1200,7 +1216,7 @@ export async function synthesizeFromResearch(
             if (!wordVerified || !languageVerified) return
             publish('language', language)
             publish('word', researchContext.mainWord.word)
-            publishPrimary()
+            publishHistories()
             if (identityError) return
             if (
               !publishedSections.has('histories') &&
@@ -1292,6 +1308,7 @@ export async function synthesizeFromResearch(
             kind: retryTransport ? 'transient' : 'validation',
           })
         )
+        if (publishedSections.size) options?.onSection?.('synthesis_reset', null)
         continue
       }
 

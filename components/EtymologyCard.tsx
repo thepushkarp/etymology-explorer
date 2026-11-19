@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { EtymologyEntry } from '@/lib/types'
+import { splitOriginStory } from '@/lib/originLead'
 import { StoryText } from '@/components/etymology-card/StoryText'
 import { AncestryTree } from './AncestryTree'
 import { ContextSection } from './etymology-card/ContextSection'
@@ -18,6 +19,7 @@ interface EtymologyCardProps {
   pending?: boolean
   usageUnavailable?: boolean
   actions?: ReactNode
+  navigation?: ReactNode
   subheader?: ReactNode
   pronunciationWord?: string
 }
@@ -27,11 +29,13 @@ export function EtymologyCard({
   pending = false,
   usageUnavailable = false,
   actions,
+  navigation,
   subheader,
   pronunciationWord,
 }: EtymologyCardProps) {
   const isEnglish = result.language === 'en'
   const hasAncestry = result.ancestryGraph.branches.length > 0
+  const { lead, rest } = splitOriginStory(result.lore)
   const wikipedia = result.rawSources?.wikipedia
 
   return (
@@ -39,12 +43,14 @@ export function EtymologyCard({
       <EntryHeader
         result={result}
         actions={actions}
+        navigation={navigation}
+        lead={lead}
         subheader={subheader}
         pending={pending}
         pronunciationWord={pronunciationWord}
       />
 
-      {(hasAncestry || pending || result.definition) && (
+      {(hasAncestry || pending) && (
         <Section id="entry-ancestry" title="Lineage">
           {hasAncestry ? (
             <AncestryTree
@@ -54,20 +60,16 @@ export function EtymologyCard({
               definition={result.definition}
               transliteration={result.transliteration}
             />
-          ) : pending ? (
-            <Skeleton widths={['w-24', 'w-40', 'w-20', 'w-48', 'w-28']} />
           ) : (
-            <p className="font-serif italic text-muted">
-              No lineage is available for this entry yet.
-            </p>
+            <Skeleton widths={['w-24', 'w-40', 'w-20', 'w-48', 'w-28']} />
           )}
         </Section>
       )}
 
-      {(result.lore || pending) && (
+      {(rest || (pending && !lead)) && (
         <Section id="entry-story" title="The story">
-          {result.lore ? (
-            <StoryText text={result.lore} />
+          {rest ? (
+            <StoryText text={rest} />
           ) : (
             <Skeleton widths={['w-full', 'w-11/12', 'w-full', 'w-3/5']} />
           )}

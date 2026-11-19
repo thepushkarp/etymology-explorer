@@ -53,7 +53,7 @@ try {
   await page.evaluate((entry) => {
     const start = performance.now()
     const observer = new MutationObserver(() => {
-      if (document.querySelector('#entry-story')?.textContent.includes(entry.lore)) {
+      if (document.querySelector('#entry-origin')?.textContent.includes(entry.lore)) {
         window.__storyMs = performance.now() - start
         observer.disconnect()
       }
@@ -93,13 +93,16 @@ try {
   }, result)
   await page.waitForTimeout(300)
   assert.equal(await page.locator('article').getAttribute('aria-busy'), 'true')
-  const partialStory = (await page.locator('#entry-story').textContent()).includes(result.lore)
+  const partialStory = await page
+    .locator('#entry-origin')
+    .filter({ hasText: result.lore })
+    .isVisible()
   assert.equal(partialStory, !values.held)
   assert.equal((await page.locator('[data-tree-node]').count()) > 0, !values.held)
   await page.waitForFunction(
     () => document.querySelector('article')?.getAttribute('aria-busy') === 'false'
   )
-  assert.ok((await page.locator('#entry-story').textContent()).includes(result.lore))
+  assert.ok((await page.locator('#entry-origin').textContent()).includes(result.lore))
   assert.ok((await page.locator('#entry-ancestry').textContent()).includes('Modern French'))
   assert.equal(await page.evaluate(() => window.__traces), 1)
   assert.deepEqual(errors, [])

@@ -3,7 +3,7 @@ import { normalizeScriptTargets } from './scriptTargets'
 import { canonicalizeWord } from './orthography'
 import { isLanguageCode } from './languages'
 import { historyChoice } from './resultHistories'
-import type { LookupGroup, ScriptTarget, WordEntry } from './types'
+import type { LexicalHistory, LookupGroup, ScriptTarget, WordEntry } from './types'
 
 export const isKanaWord = (word: string) =>
   /^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(word)
@@ -52,6 +52,25 @@ export function lookupGroupSeed(entry: WordEntry): LookupGroupSeed | undefined {
   }
 }
 
+export function matchesLookupReading(
+  history: LexicalHistory,
+  word: string,
+  reading: string,
+  romanizations: string[]
+) {
+  // The kana index's redirect-list history is represented by its destinations.
+  if (word === reading)
+    return !(
+      history.entryKind === 'unresolved' &&
+      (history.counterparts?.length ?? 0) > 1 &&
+      !history.roots.length &&
+      !history.ancestryGraph.branches.length
+    )
+  return (
+    history.transliteration && romanizations.includes(canonicalizeWord(history.transliteration))
+  )
+}
+
 export function assembleLookupGroup(
   seed: LookupGroupSeed,
   entries: WordEntry[],
@@ -84,20 +103,9 @@ export function assembleLookupGroup(
     const word = aliases.get(member.word) ?? member.word
     const result = byWord.get(word)?.entries.ja
     const histories =
-      result?.histories.filter((history) => {
-        // The kana index's redirect-list history is represented by its destinations.
-        if (member.word === seed.reading)
-          return !(
-            history.entryKind === 'unresolved' &&
-            (history.counterparts?.length ?? 0) > 1 &&
-            !history.roots.length &&
-            !history.ancestryGraph.branches.length
-          )
-        return (
-          history.transliteration &&
-          seed.romanizations.includes(canonicalizeWord(history.transliteration))
-        )
-      }) ?? []
+      result?.histories.filter((history) =>
+        matchesLookupReading(history, word, seed.reading, seed.romanizations)
+      ) ?? []
     if (histories.length) {
       for (const history of histories) {
         if (choices.some((choice) => choice.word === word && choice.historyId === history.id))
@@ -107,7 +115,7 @@ export function assembleLookupGroup(
           word,
           historyId: history.id,
           reading: seed.reading,
-          label: `${word} — ${history.definition.split(/[;；]/)[0] || history.label}`,
+          label: `${word} — ${historyChoice(history, word).label || history.definition}`,
           details: historyChoice(history).details,
         })
       }
@@ -133,5 +141,5 @@ export function assembleLookupGroup(
       : 'linked',
   }))
   members.sort((a, b) => compareLookupSupport(a.lookupSupport, b.lookupSupport))
-  return { reading: seed.reading, members, choices, languages }
+  return { reading: seed.reading, romanizations: seed.romanizations, members, choices, languages }
 }

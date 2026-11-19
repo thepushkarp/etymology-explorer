@@ -18,16 +18,20 @@ function result(language: 'en' | 'it'): EtymologyEntry {
 }
 
 describe('EtymologyCard', () => {
-  test('shows a neutral empty-lineage message only after the entry is available', () => {
-    const markup = renderToStaticMarkup(<EtymologyCard result={result('it')} />)
-    expect(markup).toContain('No lineage is available for this entry yet.')
-    expect(markup).toContain('id="entry-ancestry"')
-    const streaming = renderToStaticMarkup(<EtymologyCard result={result('it')} pending />)
-    expect(streaming).not.toContain('No lineage is available')
-    const untraced = renderToStaticMarkup(
-      <EtymologyCard result={{ ...result('it'), definition: '', lore: '' }} />
+  test('shows missing origin evidence under the definition, without an empty lineage section', () => {
+    const entry = { ...result('it'), lore: '', roots: [], rawSources: { dateAttested: '1400' } }
+    const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
+    expect(markup).toContain('No origin account is available for this meaning.')
+    expect(markup).not.toContain('first attested')
+    expect(markup).not.toContain('id="entry-ancestry"')
+    expect(renderToStaticMarkup(<EtymologyCard result={entry} pending />)).not.toContain(
+      'No origin account'
     )
-    expect(untraced).not.toContain('No lineage is available')
+    const form = renderToStaticMarkup(
+      <EtymologyCard result={{ ...entry, formOf: { word: 'fidare', language: 'it' } }} />
+    )
+    expect(form).toContain('A grammatical form of')
+    expect(form).not.toContain('No origin account')
   })
 
   test('marks unknown Han and kana forms by script while preserving supplied languages', () => {
@@ -51,8 +55,10 @@ describe('EtymologyCard', () => {
       lore: 'From *fides*.\n\nFrom *bher-; **faith** remains *unfinished.',
     }
     const markup = renderToStaticMarkup(<EtymologyCard result={entry} />)
-    expect(markup).toContain('<p>From <em><bdi lang="und" dir="auto">fides</bdi></em>.</p>')
+    expect(markup).toContain('>From <em><bdi lang="und" dir="auto">fides</bdi></em>.</p>')
     expect(markup).toContain('<p>From *bher-; **faith** remains *unfinished.</p>')
+    expect(markup.indexOf('id="entry-origin"')).toBeLessThan(markup.indexOf('id="entry-story"'))
+    expect(markup.split('From <em><bdi lang="und" dir="auto">fides</bdi>').slice(1)).toHaveLength(1)
     expect(markup).not.toContain('<strong>')
   })
 

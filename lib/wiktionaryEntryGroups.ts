@@ -29,6 +29,7 @@ export interface WiktionaryEntrySection {
   level: number
   path: string[]
   text: string
+  japaneseDefinitions?: { readings: string[]; target?: string; glosses: string[] }[]
 }
 
 /** One source-defined etymology, without merging it with adjacent etymologies. */
@@ -265,6 +266,61 @@ function selectedHeadwordLines(html: string, language: LanguageCode) {
         : []
     )
   )
+}
+
+// Only top-level definitions belong to this headword; quotations and usage
+// examples often link other kanji, even inside the same list item.
+function japaneseDefinitions(html: string, word: string) {
+  const heads = selectedHeadwordLines(html, 'ja')
+  if (
+    !heads.length ||
+    heads.some(
+      ({ headword }) => !sameSpelling(cleanWiktionaryHtml(lexicalSpellingHtml(headword[2])), word)
+    )
+  )
+    return
+  if (heads.some(({ start }) => start !== heads[0].start)) return
+  const readings = heads.flatMap(({ headword }) => {
+    if (!/<ruby\b/i.test(headword[2])) return []
+    const reading = cleanWiktionaryHtml(
+      headword[2].replace(
+        /<ruby\b[^>]*>([\s\S]*?)<\/ruby>/gi,
+        (_, body: string) =>
+          [...body.matchAll(/<rt\b[^>]*>([\s\S]*?)<\/rt>/gi)].map((r) => r[1]).join('') || body
+      )
+    )
+    return /^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(reading) ? [reading] : []
+  })
+  const body = html.slice(heads[0].start).split('</p>')[1] ?? ''
+  const start = body.match(/^\s*<ol\b/i)?.[0].indexOf('<')
+  const list = start === undefined ? undefined : balancedElement(body, start)
+  if (!list) return
+  const definitions = []
+  let end = 0
+  for (const item of list.body.matchAll(/<li\b[^>]*>/gi)) {
+    if (item.index < end) continue
+    const definition = balancedElement(list.body, item.index)
+    if (!definition) return
+    end = definition.end
+    const gloss = definition.body.split(/<(?:ul|ol|dl)\b/i)[0].trim()
+    const prefix = gloss.match(/^<span\b([^>]*)>\s*(<a\b[^>]*>[^<>]+<\/a>)\s*<\/span>\s*:\s*/i)
+    const link =
+      prefix && attribute(prefix[1], 'lang') === 'ja' && scriptLink(prefix[2], 'ja', 'en')[0]
+    const target =
+      link && sameSpelling(cleanWiktionaryHtml(prefix![2]), link.word) ? link.word : undefined
+    // A linked word inside a longer definition is not a shared sense (e.g. "in what way").
+    const glosses = gloss
+      .slice(prefix?.[0].length ?? 0)
+      .split(/;(?=\s)|,\s+/)
+      .flatMap((part) => {
+        const link = part
+          .trim()
+          .match(/^<a\b[^>]*href="\/wiki\/([a-z]+)"[^>]*>([a-z]+)<\/a>[.!?]?$/)
+        return link && link[1] === link[2] ? [link[1]] : []
+      })
+    definitions.push({ readings, target, glosses })
+  }
+  return definitions.length ? definitions : undefined
 }
 
 function headwordCounterparts(
@@ -921,6 +977,19 @@ export function extractWiktionaryEntryGroups(
           anchor: section.anchor,
           level: headingLevel(section),
           path: sectionPath(assignedSections, sectionPosition),
+          ...(requestedWord &&
+          selectedLanguage === 'ja' &&
+          pageIdentity?.edition === 'en' &&
+          /^(?:Pronoun|Noun|Verb|Adjective|Adverb|Interjection|Prefix|Suffix)$/.test(
+            cleanHeading(section.line)
+          )
+            ? {
+                japaneseDefinitions: japaneseDefinitions(
+                  html.slice(sectionStart, sectionEnd),
+                  requestedWord
+                ),
+              }
+            : {}),
           text: cleanWiktionaryHtml(html.slice(sectionStart, sectionEnd)),
         },
       ]
@@ -939,7 +1008,17 @@ export function extractWiktionaryEntryGroups(
         ...(counterparts.length ? { counterparts } : {}),
         ...(relations.length ? { relations } : {}),
         ...(etymologyHtml !== undefined
-          ? { etymologyText: cleanWiktionaryHtml(etymologyHtml) }
+          ? {
+              etymologyText: cleanWiktionaryHtml(
+                selectedLanguage === 'ja'
+                  ? etymologyHtml.replace(/<table\b([^>]*)>[\s\S]*?<\/table>/gi, (table, attrs) =>
+                      hasClass(attrs, 'kanji-table') ? '' : table
+                    )
+                  : etymologyHtml
+              )
+                .replace(/\[edit\]/gi, '')
+                .trim(),
+            }
           : {}),
         text: cleanWiktionaryHtml(fragment),
         sections: structuredSections,

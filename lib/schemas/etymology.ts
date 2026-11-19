@@ -134,6 +134,25 @@ export const EtymologyResultSchema = z
     primaryHistoryId: z.string().min(1),
     histories: z.array(history).min(1),
     ...entryFields,
+    originCoverage: z
+      .object({
+        hasAccount: z.boolean(),
+        sources: z.array(
+          z.object({
+            source: z.string(),
+            word: z.string().optional(),
+            status: z.enum([
+              'found',
+              'not_found',
+              'no_evidence',
+              'blocked',
+              'unavailable',
+              'budget_skipped',
+            ]),
+          })
+        ),
+      })
+      .optional(),
     sources: z.array(source),
     suggestions: WordSuggestionsSchema.optional(),
     modernUsage: z

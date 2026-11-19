@@ -1,14 +1,16 @@
 import type { ReactNode } from 'react'
 import type { EtymologyEntry } from '@/lib/types'
-import { languageFromName, type EtymologyStratum } from '@/lib/languages'
+import { type EtymologyStratum } from '@/lib/languages'
 import { PronunciationButton } from '../PronunciationButton'
 import { Skeleton } from './Section'
-import { FormText } from './StoryText'
+import { emphasize, FormText } from './StoryText'
 import { pronunciationReadings } from '@/lib/pronunciation'
 
 interface EntryHeaderProps {
   result: EtymologyEntry
   actions?: ReactNode
+  navigation?: ReactNode
+  lead?: string
   subheader?: ReactNode
   pending?: boolean
   pronunciationWord?: string
@@ -23,39 +25,16 @@ const STRATUM_LABELS: Record<EtymologyStratum, string> = {
   hybrid: 'Hybrid',
 }
 
-function shortenMeaning(meaning: string): string {
-  return meaning.split(/[;,]/)[0].trim()
-}
-
-function shortenOrigin(origin: string): string {
-  return origin.replace(/^Ancient\s+/i, '').replace(/^Old\s+/i, 'O.')
-}
-
-/** One-line gloss of the word's parts, e.g. "From Latin fenestra (window)." */
-function originHook(result: EtymologyEntry): ReactNode {
-  const meaningful = result.roots.filter((root) => !root.root.startsWith('-')).slice(0, 3)
-  if (meaningful.length === 0) return null
-  const parts = meaningful.map((root, index) => (
-    <span key={`${root.origin}-${root.root}`}>
-      {index > 0 && ' + '}
-      {shortenOrigin(root.origin)}{' '}
-      <FormText text={root.root} language={languageFromName(root.origin)} /> (
-      {shortenMeaning(root.meaning)})
-    </span>
-  ))
-  return <>From {parts}.</>
-}
-
 export function EntryHeader({
   result,
   actions,
+  navigation,
+  lead,
   subheader,
   pending,
   pronunciationWord,
 }: EntryHeaderProps) {
-  const hook = originHook(result)
   const partsOfSpeech = [...new Set(result.partsOfSpeech?.map((part) => part.pos) ?? [])]
-  const attested = result.rawSources?.dateAttested
   const readings = pronunciationReadings(result.pronunciation ?? '')
 
   return (
@@ -94,27 +73,48 @@ export function EntryHeader({
         {partsOfSpeech.length > 0 && (
           <span className="font-serif italic">{partsOfSpeech.join(', ')}</span>
         )}
-        {attested && <span className="text-sm">first attested {attested}</span>}
         {result.stratum && <span className="label">{STRATUM_LABELS[result.stratum]}</span>}
       </p>
 
+      {navigation}
+      {(lead || result.definition || result.formOf) && (
+        <div id="entry-origin" lang="en" dir="ltr" className="mt-5 max-w-2xl">
+          <p className="font-serif text-xl leading-relaxed text-ink">
+            {emphasize(lead || result.definition)}
+          </p>
+          {!lead && result.formOf && (
+            <p className="mt-2 font-serif">
+              A grammatical form of <FormText text={result.formOf.word} />.
+            </p>
+          )}
+          {!lead && !result.formOf && !pending && !result.ancestryGraph.branches.length && (
+            <p className="mt-2 text-sm text-muted">
+              {result.originCoverage?.sources.some((row) =>
+                ['blocked', 'unavailable', 'budget_skipped'].includes(row.status)
+              )
+                ? 'Some sources could not be loaded. No origin account is available for this meaning.'
+                : 'No origin account is available for this meaning.'}
+            </p>
+          )}
+          {lead && result.definition && lead !== result.definition && (
+            <p className="mt-2 text-sm text-muted">
+              <span className="font-medium">Meaning: </span>
+              <span>{emphasize(result.definition)}</span>
+            </p>
+          )}
+          {result.sources.some((source) => source.url) && (
+            <a href="#entry-sources" className="link mt-2 inline-block text-sm text-muted">
+              Sources for this meaning
+            </a>
+          )}
+        </div>
+      )}
+      {!lead && !result.definition && pending && (
+        <div className="mt-5">
+          <Skeleton widths={['w-11/12', 'w-2/3']} />
+        </div>
+      )}
       {subheader}
-
-      {result.definition ? (
-        <p className="mt-8 max-w-2xl font-serif text-xl leading-relaxed text-ink">
-          {result.definition}
-        </p>
-      ) : (
-        pending && (
-          <div className="mt-8">
-            <Skeleton widths={['w-11/12', 'w-2/3']} />
-          </div>
-        )
-      )}
-
-      {hook && (
-        <p className="mt-3 max-w-2xl font-serif italic leading-relaxed text-muted">{hook}</p>
-      )}
     </header>
   )
 }

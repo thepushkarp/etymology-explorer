@@ -15,6 +15,8 @@ Users search for a word or phrase in Auto mode, or supply an English, Italian, S
 5. Sends the enriched bundle to OpenRouter's Responses API using `openai/gpt-6-luna` with low reasoning effort and strict structured output. Every language shares one schema and one prompt builder, and every entry is written in English; only the usage examples are in the word's own language, each with an English translation (none for English words).
 6. Matches ancestry stages to scoped evidence, assigns confidence, and prunes unsupported lineage claims. Component evidence cannot establish the whole phrase's origin.
 
+The first one or two sentences of each history’s opening paragraph supply the word header; remaining prose appears in the story. Meaning choices follow source histories, not individual glosses. Entry-wide dates cannot establish the first use of a selected meaning.
+
 The primary Wiktionary edition defines source-local history boundaries, with Etymonline as the English fallback and source-defined specialist entries as further fallbacks; complete secondary sources remain independent context without invented history alignment. Each history has its own selectable story and lineage, with compound branches kept within that history. Wikipedia and community context cannot establish ancestry. Components alone cannot admit a phrase.
 
 Hindi, Urdu, and Sanskrit use English Wiktionary as their history primary; Hindi also queries its native edition. Optional Platts, Wisdom Library, and Cologne Monier-Williams adapters and provider IDs are omitted pending source admission. The [Platts digitization](https://dsal.uchicago.edu/dictionaries/platts/) links CC BY-NC-ND terms; [Wisdom Library's site information](https://www.wisdomlib.org/m/about.html) does not establish a blanket glossary reuse license; the [Cologne digital MW header](https://raw.githubusercontent.com/sanskrit-lexicon/csl-orig/master/v02/mw/mwheader.xml) specifies noncommercial, share-alike terms. Do not register these sources based solely on accessible lookup pages.
@@ -141,12 +143,12 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 - **`lib/singleflight.ts`** - Distributed request deduplication via Redis owner-token locks (SET NX with random token, 90s TTL, EXPIRE heartbeat every 30s while the pipeline runs). Results are cached BEFORE lock release. Streaming waiters poll the cache every 2s for up to 150s with SSE keepalive events and negative-cache checks; non-streaming waiters poll ~10s then return 429 + Retry-After. A holder that errors writes a short-TTL failure marker (60s) before releasing, so waiters surface the error; promotion to holder only happens on a true crash — lock vanished with neither a result nor a marker. If 10 users search "etymology" simultaneously, only 1 LLM call is made.
 
 - **`lib/cache.ts`** - Redis caching (via the shared `getRedis()` factory):
-  - Merged spelling entries: `entry:v1:{word}`, 365-day physical TTL. `pipelineRevision` and `entryFreshDays` (90) determine staleness using the oldest retained `freshnessAt` (or original `tracedAt`); incomplete traces become stale after five minutes. Stale entries remain readable and require an explicit Retrace click. Successful retrace languages merge with durable previous results. `attemptedLanguages` records completed coverage so an unattempted manual hint can augment a fresh entry under the same word lock.
+  - Merged spelling entries: `entry:v1:{word}`, 365-day physical TTL. `pipelineRevision` and `entryFreshDays` (90) determine staleness using the oldest retained `freshnessAt` (or original `tracedAt`); incomplete traces become stale after five minutes. An in-app search or word link refreshes a stale saved result in the background while its content stays visible. Passive visits and grouped meaning changes do not start a retrace; the Retrace button remains available. Successful retrace languages merge with durable previous results. `attemptedLanguages` records completed coverage so an unattempted manual hint can augment a fresh entry under the same word lock.
   - TTS audio: 1 year TTL
   - Negative cache: 30-minute TTL for admitted types (`no_sources`, `invalid_word`), under `neg:v10:{word}` with a distinct explicit-hint scope. Source-attested romanization offers survive no-result responses. Transient resolution failures and retraces with a durable entry never write absence markers.
   - Zod validation on reads only (writes are pre-validated by `finalizeResult` in lib/llm.ts)
 
-- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v18:<source>:<word>` for English, `src:v18:<source>:<language>:<word>` otherwise). Historical Wiktionary selections use `src:v18:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v18:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
+- **`lib/sourceCache.ts`** - 7-day Redis cache for complete dictionary and Wikipedia source data (`src:v18:<source>:<word>` for English, `src:v18:<source>:<language>:<word>` otherwise). Japanese selections from English Wiktionary use `src:v19:wiktionaryLanguage:Japanese:<word>` and retain scoped definition references. Other historical Wiktionary selections use `src:v18:wiktionaryLanguage:<encoded heading>:<word>`, shared across query languages. Specialist bundles use `src:v18:bundle:<provider>:<lexical language>:<word>`. Incomplete results are not cached. Redis failures fall back to live retrieval; complete source text and provenance are preserved.
 
 - **`lib/redis.ts`** - Shared Redis client factory using KV_REST_API_URL and KV_REST_API_TOKEN (returns null if not configured). Most callers fail open; uncached etymology fails closed with 503 and Exa requires functioning accounting (suggestions, random-word, and pronunciation keep working without Redis)
 
@@ -263,8 +265,7 @@ tracing. Equal evidence retains source order; no popularity score or candidate-c
 An explicit search traces qualifying Japanese destinations sequentially through the ordinary
 etymology API. Each destination retains its own cache, lock and per-entry budgets. Saved matching histories are reused without retracing. Only successful
 matching histories enter the meaning list; missing or failed candidates remain undisplayed. Temporary
-failures offer an explicit retry; budget/rate/unavailability limits stop the batch. Leaving the page
-aborts it. Selecting a meaning within existing lookup context does not restart the batch. A default-entry redirect preserves the searched spelling in validated lookup context, so its single-use search intent can finish the remaining alternatives from the cached destination. Meaning links, reloads, and passive visits do not grant that intent.
+failures offer an explicit retry; budget/rate/unavailability limits stop the batch. Leaving the lookup aborts it. Switching among confirmed group members retains the batch and the foreground stream. Validated reading-matched histories become selectable before each destination finishes; explicit meaning selections remain in place. A default-entry redirect preserves the searched spelling in validated lookup context, so its single-use search intent can finish the remaining alternatives from the cached destination. Meaning links, reloads, and passive visits do not grant that intent.
 Both module graphs must
 exclude research and LLM modules. Passive loads, prefetching, and browser-history restoration never
 authorize a trace.
@@ -279,8 +280,8 @@ checks known aliases for word-page GET/HEAD requests and sends uncached temporar
 fetching sources. Word pages retain cache-only data access during request-time rendering.
 Latin borrowing entries retain their own language histories. A unique verified standard
 kana reading supplies fallback audio for a single-history Japanese entry without usable IPA; misspellings never select audio. Supported speech languages send the selected IPA to Eleven v4. Audio URLs, v4 cache keys, and locks include language, spelling, and IPA. Sanskrit retains its labelled Hindi spelling reading.
-Existing entries without alias proof retain their saved contents until an explicit retrace establishes
-the relationship; pipeline revision changes make that retrace available without automatic LLM spend.
+Existing entries without alias proof retain their saved contents until a retrace establishes
+the relationship; pipeline revision changes mark entries stale without spending on passive visits.
 
 `lib/lookupResolution.ts` verifies rōmaji readings and grammatical forms before the canonical lock.
 WanaKana supplies candidate kana, never evidence. Dictionary candidates are checked within the

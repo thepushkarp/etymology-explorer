@@ -1,11 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { WordLink } from '@/components/WordLink'
 import { EtymologyCard } from '@/components/EtymologyCard'
 import { EntryHeader } from '@/components/etymology-card/EntryHeader'
 import { EntryNavigation } from '@/components/EntryNavigation'
+import {
+  getCompletedEntry,
+  noCompletedEntry,
+  subscribeCompletedEntries,
+} from '@/lib/completedEntries'
 import { entryNavigation } from '@/lib/entryNavigation'
 import { entryPagePath, type EntrySelection } from '@/lib/entrySelection'
 import { useLookupGroup } from '@/lib/hooks/useLookupGroup'
@@ -46,9 +51,19 @@ export function EntryView({
   lookupGroup,
   traceAlternatives = false,
 }: EntryViewProps) {
-  const { progress, search } = useStreamingEtymology(undefined, entry.word)
+  const { progress, search } = useStreamingEtymology(undefined, entry.word, lookupGroup, language)
+  const [backgroundWord, setBackgroundWord] = useState<string>()
   const [retryLanguage, setRetryLanguage] = useState<LanguageCode>()
-  const displayed = progress.result ?? entry
+  const completed = useSyncExternalStore(
+    subscribeCompletedEntries,
+    () => getCompletedEntry(entry.word, language),
+    noCompletedEntry
+  )
+  const displayed =
+    progress.result ??
+    (completed && completed.word === entry.word && completed.tracedAt >= entry.tracedAt
+      ? completed
+      : entry)
   const selection = useEntrySelection(displayed.word, language, initialSelection)
   const selected = selection.language ?? language ?? displayed.languages[0]
   const result = selected ? displayed.entries[selected] : undefined
@@ -79,7 +94,12 @@ export function EntryView({
           ? 'refresh'
           : undefined,
   })
-  const { group } = related
+  const { group, preview } = related
+  const histories =
+    preview?.word === displayed.word && preview.language === selected
+      ? preview.histories
+      : undefined
+  const selectedPreview = histories?.find((h) => h.id === selection.historyId)
   const navigation = entryNavigation({
     word: displayed.word,
     language: selected,
@@ -87,28 +107,35 @@ export function EntryView({
     group,
     selection,
     otherScripts: displayed.otherScripts,
+    histories: histories ?? result?.histories,
   })
   const { historyId } = navigation
   const failure = selected ? displayed.failedLanguages?.[selected] : undefined
   const spellings = displayed.spellings?.filter((spelling) => spelling.language === selected) ?? []
 
   const recovering = progress.status === 'loading' && retryLanguage === selected
-  const showProgress = progress.status === 'loading' && (!retryLanguage || recovering)
+  const background = backgroundWord === displayed.word && progress.status === 'loading'
+  const showProgress =
+    progress.status === 'loading' && !background && (!retryLanguage || recovering)
 
   useEffect(() => {
-    // A server default redirect retains the validated lookup owner. A meaning
-    // click marks the destination instead, so it cannot restart the owner's batch.
-    return scheduleTraceIntent(intentWord, undefined, () =>
+    // A server default redirect retains the validated lookup owner. Meaning
+    // links consume no new search intent, so only an explicit search starts the batch.
+    return scheduleTraceIntent(intentWord, undefined, (_, hint) => {
       setExplicitSearch({ word: entry.word, lookup: intentWord })
-    )
-  }, [entry.word, intentWord])
+      if (stale && result && !failure && displayed === entry && progress.status !== 'loading') {
+        setBackgroundWord(entry.word)
+        search(entry.word, hint, { refresh: true })
+      }
+    })
+  }, [entry, intentWord, stale, result, failure, displayed, progress.status, search])
 
-  const tabs = (
+  const navigationRow = <EntryNavigation model={navigation} />
+  const notices = (
     <>
-      <EntryNavigation model={navigation} />
       {related.loading && (
         <p role="status" className="mt-3 text-sm text-muted">
-          Checking related entries…
+          {related.status ?? 'Checking related entries…'}
         </p>
       )}
       {related.error && (
@@ -135,6 +162,7 @@ export function EntryView({
       loading={recovering}
       error={progress.status === 'error' ? progress.error?.message : undefined}
       onRetry={() => {
+        setBackgroundWord(undefined)
         setRetryLanguage(selected)
         search(displayed.word, selected, { refresh: true })
       }}
@@ -148,6 +176,7 @@ export function EntryView({
           className="link text-sm text-muted"
           disabled={progress.status === 'loading'}
           onClick={() => {
+            setBackgroundWord(undefined)
             setRetryLanguage(undefined)
             search(entry.word, selected, { refresh: true })
           }}
@@ -158,29 +187,38 @@ export function EntryView({
       <ShareButton />
     </div>
   )
-  // Finish the explicit alternative batch before navigating, so unmounting
-  // this page cannot cancel the remaining source-linked destinations.
-  if (navigation.defaultTarget && !related.loading && progress.status !== 'loading') {
+  if (navigation.defaultTarget && !selection.historyId && progress.status !== 'loading') {
     const target = navigation.defaultTarget
     return (
       <OpenDefaultEntry href={entryPagePath(target.word, target.language, target)}>
         <EntryHeader
           result={toPartialResult(displayed.word, {}, selected)}
-          subheader={tabs}
+          navigation={navigationRow}
+          subheader={notices}
           actions={actions}
           pending
         />
       </OpenDefaultEntry>
     )
   }
+  if (selectedPreview)
+    return (
+      <EtymologyCard
+        result={toPartialResult(displayed.word, selectedPreview, selected)}
+        navigation={navigationRow}
+        subheader={notices}
+        actions={actions}
+      />
+    )
   if (!result || navigation.unresolved) {
     return (
       <EntryHeader
         actions={actions}
+        navigation={navigationRow}
         result={toPartialResult(displayed.word, {}, selected)}
         subheader={
           <>
-            {tabs}
+            {notices}
             {navigation.unresolved ? (
               <div className="mt-8">
                 <p role="status" className="font-serif italic text-muted">
@@ -221,10 +259,11 @@ export function EntryView({
       result={result}
       historyId={historyId!}
       grouped={navigation.grouped}
+      navigation={navigationRow}
       spellings={spellings}
       subheader={
         <>
-          {tabs}
+          {notices}
           {recovery}
           {spellings.length > 0 && (
             <p className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-2 text-sm text-muted">
@@ -313,6 +352,7 @@ function FailedLanguage({
 }
 
 function FinishedLanguage({
+  navigation,
   result,
   subheader,
   actions,
@@ -322,6 +362,7 @@ function FinishedLanguage({
   grouped,
 }: {
   result: EtymologyResult
+  navigation: ReactNode
   subheader: ReactNode
   actions: ReactNode
   status?: string
@@ -341,6 +382,7 @@ function FinishedLanguage({
   return (
     <EtymologyCard
       result={display}
+      navigation={navigation}
       pronunciationWord={
         result.histories.length === 1
           ? spellingPronunciation(result.language, spellings)

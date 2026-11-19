@@ -10,6 +10,11 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Added
 
+- Read an origin summary for the selected meaning below the headword, with its sources and compact choices for words with several histories.
+- Refresh stale saved entries in the background when you search for them, keeping the saved result readable.
+- Follow dictionary-linked Japanese origins when the spelling, reading, and meaning agree, and see when sources provide no origin account.
+- Keep tracing related meanings while switching tabs and open each matching history as it becomes ready.
+
 - Consult licensed NINJAL historical dictionary transcriptions and headword records as dated Japanese context.
 - Choose a search language from a theme-matched menu with language codes, keyboard navigation, and stable spacing when switching languages.
 - Show dictionary-attested Japanese lookup destinations alongside existing results, including entries whose ancestry is unavailable.

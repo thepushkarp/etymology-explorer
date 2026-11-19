@@ -3,7 +3,7 @@
 import type { KeyboardEvent } from 'react'
 import { WordLink } from './WordLink'
 import type { EntryNavigationModel } from '@/lib/entryNavigation'
-import { EntryChoices, EntryChoiceLabel, entryChoiceClass } from './etymology-card/EntryChoices'
+import { EntryChoices } from './etymology-card/EntryChoices'
 
 function focusLink(event: KeyboardEvent<HTMLElement>) {
   const links = Array.from(event.currentTarget.querySelectorAll<HTMLAnchorElement>('a'))
@@ -24,7 +24,12 @@ function focusLink(event: KeyboardEvent<HTMLElement>) {
 /** All language and meaning choices use the same URL and keyboard contract. */
 export function EntryNavigation({ model }: { model: EntryNavigationModel }) {
   return (
-    <div className="mt-8">
+    <div className="mt-4">
+      {model.grouped && model.label !== model.word && (
+        <p className="mb-2 text-sm text-muted">
+          Reading: <bdi dir="auto">{model.label}</bdi>
+        </p>
+      )}
       <nav
         aria-label={`Languages for ${model.label}`}
         onKeyDown={focusLink}
@@ -44,8 +49,13 @@ export function EntryNavigation({ model }: { model: EntryNavigationModel }) {
         ))}
       </nav>
       {model.choices.length > 1 && (
-        <EntryChoices label={`Meanings for ${model.label}`} onKeyDown={focusLink}>
-          {model.choices.map((target, index) => {
+        <EntryChoices
+          count={model.choices.length}
+          active={model.active?.label}
+          label={`Meanings for ${model.label}`}
+          onKeyDown={focusLink}
+        >
+          {model.choices.map((target) => {
             const selected = target === model.active
             return (
               <WordLink
@@ -54,20 +64,19 @@ export function EntryNavigation({ model }: { model: EntryNavigationModel }) {
                 localNavigation={target.local}
                 lang="en"
                 aria-current={selected ? 'page' : undefined}
-                className={entryChoiceClass(selected)}
+                title={target.details}
+                className={selected ? 'border-b border-ink text-ink' : 'text-muted hover:underline'}
               >
-                <EntryChoiceLabel index={index} details={target.details ?? 'entry'}>
-                  {model.grouped ? (
-                    <>
-                      <span lang={target.language} dir="auto" className="whitespace-nowrap">
-                        {target.word}
-                      </span>
-                      {target.label.slice(target.word.length)}
-                    </>
-                  ) : (
-                    target.label
-                  )}
-                </EntryChoiceLabel>
+                {model.grouped ? (
+                  <>
+                    <span lang={target.language} dir="auto" className="whitespace-nowrap">
+                      {target.word}
+                    </span>
+                    {target.label.slice(target.word.length)}
+                  </>
+                ) : (
+                  target.label
+                )}
               </WordLink>
             )
           })}

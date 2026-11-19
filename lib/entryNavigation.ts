@@ -1,5 +1,5 @@
 import { LANGUAGES, isLanguageCode, type LanguageCode } from './languages'
-import { historyChoices } from './resultHistories'
+import { historyChoice } from './resultHistories'
 import { normalizeScriptTargets } from './scriptTargets'
 import type { EntrySelection } from './entrySelection'
 import type { LookupGroup, ScriptTarget, WordEntry } from './types'
@@ -19,6 +19,7 @@ export function entryNavigation({
   otherScripts,
   group,
   selection = {},
+  histories = entry?.entries[language]?.histories,
 }: {
   word: string
   language: LanguageCode
@@ -27,6 +28,7 @@ export function entryNavigation({
   failedLanguages?: WordEntry['failedLanguages']
   otherScripts?: ScriptTarget[]
   group?: LookupGroup
+  histories?: import('./types').LexicalHistory[]
   selection?: EntrySelection
 }) {
   const result = entry?.entries[language]
@@ -55,16 +57,18 @@ export function entryNavigation({
           local: choice.word === word && saved.has(choice.language),
         }))
       : !selection.lookup || group
-        ? result
-          ? historyChoices(result).map((choice) => ({
-              word,
-              language,
-              historyId: choice.id,
-              label: choice.label,
-              details: choice.details,
-              lookup,
-              local: true,
-            }))
+        ? histories
+          ? histories
+              .map((h) => historyChoice(h, word))
+              .map((choice) => ({
+                word,
+                language,
+                historyId: choice.id,
+                label: choice.label,
+                details: choice.details,
+                lookup,
+                local: true,
+              }))
           : []
         : []
   const current = choices.filter((choice) => choice.word === word)
@@ -72,7 +76,7 @@ export function entryNavigation({
     ? current.find((choice) => choice.historyId === selection.historyId)
     : current[0]
   // A source-linked reading is not interchangeable with a word's primary history.
-  const historyId = result?.histories.some((history) => history.id === active?.historyId)
+  const historyId = histories?.some((history) => history.id === active?.historyId)
     ? active?.historyId
     : undefined
   const codes = [
@@ -119,7 +123,8 @@ export function entryNavigation({
     historyId,
     grouped: restrictToGroup || grouped.length > 0,
     unresolved: Boolean(result && !historyId) || Boolean(selection.lookup && !group),
-    defaultTarget: grouped.length && !current.length ? grouped[0] : undefined,
+    defaultTarget:
+      !selection.historyId && grouped.length && !current.length ? grouped[0] : undefined,
   }
 }
 

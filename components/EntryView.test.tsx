@@ -81,6 +81,44 @@ describe('EntryView merged entries', () => {
     expect(html).toContain('/word/en/shiro?lookup=')
   })
 
+  test('Portuguese manga switches the origin lead and its sources with the selected meaning', () => {
+    const sleeve = etymologyResult({
+      word: 'manga',
+      language: 'pt',
+      definition: 'Sleeve',
+      lore: 'The clothing term comes from Latin manica.',
+    })
+    const fruit = {
+      ...sleeve.histories[0],
+      id: 'history:fruit',
+      label: 'Fruit',
+      definition: 'Mango',
+      lore: 'The fruit name comes from Malayalam.',
+    }
+    sleeve.histories.push(fruit)
+    sleeve.sources = [
+      {
+        name: 'priberam',
+        url: 'https://example.invalid/sleeve',
+        historyIds: [sleeve.primaryHistoryId],
+      },
+      { name: 'priberam', url: 'https://example.invalid/fruit', historyIds: [fruit.id] },
+    ]
+    const saved: WordEntry = { ...entry, word: 'manga', languages: ['pt'], entries: { pt: sleeve } }
+    for (const [id, shown, hidden] of [
+      [sleeve.primaryHistoryId, 'sleeve', 'fruit'],
+      [fruit.id, 'fruit', 'sleeve'],
+    ]) {
+      const html = renderToStaticMarkup(
+        <EntryView entry={saved} language="pt" selection={{ historyId: id }} />
+      )
+      const origin = html.split('id="entry-origin"')[1].split('</header>')[0]
+      expect(origin).toContain(shown === 'sleeve' ? 'Latin manica' : 'Malayalam')
+      expect(origin).not.toContain(shown === 'sleeve' ? 'Malayalam' : 'Latin manica')
+      expect(html).toContain('href="https://example.invalid/' + shown + '"')
+      expect(html).not.toContain('href="https://example.invalid/' + hidden + '"')
+    }
+  })
   test('selects the requested language without mixing sibling definitions', () => {
     const html = renderToStaticMarkup(<EntryView entry={entry} language="it" />)
     expect(html).toContain('Salt, a mineral used in food.')

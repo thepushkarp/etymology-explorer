@@ -1,11 +1,10 @@
 'use client'
-
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { LookupGroup, WordEntry } from '../types'
 import { lookupGroupForWord, lookupGroupSeed } from '../lookupGroups'
-import { fetchLookupGroup, traceLookupAlternatives } from '../traceLookupAlternatives'
+import { fetchLookupGroup } from '../traceLookupAlternatives'
+import { lookupSession } from '../lookupSession'
 
-/** Explicit lookup context travels with links; direct kanji URLs stay focused. */
 export function useLookupGroup({
   word,
   initial,
@@ -17,44 +16,52 @@ export function useLookupGroup({
   initial?: LookupGroup
   entry?: WordEntry
   lookup?: string
-  /** Only explicit search intent may request research; refresh reads cached navigation. */
   activity?: 'refresh' | 'trace'
 }) {
   const key = lookup ?? word
-  const [loaded, setLoaded] = useState<{ key: string; group?: LookupGroup }>()
-  const [status, setStatus] = useState<{ key: string; loading: boolean; error?: string }>()
-  const [retry, setRetry] = useState(0)
-  const hasLinks = Boolean(entry?.otherScripts?.length || (entry && lookupGroupSeed(entry)))
-  const eligible = Boolean(lookup || initial || hasLinks)
-  const group = eligible ? (loaded?.key === key ? loaded.group : initial) : undefined
+  const snapshot = useSyncExternalStore(
+    lookupSession.subscribe,
+    lookupSession.getSnapshot,
+    () => undefined
+  )
+  const active = lookupSession.matches(word, key) ? snapshot : undefined
+  const [cached, setCached] = useState<{ key: string; group?: LookupGroup; error?: string }>()
+  const eligible = Boolean(
+    lookup || entry?.otherScripts?.length || (entry && lookupGroupSeed(entry))
+  )
+  const attached = Boolean(active)
   useEffect(() => {
-    if (!activity && !retry) return
-    if (!lookup && !hasLinks) return
-    const controller = new AbortController()
-    const publish = (group: LookupGroup | undefined) => setLoaded({ key, group })
-    async function load() {
-      try {
-        if ((activity === 'trace' || retry) && entry) {
-          setStatus({ key, loading: true })
-          const error = await traceLookupAlternatives(key, entry, controller.signal, publish)
-          setStatus({ key, loading: false, error })
-        } else {
-          publish(await fetchLookupGroup(key, controller.signal))
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) {
+    if (!eligible || !activity || attached) return
+    if (activity === 'trace' && entry) {
+      lookupSession.start(key, entry, initial)
+      return
+    }
+    const run = new AbortController()
+    void fetchLookupGroup(key, run.signal).then(
+      (group) => {
+        if (!run.signal.aborted) setCached({ key, group })
+      },
+      (error) => {
+        if (!run.signal.aborted) {
           console.error('[Lookup navigation]', error)
-          setStatus({ key, loading: false, error: 'Some related entries could not be loaded.' })
+          setCached({ key, error: 'Could not refresh related entries.' })
         }
       }
-    }
-    void load()
-    return () => controller.abort()
-  }, [key, lookup, entry, activity, retry, hasLinks])
+    )
+    return () => run.abort()
+  }, [key, eligible, activity, entry, initial, attached])
   return {
-    group: lookupGroupForWord(word, group),
-    loading: Boolean((activity === 'trace' || retry) && status?.key === key && status.loading),
-    error: status?.key === key ? status.error : undefined,
-    retry: () => setRetry((value) => value + 1),
+    group: lookupGroupForWord(
+      word,
+      active?.group ?? (cached?.key === key ? cached.group : undefined) ?? initial
+    ),
+    preview: active?.preview,
+    loading: active?.loading,
+    status: active?.status,
+    error: active?.error ?? (cached?.key === key ? cached.error : undefined),
+    retry: () => {
+      const source = active?.entry ?? entry
+      if (source) lookupSession.start(active?.key ?? key, source, active?.group ?? initial, true)
+    },
   }
 }
