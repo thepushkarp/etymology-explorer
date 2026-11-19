@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { TrendingSearches } from './TrendingSearches'
 import { SearchBox } from '@/components/SearchBox'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { SiteFooter } from '@/components/SiteFooter'
@@ -162,6 +163,7 @@ export function Landing() {
             ))}
           </ul>
         </section>
+        <TrendingSearches />
       </main>
       <SiteFooter />
     </>

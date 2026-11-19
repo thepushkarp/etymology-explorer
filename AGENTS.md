@@ -129,6 +129,8 @@ The app operates in **public mode** with server-side cost controls (added in PR 
 
 - **`lib/exa.ts` / `lib/exaBudget.ts`** - Optional publisher retrieval and targeted discovery with a separate $10 UTC-month allowance. Atomic preflight tariff reservations fail closed for Exa when Redis is unavailable. Unknown charges remain reserved; provider estimates do not authorize refunds. Each trace permits two searches, eight Contents pages, and five API calls; full text is validated against exact publisher identity and entry boundaries. Exa is a retrieval method, never an independent evidence family. A dedicated key should also carry a $10 provider-side billing-period budget.
 
+- **`lib/trends.ts`** - The homepage independently loads GET `/api/trends`. A shared Redis snapshot of 24 Google Trends RSS feeds refreshes on demand every 15 minutes. Each query needs two countries within the past day. Failed feeds retain their original timestamps and expire after one hour. An explicit etymology link starts normal Auto navigation.
+
 - **`lib/recentSearches.ts`** - One atomic list of the latest 20 distinct successful searches, each labelled with its primary language. GET `/api/recent-searches` samples four; POST records only server-validated cached results and their previews. Explicit navigation and completed traces record searches; prefetching and passive loads do not. The static homepage fills gaps from curated words.
 
 - **`data/discovery-words.json`** - Frequency-selected Romance pools and curated Hindi, Urdu, Sanskrit, and Japanese headwords. `scripts/build-discovery-word-pools.py --languages hi ur sa ja` refreshes the curated pools without downloads and preserves other pools; the Romance frequency and Latin-letter filters are not applied to these scripts.

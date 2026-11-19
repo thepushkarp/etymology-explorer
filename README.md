@@ -20,6 +20,7 @@ Try it out at [etymex.com](https://etymex.com)
 - **Modern Usage**: Supplemental community usage gated by source significance from Incel Wiki extracts
 - **Pronunciation Audio**: Listen to word pronunciations powered by ElevenLabs
 - **Random Word**: Open a random word to expand your vocabulary
+- **Trending across countries**: One Google Trends feed for every visitor. Queries must appear in at least two of 24 monitored country feeds within the past day. Searches include names and news topics, with a separate etymology lookup for valid input.
 - **Recently Explored**: Four random selections from the latest 20 successful searches, filtered by primary language when a language is selected, with previews and curated fallback words
 - **Specialist Dictionaries**: General and language-specific evidence for query words, components, variants, and ancestors
 - **Structured Outputs**: Guaranteed valid JSON via OpenRouter `json_schema` strict mode
@@ -239,6 +240,7 @@ etymology-explorer/
 | `/api/ngram`           | GET        | Get language-aware Google Books usage data (`?word=X`)                                | No                |
 | `/api/health`          | GET        | Liveness check                                                                        | No                |
 | `/api/admin/stats`     | GET        | Get budget/usage statistics and counters                                              | Admin secret      |
+| `/api/trends`          | GET        | Cross-country Google search trends, country counts and last update                    | No (rate-limited) |
 | `/api/recent-searches` | GET / POST | Sample recent searches or record a validated cached lookup                            | No (rate-limited) |
 
 ## How It Works

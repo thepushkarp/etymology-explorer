@@ -15,6 +15,7 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 - Follow dictionary-linked Japanese origins when the spelling, reading, and meaning agree, and see when sources provide no origin account.
 - Keep tracing related meanings while switching tabs and open each matching history as it becomes ready.
 
+- See searches rising across countries on Google Trends and look up eligible words and phrases from the homepage.
 - Consult licensed NINJAL historical dictionary transcriptions and headword records as dated Japanese context.
 - Choose a search language from a theme-matched menu with language codes, keyboard navigation, and stable spacing when switching languages.
 - Show dictionary-attested Japanese lookup destinations alongside existing results, including entries whose ancestry is unavailable.

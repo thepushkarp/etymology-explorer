@@ -40,6 +40,7 @@ const SOURCE_ORIGINS = [
 
 const APP_ORIGINS = [
   ...SOURCE_ORIGINS,
+  'https://trends.google.com',
   'https://openrouter.ai',
   'https://api.elevenlabs.io',
   'https://books.google.com',
