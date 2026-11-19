@@ -57,7 +57,7 @@ Be accurate about language origins (Latin, Greek, Proto-Indo-European, Old Frenc
 export function buildSystemPrompt(language: LanguageCode): string {
   if (language === 'en') return SYSTEM_PROMPT
   const { englishName, promptNotes } = LANGUAGES[language]
-  const languageRule = `LEXEME LANGUAGE: the searched lexeme is explicitly ${englishName}; never reinterpret it as an English word, and never substitute an English entry. Write every prose field in English, describing the ${englishName} word. Do not translate forms, IPA, language names, or source facts. If the research does not establish this ${englishName} entry, do not invent an English fallback.`
+  const languageRule = `LEXEME LANGUAGE: the searched lexeme is explicitly ${englishName}; never reinterpret it as an English word, and never substitute an English entry. Write the definitions and origin stories in English. For each usage example, write text in ${englishName} using the spelling of that history, and translation in English. Do not translate forms, IPA, language names, or source facts. If the research does not establish this ${englishName} entry, do not invent an English fallback.`
   return [SYSTEM_PROMPT, languageRule, promptNotes].filter(Boolean).join('\n\n')
 }
 
@@ -81,7 +81,7 @@ export function buildUserPrompt(
     `Analyze the ${englishName} (${language}) lexeme: "${word}".\n\n` +
     `Research data on this selected-language entry and its language-tagged ancestors:\n\n` +
     researchData +
-    `\n\nProduce source-scoped histories written in English. ` +
+    `\n\nWrite the history of each meaning in English and its example sentences in ${englishName}. ` +
     `Preserve every immutable history and graph identity exactly. Do not infer a different ` +
     `language from spelling and do not substitute an English entry.`
   )

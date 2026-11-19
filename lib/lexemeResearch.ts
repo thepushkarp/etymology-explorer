@@ -14,7 +14,7 @@ import {
 import { SPECIALIST_PROVIDERS, parseDiscoveredSpecialist } from './specialistSources'
 import { HISTORICAL_SOURCES } from './historicalSources'
 import { LANGUAGES, languageFromName, lexicalLanguageName, type LanguageCode } from './languages'
-import { canonicalizeWord } from './orthography'
+import { canonicalizeWord, initialCapitalTitle } from './orthography'
 import { sourceFamily } from './sourceProviders'
 import { sourceEvidenceRole } from './researchSources'
 import { cacheSource, cacheSourceBundle, getCachedSourceBundle } from './sourceCache'
@@ -63,6 +63,7 @@ export interface LexemeLookupResult {
 }
 
 interface SourceJob {
+  title?: string
   id: string
   core?: boolean
   run(): Promise<{ records: SourceRecord[]; outcome: SourceOutcome }>
@@ -302,17 +303,42 @@ export function createLexemeResearchSession(options: {
         return found(data ? [record(id, { ...data, lexicalLanguage: heading })] : [])
       },
     })
-    if (language === 'en') {
-      general.push(
-        simple(
-          'wiktionary',
-          () =>
-            fetchOnce(`wiktionaryLanguage:English:${word}`, () =>
-              fetchWiktionary(word, signal, { retryTransient: !settings.primary, fetchOnce })
-            ),
-          true
-        )
+    const wiktionaryJobs = (title: string): SourceJob[] => {
+      const options = {
+        retryTransient: !settings.primary,
+        useCachedToc: settings.primary,
+        fetchOnce,
+      }
+      const english = simple(
+        language && language !== 'en' ? 'wiktionaryEnglish' : 'wiktionary',
+        () =>
+          fetchOnce(`wiktionaryLanguage:${heading}:${title}`, () =>
+            fetchSelectedWiktionaryLanguage(title, heading, signal, options)
+          ),
+        true
       )
+      english.title = title
+      if (!language || language === 'en' || !LANGUAGES[language].nativeWiktionary) return [english]
+      return [
+        english,
+        {
+          ...simple(
+            'wiktionaryNative',
+            () =>
+              fetchOnce(`wiktionaryNative:${language}:${title}`, () =>
+                fetchNativeWiktionary(title, language, signal, {
+                  useCachedToc: settings.primary,
+                  fetchOnce,
+                })
+              ),
+            true
+          ),
+          title,
+        },
+      ]
+    }
+    general.push(...wiktionaryJobs(word))
+    if (language === 'en') {
       general.push({
         id: 'etymonline',
         core: true,
@@ -324,45 +350,6 @@ export function createLexemeResearchSession(options: {
           return outcomeResult('etymonline', outcome)
         },
       })
-    } else if (language) {
-      general.push(
-        simple(
-          'wiktionaryEnglish',
-          () =>
-            fetchOnce(`wiktionaryLanguage:${heading}:${word}`, () =>
-              fetchEnglishWiktionaryLanguage(word, language, signal, {
-                retryTransient: !settings.primary,
-                fetchOnce,
-              })
-            ),
-          true
-        )
-      )
-      if (LANGUAGES[language].nativeWiktionary)
-        general.push(
-          simple(
-            'wiktionaryNative',
-            () =>
-              fetchOnce(`wiktionaryNative:${language}:${word}`, () =>
-                fetchNativeWiktionary(word, language, signal, { fetchOnce })
-              ),
-            true
-          )
-        )
-    } else {
-      general.push(
-        simple(
-          'wiktionary',
-          () =>
-            fetchOnce(`wiktionaryLanguage:${heading}:${word}`, () =>
-              fetchSelectedWiktionaryLanguage(word, heading, signal, {
-                retryTransient: true,
-                fetchOnce,
-              })
-            ),
-          true
-        )
-      )
     }
     if (!settings.skipOptionalSources) {
       if (!language || LANGUAGES[language].wikipediaEdition)
@@ -406,10 +393,16 @@ export function createLexemeResearchSession(options: {
             },
           })
         )
+    // A primary query requests all meanings. An ancestor belongs to its parent's scoped evidence.
+    const capital =
+      settings.primary &&
+      language &&
+      LANGUAGES[language].scripts.includes('Latin') &&
+      initialCapitalTitle(word)
     // Interleave source groups before network dispatch; no language gets an arbitrary dictionary cap.
     return general
       .flatMap((job, index) => [job, ...(specialized[index] ? [specialized[index]] : [])])
-      .concat(specialized.slice(general.length))
+      .concat(specialized.slice(general.length), capital ? wiktionaryJobs(capital) : [])
   }
 
   async function runJob(lexeme: LexemeRef, job: SourceJob) {
@@ -734,7 +727,8 @@ export function createLexemeResearchSession(options: {
               ) &&
               !failure.outcome.reason?.includes('Retry-After')
             ) {
-              const word = entry.result.lexeme.word
+              const word =
+                entry.jobs[entry.result.outcomes.indexOf(failure)].title ?? entry.result.lexeme.word
               const options = { retryTransient: true, fetchOnce }
               const recovered = await runJob(entry.result.lexeme, {
                 id: primary,

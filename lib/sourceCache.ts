@@ -1,4 +1,4 @@
-import { canonicalizeWord } from './orthography'
+import { canonicalizeWord, publisherTitle } from './orthography'
 /**
  * Redis cache for complete source lookups, including historical-language selections.
  * Fails open: no Redis, or any Redis error, means a normal live fetch.
@@ -42,7 +42,8 @@ const SOURCE_CACHE_PREFIX = 'src:v18:'
 
 function sourceKey(source: CacheableSource, word: string, language: LanguageCode): string {
   const normalized = canonicalizeWord(word)
-  if (source === 'wiktionaryLanguage:Japanese') return `src:v19:${source}:${normalized}`
+  if (source.startsWith('wiktionary'))
+    return `src:v20:${source}:${language === 'en' ? '' : language + ':'}${publisherTitle(word)}`
   return language === 'en'
     ? `${SOURCE_CACHE_PREFIX}${source}:${normalized}`
     : `${SOURCE_CACHE_PREFIX}${source}:${language}:${normalized}`
@@ -99,7 +100,8 @@ export async function cacheSource(
 
 /** A provider request can return several independent dictionaries or homographs. */
 function bundleKey(provider: string, word: string, lexicalLanguage: string): string {
-  return `${SOURCE_CACHE_PREFIX}bundle:${encodeURIComponent(provider)}:${encodeURIComponent(lexicalLanguage)}:${canonicalizeWord(word)}`
+  const prefix = provider === 'dle' ? 'src:v20:' : SOURCE_CACHE_PREFIX
+  return `${prefix}bundle:${encodeURIComponent(provider)}:${encodeURIComponent(lexicalLanguage)}:${canonicalizeWord(word)}`
 }
 
 export async function getCachedSourceBundle(
@@ -153,7 +155,7 @@ export interface WiktionaryToc {
 }
 
 function wiktionaryTocKey(word: string, edition: string): string {
-  return `${SOURCE_CACHE_PREFIX}wiktionaryToc:${edition === 'en' ? '' : `${edition}:`}${canonicalizeWord(word)}`
+  return `src:v20:wiktionaryToc:${edition === 'en' ? '' : `${edition}:`}${publisherTitle(word)}`
 }
 
 export async function getCachedWiktionaryToc(

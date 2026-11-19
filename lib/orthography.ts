@@ -6,13 +6,23 @@
  */
 // Only horizontal space separators may collapse. Controls and line separators
 // stay in the string so input validation cannot silently erase malformed input.
-export function canonicalizeWord(raw: string): string {
+export function publisherTitle(raw: string): string {
   return raw
     .replace(/[\uFF61-\uFF9F]+/g, (part) => part.normalize('NFKC'))
-    .toLowerCase()
     .normalize('NFC')
     .replace(/\p{Zs}+/gu, ' ')
     .replace(/^ +| +$/g, '')
+}
+
+export function canonicalizeWord(raw: string): string {
+  return publisherTitle(raw).toLowerCase().normalize('NFC')
+}
+
+/** MediaWiki titles retain case even when the public spelling URL is shared. */
+export function initialCapitalTitle(word: string): string | undefined {
+  if (!/^\p{Script=Latin}/u.test(word)) return
+  const title = word.replace(/^./u, (letter) => letter.toUpperCase())
+  return title !== word && canonicalizeWord(title) === word ? title : undefined
 }
 
 export function sameSpelling(left: string, right: string): boolean {

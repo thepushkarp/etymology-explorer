@@ -1,4 +1,9 @@
 import { afterEach, expect, spyOn, test } from 'bun:test'
+import { conductAgenticResearch, scopeEnglishHistories } from './research'
+import { finalizeResult } from './llm'
+import { historyChoices, historyEntry } from './resultHistories'
+import { etymologyResult } from './testSupport/etymologyResult'
+import type { ResearchContext } from './types'
 import { resolveEntryLanguages } from './entryLanguages'
 import { createLexemeResearchSession } from './lexemeResearch'
 import { fetchSelectedWiktionaryLanguage, fetchWiktionaryPage } from './wiktionary'
@@ -66,9 +71,9 @@ test('resolution includes English sections, native-only entries, hints and order
     languages: ['en', 'it', 'es', 'fr'],
     otherLanguages: ['German', 'Latin'],
   })
-  expect(requests).toHaveLength(5)
-  expect(requests.filter((url) => url.hostname === 'en.wiktionary.org')).toHaveLength(1)
-  expect(shared.getBudget().attempts).toBe(5)
+  expect(requests).toHaveLength(10)
+  expect(requests.filter((url) => url.hostname === 'en.wiktionary.org')).toHaveLength(2)
+  expect(shared.getBudget().attempts).toBe(10)
 })
 
 test('full language lookups reuse resolution pages and emit progress for each query language', async () => {
@@ -97,14 +102,14 @@ test('full language lookups reuse resolution pages and emit progress for each qu
     events.filter(
       (event) => event.type === 'source_started' && event.source === 'wiktionaryEnglish'
     )
-  ).toEqual([
-    {
+  ).toEqual(
+    Array.from({ length: 2 }, () => ({
       type: 'source_started',
       source: 'wiktionaryEnglish',
       language: 'fr',
       activityId: expect.any(String),
-    },
-  ])
+    }))
+  )
 })
 
 test('authoritative Latin misses fall back to English, while unsupported or mixed scripts fetch nothing', async () => {
@@ -287,6 +292,7 @@ test('romanization offers retain English and enrich redirects only from warm sou
     const requests = serve((url) => {
       if (url.hostname !== 'en.wiktionary.org') return new Response('', { status: 404 })
       if (url.searchParams.get('page') === 'tsunami') return Response.json(romanizationPage())
+      if (url.searchParams.get('page') !== 'つなみ') return new Response('', { status: 404 })
       const response = page(['Japanese'], 'つなみ')
       response.parse.text =
         '<h2 id="language-0">Japanese</h2><table class="wikitable ja-see"><tr><td>' +
@@ -321,11 +327,101 @@ test('an uncached optional redirect cannot mark the English entry incomplete', a
     if (url.hostname !== 'en.wiktionary.org') return new Response('', { status: 404 })
     return url.searchParams.get('page') === 'tsunami'
       ? Response.json(romanizationPage())
-      : new Response('', { status: 503 })
+      : new Response('', { status: url.searchParams.get('page') === 'Tsunami' ? 404 : 503 })
   })
   expect(await resolveEntryLanguages('tsunami', session())).toEqual({
     languages: ['en'],
     otherLanguages: [],
     otherScripts: [{ word: 'つなみ', language: 'ja' }],
   })
+})
+
+test('Macarena preserves the RAE adjective and the capitalized Spanish name through synthesis', async () => {
+  const requests = serve((url) => {
+    const title = url.searchParams.get('page')
+    if (title === 'Macarena' && url.hostname === 'es.wiktionary.org')
+      return Response.json(page(['Español'], title))
+    if (title === 'macarena' && url.hostname === 'en.wiktionary.org')
+      return Response.json(page(['English'], title))
+    if (url.hostname === 'dle.rae.es')
+      return new Response(
+        '<article class="o-main__article" id="M"><h1 class="c-page-header__title">macareno, macarena</h1><p>Of the neighborhood.</p></article>'
+      )
+    return new Response('', { status: 404 })
+  })
+  const shared = session()
+  for (const hint of [undefined, 'es'] as const) {
+    expect((await resolveEntryLanguages('Macarena', shared, hint)).languages).toEqual(['en', 'es'])
+  }
+  const context = await conductAgenticResearch('macarena', {
+    language: 'es',
+    session: shared,
+    budget: shared.getBudget(),
+  })
+  const result = finalizeResult(
+    etymologyResult({ word: 'macarena', definition: 'Meaning' }, context),
+    context,
+    'standard'
+  )
+  expect(historyChoices(result).map((item) => item.label)).toEqual([
+    'macarena — Meaning',
+    'Macarena — Meaning',
+  ])
+  expect(
+    result.histories.map((h) => historyEntry(result, h.id).sources.map((s) => s.name))
+  ).toEqual([['dle'], ['wiktionaryNative']])
+  expect(
+    requests.filter(
+      (url) => url.hostname === 'es.wiktionary.org' && url.searchParams.get('page') === 'Macarena'
+    )
+  ).toHaveLength(1)
+})
+
+test('English case homographs keep their original history IDs and deduplicate a page redirect', async () => {
+  let redirected = false
+  serve((url) => {
+    const title = url.searchParams.get('page')
+    if (url.hostname !== 'en.wiktionary.org' || !title) return new Response('', { status: 404 })
+    const target = redirected ? 'turkey' : title
+    return Response.json({
+      parse: {
+        ...page(['English'], target).parse,
+        redirects: target !== title ? [{ from: title, to: target }] : [],
+      },
+    })
+  })
+  async function histories() {
+    const [lookup] = await session().lookupMany([{ language: 'en', word: 'turkey' }], {
+      primary: true,
+    })
+    const context: ResearchContext = {
+      mainWord: { word: 'turkey', sources: lookup.sources, etymonline: null, wiktionary: null },
+      rootResearch: [],
+      relatedResearch: [],
+      identifiedRoots: [],
+      totalSourcesFetched: 0,
+    }
+    scopeEnglishHistories(context)
+    return context.entryContexts!
+  }
+  const separate = await histories()
+  expect(separate.map((h) => h.sourceTitle)).toEqual(['turkey', 'Turkey'])
+  expect(new Set(separate.map((h) => h.id)).size).toBe(2)
+  redirected = true
+  expect((await histories()).map((h) => h.id)).toEqual([separate[0].id])
+})
+
+test('a capitalized page timeout leaves the known lowercase lookup incomplete', async () => {
+  serve((url) =>
+    url.searchParams.get('page') === 'Macarena' && url.hostname === 'es.wiktionary.org'
+      ? new Response('', { status: 503 })
+      : new Response('', { status: 404 })
+  )
+  const shared = session()
+  expect((await resolveEntryLanguages('macarena', shared, 'es')).incomplete).toBe(true)
+  const [lookup] = await shared.lookupMany([{ word: 'macarena', language: 'es' }], {
+    primary: true,
+  })
+  expect(lookup.incomplete).toBe(true)
+  expect(lookup.sources).toEqual([])
 })

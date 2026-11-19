@@ -48,6 +48,7 @@ import {
   relatedSourceRecords,
   lexicalSourceRecords,
   sourceEvidenceRole,
+  sourceSpelling,
 } from './researchSources'
 
 export interface RootExtraction {
@@ -221,43 +222,57 @@ function scopeHistories(context: ResearchContext): void {
   const language = context.language ?? 'en'
   const word = context.mainWord.word
   const sources = mainSourceRecords(context.mainWord)
-  const find = (provider: string) => sources.find((source) => source.provider === provider)
-  const primary = primarySource(sources, language) ?? lexicalSourceRecords(sources)[0]
-  let entries: ResearchEntryContext[] = primary
-    ? deriveEntryContexts(
-        word,
-        language,
-        primary.provider,
-        primary.data,
-        context.mainWord.wikidataLexeme ?? null
+  const titles = [...new Set([word, ...sources.map((source) => sourceSpelling(source, word))])]
+  const entries: ResearchEntryContext[] = []
+  const chains: ParsedEtymChain[] = []
+  for (const title of titles) {
+    const records = sources.filter((source) => sourceSpelling(source, word) === title)
+    const primary =
+      primarySource(records, language) ??
+      lexicalSourceRecords(records).find(
+        (source) => titles.length === 1 || source.provider !== 'wikidataLexeme'
       )
-    : []
+    if (!primary) continue
+    const histories = deriveEntryContexts(
+      title,
+      language,
+      primary.provider,
+      primary.data,
+      title === word ? (context.mainWord.wikidataLexeme ?? null) : null
+    )
+    const redirects =
+      primary.data.variants?.filter((variant) => variant.relationship === 'redirect') ?? []
+    if (histories.length === 1 && redirects.length === 1) {
+      histories[0].entryKind = 'form'
+      histories[0].formOf = { word: redirects[0].word, language }
+    }
+    for (const entry of histories) {
+      if (title !== word) {
+        // Source-local anchors can be identical on two differently cased pages.
+        entry.id += ':initial-capital'
+        entry.evidenceScopeId += ':initial-capital'
+      }
+      if (titles.length > 1) entry.sourceTitle = title
+      entries.push(entry)
+      if (sourceEvidenceRole(primary) === 'etymology') chains.push(...entryChains(entry, title))
+    }
+  }
   if (!entries.length) {
     const fallback =
-      find('wikipedia') ?? find('multilingualDictionary') ?? lexicalSourceRecords(sources)[0]
-    entries = [
-      {
-        id: `history:${language}:${encodeURIComponent(word)}:unresolved`,
-        evidenceScopeId: `scope:${language}:${encodeURIComponent(word)}:unresolved`,
-        source: fallback?.provider ?? 'multilingualDictionary',
-        heading: word,
-        text: fallback?.data.text ?? '',
-        sectionHeadings: [],
-        sourceUrl: fallback?.data.url ?? '',
-        entryKind: 'unresolved',
-      },
-    ]
+      sources.find((s) => s.provider === 'wikipedia') ??
+      sources.find((s) => s.provider === 'multilingualDictionary') ??
+      lexicalSourceRecords(sources)[0]
+    entries.push({
+      id: `history:${language}:${encodeURIComponent(word)}:unresolved`,
+      evidenceScopeId: `scope:${language}:${encodeURIComponent(word)}:unresolved`,
+      source: fallback?.provider ?? 'multilingualDictionary',
+      heading: word,
+      text: fallback?.data.text ?? '',
+      sectionHeadings: [],
+      sourceUrl: fallback?.data.url ?? '',
+      entryKind: 'unresolved',
+    })
   }
-  const redirects =
-    primary?.data.variants?.filter((variant) => variant.relationship === 'redirect') ?? []
-  if (entries.length === 1 && redirects.length === 1) {
-    entries[0].entryKind = 'form'
-    entries[0].formOf = { word: redirects[0].word, language }
-  }
-  const chains = entries.flatMap((entry) => {
-    if (!primary || sourceEvidenceRole(primary) !== 'etymology') return []
-    return entryChains(entry, word)
-  })
   context.entryContexts = entries
   context.parsedChains = chains
   context.lexicalGraph = buildLexicalResearchGraph(word, language, entries, chains)
@@ -1187,6 +1202,10 @@ export function buildResearchPrompt(context: ResearchContext): string {
       sections.push(
         `\n<source_data name="${entry.source}" history_id="${entry.id}" evidence_scope_id="${entry.evidenceScopeId}">\n${sanitizeSourceText(entry.text)}\n</source_data>`
       )
+      if (entry.sourceTitle)
+        sections.push(
+          `Dictionary headword: ${sanitizeSourceText(entry.sourceTitle)}. Keep its meanings and origin accounts scoped to this spelling, including any uncertainty or disagreement between sources.`
+        )
       if (entry.sectionHeadings.length)
         sections.push(`Section context: ${entry.sectionHeadings.join(' > ')}`)
     }

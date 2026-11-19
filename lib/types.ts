@@ -308,6 +308,7 @@ interface HistoryEntryFields {
 
 /** One independently selectable lexical history for a same-spelling query. */
 export interface LexicalHistory extends HistoryEntryFields {
+  sourceTitle?: string
   id: string
   label: string
   entryKind: 'lemma' | 'form' | 'unresolved'
@@ -460,6 +461,7 @@ export type SourceFetchOutcome =
   | { status: Exclude<SourceOutcome['status'], 'found'>; reason?: string; httpStatus?: number }
 
 export interface ResearchEntryContext {
+  sourceTitle?: string
   definitionReference?: { word: string; heading: string; glosses: string[] }
   originReference?: { word: string; url: string }
   counterparts?: ScriptTarget[]

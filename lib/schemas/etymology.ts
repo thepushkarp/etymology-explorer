@@ -93,6 +93,7 @@ const history = z
   .object({
     id: z.string().min(1),
     label: z.string(),
+    sourceTitle: z.string().optional(),
     entryKind: z.enum(['lemma', 'form', 'unresolved']),
     queryNodeId: z.string().min(1),
     lemmaNodeId: z.string().min(1),

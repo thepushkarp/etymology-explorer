@@ -10,6 +10,7 @@ import { EtymologyResultSchema } from '@/lib/schemas/etymology'
  */
 const POST_PROCESSING_ONLY_PATHS = new Set([
   'counterparts',
+  'sourceTitle',
   'originCoverage',
   'ancestryGraph.branches[].stages[].isReconstructed',
   'ancestryGraph.branches[].stages[].confidence',

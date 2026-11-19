@@ -73,8 +73,12 @@ export function buildLexicalResearchGraph(
     graph.nodes[queryNodeId] = {
       id: queryNodeId,
       kind: context.entryKind === 'form' ? 'form' : 'lexeme',
-      lexeme: { language, lemma: word, normalizedLemma: canonicalizeWord(word) },
-      displayForm: word,
+      lexeme: {
+        language,
+        lemma: context.sourceTitle ?? word,
+        normalizedLemma: canonicalizeWord(word),
+      },
+      displayForm: context.sourceTitle ?? word,
       senseIds: [],
     }
 
