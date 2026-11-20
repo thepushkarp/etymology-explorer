@@ -72,8 +72,8 @@ describe('source cache', () => {
     await cacheSource('wiktionaryNative', 'sale', DATA, store, 'fr')
 
     expect(store.keys().sort()).toEqual([
-      'src:v20:wiktionaryNative:fr:sale',
-      'src:v20:wiktionaryNative:it:sale',
+      'src:v21:wiktionaryNative:fr:sale',
+      'src:v21:wiktionaryNative:it:sale',
     ])
   })
 

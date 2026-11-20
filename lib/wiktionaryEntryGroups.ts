@@ -1,5 +1,5 @@
 import { decodeHtmlEntities, preserveLinguisticNotation } from './sourceText'
-import { sameSpelling } from './orthography'
+import { publisherTitle, sameSpelling } from './orthography'
 import { LANGUAGES, languageFromName, lexicalLanguageName, type LanguageCode } from './languages'
 import { normalizeScriptTargets } from './scriptTargets'
 import { japaneseEtymologyRelations } from './japaneseEtymology'
@@ -34,6 +34,12 @@ export interface WiktionaryEntrySection {
 
 /** One source-defined etymology, without merging it with adjacent etymologies. */
 export interface WiktionaryEntryGroup {
+  caseForm?: {
+    target: string
+    only: boolean
+    headings: string[]
+    independent: { heading: string; gloss: string }[]
+  }
   sourceUrl?: string
   transliteration?: string
   counterparts?: ScriptTarget[]
@@ -321,6 +327,68 @@ function japaneseDefinitions(html: string, word: string) {
     definitions.push({ readings, target, glosses })
   }
   return definitions.length ? definitions : undefined
+}
+
+/** A spelling assertion belongs to a numbered definition at its own headword.
+ * Links in quotations, examples, and lists of alternative forms cannot establish it. */
+function caseDefinitionTarget(gloss: string, title: string, language: LanguageCode) {
+  const marker = gloss.search(/<span\b[^>]*class=["'][^"']*\bform-of-definition-link\b/i)
+  if (
+    marker < 0 ||
+    !/^(?:alternative|alternate) (?:letter-case )?(?:form|spelling) of$/i.test(
+      cleanWiktionaryHtml(gloss.slice(0, marker))
+    )
+  )
+    return
+  const link = balancedElement(gloss, marker)
+  if (!link || cleanWiktionaryHtml(gloss.slice(link.end)).replace(/\./g, '')) return
+  const anchors = [...link.body.matchAll(/<a\b([^>]*)>/gi)]
+  const term = link.body.match(/<(?:span|i|b)\b([^>]*\blang=["'][^"']+["'][^>]*)>/i)
+  if (anchors.length !== 1 || !term || attribute(term[1], 'lang') !== language) return
+  const label = publisherTitle(cleanWiktionaryHtml(link.body))
+  if (label === title || !sameSpelling(label, title)) return
+  const href = attribute(anchors[0][1], 'href')
+  const expected =
+    '/wiki/' +
+    encodeURIComponent(label.replace(/ /g, '_')) +
+    '#' +
+    LANGUAGES[language].englishWiktionaryHeading
+  if (href === expected || href === decodeURI(expected)) return label
+}
+
+function caseDefinitions(
+  html: string,
+  title: string,
+  language: LanguageCode
+): { target?: string; gloss?: string }[] {
+  const heads = selectedHeadwordLines(html, language)
+  if (heads.length !== 1 || publisherTitle(cleanWiktionaryHtml(heads[0].headword[2])) !== title)
+    return [{}]
+  const definitions: { target?: string; gloss?: string }[] = []
+  const body = html.slice(heads[0].start)
+  const opening = body.match(/<\/p>\s*(<ol\b[^>]*>)/i)
+  if (!opening) return [{}]
+  const list = balancedElement(body, opening.index! + opening[0].indexOf(opening[1]))
+  if (!list) return [{}]
+  if (/<ol\b/i.test(body.slice(list.end))) definitions.push({})
+  let end = 0
+  for (const item of list.body.matchAll(/<li\b[^>]*>/gi)) {
+    if (item.index < end) continue
+    const row = balancedElement(list.body, item.index)
+    if (!row) return [{}]
+    end = row.end
+    const gloss = row.body.split(/<(?:dl|ul|ol)\b/i)[0]
+    const target = caseDefinitionTarget(gloss, title, language)
+    definitions.push(
+      target
+        ? { target }
+        : /\bform-of-definition\b/.test(gloss)
+          ? {}
+          : { gloss: cleanWiktionaryHtml(gloss) }
+    )
+    if (/<ol\b/i.test(row.body)) definitions.push({})
+  }
+  return definitions.length ? definitions : [{}]
 }
 
 function headwordCounterparts(
@@ -961,6 +1029,12 @@ export function extractWiktionaryEntryGroups(
           )
         : []
 
+    const checkCaseForms =
+      pageIdentity?.edition === 'en' &&
+      selectedLanguage &&
+      /^\p{Script=Latin}/u.test(pageIdentity.title) &&
+      fragment.includes('form-of-definition-link')
+    const caseRows: { heading: string; target?: string; gloss?: string }[] = []
     const structuredSections = assignedSections.flatMap((section, sectionPosition) => {
       const sectionStart = anchorOffset(html, section.anchor)
       if (sectionStart < 0 || sectionStart >= end) return []
@@ -968,6 +1042,19 @@ export function extractWiktionaryEntryGroups(
       const following = assignedSections[sectionPosition + 1]
       const followingOffset = following ? anchorOffset(html, following.anchor) : end
       const sectionEnd = followingOffset > sectionStart ? followingOffset : end
+
+      const sectionHtml = html.slice(sectionStart, sectionEnd)
+      const heading = cleanHeading(section.line)
+      if (
+        checkCaseForms &&
+        (/<strong\b[^>]*class=["'][^"']*\bheadword\b/i.test(sectionHtml) ||
+          /^(?:Noun|Proper noun|Verb|Adjective|Adverb|Interjection|Phrase|Pronoun|Preposition|Conjunction|Determiner|Numeral|Particle|Proverb|Idiom|Letter|Symbol|Prefix|Suffix)$/.test(
+            heading
+          ))
+      ) {
+        for (const definition of caseDefinitions(sectionHtml, pageIdentity.title, selectedLanguage))
+          caseRows.push({ heading, ...definition })
+      }
 
       return [
         {
@@ -995,8 +1082,22 @@ export function extractWiktionaryEntryGroups(
       ]
     })
 
+    const linked = caseRows.filter((row) => row.target)
+    const target = linked[0]?.target
+    const caseForm =
+      target && linked.every((row) => row.target === target)
+        ? {
+            target,
+            only: caseRows.length === linked.length,
+            headings: [...new Set(linked.map((row) => row.heading))],
+            independent: caseRows.flatMap((row) =>
+              row.gloss ? [{ heading: row.heading, gloss: row.gloss }] : []
+            ),
+          }
+        : undefined
     return [
       {
+        ...(caseForm ? { caseForm } : {}),
         index: group.index,
         number: group.number,
         heading: owner

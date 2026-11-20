@@ -10,6 +10,7 @@ import {
   AncestryBranch,
   ResearchEntryContext,
   LexemeRef,
+  PARTS_OF_SPEECH,
 } from './types'
 import { buildSystemPrompt, buildUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
@@ -499,7 +500,11 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
       ? scoped.map((entry) => ({
           word,
           historyId: entry.id,
-          records: main.filter((record) => sourceSpelling(record, word) === entry.sourceTitle),
+          records: main.filter(
+            (record) =>
+              sourceSpelling(record, word) === entry.sourceTitle ||
+              entry.spellingVariants?.some((v) => !v.entryOnly && v.sourceUrl === record.data.url)
+          ),
         }))
       : [{ word, records: main }]),
     ...researchContext.rootResearch.map((root) => ({
@@ -982,6 +987,25 @@ function finalizeHistories(result: EtymologyResult, researchContext: ResearchCon
   for (const history of result.histories) {
     const entry = researchContext.entryContexts?.find((entry) => entry.id === history.id)
     const source = entry?.source
+    if (entry?.spellingVariants?.length) history.spellingVariants = entry.spellingVariants
+    else delete history.spellingVariants
+    if (entry?.independentDefinitions?.length) {
+      const glosses = new Set<string>()
+      for (const { heading, gloss } of entry.independentDefinitions) {
+        const pos = PARTS_OF_SPEECH.find(
+          (part) => part === (heading === 'Proper noun' ? 'noun' : heading.toLowerCase())
+        )
+        if (
+          pos &&
+          !history.partsOfSpeech?.some((p) =>
+            p.definition.toLowerCase().includes(gloss.toLowerCase())
+          )
+        )
+          (history.partsOfSpeech ??= []).push({ pos, definition: gloss })
+        if (!history.label.toLowerCase().includes(gloss.toLowerCase())) glosses.add(gloss)
+      }
+      if (glosses.size) history.label += ' · ' + [...glosses].join(' · ')
+    }
     if (entry?.sourceTitle) history.sourceTitle = entry.sourceTitle
     else delete history.sourceTitle
     if (entry?.transliteration) history.transliteration = entry.transliteration

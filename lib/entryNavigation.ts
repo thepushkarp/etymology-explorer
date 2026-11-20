@@ -1,5 +1,6 @@
 import { LANGUAGES, isLanguageCode, type LanguageCode } from './languages'
 import { historyChoice } from './resultHistories'
+import { initialCapitalTitle } from './orthography'
 import { normalizeScriptTargets } from './scriptTargets'
 import type { EntrySelection } from './entrySelection'
 import type { LookupGroup, ScriptTarget, WordEntry } from './types'
@@ -72,9 +73,27 @@ export function entryNavigation({
           : []
         : []
   const current = choices.filter((choice) => choice.word === word)
-  const active = selection.historyId
+  const title = selection.capitalized ? initialCapitalTitle(word) : word
+  const matching =
+    restrictToGroup || grouped.length || (selection.lookup && !group)
+      ? []
+      : (histories ?? []).filter((history) =>
+          selection.historyId
+            ? history.spellingVariants?.some(
+                (variant) => variant.previousHistoryId === selection.historyId
+              )
+            : (title !== undefined && history.sourceTitle === title) ||
+              history.spellingVariants?.some((variant) => variant.word === title)
+        )
+  let active = selection.historyId
     ? current.find((choice) => choice.historyId === selection.historyId)
-    : current[0]
+    : undefined
+  const chooseMeaning = !active && matching.length > 1
+  if (!active && !chooseMeaning) {
+    if (matching.length === 1)
+      active = current.find((choice) => choice.historyId === matching[0].id)
+    else if (!selection.historyId) active = current[0]
+  }
   // A source-linked reading is not interchangeable with a word's primary history.
   const historyId = histories?.some((history) => history.id === active?.historyId)
     ? active?.historyId
@@ -110,6 +129,7 @@ export function entryNavigation({
       historyId: first?.historyId,
       lookup: supportsLookup ? lookup : undefined,
       label: LANGUAGES[code].englishName,
+      ...(selection.capitalized && target.word === word ? { capitalized: true } : {}),
       local: target.word === word && saved.has(code),
     }
   })
@@ -120,9 +140,11 @@ export function entryNavigation({
     tabs,
     choices,
     active,
+    chooseMeaning,
     historyId,
     grouped: restrictToGroup || grouped.length > 0,
-    unresolved: Boolean(result && !historyId) || Boolean(selection.lookup && !group),
+    unresolved:
+      Boolean(result && !historyId && !chooseMeaning) || Boolean(selection.lookup && !group),
     defaultTarget:
       !selection.historyId && grouped.length && !current.length ? grouped[0] : undefined,
   }

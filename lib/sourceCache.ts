@@ -43,7 +43,7 @@ const SOURCE_CACHE_PREFIX = 'src:v18:'
 function sourceKey(source: CacheableSource, word: string, language: LanguageCode): string {
   const normalized = canonicalizeWord(word)
   if (source.startsWith('wiktionary'))
-    return `src:v20:${source}:${language === 'en' ? '' : language + ':'}${publisherTitle(word)}`
+    return `src:v21:${source}:${language === 'en' ? '' : language + ':'}${publisherTitle(word)}`
   return language === 'en'
     ? `${SOURCE_CACHE_PREFIX}${source}:${normalized}`
     : `${SOURCE_CACHE_PREFIX}${source}:${language}:${normalized}`

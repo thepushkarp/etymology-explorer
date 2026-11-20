@@ -308,8 +308,11 @@ export function deriveEntryContexts(
         formOf: { word: target, language },
       })
     }
-    if (contexts.length === groupContextStart + 1)
+    if (contexts.length === groupContextStart + 1) {
       contexts[groupContextStart].counterparts = group.counterparts
+      if (!source.incomplete && group.caseForm)
+        contexts[groupContextStart].caseForm = group.caseForm
+    }
   }
 
   if (contexts.length > 0) return contexts

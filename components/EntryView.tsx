@@ -210,7 +210,7 @@ export function EntryView({
         actions={actions}
       />
     )
-  if (!result || navigation.unresolved) {
+  if (!result || navigation.unresolved || navigation.chooseMeaning) {
     return (
       <EntryHeader
         actions={actions}
@@ -219,7 +219,11 @@ export function EntryView({
         subheader={
           <>
             {notices}
-            {navigation.unresolved ? (
+            {navigation.chooseMeaning ? (
+              <p role="status" className="mt-4 text-sm text-muted">
+                Choose a meaning to read its history.
+              </p>
+            ) : navigation.unresolved ? (
               <div className="mt-8">
                 <p role="status" className="font-serif italic text-muted">
                   This reading is not available in the saved entry.

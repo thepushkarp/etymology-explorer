@@ -94,6 +94,16 @@ const history = z
     id: z.string().min(1),
     label: z.string(),
     sourceTitle: z.string().optional(),
+    spellingVariants: z
+      .array(
+        z.object({
+          word: z.string(),
+          sourceUrl: z.string(),
+          previousHistoryId: z.string().optional(),
+          entryOnly: z.boolean().optional(),
+        })
+      )
+      .optional(),
     entryKind: z.enum(['lemma', 'form', 'unresolved']),
     queryNodeId: z.string().min(1),
     lemmaNodeId: z.string().min(1),

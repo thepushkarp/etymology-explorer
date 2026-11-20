@@ -257,6 +257,66 @@ function scopeHistories(context: ResearchContext): void {
       if (sourceEvidenceRole(primary) === 'etymology') chains.push(...entryChains(entry, title))
     }
   }
+  // A secondary dictionary can attest a spelling even when the primary
+  // independently defines it. Only the primary can retire its own history.
+  const retired = new Set<string>()
+  for (const record of sources) {
+    if (record.data.incomplete) continue
+    const title = sourceSpelling(record, word)
+    for (const group of record.data.entryGroups ?? []) {
+      const form = group.caseForm
+      if (!form) continue
+      const targets = entries.filter(
+        (e) =>
+          e.sourceTitle === form.target &&
+          !e.caseForm?.only &&
+          sources.some(
+            (s) =>
+              s.provider === e.source &&
+              !s.data.incomplete &&
+              sourceSpelling(s, word) === form.target &&
+              sourceEvidenceRole(s) !== 'context'
+          )
+      )
+      if (!targets.length) continue
+      const matchingPos = targets.filter(
+        (e) =>
+          e.source === record.provider &&
+          e.sectionHeadings.some((heading) => form.headings.includes(heading))
+      )
+      const destinations = matchingPos.length ? matchingPos : targets
+      const donor = entries.find(
+        (e) => e.sourceTitle === title && e.sourceUrl === record.data.url && e.caseForm === form
+      )
+      // Scope a secondary dictionary's independent definitions to this title
+      // only when it has a single history. The metadata supplies meanings only.
+      const owners = entries.filter((entry) => entry.sourceTitle === title)
+      const owner = donor ?? (owners.length === 1 ? owners[0] : undefined)
+      if (owner && form.independent?.length)
+        owner.independentDefinitions = [
+          ...(owner.independentDefinitions ?? []),
+          ...form.independent,
+        ]
+      const only = donor && form.only && !donor.etymologyText && !donor.relations?.length
+      if (only) retired.add(donor.id)
+      for (const dest of destinations) {
+        const variants = (dest.spellingVariants ??= [])
+        if (
+          !variants.some(
+            (v) =>
+              v.sourceUrl === record.data.url &&
+              v.previousHistoryId === (only ? donor.id : undefined)
+          )
+        )
+          variants.push({
+            word: title,
+            sourceUrl: record.data.url,
+            ...(only ? { previousHistoryId: donor.id } : {}),
+            ...(destinations.length > 1 ? { entryOnly: true } : {}),
+          })
+      }
+    }
+  }
   if (!entries.length) {
     const fallback =
       sources.find((s) => s.provider === 'wikipedia') ??
@@ -273,9 +333,17 @@ function scopeHistories(context: ResearchContext): void {
       entryKind: 'unresolved',
     })
   }
-  context.entryContexts = entries
-  context.parsedChains = chains
-  context.lexicalGraph = buildLexicalResearchGraph(word, language, entries, chains)
+  // A second publisher may have supplied substantive definitions for a title
+  // whose primary dictionary contains only a spelling reference.
+  for (const entry of entries) if (entry.independentDefinitions?.length) retired.delete(entry.id)
+  context.entryContexts = entries.filter((entry) => !retired.has(entry.id))
+  context.parsedChains = chains.filter((chain) => !chain.historyId || !retired.has(chain.historyId))
+  context.lexicalGraph = buildLexicalResearchGraph(
+    word,
+    language,
+    context.entryContexts,
+    context.parsedChains
+  )
 }
 
 export function scopeEnglishHistories(context: ResearchContext): void {
@@ -1205,6 +1273,17 @@ export function buildResearchPrompt(context: ResearchContext): string {
       if (entry.sourceTitle)
         sections.push(
           `Dictionary headword: ${sanitizeSourceText(entry.sourceTitle)}. Keep its meanings and origin accounts scoped to this spelling, including any uncertainty or disagreement between sources.`
+        )
+      if (entry.caseForm && !entry.caseForm.only)
+        sections.push(
+          'This spelling also has independent definitions. Describe those definitions here. The spelling reference points to the other headword.'
+        )
+      if (entry.independentDefinitions?.length)
+        sections.push(
+          'Include the independently attested definitions for this spelling in its label and parts of speech.',
+          '<source_data name="independent_definitions">' +
+            sanitizeSourceText(JSON.stringify(entry.independentDefinitions)) +
+            '</source_data>'
         )
       if (entry.sectionHeadings.length)
         sections.push(`Section context: ${entry.sectionHeadings.join(' > ')}`)

@@ -22,6 +22,8 @@ export function historyEntry(result: EtymologyResult, historyId?: string): Etymo
   return {
     ...entry,
     formOf: history.formOf,
+    sourceTitle: history.sourceTitle,
+    spellingVariants: history.spellingVariants,
     sources: sourcesForHistory(result, history),
     stratum: history.stratum,
     pronunciation: history.pronunciation,

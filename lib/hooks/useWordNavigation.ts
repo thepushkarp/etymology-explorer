@@ -4,7 +4,8 @@ import { useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
 import { markTraceIntent } from '@/lib/traceIntent'
-import { wordPagePath, type LanguageCode } from '@/lib/languages'
+import type { LanguageCode } from '@/lib/languages'
+import { entryPagePath } from '@/lib/entrySelection'
 import { recordRecentSearchIntent } from '@/lib/recentSearchClient'
 
 /**
@@ -21,7 +22,7 @@ export function useWordNavigation() {
       if (!isValidWord(trimmed)) return
       markTraceIntent(trimmed, language)
       void recordRecentSearchIntent(trimmed)
-      router.push(wordPagePath(trimmed, language))
+      router.push(entryPagePath(word, language))
     },
     [router]
   )

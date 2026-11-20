@@ -36,6 +36,13 @@ export function EntryHeader({
 }: EntryHeaderProps) {
   const partsOfSpeech = [...new Set(result.partsOfSpeech?.map((part) => part.pos) ?? [])]
   const readings = pronunciationReadings(result.pronunciation ?? '')
+  const spellings = [
+    ...new Set(
+      result.spellingVariants
+        ?.filter((variant) => !variant.entryOnly)
+        .map((variant) => variant.word)
+    ),
+  ]
 
   return (
     <header>
@@ -45,7 +52,7 @@ export function EntryHeader({
           dir="auto"
           className="min-w-0 break-words font-serif text-[clamp(2.75rem,11vw,4.5rem)] leading-none tracking-tight text-ink"
         >
-          {result.word}
+          {result.sourceTitle ?? result.word}
         </h1>
         {actions && <div className="ml-auto self-center">{actions}</div>}
       </div>
@@ -77,6 +84,11 @@ export function EntryHeader({
       </p>
 
       {navigation}
+      {spellings.length > 0 && (
+        <p className="mt-3 text-sm text-muted">
+          Also written <bdi lang={result.language}>{spellings.join(', ')}</bdi>.
+        </p>
+      )}
       {(lead || result.definition || result.formOf) && (
         <div id="entry-origin" lang="en" dir="ltr" className="mt-5 max-w-2xl">
           <p className="font-serif text-xl leading-relaxed text-ink">

@@ -221,16 +221,18 @@ export interface AncestryGraph {
 /**
  * Part of speech type for grammatical categorization
  */
-export type PartOfSpeech =
-  | 'noun'
-  | 'verb'
-  | 'adjective'
-  | 'adverb'
-  | 'preposition'
-  | 'conjunction'
-  | 'pronoun'
-  | 'interjection'
-  | 'determiner'
+export const PARTS_OF_SPEECH = [
+  'noun',
+  'verb',
+  'adjective',
+  'adverb',
+  'preposition',
+  'conjunction',
+  'pronoun',
+  'interjection',
+  'determiner',
+] as const
+export type PartOfSpeech = (typeof PARTS_OF_SPEECH)[number]
 
 /**
  * Definition for a specific part of speech
@@ -306,8 +308,17 @@ interface HistoryEntryFields {
   partsOfSpeech?: POSDefinition[] // Definitions per grammatical category
 }
 
+export interface HistorySpelling {
+  word: string
+  sourceUrl: string
+  previousHistoryId?: string
+  /** The publisher links the entry without distinguishing its histories. */
+  entryOnly?: boolean
+}
+
 /** One independently selectable lexical history for a same-spelling query. */
 export interface LexicalHistory extends HistoryEntryFields {
+  spellingVariants?: HistorySpelling[]
   sourceTitle?: string
   id: string
   label: string
@@ -383,6 +394,8 @@ export interface WordEntry {
  * or the sections of a streaming synthesis received so far.
  */
 export type EtymologyEntry = Omit<EtymologyResult, 'primaryHistoryId' | 'histories'> & {
+  sourceTitle?: string
+  spellingVariants?: HistorySpelling[]
   formOf?: LexemeRef
 }
 
@@ -461,6 +474,9 @@ export type SourceFetchOutcome =
   | { status: Exclude<SourceOutcome['status'], 'found'>; reason?: string; httpStatus?: number }
 
 export interface ResearchEntryContext {
+  caseForm?: WiktionaryEntryGroup['caseForm']
+  independentDefinitions?: { heading: string; gloss: string }[]
+  spellingVariants?: HistorySpelling[]
   sourceTitle?: string
   definitionReference?: { word: string; heading: string; glosses: string[] }
   originReference?: { word: string; url: string }
