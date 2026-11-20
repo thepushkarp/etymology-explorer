@@ -279,6 +279,15 @@ function scopeHistories(context: ResearchContext): void {
           )
       )
       if (!targets.length) continue
+      // Within an edition the grammatical headings share a vocabulary. A
+      // missing verb entry cannot be satisfied by a noun with the same title.
+      if (
+        targets.every((target) => target.source === record.provider) &&
+        form.headings.some(
+          (heading) => !targets.some((target) => target.sectionHeadings.includes(heading))
+        )
+      )
+        continue
       const matchingPos = targets.filter(
         (e) =>
           e.source === record.provider &&

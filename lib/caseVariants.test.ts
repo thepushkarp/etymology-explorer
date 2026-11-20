@@ -133,6 +133,7 @@ test('an unqualified link to two noun histories opens the choices, while a match
 })
 
 test('a quotation, a cross-language link or a mismatched title cannot retire a history', () => {
+  expect(research(variant, [['Verb', '<li>A different verb.</li>']]).histories).toHaveLength(2)
   for (const content of [
     'A distinct meaning.<ul><li>' + alias + '</li></ul>',
     alias.replace('#English', '#French'),
