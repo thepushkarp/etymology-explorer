@@ -72,8 +72,8 @@ describe('source cache', () => {
     await cacheSource('wiktionaryNative', 'sale', DATA, store, 'fr')
 
     expect(store.keys().sort()).toEqual([
-      'src:v18:wiktionaryNative:fr:sale',
-      'src:v18:wiktionaryNative:it:sale',
+      'src:v21:wiktionaryNative:fr:sale',
+      'src:v21:wiktionaryNative:it:sale',
     ])
   })
 
@@ -176,10 +176,11 @@ test('TOC cache preserves page-order headings and authoritative absence per edit
   await cacheWiktionaryToc('Fixture', 'en', toc, store)
   await cacheWiktionaryToc('fixture', 'fr', { headings: [], nonemptyHeadings: [] }, store)
   expect(store.keys()).toEqual([
-    'src:v18:wiktionaryToc:fixture',
-    'src:v18:wiktionaryToc:fr:fixture',
+    'src:v20:wiktionaryToc:Fixture',
+    'src:v20:wiktionaryToc:fr:fixture',
   ])
-  expect(await getCachedWiktionaryToc('fixture', 'en', store)).toEqual(toc)
+  expect(await getCachedWiktionaryToc('Fixture', 'en', store)).toEqual(toc)
+  expect(await getCachedWiktionaryToc('fixture', 'en', store)).toBeNull()
   expect(await getCachedWiktionaryToc('fixture', 'fr', store)).toEqual({
     headings: [],
     nonemptyHeadings: [],

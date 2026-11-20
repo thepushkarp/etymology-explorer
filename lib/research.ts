@@ -48,6 +48,7 @@ import {
   relatedSourceRecords,
   lexicalSourceRecords,
   sourceEvidenceRole,
+  sourceSpelling,
 } from './researchSources'
 
 export interface RootExtraction {
@@ -221,46 +222,137 @@ function scopeHistories(context: ResearchContext): void {
   const language = context.language ?? 'en'
   const word = context.mainWord.word
   const sources = mainSourceRecords(context.mainWord)
-  const find = (provider: string) => sources.find((source) => source.provider === provider)
-  const primary = primarySource(sources, language) ?? lexicalSourceRecords(sources)[0]
-  let entries: ResearchEntryContext[] = primary
-    ? deriveEntryContexts(
-        word,
-        language,
-        primary.provider,
-        primary.data,
-        context.mainWord.wikidataLexeme ?? null
+  const titles = [...new Set([word, ...sources.map((source) => sourceSpelling(source, word))])]
+  const entries: ResearchEntryContext[] = []
+  const chains: ParsedEtymChain[] = []
+  for (const title of titles) {
+    const records = sources.filter((source) => sourceSpelling(source, word) === title)
+    const primary =
+      primarySource(records, language) ??
+      lexicalSourceRecords(records).find(
+        (source) => titles.length === 1 || source.provider !== 'wikidataLexeme'
       )
-    : []
+    if (!primary) continue
+    const histories = deriveEntryContexts(
+      title,
+      language,
+      primary.provider,
+      primary.data,
+      title === word ? (context.mainWord.wikidataLexeme ?? null) : null
+    )
+    const redirects =
+      primary.data.variants?.filter((variant) => variant.relationship === 'redirect') ?? []
+    if (histories.length === 1 && redirects.length === 1) {
+      histories[0].entryKind = 'form'
+      histories[0].formOf = { word: redirects[0].word, language }
+    }
+    for (const entry of histories) {
+      if (title !== word) {
+        // Source-local anchors can be identical on two differently cased pages.
+        entry.id += ':initial-capital'
+        entry.evidenceScopeId += ':initial-capital'
+      }
+      if (titles.length > 1) entry.sourceTitle = title
+      entries.push(entry)
+      if (sourceEvidenceRole(primary) === 'etymology') chains.push(...entryChains(entry, title))
+    }
+  }
+  // A secondary dictionary can attest a spelling even when the primary
+  // independently defines it. Only the primary can retire its own history.
+  const retired = new Set<string>()
+  for (const record of sources) {
+    if (record.data.incomplete) continue
+    const title = sourceSpelling(record, word)
+    for (const group of record.data.entryGroups ?? []) {
+      const form = group.caseForm
+      if (!form) continue
+      const targets = entries.filter(
+        (e) =>
+          e.sourceTitle === form.target &&
+          !e.caseForm?.only &&
+          sources.some(
+            (s) =>
+              s.provider === e.source &&
+              !s.data.incomplete &&
+              sourceSpelling(s, word) === form.target &&
+              sourceEvidenceRole(s) !== 'context'
+          )
+      )
+      if (!targets.length) continue
+      // Within an edition the grammatical headings share a vocabulary. A
+      // missing verb entry cannot be satisfied by a noun with the same title.
+      if (
+        targets.every((target) => target.source === record.provider) &&
+        form.headings.some(
+          (heading) => !targets.some((target) => target.sectionHeadings.includes(heading))
+        )
+      )
+        continue
+      const matchingPos = targets.filter(
+        (e) =>
+          e.source === record.provider &&
+          e.sectionHeadings.some((heading) => form.headings.includes(heading))
+      )
+      const destinations = matchingPos.length ? matchingPos : targets
+      const donor = entries.find(
+        (e) => e.sourceTitle === title && e.sourceUrl === record.data.url && e.caseForm === form
+      )
+      // Scope a secondary dictionary's independent definitions to this title
+      // only when it has a single history. The metadata supplies meanings only.
+      const owners = entries.filter((entry) => entry.sourceTitle === title)
+      const owner = donor ?? (owners.length === 1 ? owners[0] : undefined)
+      if (owner && form.independent?.length)
+        owner.independentDefinitions = [
+          ...(owner.independentDefinitions ?? []),
+          ...form.independent,
+        ]
+      const only = donor && form.only && !donor.etymologyText && !donor.relations?.length
+      if (only) retired.add(donor.id)
+      for (const dest of destinations) {
+        const variants = (dest.spellingVariants ??= [])
+        if (
+          !variants.some(
+            (v) =>
+              v.sourceUrl === record.data.url &&
+              v.previousHistoryId === (only ? donor.id : undefined)
+          )
+        )
+          variants.push({
+            word: title,
+            sourceUrl: record.data.url,
+            ...(only ? { previousHistoryId: donor.id } : {}),
+            ...(destinations.length > 1 ? { entryOnly: true } : {}),
+          })
+      }
+    }
+  }
   if (!entries.length) {
     const fallback =
-      find('wikipedia') ?? find('multilingualDictionary') ?? lexicalSourceRecords(sources)[0]
-    entries = [
-      {
-        id: `history:${language}:${encodeURIComponent(word)}:unresolved`,
-        evidenceScopeId: `scope:${language}:${encodeURIComponent(word)}:unresolved`,
-        source: fallback?.provider ?? 'multilingualDictionary',
-        heading: word,
-        text: fallback?.data.text ?? '',
-        sectionHeadings: [],
-        sourceUrl: fallback?.data.url ?? '',
-        entryKind: 'unresolved',
-      },
-    ]
+      sources.find((s) => s.provider === 'wikipedia') ??
+      sources.find((s) => s.provider === 'multilingualDictionary') ??
+      lexicalSourceRecords(sources)[0]
+    entries.push({
+      id: `history:${language}:${encodeURIComponent(word)}:unresolved`,
+      evidenceScopeId: `scope:${language}:${encodeURIComponent(word)}:unresolved`,
+      source: fallback?.provider ?? 'multilingualDictionary',
+      heading: word,
+      text: fallback?.data.text ?? '',
+      sectionHeadings: [],
+      sourceUrl: fallback?.data.url ?? '',
+      entryKind: 'unresolved',
+    })
   }
-  const redirects =
-    primary?.data.variants?.filter((variant) => variant.relationship === 'redirect') ?? []
-  if (entries.length === 1 && redirects.length === 1) {
-    entries[0].entryKind = 'form'
-    entries[0].formOf = { word: redirects[0].word, language }
-  }
-  const chains = entries.flatMap((entry) => {
-    if (!primary || sourceEvidenceRole(primary) !== 'etymology') return []
-    return entryChains(entry, word)
-  })
-  context.entryContexts = entries
-  context.parsedChains = chains
-  context.lexicalGraph = buildLexicalResearchGraph(word, language, entries, chains)
+  // A second publisher may have supplied substantive definitions for a title
+  // whose primary dictionary contains only a spelling reference.
+  for (const entry of entries) if (entry.independentDefinitions?.length) retired.delete(entry.id)
+  context.entryContexts = entries.filter((entry) => !retired.has(entry.id))
+  context.parsedChains = chains.filter((chain) => !chain.historyId || !retired.has(chain.historyId))
+  context.lexicalGraph = buildLexicalResearchGraph(
+    word,
+    language,
+    context.entryContexts,
+    context.parsedChains
+  )
 }
 
 export function scopeEnglishHistories(context: ResearchContext): void {
@@ -1187,6 +1279,21 @@ export function buildResearchPrompt(context: ResearchContext): string {
       sections.push(
         `\n<source_data name="${entry.source}" history_id="${entry.id}" evidence_scope_id="${entry.evidenceScopeId}">\n${sanitizeSourceText(entry.text)}\n</source_data>`
       )
+      if (entry.sourceTitle)
+        sections.push(
+          `Dictionary headword: ${sanitizeSourceText(entry.sourceTitle)}. Keep its meanings and origin accounts scoped to this spelling, including any uncertainty or disagreement between sources.`
+        )
+      if (entry.caseForm && !entry.caseForm.only)
+        sections.push(
+          'This spelling also has independent definitions. Describe those definitions here. The spelling reference points to the other headword.'
+        )
+      if (entry.independentDefinitions?.length)
+        sections.push(
+          'Include the independently attested definitions for this spelling in its label and parts of speech.',
+          '<source_data name="independent_definitions">' +
+            sanitizeSourceText(JSON.stringify(entry.independentDefinitions)) +
+            '</source_data>'
+        )
       if (entry.sectionHeadings.length)
         sections.push(`Section context: ${entry.sectionHeadings.join(' > ')}`)
     }

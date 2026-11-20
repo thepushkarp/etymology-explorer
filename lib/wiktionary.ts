@@ -1,8 +1,9 @@
-import { canonicalizeWord, sameSpelling } from './orthography'
+import { publisherTitle, sameSpelling } from './orthography'
 import type { SourceData } from './types'
-import { LANGUAGES, languageFromName } from './languages'
+import { LANGUAGES, languageFromName, type LanguageCode } from './languages'
 import {
   cleanWiktionaryHtml,
+  comparableHeading,
   extractWiktionaryLookup,
   extractWiktionaryEntryGroups,
   extractWiktionaryLanguageText,
@@ -15,7 +16,13 @@ import {
 import { fetchWithTimeout } from './fetchUtils'
 import { safeError } from './errorUtils'
 import { CONFIG } from './config'
-import { getCachedSource, cacheSource, cacheWiktionaryToc, type WiktionaryToc } from './sourceCache'
+import {
+  getCachedSource,
+  cacheSource,
+  cacheWiktionaryToc,
+  getCachedWiktionaryToc,
+  type WiktionaryToc,
+} from './sourceCache'
 import { currentSourceFetchBudget } from './sourceFetchBudget'
 
 export type WiktionaryResult = SourceData
@@ -30,6 +37,7 @@ export interface WiktionaryPage {
 }
 
 export interface WiktionaryFetchOptions {
+  useCachedToc?: boolean
   retryTransient?: boolean
   fetchOnce?: <T>(key: string, fetcher: () => Promise<T>) => Promise<T>
 }
@@ -65,7 +73,7 @@ export function fetchWiktionaryPage(
   signal?: AbortSignal,
   options?: WiktionaryFetchOptions
 ): Promise<WiktionaryPage | null> {
-  const normalizedWord = canonicalizeWord(word)
+  const normalizedWord = publisherTitle(word)
   const fetchPage = async (): Promise<WiktionaryPage | null> => {
     const url = new URL(`https://${edition}.wiktionary.org/w/api.php`)
     url.searchParams.set('action', 'parse')
@@ -123,10 +131,11 @@ export function fetchWiktionaryPage(
           throw new Error(`Wiktionary ${edition}:${normalizedWord}: invalid parse response`)
         if (
           page.title &&
-          !sameSpelling(page.title, normalizedWord) &&
+          publisherTitle(page.title) !== normalizedWord &&
           !page.redirects?.some(
             (redirect) =>
-              sameSpelling(redirect.from, normalizedWord) && sameSpelling(redirect.to, page.title!)
+              publisherTitle(redirect.from) === normalizedWord &&
+              publisherTitle(redirect.to) === publisherTitle(page.title!)
           )
         )
           return null
@@ -248,13 +257,35 @@ export async function fetchSelectedWiktionaryLanguage(
   signal?: AbortSignal,
   options?: WiktionaryFetchOptions
 ): Promise<WiktionaryResult | null> {
-  const source = `wiktionaryLanguage:${encodeURIComponent(languageHeading)}` as const
-  const cached = await getCachedSource(source, word)
+  return fetchDictionarySection(word, 'en', languageHeading, 'en', signal, options)
+}
+
+export async function fetchDictionarySection(
+  word: string,
+  edition: string,
+  languageHeading: string,
+  cacheLanguage: LanguageCode,
+  signal?: AbortSignal,
+  options?: WiktionaryFetchOptions
+): Promise<WiktionaryResult | null> {
+  const source =
+    edition === 'en'
+      ? (`wiktionaryLanguage:${encodeURIComponent(languageHeading)}` as const)
+      : 'wiktionaryNative'
+  const cached = await getCachedSource(source, word, undefined, cacheLanguage)
   if (cached) return cached
   try {
-    const page = await fetchWiktionaryPage(word, 'en', signal, options)
-    const result = page && extractWiktionaryLanguage(page, languageHeading, 'en')
-    if (result) await cacheSource(source, word, result)
+    const toc = options?.useCachedToc && (await getCachedWiktionaryToc(word, edition))
+    if (
+      toc &&
+      !toc.nonemptyHeadings.some(
+        (heading) => comparableHeading(heading) === comparableHeading(languageHeading)
+      )
+    )
+      return null
+    const page = await fetchWiktionaryPage(word, edition, signal, options)
+    const result = page && extractWiktionaryLanguage(page, languageHeading, edition)
+    if (result) await cacheSource(source, word, result, undefined, cacheLanguage)
     return result
   } catch (error) {
     signal?.throwIfAborted()

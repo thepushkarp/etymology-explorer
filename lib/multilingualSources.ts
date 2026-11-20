@@ -9,8 +9,7 @@ import { cleanWiktionaryHtml } from './wiktionaryEntryGroups'
 
 import {
   fetchSelectedWiktionaryLanguage,
-  fetchWiktionaryPage,
-  extractWiktionaryLanguage,
+  fetchDictionarySection,
   type WiktionaryFetchOptions,
 } from './wiktionary'
 
@@ -27,18 +26,14 @@ export async function fetchWiktionaryEdition(
   if (edition === 'en')
     return fetchSelectedWiktionaryLanguage(word, config.englishWiktionaryHeading, signal, options)
   if (!config.nativeWiktionary || config.nativeWiktionary.edition !== edition) return null
-  const cached = await getCachedSource('wiktionaryNative', word, undefined, language)
-  if (cached) return cached
-  try {
-    const page = await fetchWiktionaryPage(word, edition, signal, options)
-    const result = page && extractWiktionaryLanguage(page, config.nativeWiktionary.heading, edition)
-    if (result) await cacheSource('wiktionaryNative', word, result, undefined, language)
-    return result
-  } catch (error) {
-    signal?.throwIfAborted()
-    console.error(`[Research] ${edition}.wiktionary fetch failed:`, safeError(error))
-    throw error
-  }
+  return fetchDictionarySection(
+    word,
+    edition,
+    config.nativeWiktionary.heading,
+    language,
+    signal,
+    options
+  )
 }
 
 export function fetchEnglishWiktionaryLanguage(

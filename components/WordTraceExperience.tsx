@@ -180,7 +180,8 @@ export function WordTraceExperience({
     const streamed = toPartialResult(
       activeWord,
       liveHistory ??
-        ((navigation.grouped || selection.historyId) && !navigation.historyId
+        ((navigation.chooseMeaning || navigation.grouped || selection.historyId) &&
+        !navigation.historyId
           ? {}
           : {
               ...slice?.sections,
@@ -197,6 +198,7 @@ export function WordTraceExperience({
     ngram,
     navigation.grouped,
     navigation.historyId,
+    navigation.chooseMeaning,
     selection.historyId,
   ])
 
@@ -266,7 +268,11 @@ export function WordTraceExperience({
                     {lookupError} <button onClick={retryLookup}>Retry</button>
                   </p>
                 ) : progress.status === 'idle' ? (
-                  navigation.unresolved ? (
+                  navigation.chooseMeaning ? (
+                    <p role="status" className="mt-4 text-sm text-muted">
+                      Choose a meaning to read its history.
+                    </p>
+                  ) : navigation.unresolved ? (
                     <div className="mt-8">
                       <p role="status" className="font-serif italic text-muted">
                         This lookup context is not available in the saved entries.

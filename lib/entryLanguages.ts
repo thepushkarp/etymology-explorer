@@ -8,7 +8,7 @@ import {
   type LanguageCode,
 } from './languages'
 import type { LexemeResearchSession } from './lexemeResearch'
-import { canonicalizeWord } from './orthography'
+import { canonicalizeWord, initialCapitalTitle } from './orthography'
 import { normalizeScriptTargets } from './scriptTargets'
 import type { ScriptTarget } from './types'
 import {
@@ -38,77 +38,93 @@ async function resolveLanguages(
   const candidates = candidateLanguages(normalized)
   if (!candidates.length) return { languages: [], otherLanguages: [] }
   let incomplete = false
-  const editions = new Map<string, Promise<WiktionaryToc | null>>()
-  const pageToc = (edition: string): Promise<WiktionaryToc | null> => {
-    const existing = editions.get(edition)
-    if (existing) return existing
-    const pending = (async () => {
-      const cached = await getCachedWiktionaryToc(normalized, edition)
-      if (cached) return cached
-      try {
-        const page = await fetchWiktionaryPage(normalized, edition, session.signal, {
-          fetchOnce: session.fetchOnce,
-        })
-        if (!page) return { headings: [], nonemptyHeadings: [] }
-        // Full lookups share the extracted sections as well as the raw request promise.
-        await Promise.all(
-          candidates.map(async (language) => {
-            const definition = LANGUAGES[language]
-            const heading =
+  async function pageToc(title: string, edition: string): Promise<WiktionaryToc | null> {
+    const cached = await getCachedWiktionaryToc(title, edition)
+    if (cached) return cached
+    try {
+      const page = await fetchWiktionaryPage(title, edition, session.signal, {
+        fetchOnce: session.fetchOnce,
+      })
+      if (!page) return { headings: [], nonemptyHeadings: [] }
+      // Full lookups share the extracted sections as well as the raw request promise.
+      await Promise.all(
+        candidates.map(async (language) => {
+          const definition = LANGUAGES[language]
+          const heading =
+            edition === 'en'
+              ? definition.englishWiktionaryHeading
+              : definition.nativeWiktionary?.edition === edition
+                ? definition.nativeWiktionary.heading
+                : undefined
+          if (!heading) return
+          const data = extractWiktionaryLanguage(page, heading, edition)
+          if (data)
+            await cacheSource(
               edition === 'en'
-                ? definition.englishWiktionaryHeading
-                : definition.nativeWiktionary?.edition === edition
-                  ? definition.nativeWiktionary.heading
-                  : undefined
-            if (!heading) return
-            const data = extractWiktionaryLanguage(page, heading, edition)
-            if (data)
-              await cacheSource(
-                edition === 'en'
-                  ? `wiktionaryLanguage:${encodeURIComponent(heading)}`
-                  : 'wiktionaryNative',
-                normalized,
-                data,
-                undefined,
-                edition === 'en' ? 'en' : language
-              )
-          })
-        )
-        return wiktionaryPageToc(page)
-      } catch (error) {
-        session.signal?.throwIfAborted()
-        console.error(
-          '[Research] Language resolution failed for %s:%s:',
-          edition,
-          normalized,
-          safeError(error)
-        )
-        incomplete = true
-        return null
-      }
-    })()
-    editions.set(edition, pending)
-    return pending
+                ? `wiktionaryLanguage:${encodeURIComponent(heading)}`
+                : 'wiktionaryNative',
+              title,
+              data,
+              undefined,
+              edition === 'en' ? 'en' : language
+            )
+        })
+      )
+      return wiktionaryPageToc(page)
+    } catch (error) {
+      session.signal?.throwIfAborted()
+      console.error(
+        '[Research] Language resolution failed for %s:%s:',
+        edition,
+        title,
+        safeError(error)
+      )
+      incomplete = true
+      return null
+    }
   }
-  const english = pageToc('en')
-  const native = await Promise.all(
-    candidates.map(async (language) => {
-      const edition = LANGUAGES[language].nativeWiktionary?.edition
-      return [language, edition ? await pageToc(edition) : null] as const
-    })
-  )
-  const englishToc = await english
+  const editionNames = [
+    ...new Set([
+      'en',
+      ...candidates.flatMap((language) => {
+        const native = LANGUAGES[language].nativeWiktionary
+        return native ? [native.edition] : []
+      }),
+    ]),
+  ]
+  const capital = initialCapitalTitle(normalized)
+  const tables: { edition: string; title: string; toc: WiktionaryToc | null }[] = []
+  // Reserve the ordinary pages first when the resolution budget is tight.
+  for (const title of capital ? [normalized, capital] : [normalized]) {
+    tables.push(
+      ...(await Promise.all(
+        editionNames.map(async (edition) => ({
+          edition,
+          title,
+          toc: await pageToc(title, edition),
+        }))
+      ))
+    )
+  }
+  const englishToc = tables.find((row) => row.edition === 'en' && row.title === normalized)?.toc
   const languages = candidates.filter((language) => {
     const definition = LANGUAGES[language]
     return (
       language === hint ||
-      englishToc?.nonemptyHeadings
-        .map(comparableHeading)
-        .includes(comparableHeading(definition.englishWiktionaryHeading)) ||
-      native
-        .find(([code]) => code === language)?.[1]
-        ?.nonemptyHeadings.map(comparableHeading)
-        .includes(comparableHeading(definition.nativeWiktionary?.heading ?? ''))
+      tables.some(({ edition, toc }) => {
+        const heading =
+          edition === 'en'
+            ? definition.englishWiktionaryHeading
+            : edition === definition.nativeWiktionary?.edition
+              ? definition.nativeWiktionary.heading
+              : undefined
+        return (
+          heading &&
+          toc?.nonemptyHeadings.some(
+            (name) => comparableHeading(name) === comparableHeading(heading)
+          )
+        )
+      })
     )
   })
   if (!languages.length && !hint && detectScripts(normalized).includes('Latin'))
@@ -146,10 +162,11 @@ async function resolveLanguages(
   const otherScripts = normalizeScriptTargets([...romanizations, ...redirects])
   return {
     languages,
-    otherLanguages:
-      englishToc?.headings.filter(
-        (heading) => !supportedHeadings.has(comparableHeading(heading))
-      ) ?? [],
+    otherLanguages: [
+      ...new Set(
+        tables.filter((row) => row.edition === 'en').flatMap((row) => row.toc?.headings ?? [])
+      ),
+    ].filter((heading) => !supportedHeadings.has(comparableHeading(heading))),
     ...(otherScripts.length ? { otherScripts } : {}),
     ...(incomplete ? { incomplete: true } : {}),
   }

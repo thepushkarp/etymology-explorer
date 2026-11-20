@@ -10,7 +10,7 @@ import { WordTraceExperience } from '@/components/WordTraceExperience'
 import { ENTRY_PREFIX, etymologyWordTag, getCachedEntry } from '@/lib/cache'
 import { LANGUAGES, isLanguageCode, wordPagePath, type LanguageCode } from '@/lib/languages'
 import { historyEntry } from '@/lib/resultHistories'
-import { entryPagePath, parseEntrySelection } from '@/lib/entrySelection'
+import { entryPagePath, selectionForWordPath } from '@/lib/entrySelection'
 import { getLookupGroup } from '@/lib/lookupGroupCache'
 import { lookupGroupForWord } from '@/lib/lookupGroups'
 import { entryNavigation } from '@/lib/entryNavigation'
@@ -151,7 +151,7 @@ export default async function WordPage({ params, searchParams }: WordPageProps) 
     if (typeof value === 'string') query.set(key, value)
     else if (value) for (const item of value) query.append(key, item)
   }
-  const selection = parseEntrySelection(query)
+  const selection = selectionForWordPath(query, decodeURIComponent((await params).segments.at(-1)!))
   const lookupGroup = lookupGroupForWord(
     word,
     await getLookupGroup(selection.lookup ?? word, selection.lookup ? undefined : cached?.entry)

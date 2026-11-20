@@ -10,6 +10,9 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ### Added
 
+- Show dictionary-confirmed capitalization variants under one history, preserve independent meanings, and open ambiguous spellings with a choice of histories.
+
+- Explore distinct capitalized name and lowercase word histories, including the Spanish name Macarena and its separately attested adjective.
 - Read an origin summary for the selected meaning below the headword, with its sources and compact choices for words with several histories.
 - Refresh stale saved entries in the background when you search for them, keeping the saved result readable.
 - Follow dictionary-linked Japanese origins when the spelling, reading, and meaning agree, and see when sources provide no origin account.

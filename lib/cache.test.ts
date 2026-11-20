@@ -379,13 +379,13 @@ describe('independent negative and audio caches', () => {
     await cacheNegative(' NICE ', 'no_sources')
     await cacheNegative('nice', 'no_sources', 'fr')
     expect(currentRedis.set.mock.calls.map((call) => call[0])).toEqual([
-      'neg:v10:nice',
-      'neg:v10:hint:fr:nice',
+      'neg:v11:nice',
+      'neg:v11:hint:fr:nice',
     ])
     await getNegativeCache(' NICE ')
     await getNegativeCache('nice', 'en')
-    expect(currentRedis.get).toHaveBeenCalledWith('neg:v10:nice')
-    expect(currentRedis.get).toHaveBeenCalledWith('neg:v10:hint:en:nice')
+    expect(currentRedis.get).toHaveBeenCalledWith('neg:v11:nice')
+    expect(currentRedis.get).toHaveBeenCalledWith('neg:v11:hint:en:nice')
     currentRedis = fakeRedis({ exists: mock(async () => 1) })
     await cacheNegative('nice', 'no_sources')
     expect(currentRedis.set).not.toHaveBeenCalled()
@@ -399,7 +399,7 @@ describe('independent negative and audio caches', () => {
     currentRedis = fakeRedis()
     await cacheNegative('namaste', 'no_sources', undefined, otherScripts)
     expect(currentRedis.set).toHaveBeenCalledWith(
-      'neg:v10:namaste',
+      'neg:v11:namaste',
       { otherScripts: [{ word: 'नमस्ते', language: 'hi' }] },
       { ex: expect.any(Number) }
     )

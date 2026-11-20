@@ -60,7 +60,7 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
     setOpen(false)
     setActive(-1)
     inputRef.current?.blur()
-    navigateToWord(trimmed, language)
+    navigateToWord(word, language)
   }
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {

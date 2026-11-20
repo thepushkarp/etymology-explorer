@@ -18,7 +18,7 @@ export function EntryChoices({
   const button = useRef<HTMLButtonElement>(null)
   const [expanded, setExpanded] = useState(false)
   const [focusWithin, setFocusWithin] = useState(false)
-  const compact = count > 3
+  const compact = count > 3 && Boolean(active)
   // Another history can arrive while someone is navigating these links. Keep
   // the same DOM nodes and never hide the link that currently has focus.
   const visible = !compact || expanded || focusWithin

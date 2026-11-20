@@ -4,11 +4,13 @@ import {
   EtymologyResult,
   LlmUsage,
   SourceReference,
+  SourceRecord,
   ResearchContext,
   LexicalHistory,
   AncestryBranch,
   ResearchEntryContext,
   LexemeRef,
+  PARTS_OF_SPEECH,
 } from './types'
 import { buildSystemPrompt, buildUserPrompt } from './prompts'
 import { buildResearchPrompt } from './research'
@@ -40,6 +42,7 @@ import {
   relatedSourceRecords,
   rootSourceRecords,
   sourceEvidenceRole,
+  sourceSpelling,
 } from './researchSources'
 
 export interface SynthesisResult {
@@ -489,8 +492,21 @@ export function isRecoverableValidationError(error: unknown): boolean {
 function attachSources(result: EtymologyResult, researchContext: ResearchContext): EtymologyResult {
   const sources: SourceReference[] = []
   const seen = new Map<string, SourceReference>()
-  const lookups = [
-    { word: researchContext.mainWord.word, records: mainSourceRecords(researchContext.mainWord) },
+  const word = researchContext.mainWord.word
+  const main = mainSourceRecords(researchContext.mainWord)
+  const scoped = researchContext.entryContexts?.filter((entry) => entry.sourceTitle)
+  const lookups: { word: string; records: SourceRecord[]; historyId?: string }[] = [
+    ...(scoped?.length
+      ? scoped.map((entry) => ({
+          word,
+          historyId: entry.id,
+          records: main.filter(
+            (record) =>
+              sourceSpelling(record, word) === entry.sourceTitle ||
+              entry.spellingVariants?.some((v) => !v.entryOnly && v.sourceUrl === record.data.url)
+          ),
+        }))
+      : [{ word, records: main }]),
     ...researchContext.rootResearch.map((root) => ({
       word: root.lexeme?.word ?? root.root,
       records: rootSourceRecords(root),
@@ -503,7 +519,7 @@ function attachSources(result: EtymologyResult, researchContext: ResearchContext
   ]
   for (const lookup of lookups) {
     const { word, records } = lookup
-    const historyId = 'historyId' in lookup ? lookup.historyId : undefined
+    const historyId = lookup.historyId
     for (const record of records) {
       if (record.provider === 'incelsWiki' && !hasIncelsUsageEvidence(record.data.text)) continue
       // A portal can host several independent dictionaries at the same URL.
@@ -971,13 +987,37 @@ function finalizeHistories(result: EtymologyResult, researchContext: ResearchCon
   for (const history of result.histories) {
     const entry = researchContext.entryContexts?.find((entry) => entry.id === history.id)
     const source = entry?.source
+    if (entry?.spellingVariants?.length) history.spellingVariants = entry.spellingVariants
+    else delete history.spellingVariants
+    if (entry?.independentDefinitions?.length) {
+      const glosses = new Set<string>()
+      for (const { heading, gloss } of entry.independentDefinitions) {
+        const pos = PARTS_OF_SPEECH.find(
+          (part) => part === (heading === 'Proper noun' ? 'noun' : heading.toLowerCase())
+        )
+        if (
+          pos &&
+          !history.partsOfSpeech?.some((p) =>
+            p.definition.toLowerCase().includes(gloss.toLowerCase())
+          )
+        )
+          (history.partsOfSpeech ??= []).push({ pos, definition: gloss })
+        if (!history.label.toLowerCase().includes(gloss.toLowerCase())) glosses.add(gloss)
+      }
+      if (glosses.size) history.label += ' · ' + [...glosses].join(' · ')
+    }
+    if (entry?.sourceTitle) history.sourceTitle = entry.sourceTitle
+    else delete history.sourceTitle
     if (entry?.transliteration) history.transliteration = entry.transliteration
     else delete history.transliteration
     const counterparts = normalizeScriptTargets(entry?.counterparts)
     if (counterparts.length) history.counterparts = counterparts
     else delete history.counterparts
     const sourceRecord = mainSourceRecords(researchContext.mainWord).find(
-      (record) => record.provider === source
+      (record) =>
+        record.provider === source &&
+        (!entry?.sourceTitle ||
+          sourceSpelling(record, researchContext.mainWord.word) === entry.sourceTitle)
     )
     const cannotEstablishAncestry =
       source === 'multilingualDictionary' ||

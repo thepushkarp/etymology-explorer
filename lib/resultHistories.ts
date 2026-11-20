@@ -22,6 +22,8 @@ export function historyEntry(result: EtymologyResult, historyId?: string): Etymo
   return {
     ...entry,
     formOf: history.formOf,
+    sourceTitle: history.sourceTitle,
+    spellingVariants: history.spellingVariants,
     sources: sourcesForHistory(result, history),
     stratum: history.stratum,
     pronunciation: history.pronunciation,
@@ -71,14 +73,17 @@ export function historyChoices(result: EtymologyResult): HistoryChoice[] {
 
 /** Direct and cross-spelling histories share the same grammatical description. */
 export function historyChoice(history: LexicalHistory, word?: string): HistoryChoice {
-  const prefix = word && word + ' ('
+  const spelling = history.sourceTitle ?? word
+  const prefix = spelling && spelling + ' ('
   const label =
     prefix && history.label.startsWith(prefix) && history.label.endsWith(')')
       ? history.label.slice(prefix.length, -1)
       : history.label
   return {
     id: history.id,
-    label: label || history.definition,
+    label: history.sourceTitle
+      ? `${history.sourceTitle} — ${label || history.definition}`
+      : label || history.definition,
     details: history.formOf
       ? `form of ${history.formOf.word}`
       : [...new Set((history.partsOfSpeech ?? []).map((part) => part.pos))].join(' · ') ||

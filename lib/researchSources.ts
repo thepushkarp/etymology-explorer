@@ -1,3 +1,4 @@
+import { canonicalizeWord } from './orthography'
 import { sourceFamily, type SourceProviderId } from './sourceProviders'
 import type {
   ResearchContext,
@@ -6,6 +7,14 @@ import type {
   SourceData,
   SourceRecord,
 } from './types'
+
+/** Only the dictionary's resolved title identifies a case-specific lexical entry. */
+export function sourceSpelling(source: SourceRecord, word: string): string {
+  const title = source.data.resolvedWord
+  return source.provider.startsWith('wiktionary') && title && canonicalizeWord(title) === word
+    ? title
+    : word
+}
 
 /** Old research recordings predate source collections and remain replayable. */
 function recordedSources(

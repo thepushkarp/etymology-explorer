@@ -285,10 +285,21 @@ async function fetchDle(word: string, signal?: AbortSignal): Promise<SpecialistS
   const url = `https://dle.rae.es/${encodeURIComponent(word)}`
   const html = await page(url, signal)
   if (!html) return []
-  const groups = all(
-    elements(html),
-    (node) => node.tag === 'article' && exact(node.attributes['data-word'] ?? '', word)
-  )
+  const groups = all(elements(html), (node) => {
+    if (node.tag !== 'article' || !node.attributes.id) return false
+    if (exact(node.attributes['data-word'] ?? '', word)) return true
+    if (!hasClass(node, 'o-main__article')) return false
+    const heading = all(
+      node,
+      (child) => child.tag === 'h1' && hasClass(child, 'c-page-header__title')
+    )[0]
+    return Boolean(
+      heading &&
+      headword(fragment(html, heading))
+        .split(',')
+        .some((form) => exact(form.trim(), word))
+    )
+  })
     .map((node) => {
       const id = node.attributes.id
       const etymology = all(node, (child) => child.attributes['data-dle-type'] === '1')

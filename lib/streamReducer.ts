@@ -69,13 +69,15 @@ export type PartialEtymology = Partial<Pick<EtymologyResult, SectionKey>>
  */
 export function toPartialResult(
   word: string,
-  sections: PartialEtymology & Pick<EtymologyEntry, 'formOf'>,
+  sections: PartialEtymology & Pick<EtymologyEntry, 'formOf' | 'sourceTitle' | 'spellingVariants'>,
   language: LanguageCode = 'en'
 ): EtymologyEntry {
   return {
     language,
     word: sections.word ?? word,
     formOf: sections.formOf,
+    sourceTitle: sections.sourceTitle,
+    spellingVariants: sections.spellingVariants,
     stratum: sections.stratum,
     pronunciation: sections.pronunciation ?? '',
     transliteration: sections.transliteration,

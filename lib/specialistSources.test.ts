@@ -261,3 +261,11 @@ test('recovered Académie HTML uses its exact article container and retains comp
   expect(record.data.text).not.toContain('Nearby words')
   expect(parseDiscoveredSpecialist('avocate', 'fr', document)).toEqual([])
 })
+
+test('DLE suggestions cannot admit a misspelled word as a lexical entry', async () => {
+  serve(
+    () =>
+      '<article><p>La palabra maarena no está en el Diccionario.</p><a href="/macarena">macareno, macarena</a></article>'
+  )
+  expect(await provider('dle').fetch('maarena')).toEqual([])
+})

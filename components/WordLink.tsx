@@ -12,6 +12,7 @@ interface WordLinkProps {
   word: string
   language?: LanguageCode
   historyId?: string
+  capitalized?: boolean
   lookup?: string
   localNavigation?: boolean
   /** Language of a custom label when it differs from the destination entry. */
@@ -32,6 +33,7 @@ export function WordLink({
   word,
   language,
   historyId,
+  capitalized,
   lookup,
   localNavigation = false,
   lang = language,
@@ -41,7 +43,7 @@ export function WordLink({
   'aria-current': ariaCurrent,
 }: WordLinkProps) {
   const [prefetch, setPrefetch] = useState(false)
-  const href = entryPagePath(word, language, { historyId, lookup })
+  const href = entryPagePath(word, language, { historyId, lookup, capitalized })
 
   return (
     <Link
