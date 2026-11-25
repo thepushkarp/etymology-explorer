@@ -8,79 +8,32 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+
 ### Added
 
-- Show dictionary-confirmed capitalization variants under one history, preserve independent meanings, and open ambiguous spellings with a choice of histories.
-
-- Explore distinct capitalized name and lowercase word histories, including the Spanish name Macarena and its separately attested adjective.
-- Read an origin summary for the selected meaning below the headword, with its sources and compact choices for words with several histories.
-- Refresh stale saved entries in the background when you search for them, keeping the saved result readable.
-- Follow dictionary-linked Japanese origins when the spelling, reading, and meaning agree, and see when sources provide no origin account.
-- Keep tracing related meanings while switching tabs and open each matching history as it becomes ready.
-
-- Consult licensed NINJAL historical dictionary transcriptions and headword records as dated Japanese context.
-- Choose a search language from a theme-matched menu with language codes, keyboard navigation, and stable spacing when switching languages.
-- Show dictionary-attested Japanese lookup destinations alongside existing results, including entries whose ancestry is unavailable.
-- Resolve verified Japanese romanizations and grammatical forms, with source-backed choices for ambiguous readings and an optional beta lookup assistant.
-- Research explicitly attested Old Japanese forms using pinned Oxford–NINJAL lexical annotations with source attribution.
-- Keep typed searches when changing language and protect Japanese input-method confirmation from accidental submission.
-- Open one Japanese entry through dictionary-confirmed spelling variants, with linked spellings and preserved misspelling labels.
-- See unreleased changes in the beta changelog, with the beta build identified in the header.
-- Preview the latest main changes at beta.etymex.com while production remains release-only.
-- Follow dictionary and Exa retrieval activity as research expands to components, variants, and ancestors, including during retraces.
-- Hear a labelled Hindi reading of Sanskrit Devanagari, with female stock voice fallback when the preferred voice is unavailable.
-- Follow attested lineage forms, source-listed spelling counterparts, and romanization links across supported languages.
-- Explore Japanese words with source-backed histories, word-origin labels, Japanese typography, and credited JMdict lexical context.
-- Explore Hindi, Urdu, and Sanskrit words in their native scripts, with source-backed transliterations, language tabs, and curated discovery words.
-- Hear Hindi and Urdu pronunciations, with right-to-left Urdu text and fonts for Devanagari and Urdu.
+- Explore Hindi, Urdu, and Sanskrit words in their native scripts, with source-backed transliterations, right-to-left Urdu text, and fonts for Devanagari and Urdu.
+- Explore Japanese words with source-backed histories, word-origin labels, Japanese typography, and credited JMdict, NINJAL, and Old Japanese sources.
+- Search Japanese in kana, kanji, or rōmaji, with verified romanizations, spelling variants, and grammatical forms opening their dictionary entries.
+- Search in Auto to find every supported language for a spelling, or pick one from the search language menu.
+- Choose between distinct histories of one spelling, including capitalized names and lowercase words such as the Spanish name Macarena and its adjective.
+- Follow attested lineage forms, spelling counterparts, and romanization links across supported languages.
+- Read an origin summary for the selected meaning below the headword, with source links for that history and its forms.
+- Search prefixes and suffixes such as pan- and -ness, and find Wiktionary headwords in autocomplete.
+- Watch dictionary and Exa retrieval activity as research expands to components, variants, and ancestors.
+- Hear Hindi and Urdu pronunciations and a labelled Hindi reading of Sanskrit.
+- Preview upcoming changes at beta.etymex.com, with unreleased entries in its changelog.
 
 ### Changed
 
-- Preserve explicit search intent across default-meaning redirects so remaining verified-link alternatives can be checked without retracing cached meanings.
-- Give Auto searches 64 source requests before additional-language allowances, within the shared 96-request ceiling.
-- Keep optional Japanese alternatives from delaying primary entry research and preserve empty reading pages with explicit recovery actions.
-- Reuse canonical saved entries in Japanese meaning groups and retain sources for displayed related words.
-- Keep model-suggested romanizations selectable without assuming uniqueness, and show retry guidance when lookup resolution is busy or unavailable.
-
-- Keep empty reading groups unavailable instead of displaying unrelated saved readings, while retaining direct-word access and return-language tabs.
-- Share language and meaning navigation rules across server, saved, and live views, with consistent grammatical labels and dictionary links.
-- Keep loaded meanings visible when an additional Japanese lookup times out, with a word-specific inline message and an explicit retry.
-- Look up Japanese senses and restricted readings locally from official JMdict XML, preserving original loanword metadata and source attribution.
-- Preserve Japanese Wiktionary numbered origins within part-of-speech and homograph sections as independent histories, and recognize explicit native-language derivation and shortening statements.
-- Preserve the longer source expression before shortening in Japanese etymologies such as sayonara, so valid compound histories can be traced.
-- Keep Etym in the accent colour, highlight the full logo on hover or keyboard focus, and use the matching EtymEx wordmark for favicons.
-- Rank Japanese lookup alternatives by source evidence without a fixed candidate-count cutoff, automatically check source-linked destinations, and display all saved matching meanings.
-- Preserve source-confirmed language tabs in both directions for Japanese entries with a single written form, including on reload and direct navigation.
-- Preserve correction suggestions and error types when streaming falls back to a JSON response, and keep Auto searches in Auto when choosing a correction.
-- Keep the search language preference independent of result tabs and spelling redirects, retaining explicit choices across navigation and reloads in the same browser tab.
-- Recognize conjugated forms listed together in dictionary tables or marked with footnotes, including native-script and rōmaji input.
-- Keep additional dictionary-listed meanings available as explicitly unchecked links when a lookup reaches its verification limit.
-
-- Retain independent word meanings when the same spelling is also a grammatical form, with verified dictionary-form destinations kept as choices.
-
-- Preserve Auto for manually started traces and keep non-Japanese written-form destinations free of unsupported lookup context.
-- Open cross-word links at the destination entry while preserving scroll for same-entry language and meaning selections.
-- Unify language and meaning navigation across saved and live results, render shared selections on reload, and retain failed-language tabs without substituting unrelated readings.
-
-- Open the first listed Japanese meaning by default when selecting its language tab, keeping alternative meanings available in the same selector.
-- Use one consistent history selector layout and stable header spacing, keeping Japanese reading groups focused when switching meanings.
-- Keep language navigation visible and group ambiguous Japanese lookups by meaning, while direct kanji searches retain their own readings and histories.
-- Preserve selected etymological histories and lookup context when sharing, reloading, or navigating Back and Forward.
-- Open verified native-script entries from the language tabs, with a spelling or meaning choice when several targets exist.
-- Keep language navigation focused on available entries without notices listing unsupported languages.
-- Select female default pronunciation voices by language, preferring language labels and verified language support before a multilingual fallback.
-- Play the selected language and IPA reading with separate audio clips for distinct pronunciations.
-- Restore completed traces when navigating Back and Forward without starting another trace.
-- Show source links for the selected etymological history and its forms.
-- Accept prefix and suffix searches such as pan- and prioritize dictionary-returned affixes in autocomplete.
-- Recover failed synthesis with a bounded corrective retry, retain failed-language tabs with targeted retry actions, and explain unavailable lineage.
-- Pronunciation playback follows language changes without stale audio resetting the selected entry.
-- Auto discovers supported languages for a spelling and traces their histories together with language tabs.
-- Saved entries remain discoverable across pipeline updates, with an explicit retrace action for older research.
-- Autocomplete includes Wiktionary headwords beyond the vocabulary list.
-
-- Italian, Spanish, French, and Portuguese entries are written in English, with usage examples in the word's own language and their English translations.
-- Italian, Spanish, French, and Portuguese are no longer marked as beta.
+- Read Italian, Spanish, French, and Portuguese entries in English, with usage examples in the word's own language and English translations; these languages are no longer in beta.
+- Switch languages and meanings with the same tabs on saved and live entries, keeping your selection when sharing, reloading, or going Back and Forward.
+- Keep tracing related meanings while switching tabs, with each matching history opening as it becomes ready.
+- Retry a failed language on its own while other languages stay available, and see why when no lineage is available.
+- See saved entries refresh in the background when you search for them, or retrace older research on demand.
+- Hear the selected language and reading, with female default voices chosen by language.
+- Keep your search language and typed search when navigating or changing language.
+- See the full EtymEx logo highlight on hover or keyboard focus, with a matching wordmark favicon.
 
 ## [0.1.0] - 2026-11-07
 
