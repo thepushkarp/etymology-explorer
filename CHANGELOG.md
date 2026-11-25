@@ -8,16 +8,16 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+
 ### Added
 
 - Show dictionary-confirmed capitalization variants under one history, preserve independent meanings, and open ambiguous spellings with a choice of histories.
-
 - Explore distinct capitalized name and lowercase word histories, including the Spanish name Macarena and its separately attested adjective.
 - Read an origin summary for the selected meaning below the headword, with its sources and compact choices for words with several histories.
 - Refresh stale saved entries in the background when you search for them, keeping the saved result readable.
 - Follow dictionary-linked Japanese origins when the spelling, reading, and meaning agree, and see when sources provide no origin account.
 - Keep tracing related meanings while switching tabs and open each matching history as it becomes ready.
-
 - Consult licensed NINJAL historical dictionary transcriptions and headword records as dated Japanese context.
 - Choose a search language from a theme-matched menu with language codes, keyboard navigation, and stable spacing when switching languages.
 - Show dictionary-attested Japanese lookup destinations alongside existing results, including entries whose ancestry is unavailable.
@@ -41,7 +41,6 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 - Keep optional Japanese alternatives from delaying primary entry research and preserve empty reading pages with explicit recovery actions.
 - Reuse canonical saved entries in Japanese meaning groups and retain sources for displayed related words.
 - Keep model-suggested romanizations selectable without assuming uniqueness, and show retry guidance when lookup resolution is busy or unavailable.
-
 - Keep empty reading groups unavailable instead of displaying unrelated saved readings, while retaining direct-word access and return-language tabs.
 - Share language and meaning navigation rules across server, saved, and live views, with consistent grammatical labels and dictionary links.
 - Keep loaded meanings visible when an additional Japanese lookup times out, with a word-specific inline message and an explicit retry.
@@ -55,13 +54,10 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 - Keep the search language preference independent of result tabs and spelling redirects, retaining explicit choices across navigation and reloads in the same browser tab.
 - Recognize conjugated forms listed together in dictionary tables or marked with footnotes, including native-script and rōmaji input.
 - Keep additional dictionary-listed meanings available as explicitly unchecked links when a lookup reaches its verification limit.
-
 - Retain independent word meanings when the same spelling is also a grammatical form, with verified dictionary-form destinations kept as choices.
-
 - Preserve Auto for manually started traces and keep non-Japanese written-form destinations free of unsupported lookup context.
 - Open cross-word links at the destination entry while preserving scroll for same-entry language and meaning selections.
 - Unify language and meaning navigation across saved and live results, render shared selections on reload, and retain failed-language tabs without substituting unrelated readings.
-
 - Open the first listed Japanese meaning by default when selecting its language tab, keeping alternative meanings available in the same selector.
 - Use one consistent history selector layout and stable header spacing, keeping Japanese reading groups focused when switching meanings.
 - Keep language navigation visible and group ambiguous Japanese lookups by meaning, while direct kanji searches retain their own readings and histories.
@@ -78,7 +74,6 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 - Auto discovers supported languages for a spelling and traces their histories together with language tabs.
 - Saved entries remain discoverable across pipeline updates, with an explicit retrace action for older research.
 - Autocomplete includes Wiktionary headwords beyond the vocabulary list.
-
 - Italian, Spanish, French, and Portuguese entries are written in English, with usage examples in the word's own language and their English translations.
 - Italian, Spanish, French, and Portuguese are no longer marked as beta.
 
