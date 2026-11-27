@@ -49,12 +49,7 @@ export function EntryNavigation({ model }: { model: EntryNavigationModel }) {
         ))}
       </nav>
       {model.choices.length > 1 && (
-        <EntryChoices
-          count={model.choices.length}
-          active={model.active?.label}
-          label={`Meanings for ${model.label}`}
-          onKeyDown={focusLink}
-        >
+        <EntryChoices label={`Meanings for ${model.label}`} onKeyDown={focusLink}>
           {model.choices.map((target) => {
             const selected = target === model.active
             return (

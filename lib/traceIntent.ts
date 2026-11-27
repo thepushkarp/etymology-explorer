@@ -47,6 +47,33 @@ export function markTraceIntent(word: string, hint?: LanguageCode): void {
   }
 }
 
+function parseIntent(raw: string, word: string): TraceIntent | null {
+  try {
+    const intent = JSON.parse(raw) as Partial<TraceIntent>
+    if (typeof intent.word !== 'string' || typeof intent.at !== 'number') return null
+    if (!isValidWord(intent.word) || !isValidWord(word)) return null
+    if (
+      canonicalizeWord(intent.word) !== canonicalizeWord(word) ||
+      Date.now() - intent.at >= INTENT_TTL_MS
+    )
+      return null
+    return intent as TraceIntent
+  } catch {
+    return null
+  }
+}
+
+export function hasTraceIntent(word: string): boolean {
+  const storage = getStorage()
+  if (!storage) return false
+  try {
+    const raw = storage.getItem(STORAGE_KEY)
+    return raw ? parseIntent(raw, word) !== null : false
+  } catch {
+    return false
+  }
+}
+
 /**
  * Check and clear the in-app navigation signal. Single-use: the flag is
  * removed on ANY word-page view (matching or not) so a stale intent can
@@ -59,17 +86,7 @@ function takeTraceIntent(word: string): TraceIntent | null {
     const raw = storage.getItem(STORAGE_KEY)
     if (!raw) return null
     storage.removeItem(STORAGE_KEY)
-
-    const intent = JSON.parse(raw) as Partial<TraceIntent>
-    if (typeof intent.word !== 'string' || typeof intent.at !== 'number') return null
-    if (!isValidWord(intent.word) || !isValidWord(word)) return null
-
-    if (
-      canonicalizeWord(intent.word) !== canonicalizeWord(word) ||
-      Date.now() - intent.at >= INTENT_TTL_MS
-    )
-      return null
-    return intent as TraceIntent
+    return parseIntent(raw, word)
   } catch {
     return null
   }

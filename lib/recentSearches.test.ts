@@ -30,21 +30,30 @@ function entry(value: EtymologyResult): WordEntry {
 }
 
 describe('recent search previews', () => {
-  test('uses the selected language and primary history, with a bounded whole-word teaser', () => {
-    const primaryLore = '*A* word with an old history. '.repeat(8)
+  test('uses the opening one-line summary from the primary history with a bounded whole-word teaser', () => {
     const italian = etymologyResult({
       language: 'it',
       word: ' CÀSA ',
       definition: 'House.',
       lore: 'Projected lore.',
     })
-    italian.histories[0].lore = primaryLore
+    italian.histories[0].lore =
+      '*Casa* — a home or house — grew out of Latin *casa*, originally a humble hut.\n\nLater paragraphs explain how it replaced Latin *domus*.'
     const preview = recentSearchPreview(entry(italian))!
     expect(preview.word).toBe('càsa')
-    expect(preview.teaser.startsWith('A word with an old history.')).toBe(true)
-    expect(preview.teaser.length).toBeLessThanOrEqual(120)
-    expect(preview.teaser.endsWith('…')).toBe(true)
+    expect(preview.teaser).toBe(
+      'Casa — a home or house — grew out of Latin casa, originally a humble hut.'
+    )
     expect(preview.language).toBe('it')
+    const longLead = etymologyResult({
+      language: 'en',
+      word: 'long',
+      definition: 'Long.',
+      lore: `${'word '.repeat(50)}end.`,
+    })
+    const truncated = recentSearchPreview(entry(longLead))!
+    expect(truncated.teaser.length).toBeLessThanOrEqual(200)
+    expect(truncated.teaser.endsWith('…')).toBe(true)
     const english = (lore: string) =>
       etymologyResult({ word: 'nice', definition: 'Pleasant.', lore })
     expect(recentSearchPreview(entry(english('  ')))?.teaser).toBe('Pleasant.')

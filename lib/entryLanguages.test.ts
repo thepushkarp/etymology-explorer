@@ -364,7 +364,7 @@ test('Macarena preserves the RAE adjective and the capitalized Spanish name thro
     'standard'
   )
   expect(historyChoices(result).map((item) => item.label)).toEqual([
-    'macarena — Meaning',
+    'Meaning',
     'Macarena — Meaning',
   ])
   expect(

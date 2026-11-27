@@ -79,10 +79,12 @@ export function historyChoice(history: LexicalHistory, word?: string): HistoryCh
     prefix && history.label.startsWith(prefix) && history.label.endsWith(')')
       ? history.label.slice(prefix.length, -1)
       : history.label
+  const distinctTitle =
+    history.sourceTitle && (!word || history.sourceTitle !== word) ? history.sourceTitle : undefined
   return {
     id: history.id,
-    label: history.sourceTitle
-      ? `${history.sourceTitle} — ${label || history.definition}`
+    label: distinctTitle
+      ? `${distinctTitle} — ${label || history.definition}`
       : label || history.definition,
     details: history.formOf
       ? `form of ${history.formOf.word}`

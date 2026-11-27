@@ -37,7 +37,7 @@ const ANCESTRY_STAGE_SCHEMA = {
     transliteration: { type: ['string', 'null'], description: 'Source-attested romanization only' },
     note: {
       type: 'string',
-      description: 'Brief meaning/context note',
+      description: 'Concise meaning gloss at this stage (2-8 words)',
     },
   },
   required: ['stage', 'form', 'transliteration', 'note'],

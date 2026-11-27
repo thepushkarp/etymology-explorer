@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { EntryNavigation } from './EntryNavigation'
 import { entryNavigation } from '@/lib/entryNavigation'
+import { etymologyResult } from '@/lib/testSupport/etymologyResult'
 import { ScriptLinks } from './ScriptLinks'
 
 test('successful, failed, and cross-script languages share ordered navigation links', () => {
@@ -33,6 +34,38 @@ test('successful, failed, and cross-script languages share ordered navigation li
 test('a single language retains the same language row', () => {
   const model = entryNavigation({ word: 'pani', language: 'hi', languages: ['hi'] })
   expect(renderToStaticMarkup(<EntryNavigation model={model} />)).toContain('Hindi</a>')
+})
+
+test('more than three meanings stay visible without a Change meaning toggle and default to the first match', () => {
+  const base = etymologyResult({ word: 'love', definition: 'Affection' })
+  const senses = [
+    ['h1', 'love', 'Affection'],
+    ['h2', 'love', 'To feel affection'],
+    ['h3', 'love', 'Zero score'],
+    ['h4', 'love', 'Praise or sell'],
+    ['h5', 'Love', 'Personification'],
+  ] as const
+  base.primaryHistoryId = 'h1'
+  base.histories = senses.map(([id, sourceTitle, label]) => ({
+    ...base.histories[0],
+    id,
+    sourceTitle,
+    label,
+  }))
+  const model = entryNavigation({
+    word: 'love',
+    language: 'en',
+    languages: ['en'],
+    histories: base.histories,
+  })
+  expect(model.historyId).toBe('h1')
+  const html = renderToStaticMarkup(<EntryNavigation model={model} />)
+  expect(html).not.toContain('Change meaning')
+  expect(html).not.toContain('hidden=""')
+  expect(html).toContain('>Affection</a>')
+  expect(html).toContain('>To feel affection</a>')
+  expect(html).toContain('>Love — Personification</a>')
+  expect(html).not.toContain('love — Affection')
 })
 
 test('dictionary links label Japanese and other languages using the same rule', () => {

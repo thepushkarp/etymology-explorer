@@ -8,6 +8,13 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ## [Unreleased]
 
+### Changed
+
+- Show all meaning tabs immediately without a Change meaning toggle and open the first matching meaning by default instead of asking you to pick one.
+- Tell clearer, forward-flowing etymology stories with a one-line summary that includes the word's meaning and doubles as the homepage Recently explored byline.
+- Display each ancestry stage's meaning directly inside its lineage block by default, keeping source quotes and links one click away.
+- Show quiet shimmers while the homepage recent list and word pages load instead of flashing fallback states.
+
 ## [0.2.0] - 2026-11-25
 
 ### Added

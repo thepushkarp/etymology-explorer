@@ -9,7 +9,7 @@ import { ExamplesList } from './etymology-card/ExamplesSection'
 import { KinSection } from './etymology-card/KinSection'
 import { ModernUsageSection } from './etymology-card/ModernUsageSection'
 import { RelatedWordsSection } from './etymology-card/RelatedWordsSection'
-import { Section, Skeleton } from './etymology-card/Section'
+import { LineageSkeleton, Section, Skeleton } from './etymology-card/Section'
 import { ScholarlyReferences, SourcesSection } from './etymology-card/SourcesSection'
 import { UsageSection } from './etymology-card/UsageSection'
 
@@ -61,7 +61,7 @@ export function EtymologyCard({
               transliteration={result.transliteration}
             />
           ) : (
-            <Skeleton widths={['w-24', 'w-40', 'w-20', 'w-48', 'w-28']} />
+            <LineageSkeleton />
           )}
         </Section>
       )}

@@ -23,11 +23,14 @@ import { SiteHeader } from '@/components/SiteHeader'
 import { TraceStatus } from '@/components/TraceStatus'
 import { useNgram } from '@/lib/hooks/useNgram'
 import { useStreamingEtymology } from '@/lib/hooks/useStreamingEtymology'
-import { consumeTraceIntent, scheduleTraceIntent } from '@/lib/traceIntent'
+import { consumeTraceIntent, hasTraceIntent, scheduleTraceIntent } from '@/lib/traceIntent'
 import { toPartialResult, type StreamState } from '@/lib/streamReducer'
 import { LANGUAGES, type LanguageCode } from '@/lib/languages'
 import type { LookupGroup, WordEntry } from '@/lib/types'
 import { spellingPronunciation } from '@/lib/scriptTargets'
+
+const NOOP_SUBSCRIBE = () => () => {}
+const NO_INTENT = () => false
 
 interface WordTraceExperienceProps {
   word: string
@@ -141,6 +144,16 @@ export function WordTraceExperience({
     !initialEntry.entries[language]
   )
   const savedFailure = Boolean(language && initialEntry?.failedLanguages?.[language])
+  const pendingIntent = useSyncExternalStore(NOOP_SUBSCRIBE, () => hasTraceIntent(word), NO_INTENT)
+  const autoStartPending =
+    progress.status === 'idle' &&
+    !restored &&
+    !openingDefault &&
+    !savedFailure &&
+    !unavailable &&
+    !navigation.unresolved &&
+    !(initialEntry && stale) &&
+    (lookupLoading || pendingIntent)
   const started = progress.status !== 'idle'
   // Start the usage-chart request alongside the trace so it is ready when the entry is.
   const ngram = useNgram(
@@ -180,8 +193,7 @@ export function WordTraceExperience({
     const streamed = toPartialResult(
       activeWord,
       liveHistory ??
-        ((navigation.chooseMeaning || navigation.grouped || selection.historyId) &&
-        !navigation.historyId
+        ((navigation.grouped || selection.historyId) && !navigation.historyId
           ? {}
           : {
               ...slice?.sections,
@@ -198,7 +210,6 @@ export function WordTraceExperience({
     ngram,
     navigation.grouped,
     navigation.historyId,
-    navigation.chooseMeaning,
     selection.historyId,
   ])
 
@@ -255,7 +266,7 @@ export function WordTraceExperience({
           <EtymologyCard
             result={partial}
             pronunciationWord={spellingPronunciation(selected, progress.identity?.spellings)}
-            pending={progress.status === 'loading'}
+            pending={progress.status === 'loading' || autoStartPending}
             navigation={tabs}
             subheader={
               <>
@@ -268,11 +279,7 @@ export function WordTraceExperience({
                     {lookupError} <button onClick={retryLookup}>Retry</button>
                   </p>
                 ) : progress.status === 'idle' ? (
-                  navigation.chooseMeaning ? (
-                    <p role="status" className="mt-4 text-sm text-muted">
-                      Choose a meaning to read its history.
-                    </p>
-                  ) : navigation.unresolved ? (
+                  autoStartPending ? null : navigation.unresolved ? (
                     <div className="mt-8">
                       <p role="status" className="font-serif italic text-muted">
                         This lookup context is not available in the saved entries.
