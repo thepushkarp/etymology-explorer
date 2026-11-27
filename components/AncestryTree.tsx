@@ -221,7 +221,7 @@ export function AncestryTree({
   definition,
   transliteration,
 }: AncestryTreeProps) {
-  const [openKey, setOpenKey] = useGraphState<string | null>(graph, 'final')
+  const [openKey, setOpenKey] = useGraphState<string | null>(graph, null)
   const [offsets, setOffsets] = useGraphState(graph, EMPTY_OFFSETS)
   const [draggingKey, setDraggingKey] = useState<string | null>(null)
   const [paths, setPaths] = useState<string[]>([])
@@ -414,20 +414,20 @@ export function AncestryTree({
           animationDelay: `${node.delay}ms`,
           translate: offset ? `${offset.x}px ${offset.y}px` : undefined,
         }}
-        className={`animate-rise relative w-full max-w-60 cursor-grab select-none border bg-paper px-2 py-2 text-center [-webkit-touch-callout:none] sm:px-4 sm:py-3 ${
+        className={`animate-rise relative w-full max-w-60 select-none border bg-paper px-2 py-2 text-center [-webkit-touch-callout:none] sm:px-4 sm:py-3 ${
           draggingKey === node.key
             ? 'z-10 cursor-grabbing'
-            : 'transition-[border-color,background-color]'
+            : 'cursor-pointer transition-[border-color,background-color]'
         } ${node.family ? `border-t-2 ${FAMILY[node.family].stripe}` : ''} ${
           isAttested(node.source) ? '' : 'border-dashed'
         } ${
           node.kind === 'final'
             ? open
               ? 'border-accent bg-wash'
-              : 'border-accent'
+              : 'border-accent hover:bg-wash/50'
             : open
               ? 'border-x-ink border-b-ink bg-wash'
-              : 'border-x-faint/70 border-b-faint/70 hover:border-x-muted hover:border-b-muted'
+              : 'border-x-faint/70 border-b-faint/70 hover:border-x-muted hover:border-b-muted hover:bg-wash/50'
         } ${node.family ? '' : node.kind === 'final' ? '' : open ? 'border-t-ink' : 'border-t-faint/70'}`}
       >
         <span className={LABEL}>{node.stage}</span>
@@ -441,6 +441,15 @@ export function AncestryTree({
         {node.transliteration && (
           <span lang="en" dir="ltr" className="mt-1 block font-serif text-sm text-muted">
             {node.transliteration}
+          </span>
+        )}
+        {node.note && (
+          <span
+            lang="en"
+            dir="ltr"
+            className="mt-1 line-clamp-3 block break-words text-xs leading-snug text-muted sm:mt-1.5 sm:text-sm"
+          >
+            {node.note}
           </span>
         )}
       </button>
@@ -528,7 +537,7 @@ export function AncestryTree({
             Reset layout
           </button>
         ) : (
-          !openNode && <span>Select a stage for details, or drag it</span>
+          !openNode && <span>Select a stage for sources, or drag it</span>
         )}
       </div>
       {openNode && <TreeDetails node={openNode} onClose={() => setOpenKey(null)} />}

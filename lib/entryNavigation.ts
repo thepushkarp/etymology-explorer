@@ -88,10 +88,8 @@ export function entryNavigation({
   let active = selection.historyId
     ? current.find((choice) => choice.historyId === selection.historyId)
     : undefined
-  const chooseMeaning = !active && matching.length > 1
-  if (!active && !chooseMeaning) {
-    if (matching.length === 1)
-      active = current.find((choice) => choice.historyId === matching[0].id)
+  if (!active) {
+    if (matching.length > 0) active = current.find((choice) => choice.historyId === matching[0].id)
     else if (!selection.historyId) active = current[0]
   }
   // A source-linked reading is not interchangeable with a word's primary history.
@@ -140,11 +138,9 @@ export function entryNavigation({
     tabs,
     choices,
     active,
-    chooseMeaning,
     historyId,
     grouped: restrictToGroup || grouped.length > 0,
-    unresolved:
-      Boolean(result && !historyId && !chooseMeaning) || Boolean(selection.lookup && !group),
+    unresolved: Boolean(result && !historyId) || Boolean(selection.lookup && !group),
     defaultTarget:
       !selection.historyId && grouped.length && !current.length ? grouped[0] : undefined,
   }

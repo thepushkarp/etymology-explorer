@@ -90,8 +90,8 @@ export function EntryHeader({
         </p>
       )}
       {(lead || result.definition || result.formOf) && (
-        <div id="entry-origin" lang="en" dir="ltr" className="mt-5 max-w-2xl">
-          <p className="font-serif text-xl leading-relaxed text-ink">
+        <div id="entry-origin" lang="en" dir="ltr" className="mt-5 max-w-prose">
+          <p className="font-serif text-lg leading-[1.75] text-ink">
             {emphasize(lead || result.definition)}
           </p>
           {!lead && result.formOf && (
@@ -106,12 +106,6 @@ export function EntryHeader({
               )
                 ? 'Some sources could not be loaded. No origin account is available for this meaning.'
                 : 'No origin account is available for this meaning.'}
-            </p>
-          )}
-          {lead && result.definition && lead !== result.definition && (
-            <p className="mt-2 text-sm text-muted">
-              <span className="font-medium">Meaning: </span>
-              <span>{emphasize(result.definition)}</span>
             </p>
           )}
           {result.sources.some((source) => source.url) && (

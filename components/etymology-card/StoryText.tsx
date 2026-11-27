@@ -74,7 +74,7 @@ export function StoryText({ text }: { text: string }) {
     .filter(Boolean)
 
   return (
-    <div className="max-w-2xl space-y-5 font-serif text-lg leading-[1.8] text-ink">
+    <div className="max-w-prose space-y-4 font-serif text-base leading-[1.85] text-ink sm:text-[1.0625rem]">
       {paragraphs.map((paragraph, index) => (
         <p key={index}>{emphasize(paragraph)}</p>
       ))}

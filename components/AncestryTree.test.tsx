@@ -123,7 +123,7 @@ describe('AncestryTree language identity', () => {
 })
 
 describe('AncestryTree nodes', () => {
-  test('expands the final definition while earlier stages stay collapsed', () => {
+  test('shows stage meanings inline inside blocks while keeping source details collapsed until selected', () => {
     const markup = renderToStaticMarkup(
       <AncestryTree
         word="window"
@@ -148,8 +148,11 @@ describe('AncestryTree nodes', () => {
     )
 
     expect(markup).toContain('aria-expanded="false"')
-    expect(markup).toContain('aria-expanded="true" aria-controls="tree-details"')
-    expect(markup).toContain('An opening in a wall to admit light or air.')
+    expect(markup).not.toContain('aria-expanded="true"')
+    expect(markup).toContain('>wind-eye</span>')
+    expect(markup).toContain('>An opening in a wall to admit light or air.</span>')
+    expect(markup).toContain('Select a stage for sources, or drag it')
+    expect(markup).not.toContain('id="tree-details"')
     expect(markup).not.toContain('from Old Norse vindauga')
     expect(markup).not.toContain('href=')
   })

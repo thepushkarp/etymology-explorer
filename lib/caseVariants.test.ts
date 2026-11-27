@@ -97,18 +97,18 @@ test('mixed spellings retain the independent choice and a capitalized search ope
   })
   expect(result.histories[0].label).toContain('An independent definition.')
   expect(result.histories[1].label).not.toContain('An independent definition.')
-  expect(entryNavigation(input)).toMatchObject({ chooseMeaning: true, historyId: undefined })
+  expect(entryNavigation(input)).toMatchObject({ historyId: result.histories[0].id })
   const href = entryPagePath('Macarena', 'en')
   expect(href).toBe('/word/en/macarena?case=initial')
   expect(
     entryNavigation({ ...input, selection: selectionFromLocation(href, 'macarena') })
-  ).toMatchObject({ chooseMeaning: false, historyId: result.histories[1].id })
+  ).toMatchObject({ historyId: result.histories[1].id })
   expect(
     entryNavigation({ ...input, selection: { historyId: result.histories[0].id } }).historyId
   ).toBe(result.histories[0].id)
 })
 
-test('an unqualified link to two noun histories opens the choices, while a matching part of speech identifies one history', () => {
+test('an unqualified link to two noun histories defaults to the first matching history, while a matching part of speech identifies one history', () => {
   const two = (second: string): Section[] => [
     ['Etymology 1', '<p>First origin.</p>'],
     ...dance,
@@ -122,8 +122,8 @@ test('an unqualified link to two noun histories opens the choices, while a match
   const input = { word: 'macarena', language: 'en' as const, histories: multiple.histories }
   for (const selection of [{}, { capitalized: true }, { historyId: previous }]) {
     expect(entryNavigation({ ...input, selection })).toMatchObject({
-      chooseMeaning: true,
-      historyId: undefined,
+      historyId: multiple.histories[0].id,
+      unresolved: false,
     })
   }
   const distinguished = research(variant, two('Verb'))

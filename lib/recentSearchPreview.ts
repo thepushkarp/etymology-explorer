@@ -1,5 +1,6 @@
 import type { WordEntry } from './types'
 import { SUPPORTED_LANGUAGE_CODES, type LanguageCode } from './languages'
+import { splitOriginStory } from './originLead'
 import { historyEntry } from './resultHistories'
 import { canonicalizeWord, isValidWord } from './validation'
 
@@ -11,15 +12,15 @@ export interface RecentSearchPreview {
 
 export const RECENT_SEARCH_POOL_SIZE = 20
 export const RECENT_SEARCH_DISPLAY_COUNT = 4
-const TEASER_LENGTH = 120
+const TEASER_LENGTH = 200
 
 export function recentSearchPreview(entry: WordEntry): RecentSearchPreview | null {
   const language = entry.languages[0]
   const result = entry.entries[language]
   if (!result || result.language !== language || !isValidWord(result.word)) return null
   const primary = historyEntry(result)
-  const lore = primary.lore.replace(/\s+/gu, ' ').trim()
-  let teaser = lore || primary.definition.trim()
+  const lead = splitOriginStory(primary.lore).lead.replace(/\s+/gu, ' ').trim()
+  let teaser = lead || primary.definition.trim()
   teaser = teaser
     .replace(/(\*\*|__|\*|_)(?=\S)([^*_]*?\S)\1(?![\p{L}\p{N}])/gu, '$2')
     .replace(/\s+/gu, ' ')

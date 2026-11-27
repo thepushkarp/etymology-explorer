@@ -33,7 +33,8 @@ const globalRef = globalThis as { window?: unknown }
 const originalWindow = globalRef.window
 globalRef.window = { sessionStorage }
 
-const { consumeTraceIntent, markTraceIntent, scheduleTraceIntent } = await import('./traceIntent')
+const { consumeTraceIntent, hasTraceIntent, markTraceIntent, scheduleTraceIntent } =
+  await import('./traceIntent')
 
 afterAll(() => {
   if (originalWindow === undefined) {
@@ -145,6 +146,15 @@ describe('scheduled auto-trace lifecycle', () => {
     await nextTask()
     expect(starts).toBe(0)
     expect(consumeTraceIntent('pomme de terre')).toBe(true)
+  })
+
+  test('hasTraceIntent checks a matching fresh intent without consuming it', () => {
+    expect(hasTraceIntent('nice')).toBe(false)
+    markTraceIntent('Nice', 'en')
+    expect(hasTraceIntent('nice')).toBe(true)
+    expect(hasTraceIntent('other')).toBe(false)
+    expect(consumeTraceIntent('nice')).toBe(true)
+    expect(hasTraceIntent('nice')).toBe(false)
   })
 
   test('direct phrase loads remain idle after deferred setup', async () => {
