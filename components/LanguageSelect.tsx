@@ -166,7 +166,7 @@ export function LanguageSelect({
               aria-label={option.label}
               aria-selected={selected === index}
               onPointerDown={(event) => event.preventDefault()}
-              onPointerMove={() => setActive(index)}
+              onPointerEnter={() => setActive(index)}
               onClick={() => choose(index)}
               className={`flex min-h-11 cursor-pointer items-center justify-between gap-4 px-4 ${active === index ? 'bg-wash' : ''} ${selected === index ? 'text-accent' : 'text-ink'}`}
             >

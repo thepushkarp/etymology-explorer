@@ -215,12 +215,19 @@ function extractJsonObjectChunk(text: string): string | null {
 }
 
 function parseGeneratedJson(text: string): EtymologyResult {
-  const candidates: string[] = []
   const trimmed = text.trim()
   if (trimmed.length > 0) {
-    candidates.push(trimmed)
+    try {
+      const raw = JSON.parse(trimmed)
+      if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+        return raw as EtymologyResult
+      }
+    } catch {
+      // Fall through to markdown-fenced and balanced-object extraction.
+    }
   }
 
+  const candidates: string[] = []
   const fencedMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)
   if (fencedMatch?.[1]) {
     candidates.push(fencedMatch[1].trim())
@@ -851,16 +858,20 @@ function validateHistoryGraph(history: LexicalHistory, context: ResearchContext)
   const foreignLinks = (context.parsedChains ?? [])
     .filter((chain) => chain.historyId && chain.historyId !== history.id)
     .flatMap((chain) => chain.links)
+  const canonicalIdentityTexts = identityTexts.map(canonicalizeWord)
+  const scopedFormSet = new Set(scopedLinks.map((link) => canonicalizeWord(link.form)))
+  const foreignFormSet = new Set(foreignLinks.map((link) => canonicalizeWord(link.form)))
   const forms = [
     ...graph.branches.flatMap((branch) => branch.stages.map((stage) => stage.form)),
     ...(graph.postMerge ?? []).map((stage) => stage.form),
     ...(graph.mergePoint ? [graph.mergePoint.form] : []),
   ]
   for (const form of forms) {
+    const canonicalForm = canonicalizeWord(form)
     if (
-      foreignLinks.some((link) => sameSpelling(link.form, form)) &&
-      !scopedLinks.some((link) => sameSpelling(link.form, form)) &&
-      !identityTexts.some((text) => canonicalizeWord(text).includes(canonicalizeWord(form)))
+      foreignFormSet.has(canonicalForm) &&
+      !scopedFormSet.has(canonicalForm) &&
+      !canonicalIdentityTexts.some((text) => text.includes(canonicalForm))
     ) {
       throw new Error('Schema validation failed: ancestry stage belongs to another history')
     }

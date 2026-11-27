@@ -144,7 +144,11 @@ export function WordTraceExperience({
     !initialEntry.entries[language]
   )
   const savedFailure = Boolean(language && initialEntry?.failedLanguages?.[language])
-  const pendingIntent = useSyncExternalStore(NOOP_SUBSCRIBE, () => hasTraceIntent(word), NO_INTENT)
+  const pendingIntent = useSyncExternalStore(
+    NOOP_SUBSCRIBE,
+    () => (progress.status === 'idle' ? hasTraceIntent(word) : false),
+    NO_INTENT
+  )
   const autoStartPending =
     progress.status === 'idle' &&
     !restored &&

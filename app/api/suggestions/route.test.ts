@@ -21,7 +21,8 @@ describe('/api/suggestions', () => {
       data: { suggestions: [{ word: '津波', distance: 0 }] },
     })
     expect(requests.map((url) => url.hostname)).toEqual(['en.wiktionary.org'])
-    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('cache-control')).toContain('s-maxage=3600')
+    expect(response.headers.get('x-suggestions-complete')).toBe('1')
   })
 
   test('provider outage results cannot be cached by browsers or CDNs', async () => {

@@ -82,10 +82,15 @@ function elements(html: string): Element {
 }
 
 function all(root: Element, predicate: (node: Element) => boolean): Element[] {
-  return root.children.flatMap((node) => [
-    ...(predicate(node) ? [node] : []),
-    ...all(node, predicate),
-  ])
+  const matches: Element[] = []
+  const visit = (parent: Element) => {
+    for (const node of parent.children) {
+      if (predicate(node)) matches.push(node)
+      if (node.children.length) visit(node)
+    }
+  }
+  visit(root)
+  return matches
 }
 
 function hasClass(node: Element, name: string): boolean {
@@ -449,8 +454,8 @@ async function fetchMichaelis(
   const url = `${origin}/moderno-portugues/busca/portugues-brasileiro/${encodeURIComponent(word)}/`
   const html = await page(url, signal)
   if (!html) return []
-  function extract(html: string, url: string): WiktionaryEntryGroup[] {
-    const root = elements(html)
+  function extract(html: string, url: string, parsedRoot?: Element): WiktionaryEntryGroup[] {
+    const root = parsedRoot ?? elements(html)
     const node = all(
       root,
       (node) => node.tag === 'div' && hasClass(node, 'verbete') && hasClass(node, 'bs-component')
@@ -463,9 +468,9 @@ async function fetchMichaelis(
     const etymology = /ETIMOLOGIA\s*([\s\S]*)/i.exec(text)?.[1] ?? ''
     return [group(id, word, text, etymology, url)]
   }
-  const groups = extract(html, url)
-  if (!groups.length) return []
   const root = elements(html)
+  const groups = extract(html, url, root)
+  if (!groups.length) return []
   const linksContainer = all(root, (node) => node.attributes.id === 'lista_verbetes_links')[0]
   const links = linksContainer
     ? all(linksContainer, (node) => node.tag === 'a')

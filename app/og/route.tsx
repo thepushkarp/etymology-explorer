@@ -218,7 +218,19 @@ function WordCard({
 }
 
 export async function GET(request: Request) {
-  const [regularFont, italicFont] = await loadBrandFonts()
+  const url = new URL(request.url)
+  const rawWord = url.searchParams.get('word')
+  const languageHint = url.searchParams.get('language')
+  const language = languageHint ? (parseLanguageCode(languageHint) ?? undefined) : undefined
+  const word = rawWord ? canonicalizeWord(rawWord) : ''
+  const isNonLatinWord =
+    Boolean(word && isValidWord(word)) &&
+    /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u.test(word)
+
+  const [[regularFont, italicFont], cached] = await Promise.all([
+    loadBrandFonts(),
+    isNonLatinWord ? getCachedEntry(word) : Promise.resolve(null),
+  ])
 
   const fonts = [
     {
@@ -235,16 +247,10 @@ export async function GET(request: Request) {
     },
   ]
 
-  const rawWord = new URL(request.url).searchParams.get('word')
-  const languageHint = new URL(request.url).searchParams.get('language')
-  const language = languageHint ? (parseLanguageCode(languageHint) ?? undefined) : undefined
-  const word = rawWord ? canonicalizeWord(rawWord) : ''
-
   if (word && isValidWord(word)) {
     // Satori cannot shape Indic or Arabic. Resolve only durable cached text;
     // generating a social preview must never initiate etymology research.
-    if (/[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u.test(word)) {
-      const cached = await getCachedEntry(word)
+    if (isNonLatinWord) {
       const selected = language ?? cached?.entry.languages[0]
       const result = selected ? cached?.entry.entries[selected] : undefined
       const languageName = selected
@@ -258,16 +264,28 @@ export async function GET(request: Request) {
         !/[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u.test(romanization)
           ? romanization
           : null
+      const cacheControl = headline
+        ? 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000'
+        : 'public, max-age=60, s-maxage=300, stale-while-revalidate=3600'
       return new ImageResponse(
         <WordCard word={headline ?? languageName} subtitle={headline ? languageName : undefined} />,
-        { ...IMAGE_OPTIONS, fonts }
+        { ...IMAGE_OPTIONS, fonts, headers: { 'Cache-Control': cacheControl } }
       )
     }
     return new ImageResponse(<WordCard word={word} language={language} />, {
       ...IMAGE_OPTIONS,
       fonts,
+      headers: {
+        'Cache-Control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000',
+      },
     })
   }
 
-  return new ImageResponse(<BrandCard />, { ...IMAGE_OPTIONS, fonts })
+  return new ImageResponse(<BrandCard />, {
+    ...IMAGE_OPTIONS,
+    fonts,
+    headers: {
+      'Cache-Control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000',
+    },
+  })
 }

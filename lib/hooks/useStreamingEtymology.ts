@@ -3,9 +3,11 @@
 import {
   createContext,
   createElement,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useReducer,
   useRef,
   type ReactNode,
@@ -219,7 +221,17 @@ function useTraceTransport() {
             const streamEvent: StreamEvent = JSON.parse(event.data)
             if (streamEvent.type === 'entry_identity') resolvedLanguage = streamEvent.language
 
-            dispatch({ type: 'stream_event', event: streamEvent })
+            if (
+              streamEvent.type === 'source_started' ||
+              streamEvent.type === 'source_complete' ||
+              streamEvent.type === 'source_failed' ||
+              streamEvent.type === 'source_outcome' ||
+              streamEvent.type === 'singleflight_wait'
+            ) {
+              startTransition(() => dispatch({ type: 'stream_event', event: streamEvent }))
+            } else {
+              dispatch({ type: 'stream_event', event: streamEvent })
+            }
 
             if (streamEvent.type === 'result' || streamEvent.type === 'error') {
               completedRequestRef.current = requestId
@@ -241,11 +253,14 @@ function useTraceTransport() {
     [fallbackFetch]
   )
 
-  return {
-    progress,
-    search,
-    cancel,
-  }
+  return useMemo(
+    () => ({
+      progress,
+      search,
+      cancel,
+    }),
+    [progress, search, cancel]
+  )
 }
 
 const Transport = createContext<ReturnType<typeof useTraceTransport> | null>(null)

@@ -18,6 +18,15 @@ function useElapsed(running: boolean): number {
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`
 
+function ElapsedTimer({ running }: { running: boolean }) {
+  const elapsed = useElapsed(running)
+  return (
+    <span aria-hidden="true" className="not-italic tabular-nums text-faint">
+      {seconds(elapsed)}
+    </span>
+  )
+}
+
 export function TraceStatus({
   progress,
   language,
@@ -26,12 +35,12 @@ export function TraceStatus({
   language: LanguageCode
 }) {
   const slice = progress.byLanguage[language]
+  const sliceKeys = new Set(slice?.sources.map((item) => item.key))
   const sources = [
-    ...progress.sources.filter((source) => !slice?.sources.some((item) => item.key === source.key)),
+    ...progress.sources.filter((source) => !sliceKeys.has(source.key)),
     ...(slice?.sources ?? []),
   ]
   const resolving = progress.languages.length === 0
-  const elapsed = useElapsed(progress.status === 'loading')
   const message =
     slice?.error ??
     (resolving
@@ -45,10 +54,7 @@ export function TraceStatus({
   return (
     <div className="mt-8 text-sm">
       <p className="font-serif italic text-muted" role="status">
-        {message}{' '}
-        <span aria-hidden="true" className="not-italic tabular-nums text-faint">
-          {seconds(elapsed)}
-        </span>
+        {message} <ElapsedTimer running={progress.status === 'loading'} />
       </p>
       <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
         {sources.map((source) => (

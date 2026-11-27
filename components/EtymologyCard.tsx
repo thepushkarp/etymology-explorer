@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { memo, type ReactNode } from 'react'
 import type { EtymologyEntry } from '@/lib/types'
 import { splitOriginStory } from '@/lib/originLead'
 import { StoryText } from '@/components/etymology-card/StoryText'
@@ -24,7 +24,7 @@ interface EtymologyCardProps {
   pronunciationWord?: string
 }
 
-export function EtymologyCard({
+export const EtymologyCard = memo(function EtymologyCard({
   result,
   pending = false,
   usageUnavailable = false,
@@ -110,4 +110,4 @@ export function EtymologyCard({
       {!pending && <ScholarlyReferences language={result.language} />}
     </article>
   )
-}
+})

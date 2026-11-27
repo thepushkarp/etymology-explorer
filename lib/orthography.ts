@@ -31,3 +31,9 @@ export function sameSpelling(left: string, right: string): boolean {
 
 /** Historical notation is broader than the public search syntax. */
 export const HISTORICAL_FORM = String.raw`\*?[-‐‑]?\p{L}\p{M}*(?:[\p{L}\p{M}\p{N}'’ʼʹʺ‐‑-]|(?<=\p{L}\p{M}*)[\u200C\u200D](?=\p{L}))*`
+
+export const MAX_WORD_LENGTH = 120
+
+// Marks must follow letters; punctuation separates nonempty letter groups.
+export const WORD_PATTERN =
+  /^(?:\p{L}\p{M}*)(?:[\u200C\u200D]?\p{L}\p{M}*)*(?:[ '’ʼ‐‑・-](?:\p{L}\p{M}*)(?:[\u200C\u200D]?\p{L}\p{M}*)*)*$/u

@@ -21,6 +21,7 @@ export function getRedis(): Redis | null {
   client = new Redis({
     url: process.env.KV_REST_API_URL,
     token: process.env.KV_REST_API_TOKEN,
+    enableAutoPipelining: true,
   })
   return client
 }

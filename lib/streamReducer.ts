@@ -161,8 +161,28 @@ function upsertSource(
       values.find((item) => item.status === 'pending') ??
       values.find((item) => item.status === 'complete') ??
       activity
+    if (
+      existing &&
+      previous &&
+      previous.status === activity.status &&
+      previous.timing === activity.timing &&
+      previous.reason === activity.reason &&
+      existing.status === summary.status &&
+      existing.timing === summary.timing &&
+      existing.reason === summary.reason
+    ) {
+      return sources
+    }
     updated = { ...updated, ...summary, activities }
   } else {
+    if (
+      existing &&
+      (patch.status === undefined || existing.status === patch.status) &&
+      (patch.timing === undefined || existing.timing === patch.timing) &&
+      (patch.reason === undefined || existing.reason === patch.reason)
+    ) {
+      return sources
+    }
     updated = { ...updated, ...patch }
   }
   return existing

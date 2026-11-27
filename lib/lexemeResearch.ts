@@ -585,7 +585,7 @@ export function createLexemeResearchSession(options: {
     }
   }
 
-  async function discover(result: LexemeLookupResult) {
+  async function discover(result: LexemeLookupResult, skipCacheRead = false) {
     if (hasEtymologicalText(result.sources)) return
     const heading = lexicalLanguageName(result.lexeme.language)
     const language = languageFromName(result.lexeme.language)
@@ -595,11 +595,13 @@ export function createLexemeResearchSession(options: {
         ? HISTORICAL_DOMAINS[heading]
         : []
     if (!domains.length) return
-    const cached = await getCachedSourceBundle('discovery', result.lexeme.word, heading)
-    if (cached) {
-      addRecords(result, cached)
-      reportPublishers(result.lexeme, cached)
-      return
+    if (!skipCacheRead) {
+      const cached = await getCachedSourceBundle('discovery', result.lexeme.word, heading)
+      if (cached) {
+        addRecords(result, cached)
+        reportPublishers(result.lexeme, cached)
+        return
+      }
     }
     const response = await retrieveWithExa([result.lexeme], (onDispatch) =>
       exa.search(
@@ -783,8 +785,32 @@ export function createLexemeResearchSession(options: {
       )
       await core
       await recover(fresh.map((entry) => entry.result))
+      // Pre-check cached discovery bundles concurrently, then run uncached Exa searches in deterministic queue order.
+      const pendingDiscover = fresh.filter((entry) => !hasEtymologicalText(entry.result.sources))
+      const precheckedMisses = new Set<string>()
+      if (pendingDiscover.length > 1) {
+        const cachedDiscovery = await Promise.all(
+          pendingDiscover.map(async (entry) => {
+            const heading = lexicalLanguageName(entry.result.lexeme.language)
+            const cached = await getCachedSourceBundle(
+              'discovery',
+              entry.result.lexeme.word,
+              heading
+            )
+            return { entry, cached }
+          })
+        )
+        for (const { entry, cached } of cachedDiscovery) {
+          if (cached) {
+            addRecords(entry.result, cached)
+            reportPublishers(entry.result.lexeme, cached)
+          } else {
+            precheckedMisses.add(entry.key)
+          }
+        }
+      }
       // A deterministic queue gives the query, then earlier ancestor lexemes, first access to discovery.
-      for (const entry of fresh) await discover(entry.result)
+      for (const entry of fresh) await discover(entry.result, precheckedMisses.has(entry.key))
       for (const entry of fresh) {
         signal?.throwIfAborted()
         entry.result.incomplete =

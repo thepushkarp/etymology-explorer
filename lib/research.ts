@@ -538,16 +538,17 @@ export async function expandLexemes(
   const history = context.entryContexts?.length === 1 ? context.entryContexts[0] : undefined
   if (language === 'ja') {
     const references = (context.entryContexts ?? []).filter((entry) => entry.definitionReference)
-    const words = [...new Set(references.map((entry) => entry.definitionReference!.word))].slice(
-      0,
-      CONFIG.maxRootsToExplore
-    )
-    for (const target of words) {
-      if (target === word) continue
-      const result = await session.lookup(
-        { word: target, language },
-        { progressLanguage: language, skipOptionalSources: true }
-      )
+    const words = [...new Set(references.map((entry) => entry.definitionReference!.word))]
+      .filter((target) => target !== word)
+      .slice(0, CONFIG.maxRootsToExplore)
+    const refResults = words.length
+      ? await session.lookupMany(
+          words.map((target) => ({ word: target, language })),
+          { progressLanguage: language, skipOptionalSources: true }
+        )
+      : []
+    for (const result of refResults) {
+      const target = result.lexeme.word
       recordLookup(context, result)
       const source = result.sources.find(
         (s) => s.provider === 'wiktionaryEnglish' && s.data.resolvedWord === target
@@ -1145,12 +1146,18 @@ export async function conductAgenticResearch(
       .slice(0, CONFIG.maxRootsToExplore)
     const extraRoots = await session.lookupMany(
       rootsToFetch.map((root) => ({ word: root, language })),
-      { progressLanguage: language }
+      { progressLanguage: language, skipOptionalSources: true }
+    )
+    const entryCpuRoots = new Map(
+      (context.entryContexts ?? []).map((entry) => [
+        entry.id,
+        new Set(extractRootsCpu(normalizedWord, entry.text, null, [])),
+      ])
     )
     for (const result of extraRoots) {
       recordLookup(context, result)
       const owners = (context.entryContexts ?? []).filter((entry) =>
-        extractRootsCpu(normalizedWord, entry.text, null, []).includes(result.lexeme.word)
+        entryCpuRoots.get(entry.id)?.has(result.lexeme.word)
       )
       const bindings = owners.length ? owners : [undefined]
       for (const owner of bindings)

@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { SearchBox } from '@/components/SearchBox'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { WordLink } from '@/components/WordLink'
+import { entryPagePath } from '@/lib/entrySelection'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
 import { useSearchLanguage } from '@/lib/hooks/useSearchLanguage'
 import {
@@ -14,6 +16,19 @@ import {
   type RecentSearchPreview,
 } from '@/lib/recentSearchPreview'
 import { LANGUAGES, SUPPORTED_LANGUAGE_CODES, type LanguageCode } from '@/lib/languages'
+
+const RECENT_CACHE_TTL_MS = 60_000
+const recentSearchCache = new Map<string, { data: RecentSearchPreview[]; expiresAt: number }>()
+
+function getCachedRecentSearches(key: string): RecentSearchPreview[] | null {
+  const cached = recentSearchCache.get(key)
+  if (!cached) return null
+  if (Date.now() > cached.expiresAt) {
+    recentSearchCache.delete(key)
+    return null
+  }
+  return cached.data
+}
 
 const CURATED_WORDS: Record<LanguageCode, Array<{ word: string; teaser: string }>> = {
   en: [
@@ -84,8 +99,28 @@ export function Landing() {
     : SUPPORTED_LANGUAGE_CODES.map((code) => ({ ...CURATED_WORDS[code][0], language: code }))
   const words = landingSearchPreviews(recentWords, curated)
 
+  const handleLanguageChange = (next?: LanguageCode) => {
+    setLanguage(next)
+    const nextKey = next ?? 'auto'
+    const cached = getCachedRecentSearches(nextKey)
+    if (cached !== null) {
+      setRecent(cached)
+      setLoadedKey(nextKey)
+    }
+  }
+
   useEffect(() => {
     const controller = new AbortController()
+    const cached = getCachedRecentSearches(requestKey)
+    if (cached !== null) {
+      void Promise.resolve(cached).then((data) => {
+        if (!controller.signal.aborted) {
+          setRecent(data)
+          setLoadedKey(requestKey)
+        }
+      })
+      return () => controller.abort()
+    }
     async function loadRecentSearches() {
       try {
         const query = language ? `?language=${language}` : ''
@@ -97,7 +132,12 @@ export function Landing() {
         const payload = await response.json()
         if (!payload.success) throw new Error('Recent searches unavailable')
         if (!controller.signal.aborted) {
-          setRecent(parseRecentSearchPreviews(payload.data))
+          const parsed = parseRecentSearchPreviews(payload.data)
+          recentSearchCache.set(requestKey, {
+            data: parsed,
+            expiresAt: Date.now() + RECENT_CACHE_TTL_MS,
+          })
+          setRecent(parsed)
         }
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -127,7 +167,7 @@ export function Landing() {
         <div className="animate-rise relative z-20 mt-12 [animation-delay:80ms]">
           <SearchBox language={language} size="large" autoFocus />
           <div className="mt-2 flex flex-wrap items-center gap-x-6">
-            <LanguageSelect value={language} onChange={setLanguage} />
+            <LanguageSelect value={language} onChange={handleLanguageChange} />
             <p className="flex min-h-11 items-center gap-1.5 text-sm leading-5 text-muted">
               <span>Or</span>
               <RandomWordButton language={language} />
@@ -199,9 +239,21 @@ export function Landing() {
   )
 }
 
-const DIE_FACES: Array<{ transform: string; pips: Array<[number, number]> }> = [
+// Standard Western six-sided die: opposite faces sum to 7 (1↔6, 2↔5, 3↔4)
+// and 1 → 2 → 3 runs counterclockwise around their shared corner.
+// Hovering tilts the cube to reveal 1 (top), 2 (front), and 3 (right).
+export const DIE_FACES: Array<{ transform: string; pips: Array<[number, number]> }> = [
   {
+    // Front: 2 (opposite Back: 5)
     transform: 'translateZ(8px)',
+    pips: [
+      [0, 0],
+      [2, 2],
+    ],
+  },
+  {
+    // Back: 5 (opposite Front: 2)
+    transform: 'rotateY(180deg) translateZ(8px)',
     pips: [
       [0, 0],
       [0, 2],
@@ -210,8 +262,8 @@ const DIE_FACES: Array<{ transform: string; pips: Array<[number, number]> }> = [
       [2, 2],
     ],
   },
-  { transform: 'rotateY(180deg) translateZ(8px)', pips: [[1, 1]] },
   {
+    // Right: 3 (opposite Left: 4)
     transform: 'rotateY(90deg) translateZ(8px)',
     pips: [
       [0, 0],
@@ -220,6 +272,7 @@ const DIE_FACES: Array<{ transform: string; pips: Array<[number, number]> }> = [
     ],
   },
   {
+    // Left: 4 (opposite Right: 3)
     transform: 'rotateY(-90deg) translateZ(8px)',
     pips: [
       [0, 0],
@@ -229,13 +282,12 @@ const DIE_FACES: Array<{ transform: string; pips: Array<[number, number]> }> = [
     ],
   },
   {
+    // Top: 1 (opposite Bottom: 6)
     transform: 'rotateX(90deg) translateZ(8px)',
-    pips: [
-      [0, 0],
-      [2, 2],
-    ],
+    pips: [[1, 1]],
   },
   {
+    // Bottom: 6 (opposite Top: 1)
     transform: 'rotateX(-90deg) translateZ(8px)',
     pips: [
       [0, 0],
@@ -275,18 +327,57 @@ function Dice3D() {
   )
 }
 
+const RANDOM_WARM_TTL_MS = 30_000
+
 function RandomWordButton({ language }: { language?: LanguageCode }) {
+  const router = useRouter()
   const navigateToWord = useWordNavigation()
   const [loading, setLoading] = useState(false)
+  const prefetchedRef = useRef<{
+    language?: LanguageCode
+    expiresAt: number
+    promise: Promise<string | null>
+  } | null>(null)
+
+  const fetchCandidate = (targetLanguage?: LanguageCode): Promise<string | null> => {
+    const query = targetLanguage ? `?language=${targetLanguage}` : ''
+    return fetch(`/api/random-word${query}`, { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((payload) => (payload.success && payload.data?.word ? String(payload.data.word) : null))
+      .catch(() => null)
+  }
+
+  const warm = () => {
+    if (loading) return
+    const existing = prefetchedRef.current
+    if (existing && existing.language === language && existing.expiresAt > Date.now()) return
+    const entry = {
+      language,
+      expiresAt: Date.now() + RANDOM_WARM_TTL_MS,
+      promise: fetchCandidate(language).then((word) => {
+        if (word) {
+          router.prefetch(entryPagePath(word, language))
+        } else if (prefetchedRef.current === entry) {
+          prefetchedRef.current = null
+        }
+        return word
+      }),
+    }
+    prefetchedRef.current = entry
+  }
 
   const pick = async () => {
     if (loading) return
     setLoading(true)
     try {
-      const query = language ? `?language=${language}` : ''
-      const response = await fetch(`/api/random-word${query}`, { cache: 'no-store' })
-      const payload = await response.json()
-      if (payload.success && payload.data?.word) navigateToWord(payload.data.word, language)
+      const existing = prefetchedRef.current
+      const warmed =
+        existing && existing.language === language && existing.expiresAt > Date.now()
+          ? existing.promise
+          : null
+      prefetchedRef.current = null
+      const word = (warmed ? await warmed : null) ?? (await fetchCandidate(language))
+      if (word) navigateToWord(word, language)
     } catch {
       // Offline or rate limited: the button simply does nothing.
     } finally {
@@ -298,6 +389,8 @@ function RandomWordButton({ language }: { language?: LanguageCode }) {
     <button
       type="button"
       onClick={pick}
+      onMouseEnter={warm}
+      onFocus={warm}
       disabled={loading}
       className="group inline-flex cursor-pointer items-center gap-1.5 leading-5 disabled:cursor-wait disabled:opacity-60"
     >

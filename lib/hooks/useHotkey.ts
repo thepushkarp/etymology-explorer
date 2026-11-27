@@ -10,13 +10,14 @@ function isTyping(target: EventTarget | null): boolean {
 }
 
 /** Run `handler` when `key` is pressed outside a text field, without modifiers. */
-export function useHotkey(key: string, handler: () => void) {
+export function useHotkey(key: string, handler: () => void, enabled = true) {
   const handlerRef = useRef(handler)
   useEffect(() => {
     handlerRef.current = handler
-  })
+  }, [handler])
 
   useEffect(() => {
+    if (!enabled) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== key || event.metaKey || event.ctrlKey || event.altKey) return
       if (isTyping(event.target)) return
@@ -25,5 +26,5 @@ export function useHotkey(key: string, handler: () => void) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [key])
+  }, [key, enabled])
 }

@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       return new NextResponse(buffer, {
         headers: {
           'Content-Type': 'audio/mpeg',
-          'Cache-Control': 'public, max-age=31536000',
+          'Cache-Control': 'public, max-age=31536000, immutable',
           'X-Cache': 'HIT',
         },
       })
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
       return new NextResponse(buffer, {
         headers: {
           'Content-Type': 'audio/mpeg',
-          'Cache-Control': 'public, max-age=31536000',
+          'Cache-Control': 'public, max-age=31536000, immutable',
           'X-Cache': 'HIT',
         },
       })
@@ -134,13 +134,13 @@ export async function GET(request: NextRequest) {
     return new NextResponse(Buffer.from(audioBuffer), {
       headers: {
         'Content-Type': 'audio/mpeg',
-        'Cache-Control': 'public, max-age=31536000',
+        'Cache-Control': 'public, max-age=31536000, immutable',
         'X-Cache': 'MISS',
       },
     })
   } catch (error) {
     console.error('[Pronunciation] Generation failed:', safeError(error))
-    await incrLanguageCounter(language, 'pronunciation_failure')
+    after(() => incrLanguageCounter(language, 'pronunciation_failure'))
 
     if (error instanceof ElevenLabsApiError) {
       return NextResponse.json(
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
     )
   } finally {
     if (lockToken && !cleanupScheduled) {
-      await releaseLock(lockKey, lockToken)
+      after(() => releaseLock(lockKey, lockToken))
     }
   }
 }

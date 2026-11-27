@@ -72,6 +72,19 @@ const command = ([name, ...args]) => {
         value === undefined ? null : typeof value === 'string' ? value : JSON.stringify(value),
     }
   }
+  if (name === 'mget') {
+    stats.get++
+    return {
+      result: args.map((key) => {
+        const value = records.get(key)
+        return value === undefined
+          ? null
+          : typeof value === 'string'
+            ? value
+            : JSON.stringify(value)
+      }),
+    }
+  }
   if (name === 'scan') {
     stats.scan++
     const matchIndex = args.findIndex((arg) => String(arg).toLowerCase() === 'match')

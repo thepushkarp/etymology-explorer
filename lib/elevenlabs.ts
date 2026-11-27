@@ -64,7 +64,27 @@ export function isElevenLabsConfigured(): boolean {
   return Boolean(process.env.ELEVENLABS_API_KEY)
 }
 
-async function stockVoices(language: string): Promise<string[]> {
+const VOICE_CATALOG_TTL_MS = 60 * 60 * 1000
+type ValidatedCatalog = z.infer<typeof StockVoiceCatalog>
+let voiceCatalogCache: {
+  apiKey: string
+  fetchFn: typeof fetch
+  expiresAt: number
+  promise: Promise<ValidatedCatalog>
+} | null = null
+
+function fetchVoiceCatalog(apiKey: string, bypassCache = false): Promise<ValidatedCatalog> {
+  const now = Date.now()
+  if (
+    !bypassCache &&
+    voiceCatalogCache &&
+    voiceCatalogCache.apiKey === apiKey &&
+    voiceCatalogCache.fetchFn === globalThis.fetch &&
+    voiceCatalogCache.expiresAt > now
+  ) {
+    return voiceCatalogCache.promise
+  }
+
   const query = new URLSearchParams({
     voice_type: 'default',
     gender: 'female',
@@ -73,14 +93,29 @@ async function stockVoices(language: string): Promise<string[]> {
     sort_direction: 'asc',
     include_total_count: 'false',
   })
-  const response = await fetchWithTimeout(
-    `${ELEVENLABS_ORIGIN}/v2/voices?${query}`,
-    { headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY! } },
-    CONFIG.timeouts.source
-  )
-  if (!response.ok) throw await readElevenLabsError(response)
-  const catalog = StockVoiceCatalog.parse(await response.json())
-  if (catalog.has_more) throw new Error('ElevenLabs stock voice catalog exceeds 100 voices')
+  const fetchFn = globalThis.fetch
+  const promise = (async () => {
+    const response = await fetchWithTimeout(
+      `${ELEVENLABS_ORIGIN}/v2/voices?${query}`,
+      { headers: { 'xi-api-key': apiKey } },
+      CONFIG.timeouts.source
+    )
+    if (!response.ok) throw await readElevenLabsError(response)
+    const catalog = StockVoiceCatalog.parse(await response.json())
+    if (catalog.has_more) throw new Error('ElevenLabs stock voice catalog exceeds 100 voices')
+    return catalog
+  })()
+
+  const entry = { apiKey, fetchFn, expiresAt: now + VOICE_CATALOG_TTL_MS, promise }
+  voiceCatalogCache = entry
+  promise.catch(() => {
+    if (voiceCatalogCache === entry) voiceCatalogCache = null
+  })
+  return promise
+}
+
+async function stockVoices(language: string, bypassCache = false): Promise<string[]> {
+  const catalog = await fetchVoiceCatalog(process.env.ELEVENLABS_API_KEY!, bypassCache)
   const rank = (voice: (typeof catalog.voices)[number]) =>
     voice.labels?.language === language
       ? 2
@@ -150,6 +185,9 @@ export async function generatePronunciation(
       !VOICE_UNAVAILABLE[error.code ?? '']?.includes(error.status)
     )
       throw error
+    // Invalidate the cached catalog so subsequent requests discover updated defaults
+    // while keeping this retry single-flight without an extra catalog round-trip.
+    voiceCatalogCache = null
     return generate(fallback)
   }
 }

@@ -9,6 +9,7 @@ import './globals.css'
 const libreBaskerville = localFont({
   variable: '--font-libre-baskerville',
   display: 'swap',
+  adjustFontFallback: 'Times New Roman',
   src: [
     { path: '../public/fonts/LibreBaskerville-Regular.woff2', weight: '400', style: 'normal' },
     { path: '../public/fonts/LibreBaskerville-Italic.woff2', weight: '400', style: 'italic' },

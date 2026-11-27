@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { AncestryGraph, AncestryStage, ScriptTarget } from '@/lib/types'
 import { LANGUAGES, languageFromName, type LanguageCode } from '@/lib/languages'
 import { sourceLabel } from '@/lib/sourceLabels'
@@ -193,7 +193,52 @@ function buildTree(
   }
   tail.slice(1).forEach((node, i) => edges.push([tail[i].key, node.key]))
 
-  return { split, columns, tail, edges }
+  const nodes = [...columns.flat(), ...tail]
+  const families = [...new Set(nodes.map((node) => node.family).filter(Boolean))] as Family[]
+  const hasUnattested = nodes.some((node) => !isAttested(node.source))
+  const edgesByNode = new Map<string, number[]>()
+  edges.forEach(([from, to], index) => {
+    const fromList = edgesByNode.get(from) ?? []
+    fromList.push(index)
+    edgesByNode.set(from, fromList)
+    const toList = edgesByNode.get(to) ?? []
+    toList.push(index)
+    edgesByNode.set(to, toList)
+  })
+
+  return { split, columns, tail, edges, nodes, families, hasUnattested, edgesByNode }
+}
+
+interface NodeBox {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+function edgePath(a: NodeBox, b: NodeBox): string {
+  const x1 = Math.round(a.left + a.width / 2)
+  const y1 = Math.round(a.top + a.height)
+  const x2 = Math.round(b.left + b.width / 2)
+  const y2 = Math.round(b.top)
+  const bend = Math.max(Math.abs(y2 - y1) / 2, 16)
+  return `M${x1},${y1} C${x1},${y1 + bend} ${x2},${y2 - bend} ${x2},${y2}`
+}
+
+/** Measure untranslated layout coordinates relative to canvas (unaffected by CSS transforms). */
+function measureBaseBox(element: HTMLElement, canvas: HTMLElement): NodeBox | null {
+  let left = 0
+  let top = 0
+  let current: HTMLElement | null = element
+  while (current && current !== canvas) {
+    left += current.offsetLeft
+    top += current.offsetTop
+    current = current.offsetParent as HTMLElement | null
+  }
+  if (current === canvas) {
+    return { left, top, width: element.offsetWidth, height: element.offsetHeight }
+  }
+  return null
 }
 
 /** State that resets whenever the graph changes (new word, new homograph history). */
@@ -214,7 +259,7 @@ function useGraphState<T>(graph: AncestryGraph, initial: T) {
   return [value, set] as const
 }
 
-export function AncestryTree({
+export const AncestryTree = memo(function AncestryTree({
   graph,
   word,
   language = 'en',
@@ -227,6 +272,9 @@ export function AncestryTree({
   const [paths, setPaths] = useState<string[]>([])
   const canvasRef = useRef<HTMLDivElement>(null)
   const nodeEls = useRef(new Map<string, HTMLElement>())
+  const pathEls = useRef<Array<SVGPathElement | null>>([])
+  const baseBoxes = useRef(new Map<string, NodeBox>())
+  const offsetsRef = useRef(offsets)
   const drag = useRef<{
     key: string
     pointerId: number
@@ -235,46 +283,107 @@ export function AncestryTree({
     base: Offset
     min: Offset
     max: Offset
+    next?: Offset
+    raf?: number
     active: boolean
     moved: boolean
     timer?: ReturnType<typeof setTimeout>
   } | null>(null)
   const suppressClick = useRef(false)
+  const suppressClickTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  const { split, columns, tail, edges } = useMemo(
+  const { split, columns, tail, edges, nodes, families, hasUnattested, edgesByNode } = useMemo(
     () => buildTree(graph, word, language, definition, transliteration),
     [graph, word, language, definition, transliteration]
   )
-  const nodes = [...columns.flat(), ...tail]
+
+  const registerNode = useCallback((element: HTMLButtonElement | null) => {
+    if (!element) return
+    const key = element.dataset.nodeKey
+    if (!key) return
+    nodeEls.current.set(key, element)
+    return () => {
+      if (nodeEls.current.get(key) === element) nodeEls.current.delete(key)
+    }
+  }, [])
+
+  const boxFor = useCallback(
+    (key: string, currentOffsets: Record<string, Offset>): NodeBox | undefined => {
+      const base = baseBoxes.current.get(key)
+      if (!base) return undefined
+      const offset = currentOffsets[key]
+      return offset
+        ? {
+            left: base.left + offset.x,
+            top: base.top + offset.y,
+            width: base.width,
+            height: base.height,
+          }
+        : base
+    },
+    []
+  )
+
   // Edges are measured from the rendered nodes, so they follow drags, wrapping, and resizes.
   const measure = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const c = canvas.getBoundingClientRect()
-    const bounds = new Map(
-      [...nodeEls.current].map(([key, element]) => [key, element.getBoundingClientRect()])
-    )
+    const nextBoxes = new Map<string, NodeBox>()
+    let canvasRect: DOMRect | null = null
+    for (const [key, element] of nodeEls.current) {
+      const box = measureBaseBox(element, canvas)
+      if (box) {
+        nextBoxes.set(key, box)
+      } else {
+        canvasRect ??= canvas.getBoundingClientRect()
+        const rect = element.getBoundingClientRect()
+        const offset = offsetsRef.current[key]
+        nextBoxes.set(key, {
+          left: rect.left - canvasRect.left - (offset?.x ?? 0),
+          top: rect.top - canvasRect.top - (offset?.y ?? 0),
+          width: rect.width,
+          height: rect.height,
+        })
+      }
+    }
+    baseBoxes.current = nextBoxes
+    const activeDrag = drag.current
+    const currentOffsets =
+      activeDrag?.next !== undefined
+        ? { ...offsetsRef.current, [activeDrag.key]: activeDrag.next }
+        : offsetsRef.current
     const next = edges.map(([from, to]) => {
-      const a = bounds.get(from)
-      const b = bounds.get(to)
-      if (!a || !b) return ''
-      const x1 = Math.round(a.left + a.width / 2 - c.left)
-      const y1 = Math.round(a.bottom - c.top)
-      const x2 = Math.round(b.left + b.width / 2 - c.left)
-      const y2 = Math.round(b.top - c.top)
-      const bend = Math.max(Math.abs(y2 - y1) / 2, 16)
-      return `M${x1},${y1} C${x1},${y1 + bend} ${x2},${y2 - bend} ${x2},${y2}`
+      const a = boxFor(from, currentOffsets)
+      const b = boxFor(to, currentOffsets)
+      return a && b ? edgePath(a, b) : ''
     })
     setPaths((previous) => (previous.join() === next.join() ? previous : next))
-  }, [edges])
+  }, [edges, boxFor])
   const measureRef = useRef(measure)
 
   // Updating SVG paths does not change node geometry. Measure synchronously
-  // only for graph/layout changes or a drag, rather than for the path update itself.
+  // only for graph/layout changes or committed offset updates.
   useLayoutEffect(() => {
+    offsetsRef.current = offsets
     measureRef.current = measure
     measure()
   }, [measure, offsets])
+
+  // Keep live drag translate applied after the single render when draggingKey toggles on.
+  useLayoutEffect(() => {
+    const current = drag.current
+    if (!current?.next) return
+    const element = nodeEls.current.get(current.key)
+    if (element) element.style.translate = `${current.next.x}px ${current.next.y}px`
+  }, [draggingKey])
+
+  useEffect(() => {
+    return () => {
+      if (drag.current?.timer) clearTimeout(drag.current.timer)
+      if (drag.current?.raf) cancelAnimationFrame(drag.current.raf)
+      if (suppressClickTimer.current) clearTimeout(suppressClickTimer.current)
+    }
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -316,13 +425,60 @@ export function AncestryTree({
     return () => canvas.removeEventListener('touchmove', onTouchMove)
   }, [draggingKey])
 
+  const applyLiveDragFrame = useCallback(
+    (key: string, nextOffset: Offset) => {
+      const element = nodeEls.current.get(key)
+      if (element) element.style.translate = `${nextOffset.x}px ${nextOffset.y}px`
+      const affected = edgesByNode.get(key)
+      if (!affected?.length) return
+      const currentOffsets = offsetsRef.current
+      for (const edgeIndex of affected) {
+        const pathEl = pathEls.current[edgeIndex]
+        if (!pathEl) continue
+        const [from, to] = edges[edgeIndex]
+        const fromBase = baseBoxes.current.get(from)
+        const toBase = baseBoxes.current.get(to)
+        if (!fromBase || !toBase) continue
+        const fromOff = from === key ? nextOffset : currentOffsets[from]
+        const toOff = to === key ? nextOffset : currentOffsets[to]
+        const a = fromOff
+          ? {
+              left: fromBase.left + fromOff.x,
+              top: fromBase.top + fromOff.y,
+              width: fromBase.width,
+              height: fromBase.height,
+            }
+          : fromBase
+        const b = toOff
+          ? {
+              left: toBase.left + toOff.x,
+              top: toBase.top + toOff.y,
+              width: toBase.width,
+              height: toBase.height,
+            }
+          : toBase
+        pathEl.setAttribute('d', edgePath(a, b))
+      }
+    },
+    [edges, edgesByNode]
+  )
+
   const endDrag = () => {
     const current = drag.current
     if (!current) return
     clearTimeout(current.timer)
+    if (current.raf) cancelAnimationFrame(current.raf)
     if (current.moved) {
       suppressClick.current = true
-      setTimeout(() => (suppressClick.current = false), 0)
+      clearTimeout(suppressClickTimer.current)
+      suppressClickTimer.current = setTimeout(() => {
+        suppressClick.current = false
+      }, 0)
+      if (current.next) {
+        const committed = current.next
+        applyLiveDragFrame(current.key, committed)
+        setOffsets((previous) => ({ ...previous, [current.key]: committed }))
+      }
     }
     drag.current = null
     setDraggingKey(null)
@@ -330,6 +486,7 @@ export function AncestryTree({
 
   const onPointerDown = (key: string) => (event: React.PointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0 || !canvasRef.current) return
+    if (baseBoxes.current.size === 0) measureRef.current()
     const c = canvasRef.current.getBoundingClientRect()
     const r = event.currentTarget.getBoundingClientRect()
     const base = offsets[key] ?? { x: 0, y: 0 }
@@ -374,13 +531,17 @@ export function AncestryTree({
     }
     current.moved = true
     const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
-    setOffsets((previous) => ({
-      ...previous,
-      [current.key]: {
-        x: current.base.x + clamp(dx, current.min.x, current.max.x),
-        y: current.base.y + clamp(dy, current.min.y, current.max.y),
-      },
-    }))
+    current.next = {
+      x: current.base.x + clamp(dx, current.min.x, current.max.x),
+      y: current.base.y + clamp(dy, current.min.y, current.max.y),
+    }
+    if (!current.raf) {
+      current.raf = requestAnimationFrame(() => {
+        if (!drag.current?.next) return
+        drag.current.raf = undefined
+        applyLiveDragFrame(drag.current.key, drag.current.next)
+      })
+    }
   }
 
   const onClick = (key: string) => {
@@ -396,12 +557,10 @@ export function AncestryTree({
     return (
       <button
         key={node.key}
-        ref={(element) => {
-          if (element) nodeEls.current.set(node.key, element)
-          else nodeEls.current.delete(node.key)
-        }}
+        ref={registerNode}
         type="button"
         data-tree-node
+        data-node-key={node.key}
         onClick={() => onClick(node.key)}
         onPointerDown={onPointerDown(node.key)}
         onPointerMove={onPointerMove}
@@ -456,9 +615,7 @@ export function AncestryTree({
     )
   }
 
-  const openNode = nodes.find((node) => node.key === openKey)
-  const families = [...new Set(nodes.map((node) => node.family).filter(Boolean))] as Family[]
-  const hasUnattested = nodes.some((node) => !isAttested(node.source))
+  const openNode = openKey ? nodes.find((node) => node.key === openKey) : undefined
   const moved = Object.keys(offsets).length > 0
   const gap = 'gap-5 sm:gap-7'
 
@@ -478,13 +635,25 @@ export function AncestryTree({
         </p>
       ))}
 
-      <div ref={canvasRef} className="relative" onAnimationEnd={() => measureRef.current()}>
+      <div ref={canvasRef} className="relative">
         <svg
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 h-full w-full overflow-visible text-faint"
           fill="none"
         >
-          {paths.map((d, index) => d && <path key={index} d={d} stroke="currentColor" />)}
+          {paths.map(
+            (d, index) =>
+              d && (
+                <path
+                  key={index}
+                  ref={(element) => {
+                    pathEls.current[index] = element
+                  }}
+                  d={d}
+                  stroke="currentColor"
+                />
+              )
+          )}
         </svg>
 
         {split ? (
@@ -543,7 +712,7 @@ export function AncestryTree({
       {openNode && <TreeDetails node={openNode} onClose={() => setOpenKey(null)} />}
     </div>
   )
-}
+})
 
 function TreeDetails({ node, onClose }: { node: TreeNode; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)

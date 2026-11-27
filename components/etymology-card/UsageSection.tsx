@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { NgramResult } from '@/lib/types'
 import { Section } from './Section'
 
@@ -20,32 +20,50 @@ export function formatFrequency(count: number): string {
 
 function UsageChart({ ngram }: { ngram: NgramResult }) {
   const [hover, setHover] = useState<number | null>(null)
+  const boundsRef = useRef<DOMRect | null>(null)
   const { data } = ngram
 
-  const points = useMemo(() => {
-    const max = Math.max(...data.map((point) => point.count)) || 1
-    return data.map((point, index) => ({
-      x: PAD + (index / Math.max(data.length - 1, 1)) * (WIDTH - PAD * 2),
-      y: PAD + (1 - point.count / max) * (HEIGHT - PAD * 2),
+  const { points, peak, line } = useMemo(() => {
+    let max = 0
+    let best = 0
+    for (let index = 0; index < data.length; index++) {
+      if (data[index].count > max) {
+        max = data[index].count
+        best = index
+      }
+    }
+    const scale = max || 1
+    const denom = Math.max(data.length - 1, 1)
+    const computed = data.map((point, index) => ({
+      x: PAD + (index / denom) * (WIDTH - PAD * 2),
+      y: PAD + (1 - point.count / scale) * (HEIGHT - PAD * 2),
     }))
+    const path = `M${computed.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join('L')}`
+    return { points: computed, peak: best, line: path }
   }, [data])
 
-  const peak = data.reduce(
-    (best, point, index) => (point.count > data[best].count ? index : best),
-    0
-  )
   const shown = hover ?? peak
-  const line = `M${points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join('L')}`
+
+  const onPointerEnter = (event: React.PointerEvent<SVGSVGElement>) => {
+    boundsRef.current = event.currentTarget.getBoundingClientRect()
+  }
 
   const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
-    const bounds = event.currentTarget.getBoundingClientRect()
+    const bounds = boundsRef.current ?? event.currentTarget.getBoundingClientRect()
+    boundsRef.current = bounds
     const ratio = (event.clientX - bounds.left) / bounds.width
-    setHover(Math.min(data.length - 1, Math.max(0, Math.round(ratio * (data.length - 1)))))
+    const next = Math.min(data.length - 1, Math.max(0, Math.round(ratio * (data.length - 1))))
+    setHover((current) => (current === next ? current : next))
+  }
+
+  const onPointerLeave = () => {
+    boundsRef.current = null
+    setHover(null)
   }
 
   return (
     <figure>
-      <figcaption className="mb-3 text-sm text-muted" aria-live="polite">
+      <figcaption className="mb-3 text-sm text-muted">
         <span className="font-serif text-ink">{data[shown].year}</span>
         {hover === null ? ' — peak usage, ' : ' — '}
         {formatFrequency(data[shown].count)}
@@ -56,8 +74,9 @@ function UsageChart({ ngram }: { ngram: NgramResult }) {
         className="h-28 w-full touch-none overflow-visible text-ink"
         role="img"
         aria-label={`Usage of ${ngram.word} in books, ${data[0].year}–${data[data.length - 1].year}`}
+        onPointerEnter={onPointerEnter}
         onPointerMove={onPointerMove}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={onPointerLeave}
       >
         <line x1={0} x2={WIDTH} y1={HEIGHT} y2={HEIGHT} stroke="var(--rule)" />
         <path

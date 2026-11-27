@@ -2,12 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import type { ApiResponse, NgramResult } from '@/lib/types'
-import type { LanguageCode } from '@/lib/languages'
+import { LANGUAGES, type LanguageCode } from '@/lib/languages'
 
 export type NgramState =
   | { status: 'idle' | 'loading' }
   | { status: 'ready'; data: NgramResult }
   | { status: 'unavailable' }
+
+const IDLE: NgramState = { status: 'idle' }
+const LOADING: NgramState = { status: 'loading' }
+const UNAVAILABLE: NgramState = { status: 'unavailable' }
+const MAX_CACHED_REQUESTS = 100
 
 // One request per word per page session, shared by every consumer: the live
 // trace starts it early and the finished entry reuses the same promise.
@@ -16,7 +21,11 @@ const requests = new Map<string, Promise<NgramState>>()
 function loadNgram(word: string, language: LanguageCode): Promise<NgramState> {
   const key = `${language}:${word}`
   const existing = requests.get(key)
-  if (existing) return existing
+  if (existing) {
+    requests.delete(key)
+    requests.set(key, existing)
+    return existing
+  }
 
   const request = fetch(`/api/ngram?word=${encodeURIComponent(word)}&language=${language}`)
     .then(async (response): Promise<NgramState> => {
@@ -28,26 +37,31 @@ function loadNgram(word: string, language: LanguageCode): Promise<NgramState> {
       const payload = (await response.json()) as ApiResponse<NgramResult>
       return response.ok && payload.success && payload.data
         ? { status: 'ready', data: payload.data }
-        : { status: 'unavailable' }
+        : UNAVAILABLE
     })
     .catch((): NgramState => {
       requests.delete(key) // network failure: allow a later retry
-      return { status: 'unavailable' }
+      return UNAVAILABLE
     })
+  if (requests.size >= MAX_CACHED_REQUESTS) {
+    const oldest = requests.keys().next().value
+    if (oldest !== undefined) requests.delete(oldest)
+  }
   requests.set(key, request)
   return request
 }
 
 /** Google Books usage data for a word; pass null to skip fetching. */
 export function useNgram(word: string | null, language: LanguageCode = 'en'): NgramState {
-  const key = word ? `${language}:${word}` : null
+  const hasCorpus = Boolean(LANGUAGES[language].ngramCorpus)
+  const key = word && hasCorpus ? `${language}:${word}` : null
   const [state, setState] = useState<{ key: string | null; value: NgramState }>({
     key: null,
-    value: { status: 'idle' },
+    value: IDLE,
   })
 
   useEffect(() => {
-    if (!word) return
+    if (!word || !hasCorpus) return
     let active = true
     loadNgram(word, language).then((value) => {
       if (active) setState({ key: `${language}:${word}`, value })
@@ -55,8 +69,9 @@ export function useNgram(word: string | null, language: LanguageCode = 'en'): Ng
     return () => {
       active = false
     }
-  }, [word, language])
+  }, [word, language, hasCorpus])
 
-  if (!key) return { status: 'idle' }
-  return state.key === key ? state.value : { status: 'loading' }
+  if (!word) return IDLE
+  if (!hasCorpus) return UNAVAILABLE
+  return state.key === key ? state.value : LOADING
 }

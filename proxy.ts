@@ -97,7 +97,12 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  if (pathname.startsWith('/api/') && CONFIG.features.rateLimitEnabled) {
+  if (
+    pathname.startsWith('/api/') &&
+    pathname !== '/api/health' &&
+    pathname !== '/api/changelog' &&
+    CONFIG.features.rateLimitEnabled
+  ) {
     const ip = getClientIp(request)
     const active = limitersFor(pathname)
       .map(getLimiter)

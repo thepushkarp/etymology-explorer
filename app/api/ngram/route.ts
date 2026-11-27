@@ -38,7 +38,12 @@ export async function GET(request: NextRequest) {
         success: false,
         error: `Usage history is not available for ${LANGUAGES[language].englishName}.`,
       },
-      { status: 404 }
+      {
+        status: 404,
+        headers: {
+          'Cache-Control': 'public, max-age=86400, s-maxage=604800',
+        },
+      }
     )
   }
 

@@ -20,7 +20,11 @@ export async function GET(request: NextRequest) {
   }
   return NextResponse.json(
     { success: true, data: await getRecentSearches(undefined, language) },
-    { headers }
+    {
+      headers: {
+        'Cache-Control': 'public, max-age=0, s-maxage=15, stale-while-revalidate=60',
+      },
+    }
   )
 }
 

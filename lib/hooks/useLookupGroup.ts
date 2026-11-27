@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import type { LookupGroup, WordEntry } from '../types'
 import { lookupGroupForWord, lookupGroupSeed } from '../lookupGroups'
 import { fetchLookupGroup } from '../traceLookupAlternatives'
@@ -26,9 +26,8 @@ export function useLookupGroup({
   )
   const active = lookupSession.matches(word, key) ? snapshot : undefined
   const [cached, setCached] = useState<{ key: string; group?: LookupGroup; error?: string }>()
-  const eligible = Boolean(
-    lookup || entry?.otherScripts?.length || (entry && lookupGroupSeed(entry))
-  )
+  const hasSeed = useMemo(() => Boolean(entry && lookupGroupSeed(entry)), [entry])
+  const eligible = Boolean(lookup || entry?.otherScripts?.length || hasSeed)
   const attached = Boolean(active)
   useEffect(() => {
     if (!eligible || !activity || attached) return
@@ -50,18 +49,18 @@ export function useLookupGroup({
     )
     return () => run.abort()
   }, [key, eligible, activity, entry, initial, attached])
+  const rawGroup = active?.group ?? (cached?.key === key ? cached.group : undefined) ?? initial
+  const group = useMemo(() => lookupGroupForWord(word, rawGroup), [word, rawGroup])
+  const retry = useCallback(() => {
+    const source = active?.entry ?? entry
+    if (source) lookupSession.start(active?.key ?? key, source, active?.group ?? initial, true)
+  }, [active, entry, key, initial])
   return {
-    group: lookupGroupForWord(
-      word,
-      active?.group ?? (cached?.key === key ? cached.group : undefined) ?? initial
-    ),
+    group,
     preview: active?.preview,
     loading: active?.loading,
     status: active?.status,
     error: active?.error ?? (cached?.key === key ? cached.error : undefined),
-    retry: () => {
-      const source = active?.entry ?? entry
-      if (source) lookupSession.start(active?.key ?? key, source, active?.group ?? initial, true)
-    },
+    retry,
   }
 }

@@ -34,17 +34,20 @@ function isSuggestionList(value: unknown): value is WordSuggestion[] {
 }
 
 /** Broader spelling searches produce choices only; they never supply lexical evidence. */
-export async function getWordSuggestions(
+export async function getWordSuggestionsWithMeta(
   query: string,
   language?: LanguageCode,
   alternativesOnly = false,
   signal?: AbortSignal,
-  client: SuggestionCacheRedis | null = getRedis()
-): Promise<WordSuggestion[]> {
+  client: SuggestionCacheRedis | null = getRedis(),
+  options?: { deferCacheWrite?: (write: () => Promise<void>) => void }
+): Promise<{ suggestions: WordSuggestion[]; complete: boolean }> {
   const normalized = canonicalizeWord(query)
   signal?.throwIfAborted()
-  if (normalized.length < MIN_QUERY_LENGTH || !isValidWord(normalized)) return []
-  if (language === 'en' && alternativesOnly) return getSuggestions(normalized)
+  if (normalized.length < MIN_QUERY_LENGTH || !isValidWord(normalized))
+    return { suggestions: [], complete: true }
+  if (language === 'en' && alternativesOnly)
+    return { suggestions: getSuggestions(normalized), complete: true }
 
   // Alternative spelling searches and prefix autocomplete have different rankings.
   // Only autocomplete uses the prefix cache so neither mode can overwrite the other.
@@ -53,7 +56,7 @@ export async function getWordSuggestions(
     try {
       const cached = await client.get(cacheKey)
       signal?.throwIfAborted()
-      if (isSuggestionList(cached)) return cached
+      if (isSuggestionList(cached)) return { suggestions: cached, complete: true }
     } catch (error) {
       if (signal?.aborted) throw error
       console.error('Suggestion cache read failed:', safeError(error))
@@ -137,13 +140,35 @@ export async function getWordSuggestions(
     .slice(0, alternativesOnly ? 3 : SUGGESTION_LIMIT)
 
   signal?.throwIfAborted()
+  const complete = results.every((result) => result !== null)
   // A partial or failed lookup must not hide a recovered provider for a full day.
-  if (client && !alternativesOnly && results.every((result) => result !== null)) {
-    try {
-      await client.set(cacheKey, suggestions, { ex: CACHE_TTL })
-    } catch (error) {
-      console.error('Suggestion cache write failed:', safeError(error))
+  if (client && !alternativesOnly && complete) {
+    const persist = async () => {
+      try {
+        await client.set(cacheKey, suggestions, { ex: CACHE_TTL })
+      } catch (error) {
+        console.error('Suggestion cache write failed:', safeError(error))
+      }
     }
+    if (options?.deferCacheWrite) options.deferCacheWrite(persist)
+    else await persist()
   }
+  return { suggestions, complete }
+}
+
+export async function getWordSuggestions(
+  query: string,
+  language?: LanguageCode,
+  alternativesOnly = false,
+  signal?: AbortSignal,
+  client: SuggestionCacheRedis | null = getRedis()
+): Promise<WordSuggestion[]> {
+  const { suggestions } = await getWordSuggestionsWithMeta(
+    query,
+    language,
+    alternativesOnly,
+    signal,
+    client
+  )
   return suggestions
 }

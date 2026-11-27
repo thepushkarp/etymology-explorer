@@ -100,18 +100,25 @@ export function EntryView({
       ? preview.histories
       : undefined
   const selectedPreview = histories?.find((h) => h.id === selection.historyId)
-  const navigation = entryNavigation({
-    word: displayed.word,
-    language: selected,
-    entry: displayed,
-    group,
-    selection,
-    otherScripts: displayed.otherScripts,
-    histories: histories ?? result?.histories,
-  })
+  const navigation = useMemo(
+    () =>
+      entryNavigation({
+        word: displayed.word,
+        language: selected,
+        entry: displayed,
+        group,
+        selection,
+        otherScripts: displayed.otherScripts,
+        histories: histories ?? result?.histories,
+      }),
+    [displayed, selected, group, selection, histories, result?.histories]
+  )
   const { historyId } = navigation
   const failure = selected ? displayed.failedLanguages?.[selected] : undefined
-  const spellings = displayed.spellings?.filter((spelling) => spelling.language === selected) ?? []
+  const spellings = useMemo(
+    () => displayed.spellings?.filter((spelling) => spelling.language === selected) ?? [],
+    [displayed.spellings, selected]
+  )
 
   const recovering = progress.status === 'loading' && retryLanguage === selected
   const background = backgroundWord === displayed.word && progress.status === 'loading'

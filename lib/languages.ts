@@ -270,29 +270,41 @@ const SCRIPTS: readonly ScriptId[] = [
   'Katakana',
 ]
 
+const LETTER_PATTERN = /\p{L}/u
+const SCRIPT_EXTENSION_PATTERNS: Record<ScriptId, RegExp> = {
+  Latin: /\p{Script_Extensions=Latin}/u,
+  Devanagari: /\p{Script_Extensions=Devanagari}/u,
+  Arabic: /\p{Script_Extensions=Arabic}/u,
+  Han: /\p{Script_Extensions=Han}/u,
+  Hiragana: /\p{Script_Extensions=Hiragana}/u,
+  Katakana: /\p{Script_Extensions=Katakana}/u,
+}
+const ANY_SUPPORTED_SCRIPT =
+  /[\p{Script_Extensions=Latin}\p{Script_Extensions=Devanagari}\p{Script_Extensions=Arabic}\p{Script_Extensions=Han}\p{Script_Extensions=Hiragana}\p{Script_Extensions=Katakana}]/u
+const LANGUAGES_BY_PRIORITY = Object.values(LANGUAGES).sort((a, b) => a.priority - b.priority)
+
 /** Ignore punctuation and marks, but retain unsupported letters so mixed input cannot match. */
 export function detectScripts(word: string): ScriptId[] {
-  const letters = [...word].filter((letter) => /\p{L}/u.test(letter)).join('')
-  return SCRIPTS.filter((script) =>
-    new RegExp(`\\p{Script_Extensions=${script}}`, 'u').test(letters)
-  )
+  let letters = ''
+  for (const ch of word) {
+    if (LETTER_PATTERN.test(ch)) letters += ch
+  }
+  if (!letters) return []
+  return SCRIPTS.filter((script) => SCRIPT_EXTENSION_PATTERNS[script].test(letters))
 }
 
 export function candidateLanguages(word: string): LanguageCode[] {
-  const letters = [...word].filter((letter) => /\p{L}/u.test(letter))
-  if (
-    !letters.length ||
-    letters.some(
-      (letter) =>
-        !SCRIPTS.some((script) => new RegExp(`\\p{Script_Extensions=${script}}`, 'u').test(letter))
-    )
-  )
-    return []
-  const scripts = detectScripts(word)
-  return Object.values(LANGUAGES)
-    .filter((language) => scripts.every((script) => language.scripts.includes(script)))
-    .sort((a, b) => a.priority - b.priority)
-    .map((language) => language.code)
+  let letters = ''
+  for (const ch of word) {
+    if (!LETTER_PATTERN.test(ch)) continue
+    if (!ANY_SUPPORTED_SCRIPT.test(ch)) return []
+    letters += ch
+  }
+  if (!letters) return []
+  const scripts = SCRIPTS.filter((script) => SCRIPT_EXTENSION_PATTERNS[script].test(letters))
+  return LANGUAGES_BY_PRIORITY.filter((language) =>
+    scripts.every((script) => language.scripts.includes(script))
+  ).map((language) => language.code)
 }
 
 export function languageFromName(name: string): LanguageCode | undefined {

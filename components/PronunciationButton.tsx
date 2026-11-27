@@ -26,9 +26,13 @@ export function PronunciationButton({
     speechCode && speechCode !== language
       ? `${LANGUAGES[speechCode].englishName} reading`
       : 'pronunciation'
-  useHotkey('p', () => {
-    if (supported && hotkey) void play()
-  })
+  useHotkey(
+    'p',
+    () => {
+      void play()
+    },
+    supported && hotkey
+  )
   if (!supported) return null
 
   return (

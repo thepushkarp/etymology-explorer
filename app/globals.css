@@ -67,7 +67,7 @@
     var(--font-noto-nastaliq-urdu), Georgia, serif;
   --font-sans:
     var(--font-alegreya-sans), var(--font-noto-serif-devanagari), var(--font-noto-nastaliq-urdu),
-    Georgia, serif;
+    system-ui, sans-serif;
 }
 
 html {
@@ -81,7 +81,6 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
 }
 
 /* Nastaliq's descending forms need space even in compact headings and tree nodes.
@@ -175,10 +174,10 @@ input[type='search']:focus-visible {
 
 @keyframes shimmer {
   0% {
-    background-position: 200% 0;
+    transform: translateX(-100%);
   }
   100% {
-    background-position: -200% 0;
+    transform: translateX(100%);
   }
 }
 
@@ -187,9 +186,19 @@ input[type='search']:focus-visible {
 }
 
 @utility shimmer {
-  background: linear-gradient(90deg, var(--wash) 25%, var(--rule) 50%, var(--wash) 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.6s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+  background: var(--wash);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, var(--rule) 50%, transparent 100%);
+    transform: translateX(-100%);
+    animation: shimmer 1.6s ease-in-out infinite;
+    will-change: transform;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -202,7 +211,7 @@ input[type='search']:focus-visible {
     scroll-behavior: auto !important;
   }
 
-  .shimmer {
-    background: var(--wash);
+  .shimmer::after {
+    display: none;
   }
 }

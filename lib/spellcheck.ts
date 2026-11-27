@@ -6,34 +6,32 @@ import greWordsData from '@/data/gre-words.json'
 const greWords: string[] = greWordsData.words
 
 /**
- * Calculate Levenshtein distance between two strings
+ * Calculate Levenshtein distance between two strings (O(min(m, n)) space).
  */
 export function levenshteinDistance(a: string, b: string): number {
-  const matrix: number[][] = []
+  if (a === b) return 0
+  if (a.length === 0) return b.length
+  if (b.length === 0) return a.length
+  const shorter = a.length <= b.length ? a : b
+  const longer = a.length <= b.length ? b : a
+  const prev = new Int32Array(shorter.length + 1)
+  const curr = new Int32Array(shorter.length + 1)
+  for (let j = 0; j <= shorter.length; j++) prev[j] = j
 
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i]
-  }
-
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0][j] = j
-  }
-
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1]
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1, // insertion
-          matrix[i - 1][j] + 1 // deletion
-        )
-      }
+  for (let i = 1; i <= longer.length; i++) {
+    curr[0] = i
+    const li = longer.charCodeAt(i - 1)
+    for (let j = 1; j <= shorter.length; j++) {
+      const cost = li === shorter.charCodeAt(j - 1) ? 0 : 1
+      const del = prev[j] + 1
+      const ins = curr[j - 1] + 1
+      const sub = prev[j - 1] + cost
+      curr[j] = del < ins ? (del < sub ? del : sub) : ins < sub ? ins : sub
     }
+    prev.set(curr)
   }
 
-  return matrix[b.length][a.length]
+  return prev[shorter.length]
 }
 
 /**
@@ -49,17 +47,16 @@ export function getSuggestions(
   maxDistance: number = 3
 ): WordSuggestion[] {
   const normalizedInput = canonicalizeWord(input)
-
-  const suggestions: WordSuggestion[] = greWords
-    .map((word) => ({
-      word,
-      distance: levenshteinDistance(normalizedInput, word),
-    }))
-    .filter((s) => s.distance <= maxDistance && s.distance > 0)
-    .sort((a, b) => a.distance - b.distance)
-    .slice(0, maxSuggestions)
-
-  return suggestions
+  const suggestions: WordSuggestion[] = []
+  for (const word of greWords) {
+    if (Math.abs(normalizedInput.length - word.length) > maxDistance) continue
+    const distance = levenshteinDistance(normalizedInput, word)
+    if (distance > 0 && distance <= maxDistance) {
+      suggestions.push({ word, distance })
+    }
+  }
+  suggestions.sort((a, b) => a.distance - b.distance)
+  return suggestions.slice(0, maxSuggestions)
 }
 
 /**

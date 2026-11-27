@@ -1,4 +1,5 @@
-import index from '../data/oncoj-index.json'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import type { SourceData, SourceLexicalRelation } from './types'
 import type { WiktionaryEntryGroup } from './wiktionaryEntryGroups'
 
@@ -12,24 +13,60 @@ interface AnnotationRecord {
   entries: AnnotationEntry[]
   xml: string
 }
-const records: AnnotationRecord[] = index.records
-const byForm = new Map<string, AnnotationRecord[]>()
-const byId = new Map<string, AnnotationEntry>()
-for (const record of records) {
-  for (const entry of record.entries) {
-    byId.set(entry.id, entry)
-    for (const form of entry.forms) {
-      const matching = byForm.get(form) ?? []
-      if (!matching.includes(record)) matching.push(record)
-      byForm.set(form, matching)
+interface OncojIndexFile {
+  revision: string
+  license: string
+  attribution: string
+  records: AnnotationRecord[]
+}
+
+interface LoadedOncojIndex {
+  revision: string
+  license: string
+  attribution: string
+  byForm: Map<string, AnnotationRecord[]>
+  byId: Map<string, AnnotationEntry>
+}
+
+let cachedIndex: LoadedOncojIndex | null = null
+
+function loadOncojIndex(): LoadedOncojIndex {
+  if (cachedIndex) return cachedIndex
+  const raw = readFileSync(path.join(process.cwd(), 'data/oncoj-index.json'), 'utf8')
+  const index = JSON.parse(raw) as OncojIndexFile
+  const byForm = new Map<string, AnnotationRecord[]>()
+  const byId = new Map<string, AnnotationEntry>()
+  for (const record of index.records) {
+    const seenForms = new Set<string>()
+    for (const entry of record.entries) {
+      byId.set(entry.id, entry)
+      for (const form of entry.forms) {
+        if (seenForms.has(form)) continue
+        seenForms.add(form)
+        let matching = byForm.get(form)
+        if (!matching) {
+          matching = []
+          byForm.set(form, matching)
+        }
+        matching.push(record)
+      }
     }
   }
+  cachedIndex = {
+    revision: index.revision,
+    license: index.license,
+    attribution: index.attribution,
+    byForm,
+    byId,
+  }
+  return cachedIndex
 }
 
 /** Frellesvig–Whitman transcription is exact: pi/pwi and ko/kwo must remain distinct. */
 export function lookupOncoj(word: string, language = 'Old Japanese'): SourceData | null {
   if (language !== 'Old Japanese') return null
-  const matches = byForm.get(word.normalize('NFC'))
+  const index = loadOncojIndex()
+  const matches = index.byForm.get(word.normalize('NFC'))
   if (!matches?.length) return null
   const url = `https://github.com/ONCOJ/data/blob/${index.revision}/lexicon.xml`
   const groups: WiktionaryEntryGroup[] = []
@@ -37,7 +74,7 @@ export function lookupOncoj(word: string, language = 'Old Japanese'): SourceData
     for (const entry of record.entries) {
       if (!entry.forms.includes(word)) continue
       const relations: SourceLexicalRelation[] = entry.derivations.flatMap((relation) => {
-        if (!byId.get(relation.targetId)?.forms.includes(relation.form)) return []
+        if (!index.byId.get(relation.targetId)?.forms.includes(relation.form)) return []
         return [
           {
             subject: { word, language: 'Old Japanese' },
