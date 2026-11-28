@@ -8,6 +8,8 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-28
+
 ### Changed
 
 - Show all meaning tabs immediately without a Change meaning toggle and open the first matching meaning by default instead of asking you to pick one.
