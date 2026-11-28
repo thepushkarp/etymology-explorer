@@ -241,43 +241,43 @@ export function Landing() {
 
 // Standard Western six-sided die: opposite faces sum to 7 (1↔6, 2↔5, 3↔4)
 // and 1 → 2 → 3 runs counterclockwise around their shared corner.
-// Hovering tilts the cube to reveal 1 (top), 2 (front), and 3 (right).
+// Hovering tilts the cube to reveal 1 (top), 3 (front), and 5 (right).
 export const DIE_FACES: Array<{ transform: string; pips: Array<[number, number]> }> = [
   {
-    // Front: 2 (opposite Back: 5)
+    // Front: 3 (opposite Back: 4)
     transform: 'translateZ(8px)',
     pips: [
       [0, 0],
+      [1, 1],
       [2, 2],
     ],
   },
   {
-    // Back: 5 (opposite Front: 2)
+    // Back: 4 (opposite Front: 3)
     transform: 'rotateY(180deg) translateZ(8px)',
     pips: [
       [0, 0],
       [0, 2],
-      [1, 1],
       [2, 0],
       [2, 2],
     ],
   },
   {
-    // Right: 3 (opposite Left: 4)
+    // Right: 5 (opposite Left: 2)
     transform: 'rotateY(90deg) translateZ(8px)',
     pips: [
       [0, 0],
+      [0, 2],
       [1, 1],
+      [2, 0],
       [2, 2],
     ],
   },
   {
-    // Left: 4 (opposite Right: 3)
+    // Left: 2 (opposite Right: 5)
     transform: 'rotateY(-90deg) translateZ(8px)',
     pips: [
       [0, 0],
-      [0, 2],
-      [2, 0],
       [2, 2],
     ],
   },

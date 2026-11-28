@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { DIE_FACES } from './Landing'
 
 describe('Dice3D geometry', () => {
-  test('forms a standard counterclockwise Western six-sided die with 1 on top, 2 in front, and 3 on the right', () => {
+  test('forms a standard counterclockwise Western six-sided die with 1 on top, 3 in front, and 5 on the right', () => {
     expect(DIE_FACES).toHaveLength(6)
     const count = (transform: string) => {
       const face = DIE_FACES.find((item) => item.transform === transform)
@@ -23,9 +23,10 @@ describe('Dice3D geometry', () => {
     expect(front + back).toBe(7)
     expect(right + left).toBe(7)
     expect(top + bottom).toBe(7)
-    // Hover reveals Top=1, Front=2, Right=3 (1 -> 2 -> 3 counterclockwise)
+    // Top=1, Left=2, Front=3 runs counterclockwise; hover reveals Top=1, Front=3, Right=5
     expect(top).toBe(1)
-    expect(front).toBe(2)
-    expect(right).toBe(3)
+    expect(left).toBe(2)
+    expect(front).toBe(3)
+    expect(right).toBe(5)
   })
 })
