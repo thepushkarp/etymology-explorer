@@ -32,15 +32,16 @@ export interface EntryLanguages {
 async function resolveLanguages(
   word: string,
   session: LexemeResearchSession,
-  hint?: LanguageCode
+  hint?: LanguageCode,
+  onlyLanguage?: LanguageCode
 ): Promise<EntryLanguages> {
   const normalized = canonicalizeWord(word)
-  const candidates = candidateLanguages(normalized)
+  const allCandidates = candidateLanguages(normalized)
+  const candidates =
+    onlyLanguage && allCandidates.includes(onlyLanguage) ? [onlyLanguage] : allCandidates
   if (!candidates.length) return { languages: [], otherLanguages: [] }
   let incomplete = false
-  async function pageToc(title: string, edition: string): Promise<WiktionaryToc | null> {
-    const cached = await getCachedWiktionaryToc(title, edition)
-    if (cached) return cached
+  async function fetchToc(title: string, edition: string): Promise<WiktionaryToc | null> {
     try {
       const page = await fetchWiktionaryPage(title, edition, session.signal, {
         fetchOnce: session.fetchOnce,
@@ -93,19 +94,20 @@ async function resolveLanguages(
     ]),
   ]
   const capital = initialCapitalTitle(normalized)
-  const tables: { edition: string; title: string; toc: WiktionaryToc | null }[] = []
-  // Reserve the ordinary pages first when the resolution budget is tight.
-  for (const title of capital ? [normalized, capital] : [normalized]) {
-    tables.push(
-      ...(await Promise.all(
-        editionNames.map(async (edition) => ({
-          edition,
-          title,
-          toc: await pageToc(title, edition),
-        }))
-      ))
-    )
-  }
+  const titles = capital ? [normalized, capital] : [normalized]
+  const pairs = titles.flatMap((title) => editionNames.map((edition) => ({ title, edition })))
+  // Resolve all cached TOCs first so live HTTP budget reservations strictly follow
+  // ordinary-case-before-capital order regardless of Redis response timing.
+  const cachedTocs = await Promise.all(
+    pairs.map(({ title, edition }) => getCachedWiktionaryToc(title, edition))
+  )
+  const tasks = pairs.map(({ title, edition }, index) => {
+    const cached = cachedTocs[index]
+    return cached
+      ? Promise.resolve({ edition, title, toc: cached })
+      : fetchToc(title, edition).then((toc) => ({ edition, title, toc }))
+  })
+  const tables = await Promise.all(tasks)
   const englishToc = tables.find((row) => row.edition === 'en' && row.title === normalized)?.toc
   const languages = candidates.filter((language) => {
     const definition = LANGUAGES[language]
@@ -175,10 +177,13 @@ async function resolveLanguages(
 export function resolveEntryLanguages(
   word: string,
   session: LexemeResearchSession,
-  hint?: LanguageCode
+  hint?: LanguageCode,
+  options?: { onlyLanguage?: LanguageCode }
 ): Promise<EntryLanguages> {
   // The phase cap includes redirects while preserving the entry-wide counter for research.
   return session
     .getBudget()
-    .runLimited(CONFIG.maxTotalFetches, () => resolveLanguages(word, session, hint))
+    .runLimited(CONFIG.maxTotalFetches, () =>
+      resolveLanguages(word, session, hint, options?.onlyLanguage)
+    )
 }

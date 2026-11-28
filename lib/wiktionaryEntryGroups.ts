@@ -104,17 +104,47 @@ export function cleanWiktionaryHtml(value: string): string {
     .trim()
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+interface AnchorOffsetIndex {
+  headings: Map<string, number>
+  elements: Map<string, number>
+}
+
+const ANCHOR_TAG_PATTERN = /<([a-z][a-z0-9]*)\b[^>]*\bid=["']([^"']+)["'][^>]*>/gi
+const HEADING_TAG_PATTERN = /^h[1-6]$/i
+const anchorIndexCache = new Map<string, AnchorOffsetIndex>()
+const MAX_ANCHOR_INDEX_CACHE = 8
+
+function getAnchorIndex(html: string): AnchorOffsetIndex {
+  const cached = anchorIndexCache.get(html)
+  if (cached) {
+    anchorIndexCache.delete(html)
+    anchorIndexCache.set(html, cached)
+    return cached
+  }
+  const headings = new Map<string, number>()
+  const elements = new Map<string, number>()
+  ANCHOR_TAG_PATTERN.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = ANCHOR_TAG_PATTERN.exec(html))) {
+    const id = match[2].toLowerCase()
+    if (!elements.has(id)) elements.set(id, match.index)
+    if (HEADING_TAG_PATTERN.test(match[1]) && !headings.has(id)) {
+      headings.set(id, match.index)
+    }
+  }
+  const index: AnchorOffsetIndex = { headings, elements }
+  if (anchorIndexCache.size >= MAX_ANCHOR_INDEX_CACHE) {
+    const oldest = anchorIndexCache.keys().next().value
+    if (oldest !== undefined) anchorIndexCache.delete(oldest)
+  }
+  anchorIndexCache.set(html, index)
+  return index
 }
 
 function anchorOffset(html: string, anchor: string): number {
-  const escaped = escapeRegExp(anchor)
-  const heading = html.match(new RegExp(`<h[1-6][^>]*\\bid=["']${escaped}["'][^>]*>`, 'i'))
-  if (heading?.index !== undefined) return heading.index
-
-  const element = html.match(new RegExp(`<[^>]+\\bid=["']${escaped}["'][^>]*>`, 'i'))
-  return element?.index ?? -1
+  const index = getAnchorIndex(html)
+  const key = anchor.toLowerCase()
+  return index.headings.get(key) ?? index.elements.get(key) ?? -1
 }
 
 function matchesHeading(pattern: RegExp, heading: string): boolean {
@@ -164,8 +194,14 @@ function headwordTransliteration(html: string, word: string): string | undefined
   return readings.size === 1 ? [...readings][0] : undefined
 }
 
+const attributePatterns = new Map<string, RegExp>()
 function attribute(attributes: string, name: string): string | undefined {
-  return attributes.match(new RegExp(`\\b${name}=["']([^"']*)["']`, 'i'))?.[1]
+  let pattern = attributePatterns.get(name)
+  if (!pattern) {
+    pattern = new RegExp(`\\b${name}=["']([^"']*)["']`, 'i')
+    attributePatterns.set(name, pattern)
+  }
+  return attributes.match(pattern)?.[1]
 }
 
 function hasClass(attributes: string, name: string): boolean {
@@ -1179,11 +1215,16 @@ export function extractWiktionaryVariants(
       }
     }
   }
-  // Resolve invariant heading offsets once to avoid whole-page scans per block.
-  const positionedSections = sections.map((section) => ({
-    section,
-    offset: anchorOffset(html, section.anchor),
-  }))
+  // Resolve invariant heading offsets once within this language fragment and walk with one cursor.
+  const fragmentEnd = start + fragment.length
+  const positionedSections = sections
+    .map((section) => ({
+      section,
+      offset: anchorOffset(html, section.anchor),
+    }))
+    .filter(({ offset }) => offset >= start && offset < fragmentEnd)
+    .sort((a, b) => a.offset - b.offset)
+  let sectionCursor = -1
   // Inspect local definition/paragraph blocks so a variant qualifier never leaks
   // across senses into unrelated translation or cognate links.
   for (const block of fragment.matchAll(/<(p|li|dd)\b[^>]*>([\s\S]*?)<\/\1>/gi)) {
@@ -1193,9 +1234,14 @@ export function extractWiktionaryVariants(
       /\b(?:(?:British|American|UK|US)\s+(?:English\s+)?(?:standard\s+)?(?:spelling|form)|(?:alternative|alternate)\s+spelling)\s+(?:of|for)\b/i.test(
         plain
       )
-    const localHeading = positionedSections
-      .filter(({ offset }) => offset >= start && offset <= start + (block.index ?? 0))
-      .at(-1)?.section
+    const blockOffset = start + (block.index ?? 0)
+    while (
+      sectionCursor + 1 < positionedSections.length &&
+      positionedSections[sectionCursor + 1].offset <= blockOffset
+    ) {
+      sectionCursor += 1
+    }
+    const localHeading = sectionCursor >= 0 ? positionedSections[sectionCursor].section : undefined
     const listedRegionalVariant =
       localHeading &&
       /^Alternative forms?$/i.test(cleanHeading(localHeading.line)) &&
@@ -1230,8 +1276,7 @@ export function extractWiktionaryVariants(
   return [...variants.values()]
 }
 
-/** Retains every subsection, including pronunciation/variants before etymology. */
-export function extractWiktionaryLanguageText(
+export function extractWiktionaryLanguageHtml(
   html: string,
   sections: readonly WiktionaryTocSection[],
   languageHeading: string
@@ -1246,5 +1291,15 @@ export function extractWiktionaryLanguageText(
     .slice(index + 1)
     .find((section) => headingLevel(section) <= headingLevel(sections[index]))
   const end = next ? anchorOffset(html, next.anchor) : html.length
-  return cleanWiktionaryHtml(html.slice(start, end < 0 ? html.length : end))
+  return html.slice(start, end < 0 ? html.length : end)
+}
+
+/** Retains every subsection, including pronunciation/variants before etymology. */
+export function extractWiktionaryLanguageText(
+  html: string,
+  sections: readonly WiktionaryTocSection[],
+  languageHeading: string
+): string {
+  const fragment = extractWiktionaryLanguageHtml(html, sections, languageHeading)
+  return fragment ? cleanWiktionaryHtml(fragment) : ''
 }

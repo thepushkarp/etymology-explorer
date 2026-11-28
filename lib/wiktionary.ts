@@ -6,7 +6,7 @@ import {
   comparableHeading,
   extractWiktionaryLookup,
   extractWiktionaryEntryGroups,
-  extractWiktionaryLanguageText,
+  extractWiktionaryLanguageHtml,
   extractWiktionaryRomanizations,
   extractWiktionarySpellingRedirect,
   extractWiktionaryVariants,
@@ -18,9 +18,9 @@ import { safeError } from './errorUtils'
 import { CONFIG } from './config'
 import {
   getCachedSource,
+  getCachedSourceAndToc,
   cacheSource,
   cacheWiktionaryToc,
-  getCachedWiktionaryToc,
   type WiktionaryToc,
 } from './sourceCache'
 import { currentSourceFetchBudget } from './sourceFetchBudget'
@@ -34,6 +34,7 @@ export interface WiktionaryPage {
   sections: WiktionaryTocSection[]
   revid?: number
   fetchedAt?: string
+  toc?: WiktionaryToc
 }
 
 export interface WiktionaryFetchOptions {
@@ -44,7 +45,13 @@ export interface WiktionaryFetchOptions {
 
 /** Preserve heading anchors while excluding their labels from lexical admission. */
 function withoutHeadingText(html: string): string {
-  return html.replace(
+  // Handle fragments sliced at an inner <span id="..."> inside an <h1-6> tag.
+  const trimmedHead = html.replace(
+    /^([\s\S]*?)(<\/h[1-6]>)/i,
+    (match, body: string, close: string) =>
+      /<h[1-6]\b/i.test(body) ? match : body.replace(/(^|>)[^<]*/g, '$1') + close
+  )
+  return trimmedHead.replace(
     /(<h[1-6]\b[^>]*>)([\s\S]*?)(<\/h[1-6]>)/gi,
     (_match, open: string, body: string, close: string) =>
       open + body.replace(/(^|>)[^<]*/g, '$1') + close
@@ -52,18 +59,21 @@ function withoutHeadingText(html: string): string {
 }
 
 export function wiktionaryPageToc(page: WiktionaryPage): WiktionaryToc {
+  if (page.toc) return page.toc
   const headings = page.sections
     .filter((section) => (section.hLevel ?? Number(section.level)) === 2)
     .map((section) => cleanWiktionaryHtml(section.line))
-  const body = withoutHeadingText(page.html)
   const otherScripts = extractWiktionaryRomanizations(page.html, page.sections, page.requestedWord)
-  return {
+  const toc: WiktionaryToc = {
     headings,
     ...(otherScripts.length ? { otherScripts } : {}),
-    nonemptyHeadings: headings.filter((heading) =>
-      Boolean(extractWiktionaryLanguageText(body, page.sections, heading))
-    ),
+    nonemptyHeadings: headings.filter((heading) => {
+      const fragment = extractWiktionaryLanguageHtml(page.html, page.sections, heading)
+      return Boolean(fragment && cleanWiktionaryHtml(withoutHeadingText(fragment)))
+    }),
   }
+  page.toc = toc
+  return toc
 }
 
 /** Fetch one validated complete page; transient failures remain unknown rather than absent. */
@@ -194,12 +204,9 @@ export function extractWiktionaryLanguage(
   const pattern =
     edition === 'en' ? /^Etymology(?:\s+\d+)?$/i : native?.nativeWiktionary?.etymologyHeading
   if (!pattern) return null
-  const text = extractWiktionaryLanguageText(page.html, page.sections, heading)
-  if (
-    !text ||
-    !extractWiktionaryLanguageText(withoutHeadingText(page.html), page.sections, heading)
-  )
-    return null
+  const fragment = extractWiktionaryLanguageHtml(page.html, page.sections, heading)
+  const text = fragment ? cleanWiktionaryHtml(fragment) : ''
+  if (!text || !cleanWiktionaryHtml(withoutHeadingText(fragment))) return null
   const url = `https://${edition}.wiktionary.org/wiki/${encodeURIComponent(page.title)}`
   const variants: NonNullable<SourceData['variants']> = extractWiktionaryVariants(
     page.html,
@@ -272,10 +279,18 @@ export async function fetchDictionarySection(
     edition === 'en'
       ? (`wiktionaryLanguage:${encodeURIComponent(languageHeading)}` as const)
       : 'wiktionaryNative'
-  const cached = await getCachedSource(source, word, undefined, cacheLanguage)
+  let cached: WiktionaryResult | null
+  let prefetchedToc: WiktionaryToc | null = null
+  if (options?.useCachedToc) {
+    const batch = await getCachedSourceAndToc(source, word, edition, cacheLanguage)
+    cached = batch.source
+    prefetchedToc = batch.toc
+  } else {
+    cached = await getCachedSource(source, word, undefined, cacheLanguage)
+  }
   if (cached) return cached
   try {
-    const toc = options?.useCachedToc && (await getCachedWiktionaryToc(word, edition))
+    const toc = options?.useCachedToc ? prefetchedToc : null
     if (
       toc &&
       !toc.nonemptyHeadings.some(

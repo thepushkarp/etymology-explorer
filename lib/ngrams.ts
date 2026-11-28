@@ -8,7 +8,10 @@ interface NgramApiEntry {
   timeseries?: number[]
 }
 
-export async function fetchNgram(
+export type NgramLookupResult =
+  { status: 'ok'; data: NgramResult } | { status: 'not_found' } | { status: 'error' }
+
+export async function fetchNgramStatus(
   word: string,
   options: {
     yearStart?: number
@@ -16,9 +19,9 @@ export async function fetchNgram(
     corpus?: string
     smoothing?: number
   } = {}
-): Promise<NgramResult | null> {
+): Promise<NgramLookupResult> {
   const trimmedWord = canonicalizeWord(word)
-  if (!isValidWord(trimmedWord)) return null
+  if (!isValidWord(trimmedWord)) return { status: 'not_found' }
 
   const { yearStart = 1800, yearEnd = 2019, corpus = 'eng-2019', smoothing = 3 } = options
 
@@ -41,29 +44,49 @@ export async function fetchNgram(
     )
 
     if (!response.ok) {
-      if (response.status === 404) return null
+      if (response.status === 404) return { status: 'not_found' }
       throw new Error(`Ngram API: ${response.status}`)
     }
 
     const data: unknown = await response.json()
 
     if (!Array.isArray(data) || data.length === 0) {
-      return null
+      return { status: 'not_found' }
     }
 
     const entry = data[0] as NgramApiEntry
+    const series = (entry.timeseries || []).map((count, index) => ({
+      year: yearStart + index,
+      count,
+      matchCount: 0,
+    }))
+    if (series.length === 0) {
+      return { status: 'not_found' }
+    }
 
     return {
-      word: entry.ngram || trimmedWord,
-      corpus,
-      data: (entry.timeseries || []).map((count, index) => ({
-        year: yearStart + index,
-        count,
-        matchCount: 0,
-      })),
+      status: 'ok',
+      data: {
+        word: entry.ngram || trimmedWord,
+        corpus,
+        data: series,
+      },
     }
   } catch (error) {
     console.error('Ngram fetch failed:', error)
-    return null
+    return { status: 'error' }
   }
+}
+
+export async function fetchNgram(
+  word: string,
+  options: {
+    yearStart?: number
+    yearEnd?: number
+    corpus?: string
+    smoothing?: number
+  } = {}
+): Promise<NgramResult | null> {
+  const result = await fetchNgramStatus(word, options)
+  return result.status === 'ok' ? result.data : null
 }

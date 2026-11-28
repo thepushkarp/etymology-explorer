@@ -393,11 +393,66 @@ function buildHeaders(): HeadersInit {
   }
 }
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  labelMs: number,
+  signal?: AbortSignal,
+  onTimeout?: () => void
+): Promise<T> {
+  signal?.throwIfAborted()
+  if (timeoutMs <= 0) {
+    onTimeout?.()
+    throw new Error(`Request timeout after ${labelMs}ms`)
+  }
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const cleanup = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+    }
+    const onAbort = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      onTimeout?.()
+      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'))
+    }
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      cleanup()
+      onTimeout?.()
+      reject(new Error(`Request timeout after ${labelMs}ms`))
+    }, timeoutMs)
+    signal?.addEventListener('abort', onAbort, { once: true })
+    promise.then(
+      (value) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve(value)
+      },
+      (error) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        reject(error)
+      }
+    )
+  })
+}
+
 export async function createOpenRouterResponse(
   request: OpenRouterRequest,
   timeoutMs: number = CONFIG.timeouts.llm,
   signal?: AbortSignal
 ): Promise<OpenRouterResponseLike> {
+  const startedAt = Date.now()
+  const requestController = new AbortController()
+  const composedSignal = signal
+    ? AbortSignal.any([requestController.signal, signal])
+    : requestController.signal
   const response = await fetchWithTimeout(
     OPENROUTER_RESPONSES_URL,
     {
@@ -406,12 +461,16 @@ export async function createOpenRouterResponse(
       body: JSON.stringify(request),
     },
     timeoutMs,
-    signal
+    composedSignal
   )
 
   let payload: OpenRouterResponseLike
   try {
-    payload = (await response.json()) as OpenRouterResponseLike
+    const remaining = timeoutMs - (Date.now() - startedAt)
+    payload = (await withTimeout(response.json(), remaining, timeoutMs, signal, () => {
+      requestController.abort()
+      void response.body?.cancel().catch(() => {})
+    })) as OpenRouterResponseLike
   } catch (error) {
     if (response.ok) throw error
     throw new OpenRouterHttpError(extractErrorMessage(null, response.status), response.status)
@@ -453,6 +512,11 @@ export async function streamOpenRouterResponse(
   timeoutMs: number = CONFIG.timeouts.llm,
   signal?: AbortSignal
 ): Promise<OpenRouterResponseLike> {
+  const startedAt = Date.now()
+  const requestController = new AbortController()
+  const composedSignal = signal
+    ? AbortSignal.any([requestController.signal, signal])
+    : requestController.signal
   const response = await fetchWithTimeout(
     OPENROUTER_RESPONSES_URL,
     {
@@ -461,13 +525,17 @@ export async function streamOpenRouterResponse(
       body: JSON.stringify({ ...request, stream: true }),
     },
     timeoutMs,
-    signal
+    composedSignal
   )
 
   if (!response.ok) {
     let payload: unknown = null
     try {
-      payload = await response.json()
+      const remaining = timeoutMs - (Date.now() - startedAt)
+      payload = await withTimeout(response.json(), remaining, timeoutMs, signal, () => {
+        requestController.abort()
+        void response.body?.cancel().catch(() => {})
+      })
     } catch {
       payload = null
     }
@@ -490,9 +558,20 @@ export async function streamOpenRouterResponse(
   let buffer = ''
   let fullText = ''
   let finalResponse: OpenRouterResponseLike | null = null
+  const idleLimitMs = Math.min(timeoutMs, 60_000)
 
   while (true) {
-    const { done, value } = await reader.read()
+    const remaining = timeoutMs - (Date.now() - startedAt)
+    const { done, value } = await withTimeout(
+      reader.read(),
+      Math.min(remaining, idleLimitMs),
+      timeoutMs,
+      signal,
+      () => {
+        requestController.abort()
+        void reader.cancel().catch(() => {})
+      }
+    )
     buffer += decoder.decode(value, { stream: !done })
 
     const boundary = buffer.lastIndexOf('\n\n')
@@ -523,7 +602,8 @@ export async function streamOpenRouterResponse(
       }
     }
 
-    if (done) {
+    if (done || finalResponse) {
+      if (!done) void reader.cancel().catch(() => {})
       break
     }
   }

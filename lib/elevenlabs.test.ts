@@ -127,3 +127,26 @@ test('an empty or incomplete catalog fails before synthesis', async () => {
     expect(calls).toEqual(['/v2/voices'])
   }
 })
+
+test('caches the stock voice catalog across requests and invalidates it on voice-unavailable retry', async () => {
+  const { calls } = provider()
+  await generatePronunciation('pain', 'en')
+  await generatePronunciation('pain', 'fr')
+  await generatePronunciation('津波', 'ja')
+  expect(calls.filter((path) => path === '/v2/voices')).toHaveLength(1)
+
+  let failFirst = true
+  const retry = provider((voice) => {
+    if (voice === 'french' && failFirst) {
+      failFirst = false
+      return Response.json(
+        { detail: { code: 'voice_not_found', message: 'Unavailable voice' } },
+        { status: 404 }
+      )
+    }
+    return new Response(new Uint8Array([9]))
+  })
+  await generatePronunciation('pain', 'fr')
+  await generatePronunciation('pain', 'en')
+  expect(retry.calls.filter((path) => path === '/v2/voices')).toHaveLength(2)
+})

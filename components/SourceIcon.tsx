@@ -1,4 +1,3 @@
-import Image from 'next/image'
 import { sourceKey } from '@/lib/sourceLabels'
 
 const ICONS: Record<string, string> = {
@@ -29,12 +28,14 @@ const ICONS: Record<string, string> = {
 export function SourceIcon({ source }: { source: string }) {
   const icon = ICONS[sourceKey(source)]
   return icon ? (
-    <Image
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
       src={`/source-icons/${icon}`}
       alt=""
       width={16}
       height={16}
-      unoptimized
+      loading="lazy"
+      decoding="async"
       className="size-4 shrink-0 object-contain opacity-75 grayscale dark:invert"
     />
   ) : (

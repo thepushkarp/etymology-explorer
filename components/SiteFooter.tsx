@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import Link from 'next/link'
 
 const LINKS = [
@@ -6,7 +7,7 @@ const LINKS = [
   { href: '/faq', label: 'FAQ' },
 ]
 
-export function SiteFooter() {
+export const SiteFooter = memo(function SiteFooter() {
   return (
     <footer className="mx-auto mt-auto flex w-full max-w-3xl flex-wrap items-center gap-x-6 gap-y-2 px-4 pb-8 pt-20 text-sm text-muted sm:px-6">
       <nav className="flex gap-5" aria-label="Footer">
@@ -29,4 +30,4 @@ export function SiteFooter() {
       </p>
     </footer>
   )
-}
+})

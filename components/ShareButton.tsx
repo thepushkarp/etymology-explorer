@@ -1,10 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /** Native share sheet on touch devices; copies the canonical URL elsewhere. */
 export function ShareButton() {
   const [copied, setCopied] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => () => clearTimeout(timerRef.current), [])
 
   const share = async () => {
     const url = window.location.href
@@ -15,7 +18,8 @@ export function ShareButton() {
     try {
       await navigator.clipboard.writeText(url)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
+      clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => setCopied(false), 1600)
     } catch {
       // Clipboard permission denied: nothing useful to show.
     }

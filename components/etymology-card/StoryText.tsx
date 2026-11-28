@@ -1,5 +1,14 @@
 import type { ReactNode } from 'react'
 
+const ARABIC_SCRIPT = /\p{Script=Arabic}/u
+const DEVANAGARI_SCRIPT = /\p{Script=Devanagari}/u
+const HAN_SCRIPT = /\p{Script=Han}/u
+const HIRAGANA_SCRIPT = /\p{Script=Hiragana}/u
+const KATAKANA_SCRIPT = /\p{Script=Katakana}/u
+const FOREIGN_SPAN_PATTERN =
+  /(?:(?!\p{Script=Latin})\p{Letter}[\p{Mark}\u200C\u200D]*)+(?:[ \u00A0]+(?:(?!\p{Script=Latin})\p{Letter}[\p{Mark}\u200C\u200D]*)+)*/gu
+const EMPHASIS_PATTERN = /(?<!\*)\*([^*\s](?:[^*\n]*[^*\s])?)\*(?!\*)/g
+
 /** A form's script can be known when its lexical language is not supplied. */
 export function FormText({
   text,
@@ -12,15 +21,15 @@ export function FormText({
 }) {
   const lang =
     language ??
-    (/\p{Script=Arabic}/u.test(text)
+    (ARABIC_SCRIPT.test(text)
       ? 'und-Arab'
-      : /\p{Script=Devanagari}/u.test(text)
+      : DEVANAGARI_SCRIPT.test(text)
         ? 'und-Deva'
-        : /\p{Script=Han}/u.test(text)
+        : HAN_SCRIPT.test(text)
           ? 'und-Hani'
-          : /\p{Script=Hiragana}/u.test(text)
+          : HIRAGANA_SCRIPT.test(text)
             ? 'und-Hira'
-            : /\p{Script=Katakana}/u.test(text)
+            : KATAKANA_SCRIPT.test(text)
               ? 'und-Kana'
               : 'und')
   return (
@@ -33,10 +42,8 @@ export function FormText({
 /** Isolate unmarked native forms without inferring a language from their script. */
 function isolateForeignText(text: string, baseOffset: number): ReactNode[] {
   const nodes: ReactNode[] = []
-  const pattern =
-    /(?:(?!\p{Script=Latin})\p{Letter}[\p{Mark}\u200C\u200D]*)+(?:[ \u00A0]+(?:(?!\p{Script=Latin})\p{Letter}[\p{Mark}\u200C\u200D]*)+)*/gu
   let offset = 0
-  for (const match of text.matchAll(pattern)) {
+  for (const match of text.matchAll(FOREIGN_SPAN_PATTERN)) {
     nodes.push(text.slice(offset, match.index))
     nodes.push(<FormText key={`form-${baseOffset + match.index}`} text={match[0]} />)
     offset = match.index + match[0].length
@@ -50,9 +57,8 @@ export function emphasize(text: string): ReactNode[] {
   const nodes: ReactNode[] = []
   // Require nonempty, unpadded text; leave double stars and unmatched historical
   // reconstruction markers untouched. React text nodes always escape HTML.
-  const pattern = /(?<!\*)\*([^*\s](?:[^*\n]*[^*\s])?)\*(?!\*)/g
   let offset = 0
-  for (const match of text.matchAll(pattern)) {
+  for (const match of text.matchAll(EMPHASIS_PATTERN)) {
     const index = match.index
     nodes.push(...isolateForeignText(text.slice(offset, index), offset))
     nodes.push(

@@ -1,5 +1,6 @@
-import { getCachedEntry, getCachedSpellingEntry } from './cache'
+import { getCachedEntriesBatch, getCachedEntry, getCachedSpellingEntry } from './cache'
 import { assembleLookupGroup, isKanaWord, lookupGroupSeed } from './lookupGroups'
+import { canonicalizeWord } from './orthography'
 import { normalizeScriptTargets } from './scriptTargets'
 import type { WordEntry } from './types'
 
@@ -8,15 +9,20 @@ export async function getLookupGroup(word: string, entry?: WordEntry) {
   if (!isKanaWord(word) && !/^[\p{Script=Latin}\p{Mark}' -]+$/u.test(word)) return undefined
   const aliases = new Map<string, string>()
   const reads = new Map<string, Promise<WordEntry | undefined>>()
+  const prefetched = new Map<string, WordEntry>()
+  if (entry) prefetched.set(canonicalizeWord(entry.word), entry)
+
   const read = (target: string, japanese = false) => {
     const key = `${japanese}:${target}`
     if (!reads.has(key))
       reads.set(
         key,
         (async () => {
+          const canonical = canonicalizeWord(target)
+          const known = prefetched.get(canonical)
           const [saved, alias] = await Promise.all([
-            target === entry?.word
-              ? Promise.resolve({ entry })
+            known
+              ? Promise.resolve({ entry: known })
               : getCachedEntry(target, { durableOnly: true }),
             japanese ? getCachedSpellingEntry(target, 'ja') : null,
           ])
@@ -55,17 +61,19 @@ export async function getLookupGroup(word: string, entry?: WordEntry) {
   const words = [
     ...new Set([...seed.members.map((member) => member.word), ...seed.romanizations, word]),
   ]
+  const memberSet = new Set(seed.members.map((member) => member.word))
+  // Pre-fetch all durable member entries in one MGET before bounded alias resolution.
+  const uncachedWords = words.filter((target) => !prefetched.has(canonicalizeWord(target)))
+  if (uncachedWords.length > 0) {
+    const batch = await getCachedEntriesBatch(uncachedWords)
+    for (const [k, v] of batch) prefetched.set(k, v)
+  }
   const entries: (WordEntry | undefined)[] = []
   // Limit concurrent Redis reads without dropping any source-listed candidates.
   for (let offset = 0; offset < words.length; offset += 4) {
     entries.push(
       ...(await Promise.all(
-        words.slice(offset, offset + 4).map((target) =>
-          read(
-            target,
-            seed.members.some((member) => member.word === target)
-          )
-        )
+        words.slice(offset, offset + 4).map((target) => read(target, memberSet.has(target)))
       ))
     )
   }

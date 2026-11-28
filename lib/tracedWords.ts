@@ -14,7 +14,7 @@ import { getRedis } from '@/lib/redis'
 import { isValidWord } from '@/lib/validation'
 
 const MAX_TRACED_WORDS = 1000
-const SCAN_BATCH_SIZE = 200
+const SCAN_BATCH_SIZE = 1000
 // SCAN may return no keys with a nonzero cursor; bound network work too.
 const MAX_SCAN_BATCHES_PER_PREFIX = 100
 
@@ -55,11 +55,19 @@ export async function scanTracedWords(): Promise<TracedWord[]> {
   const words = new Map<string, TracedWord>()
   const durable = new Set<string>()
   const legacy = new Set<string>()
-  async function finish(): Promise<TracedWord[]> {
-    await migrateLegacyWords(legacy)
-    return Array.from(words.values())
+
+  const collect = (key: string): boolean => {
+    const word = wordFromCacheKey(key)
+    if (word && isValidWord(word)) {
+      const normalized = canonicalizeWord(word)
+      words.set(normalized, { word: normalized })
+      if (key.startsWith(ENTRY_PREFIX)) durable.add(normalized)
+      else if (!durable.has(normalized)) legacy.add(normalized)
+    }
+    return words.size >= MAX_TRACED_WORDS
   }
-  for (const pattern of [ENTRY_SCAN_PATTERN, ...LEGACY_SCAN_PATTERNS]) {
+
+  const scanPrefix = async (pattern: string) => {
     let cursor = '0'
     let batches = 0
     try {
@@ -70,14 +78,7 @@ export async function scanTracedWords(): Promise<TracedWord[]> {
         })
         cursor = String(nextCursor)
         for (const key of keys) {
-          const word = wordFromCacheKey(key)
-          if (word && isValidWord(word)) {
-            const normalized = canonicalizeWord(word)
-            words.set(normalized, { word: normalized })
-            if (key.startsWith(ENTRY_PREFIX)) durable.add(normalized)
-            else if (!durable.has(normalized)) legacy.add(normalized)
-          }
-          if (words.size >= MAX_TRACED_WORDS) return finish()
+          if (collect(key)) return
         }
         batches++
       } while (cursor !== '0' && batches < MAX_SCAN_BATCHES_PER_PREFIX)
@@ -85,7 +86,18 @@ export async function scanTracedWords(): Promise<TracedWord[]> {
       console.error('[TracedWords] Redis scan failed:', safeError(error))
     }
   }
-  return finish()
+
+  // Scan durable entries first so a full 1,000-word corpus skips legacy prefix scans entirely.
+  await scanPrefix(ENTRY_SCAN_PATTERN)
+  for (const pattern of LEGACY_SCAN_PATTERNS) {
+    if (words.size >= MAX_TRACED_WORDS) break
+    await scanPrefix(pattern)
+  }
+
+  if (legacy.size > 0) {
+    await migrateLegacyWords(legacy)
+  }
+  return Array.from(words.values())
 }
 
 /** Daily corpus snapshot; callers must copy the shared cached array before sorting. */

@@ -12,10 +12,17 @@ export const dynamic = 'force-static'
 export function GET() {
   const changelog = readFileSync(join(process.cwd(), 'CHANGELOG.md'), 'utf8')
 
-  return NextResponse.json<ApiResponse<ChangelogEntry[]>>({
-    success: true,
-    data: parseChangelog(changelog, {
-      includeUnreleased: process.env.NEXT_PUBLIC_APP_CHANNEL === 'beta',
-    }),
-  })
+  return NextResponse.json<ApiResponse<ChangelogEntry[]>>(
+    {
+      success: true,
+      data: parseChangelog(changelog, {
+        includeUnreleased: process.env.NEXT_PUBLIC_APP_CHANNEL === 'beta',
+      }),
+    },
+    {
+      headers: {
+        'Cache-Control': 'public, max-age=3600, s-maxage=86400',
+      },
+    }
+  )
 }

@@ -183,6 +183,12 @@ export function isSpellingEntry(entry: WordEntry, language: LanguageCode): boole
   )
 }
 
+interface StoredAliasPointer {
+  word?: unknown
+  revision?: unknown
+  proofs?: unknown
+}
+
 export async function getCachedSpellingEntry(
   word: string,
   hint?: LanguageCode
@@ -194,7 +200,7 @@ export async function getCachedSpellingEntry(
   if (!redis) return null
   const normalized = canonicalizeWord(word)
   try {
-    const raw = await redis.get<{ word?: unknown; revision?: unknown; proofs?: unknown }>(
+    const raw = await redis.get<StoredAliasPointer>(
       `${SPELLING_ALIAS_PREFIX}${lexemeKey(language, normalized)}`
     )
     if (
@@ -211,22 +217,68 @@ export async function getCachedSpellingEntry(
     // Older romanization pointers did not distinguish model-only discovery
     // from source-defined uniqueness. Durable entry contents remain readable.
     if (raw.revision === 1 && chain.some((proof) => proof.kind === 'romanization')) return null
-    if (!hint) {
-      const original = await getCachedEntry(normalized)
-      if (original?.entry.languages.some((code) => code !== language)) return null
+
+    const targetKey = `${ENTRY_PREFIX}${canonicalizeWord(raw.word)}`
+    const forwardKey = `${SPELLING_ALIAS_PREFIX}${lexemeKey(language, raw.word)}`
+    const originalKey = !hint ? `${ENTRY_PREFIX}${normalized}` : null
+
+    let originalRaw: unknown = null
+    let targetRaw: unknown = null
+    let forward: { word?: unknown } | null = null
+
+    if (typeof redis.mget === 'function') {
+      const keys = originalKey ? [originalKey, targetKey, forwardKey] : [targetKey, forwardKey]
+      const values = await redis.mget<unknown[]>(...keys)
+      if (originalKey) {
+        originalRaw = values[0]
+        targetRaw = values[1]
+        forward = (values[2] as { word?: unknown } | null) ?? null
+      } else {
+        targetRaw = values[0]
+        forward = (values[1] as { word?: unknown } | null) ?? null
+      }
+    } else {
+      const [orig, targ, fwd] = await Promise.all([
+        originalKey ? redis.get(originalKey) : Promise.resolve(null),
+        redis.get(targetKey),
+        redis.get<{ word?: unknown }>(forwardKey),
+      ])
+      originalRaw = orig
+      targetRaw = targ
+      forward = fwd
     }
-    const target = await getCachedEntry(raw.word, { durableOnly: true })
+
+    if (forward && typeof forward.word === 'string' && forward.word !== raw.word) return null
+
+    if (!hint) {
+      if (originalRaw) {
+        const parsedOriginal = WordEntrySchema.safeParse(originalRaw)
+        if (
+          parsedOriginal.success &&
+          parsedOriginal.data.word === normalized &&
+          parsedOriginal.data.languages.some((code) => code !== language)
+        ) {
+          return null
+        }
+      } else {
+        const original = await getCachedEntry(normalized)
+        if (original?.entry.languages.some((code) => code !== language)) return null
+      }
+    }
+
+    if (!targetRaw || typeof targetRaw !== 'object') return null
+    const expectedSpelling = spellingMetadata(chain)
+
+    const parsedTarget = WordEntrySchema.safeParse(targetRaw)
+    if (!parsedTarget.success || parsedTarget.data.word !== canonicalizeWord(raw.word)) return null
+    const targetEntry = parsedTarget.data as WordEntry
+    if (targetEntry.spellings) targetEntry.spellings = targetEntry.spellings.filter(freshSpelling)
     if (
-      !target ||
-      !isSpellingEntry(target.entry, language) ||
-      !hasEntrySpellings(target.entry, [spellingMetadata(chain)])
+      !isSpellingEntry(targetEntry, language) ||
+      !hasEntrySpellings(targetEntry, [expectedSpelling])
     )
       return null
-    const forward = await redis.get<{ word?: unknown }>(
-      `${SPELLING_ALIAS_PREFIX}${lexemeKey(language, raw.word)}`
-    )
-    if (forward && typeof forward.word === 'string' && forward.word !== raw.word) return null
-    return { word: raw.word, language, ...target }
+    return { word: raw.word, language, entry: targetEntry, stale: entryIsStale(targetEntry) }
   } catch (error) {
     console.error('[Cache] Spelling alias read failed:', safeError(error))
     return null
@@ -239,7 +291,7 @@ export async function publishSpellingAliases(
 ): Promise<void> {
   const redis = getRedis()
   if (!redis) return
-  const published: string[] = []
+  const writes: Array<{ word: string; key: string; value: object; ttl: number }> = []
   for (const { word, language } of entry.spellings ?? []) {
     if (!isSpellingEntry(entry, language)) continue
     const chain = proofChain(word, entry.word, proofs, language)
@@ -250,17 +302,24 @@ export async function publishSpellingAliases(
         1000
     )
     if (ttl <= 0) continue
-    try {
-      await redis.set(
-        `${SPELLING_ALIAS_PREFIX}${lexemeKey(language, word)}`,
-        { word: entry.word, revision: 2, proofs: chain },
-        { ex: ttl }
-      )
-      published.push(word)
-    } catch (error) {
-      console.error('[Cache] Spelling alias write failed:', safeError(error))
-    }
+    writes.push({
+      word,
+      key: `${SPELLING_ALIAS_PREFIX}${lexemeKey(language, word)}`,
+      value: { word: entry.word, revision: 2, proofs: chain },
+      ttl,
+    })
   }
+  const published: string[] = []
+  await Promise.all(
+    writes.map(async (item) => {
+      try {
+        await redis.set(item.key, item.value, { ex: item.ttl })
+        published.push(item.word)
+      } catch (error) {
+        console.error('[Cache] Spelling alias write failed:', safeError(error))
+      }
+    })
+  )
   if (published.length) {
     try {
       after(() => {
@@ -369,13 +428,45 @@ export function upgradeLegacyEntry(
   }
 }
 
-function entryIsStale(entry: WordEntry): boolean {
+export function filterFreshSpellings(entry: WordEntry): WordEntry {
+  if (!entry.spellings?.length) return entry
+  const fresh = entry.spellings.filter(freshSpelling)
+  return fresh.length === entry.spellings.length ? entry : { ...entry, spellings: fresh }
+}
+
+export function entryIsStale(entry: WordEntry): boolean {
   const age = Date.now() - Date.parse(entry.freshnessAt ?? entry.tracedAt)
   return (
     entry.revision < CONFIG.pipelineRevision ||
     age >= CONFIG.entryFreshDays * 86400_000 ||
     (entry.incomplete === true && age >= CONFIG.incompleteEtymologyCacheTTL * 1000)
   )
+}
+
+export async function getCachedEntriesBatch(words: string[]): Promise<Map<string, WordEntry>> {
+  const result = new Map<string, WordEntry>()
+  const redis = getRedis()
+  if (!redis || !words.length) return result
+  const normalized = [...new Set(words.map(canonicalizeWord))]
+  const keys = normalized.map((word) => `${ENTRY_PREFIX}${word}`)
+  try {
+    const rawValues =
+      typeof redis.mget === 'function'
+        ? await redis.mget<unknown[]>(...keys)
+        : await Promise.all(keys.map((key) => redis.get(key)))
+    rawValues.forEach((raw, index) => {
+      if (!raw) return
+      const word = normalized[index]
+      const parsed = WordEntrySchema.safeParse(raw)
+      if (!parsed.success || parsed.data.word !== word) return
+      const entry = parsed.data as WordEntry
+      if (entry.spellings) entry.spellings = entry.spellings.filter(freshSpelling)
+      result.set(word, entry)
+    })
+  } catch (error) {
+    console.error('[Cache] Batch entry get error:', safeError(error))
+  }
+  return result
 }
 
 /** Validate on read; freshness never removes a word from the durable corpus. */
@@ -409,18 +500,22 @@ export async function getCachedEntry(
     }
 
     if (options?.durableOnly) return null
-    const legacy = await Promise.allSettled(
-      SUPPORTED_LANGUAGE_CODES.map((language) =>
-        redis.get(
-          language === 'en'
-            ? `${LEGACY_ETYMOLOGY_PREFIX}${normalized}`
-            : `${LEGACY_BETA_ETYMOLOGY_PREFIX}${language}:${normalized}`
-        )
-      )
+    const legacyKeys = SUPPORTED_LANGUAGE_CODES.map((language) =>
+      language === 'en'
+        ? `${LEGACY_ETYMOLOGY_PREFIX}${normalized}`
+        : `${LEGACY_BETA_ETYMOLOGY_PREFIX}${language}:${normalized}`
     )
-    const entry = upgradeLegacyEntry(
-      normalized,
-      Object.fromEntries(
+    let legacyEntries: Partial<Record<LanguageCode, unknown>>
+    let hadLegacyFailure = false
+    if (typeof redis.mget === 'function') {
+      const values = await redis.mget<unknown[]>(...legacyKeys)
+      legacyEntries = Object.fromEntries(
+        SUPPORTED_LANGUAGE_CODES.map((language, index) => [language, values[index]])
+      )
+    } else {
+      const legacy = await Promise.allSettled(legacyKeys.map((key) => redis.get(key)))
+      hadLegacyFailure = legacy.some((result) => result.status === 'rejected')
+      legacyEntries = Object.fromEntries(
         legacy.flatMap((result, index) => {
           if (result.status === 'fulfilled')
             return [[SUPPORTED_LANGUAGE_CODES[index], result.value]]
@@ -428,11 +523,12 @@ export async function getCachedEntry(
           return []
         })
       )
-    )
+    }
+    const entry = upgradeLegacyEntry(normalized, legacyEntries)
     if (!entry) return null
     // Persist only a fully read legacy set. A transient sibling failure must
     // remain recoverable on the next read rather than hiding its old key.
-    if (legacy.some((result) => result.status === 'rejected')) return { entry, stale: true }
+    if (hadLegacyFailure) return { entry, stale: true }
     try {
       // A trace that completes during migration owns the durable entry.
       const stored = await redis.set(`${ENTRY_PREFIX}${normalized}`, entry, {
@@ -454,7 +550,7 @@ export async function getCachedEntry(
 export async function cacheEntry(
   word: string,
   entry: WordEntry,
-  options?: { incomplete?: boolean }
+  options?: { incomplete?: boolean; previousSpellings?: EntrySpelling[] }
 ): Promise<void> {
   const redis = getRedis()
   const normalized = canonicalizeWord(word)
@@ -463,9 +559,12 @@ export async function cacheEntry(
     options?.incomplete === undefined ? entry : { ...entry, incomplete: options.incomplete }
   const revalidationWords = new Set([normalized])
   try {
-    const previous = await redis.get<WordEntry>(`${ENTRY_PREFIX}${normalized}`)
+    const previousSpellings =
+      options?.previousSpellings !== undefined
+        ? options.previousSpellings
+        : (await redis.get<WordEntry>(`${ENTRY_PREFIX}${normalized}`))?.spellings
     for (const spelling of [
-      ...(Array.isArray(previous?.spellings) ? previous.spellings : []),
+      ...(Array.isArray(previousSpellings) ? previousSpellings : []),
       ...(stored.spellings ?? []),
     ]) {
       if (typeof spelling?.word === 'string' && isValidWord(spelling.word))

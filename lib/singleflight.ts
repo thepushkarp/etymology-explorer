@@ -30,6 +30,7 @@ export interface SingleflightRedis {
   del(key: string): Promise<unknown>
   exists(key: string): Promise<number>
   expire(key: string, seconds: number): Promise<unknown>
+  mget?(...keys: string[]): Promise<(unknown | null)[]>
 }
 
 export type LockAcquisition =
@@ -174,6 +175,30 @@ export async function markLockFailure(
   }
 }
 
+function parseLockFailureValue(value: unknown): LockFailure | null {
+  if (typeof value === 'string') {
+    if (!value.length) return null
+    if (!value.startsWith('{')) return { message: value }
+    try {
+      value = JSON.parse(value)
+    } catch {
+      return { message: value as string }
+    }
+  }
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('message' in value) ||
+    typeof value.message !== 'string' ||
+    !value.message.length
+  )
+    return null
+  const otherScripts = normalizeScriptTargets(
+    'otherScripts' in value ? value.otherScripts : undefined
+  )
+  return { message: value.message, ...(otherScripts.length ? { otherScripts } : {}) }
+}
+
 export async function getLockFailure(
   lockKey: string,
   client: SingleflightRedis | null = getRedis()
@@ -181,28 +206,7 @@ export async function getLockFailure(
   if (!client) return null
 
   try {
-    let value = await client.get(failureKey(lockKey))
-    if (typeof value === 'string') {
-      if (!value.length) return null
-      if (!value.startsWith('{')) return { message: value }
-      try {
-        value = JSON.parse(value)
-      } catch {
-        return { message: value as string }
-      }
-    }
-    if (
-      !value ||
-      typeof value !== 'object' ||
-      !('message' in value) ||
-      typeof value.message !== 'string' ||
-      !value.message.length
-    )
-      return null
-    const otherScripts = normalizeScriptTargets(
-      'otherScripts' in value ? value.otherScripts : undefined
-    )
-    return { message: value.message, ...(otherScripts.length ? { otherScripts } : {}) }
+    return parseLockFailureValue(await client.get(failureKey(lockKey)))
   } catch {
     return null
   }
@@ -225,10 +229,21 @@ export async function attemptPromotion(
   lockKey: string,
   client: SingleflightRedis | null = getRedis()
 ): Promise<PromotionAttempt> {
-  const failure = await getLockFailure(lockKey, client)
-  if (failure !== null) return { status: 'holder_failed', ...failure }
+  if (client && typeof client.mget === 'function') {
+    try {
+      const [rawFailure, rawLock] = await client.mget(failureKey(lockKey), lockKey)
+      const failure = parseLockFailureValue(rawFailure)
+      if (failure !== null) return { status: 'holder_failed', ...failure }
+      if (rawLock !== null && rawLock !== undefined) return { status: 'held' }
+    } catch {
+      return { status: 'held' }
+    }
+  } else {
+    const failure = await getLockFailure(lockKey, client)
+    if (failure !== null) return { status: 'holder_failed', ...failure }
 
-  if (await isLockHeld(lockKey, client)) return { status: 'held' }
+    if (await isLockHeld(lockKey, client)) return { status: 'held' }
+  }
 
   const acquisition = await tryAcquireLock(lockKey, client)
   if (acquisition.status !== 'acquired') return { status: 'held' }

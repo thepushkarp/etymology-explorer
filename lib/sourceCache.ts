@@ -1,3 +1,4 @@
+import { after } from 'next/server'
 import { canonicalizeWord, publisherTitle } from './orthography'
 /**
  * Redis cache for complete source lookups, including historical-language selections.
@@ -19,11 +20,24 @@ import type { LanguageCode } from './languages'
  */
 export interface SourceCacheRedis {
   get(key: string): Promise<unknown>
+  mget?(...keys: string[]): Promise<(unknown | null)[]>
   set(
     key: string,
     value: SourceData | SourceRecord[] | WiktionaryToc,
     opts?: { ex?: number }
   ): Promise<unknown>
+}
+
+async function persistSourceWrite(useDeferred: boolean, write: () => Promise<void>): Promise<void> {
+  if (!useDeferred) {
+    await write()
+    return
+  }
+  try {
+    after(write)
+  } catch {
+    await write()
+  }
 }
 
 export type CacheableSource =
@@ -86,16 +100,21 @@ export async function cacheSource(
   source: CacheableSource,
   word: string,
   data: SourceData,
-  client: SourceCacheRedis | null = getRedis(),
+  client?: SourceCacheRedis | null,
   language: LanguageCode = 'en'
 ): Promise<void> {
-  if (!client || data.incomplete) return
+  const resolvedClient = client !== undefined ? client : getRedis()
+  if (!resolvedClient || data.incomplete) return
 
-  try {
-    await client.set(sourceKey(source, word, language), data, { ex: CONFIG.sourceCacheTTL })
-  } catch (error) {
-    console.error(`[SourceCache] ${source} set error:`, safeError(error))
-  }
+  await persistSourceWrite(client === undefined, async () => {
+    try {
+      await resolvedClient.set(sourceKey(source, word, language), data, {
+        ex: CONFIG.sourceCacheTTL,
+      })
+    } catch (error) {
+      console.error(`[SourceCache] ${source} set error:`, safeError(error))
+    }
+  })
 }
 
 /** A provider request can return several independent dictionaries or homographs. */
@@ -135,16 +154,20 @@ export async function cacheSourceBundle(
   word: string,
   lexicalLanguage: string,
   records: SourceRecord[],
-  client: SourceCacheRedis | null = getRedis()
+  client?: SourceCacheRedis | null
 ): Promise<void> {
-  if (!client || records.length === 0 || records.some((record) => record.data.incomplete)) return
-  try {
-    await client.set(bundleKey(provider, word, lexicalLanguage), records, {
-      ex: CONFIG.sourceCacheTTL,
-    })
-  } catch (error) {
-    console.error(`[SourceCache] ${provider} bundle write failed:`, safeError(error))
-  }
+  const resolvedClient = client !== undefined ? client : getRedis()
+  if (!resolvedClient || records.length === 0 || records.some((record) => record.data.incomplete))
+    return
+  await persistSourceWrite(client === undefined, async () => {
+    try {
+      await resolvedClient.set(bundleKey(provider, word, lexicalLanguage), records, {
+        ex: CONFIG.sourceCacheTTL,
+      })
+    } catch (error) {
+      console.error(`[SourceCache] ${provider} bundle write failed:`, safeError(error))
+    }
+  })
 }
 
 /** Confirmed page headings, including empty lists for authoritative missing pages. */
@@ -158,6 +181,53 @@ function wiktionaryTocKey(word: string, edition: string): string {
   return `src:v20:wiktionaryToc:${edition === 'en' ? '' : `${edition}:`}${publisherTitle(word)}`
 }
 
+function parseWiktionaryToc(raw: unknown): WiktionaryToc | null {
+  const maybe = raw as Partial<WiktionaryToc> | null
+  return maybe &&
+    Array.isArray(maybe.headings) &&
+    Array.isArray(maybe.nonemptyHeadings) &&
+    maybe.headings.every((heading) => typeof heading === 'string') &&
+    maybe.nonemptyHeadings.every((heading) => typeof heading === 'string')
+    ? {
+        headings: maybe.headings,
+        nonemptyHeadings: maybe.nonemptyHeadings,
+        ...(maybe.otherScripts !== undefined
+          ? { otherScripts: normalizeScriptTargets(maybe.otherScripts) }
+          : {}),
+      }
+    : null
+}
+
+/** Batch-read a cached Wiktionary language section and its TOC in a single Redis RTT. */
+export async function getCachedSourceAndToc(
+  source: CacheableSource,
+  word: string,
+  edition: string,
+  language: LanguageCode = 'en',
+  client: SourceCacheRedis | null = getRedis()
+): Promise<{ source: SourceData | null; toc: WiktionaryToc | null }> {
+  if (!client) return { source: null, toc: null }
+  const sKey = sourceKey(source, word, language)
+  const tKey = wiktionaryTocKey(word, edition)
+  try {
+    if (typeof client.mget === 'function') {
+      const [rawSource, rawToc] = await client.mget(sKey, tKey)
+      return {
+        source: isSourceData(rawSource) ? rawSource : null,
+        toc: parseWiktionaryToc(rawToc),
+      }
+    }
+    const [rawSource, rawToc] = await Promise.all([client.get(sKey), client.get(tKey)])
+    return {
+      source: isSourceData(rawSource) ? rawSource : null,
+      toc: parseWiktionaryToc(rawToc),
+    }
+  } catch (error) {
+    console.error(`[SourceCache] ${source} batch get error:`, safeError(error))
+    return { source: null, toc: null }
+  }
+}
+
 export async function getCachedWiktionaryToc(
   word: string,
   edition = 'en',
@@ -165,20 +235,7 @@ export async function getCachedWiktionaryToc(
 ): Promise<WiktionaryToc | null> {
   if (!client) return null
   try {
-    const raw = (await client.get(wiktionaryTocKey(word, edition))) as Partial<WiktionaryToc> | null
-    return raw &&
-      Array.isArray(raw.headings) &&
-      Array.isArray(raw.nonemptyHeadings) &&
-      raw.headings.every((heading) => typeof heading === 'string') &&
-      raw.nonemptyHeadings.every((heading) => typeof heading === 'string')
-      ? {
-          headings: raw.headings,
-          nonemptyHeadings: raw.nonemptyHeadings,
-          ...(raw.otherScripts !== undefined
-            ? { otherScripts: normalizeScriptTargets(raw.otherScripts) }
-            : {}),
-        }
-      : null
+    return parseWiktionaryToc(await client.get(wiktionaryTocKey(word, edition)))
   } catch (error) {
     console.error('[SourceCache] Wiktionary TOC read failed:', safeError(error))
     return null
@@ -189,12 +246,15 @@ export async function cacheWiktionaryToc(
   word: string,
   edition: string,
   toc: WiktionaryToc,
-  client: SourceCacheRedis | null = getRedis()
+  client?: SourceCacheRedis | null
 ): Promise<void> {
-  if (!client) return
-  try {
-    await client.set(wiktionaryTocKey(word, edition), toc, { ex: CONFIG.sourceCacheTTL })
-  } catch (error) {
-    console.error('[SourceCache] Wiktionary TOC write failed:', safeError(error))
-  }
+  const resolvedClient = client !== undefined ? client : getRedis()
+  if (!resolvedClient) return
+  await persistSourceWrite(client === undefined, async () => {
+    try {
+      await resolvedClient.set(wiktionaryTocKey(word, edition), toc, { ex: CONFIG.sourceCacheTTL })
+    } catch (error) {
+      console.error('[SourceCache] Wiktionary TOC write failed:', safeError(error))
+    }
+  })
 }

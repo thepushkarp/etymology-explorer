@@ -1,18 +1,24 @@
 import type { Metadata } from 'next'
-import { CONFIG } from '@/lib/config'
 import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
 import { notFound, redirect } from 'next/navigation'
+import { CONFIG } from '@/lib/config'
 import { SiteFooter } from '@/components/SiteFooter'
 import { SiteHeader } from '@/components/SiteHeader'
 import { EntryView } from '@/components/EntryView'
 import { WordTraceExperience } from '@/components/WordTraceExperience'
-import { ENTRY_PREFIX, etymologyWordTag, getCachedEntry } from '@/lib/cache'
+import {
+  ENTRY_PREFIX,
+  entryIsStale,
+  etymologyWordTag,
+  filterFreshSpellings,
+  getCachedEntry,
+} from '@/lib/cache'
 import { LANGUAGES, isLanguageCode, wordPagePath, type LanguageCode } from '@/lib/languages'
 import { historyEntry } from '@/lib/resultHistories'
 import { entryPagePath, selectionForWordPath } from '@/lib/entrySelection'
 import { getLookupGroup } from '@/lib/lookupGroupCache'
-import { lookupGroupForWord } from '@/lib/lookupGroups'
+import { isKanaWord, lookupGroupForWord } from '@/lib/lookupGroups'
 import { entryNavigation } from '@/lib/entryNavigation'
 import { SITE_SHORT_NAME } from '@/lib/site'
 import type { EtymologyResult } from '@/lib/types'
@@ -59,12 +65,38 @@ async function resolveRoute(params: WordPageProps['params']): Promise<ResolvedWo
 }
 
 // Metadata and page rendering share one in-flight read for every language route.
-const loadCachedEntry = cache((word: string) =>
-  unstable_cache(() => getCachedEntry(word), ['word-page-entry', ENTRY_PREFIX, word], {
-    revalidate: CONFIG.incompleteEtymologyCacheTTL,
-    tags: [etymologyWordTag(word)],
-  })()
-)
+// Only validated hits enter the 24h Next.js Data Cache (invalidated immediately
+// via revalidateTag on writes); misses and transient Redis errors bypass Data Cache
+// so an outage can never freeze a word as noindex. Staleness and spelling-proof
+// freshness are evaluated dynamically on every read.
+const CACHE_MISS = Symbol('word-page-cache-miss')
+
+const loadCachedEntryData = cache(async (word: string) => {
+  try {
+    return await unstable_cache(
+      async () => {
+        const result = await getCachedEntry(word)
+        if (!result) throw CACHE_MISS
+        return result.entry
+      },
+      ['word-page-entry', ENTRY_PREFIX, String(CONFIG.pipelineRevision), word],
+      {
+        revalidate: CONFIG.wordPageCacheTTL,
+        tags: [etymologyWordTag(word)],
+      }
+    )()
+  } catch (error) {
+    if (error === CACHE_MISS) return null
+    throw error
+  }
+})
+
+const loadCachedEntry = cache(async (word: string) => {
+  const raw = await loadCachedEntryData(word)
+  if (!raw) return null
+  const entry = filterFreshSpellings(raw)
+  return { entry, stale: entryIsStale(entry) }
+})
 
 async function resolveEntry(params: WordPageProps['params']) {
   const route = await resolveRoute(params)
@@ -145,17 +177,33 @@ export async function generateMetadata({
 }
 
 export default async function WordPage({ params, searchParams }: WordPageProps) {
-  const { language, word, cached, selectedLanguage, result } = await resolveEntry(params)
+  const [resolvedParams, rawSearchParams] = await Promise.all([params, searchParams])
+  const route = await resolveRoute(Promise.resolve(resolvedParams))
   const query = new URLSearchParams()
-  for (const [key, value] of Object.entries(await searchParams)) {
+  for (const [key, value] of Object.entries(rawSearchParams)) {
     if (typeof value === 'string') query.set(key, value)
     else if (value) for (const item of value) query.append(key, item)
   }
-  const selection = selectionForWordPath(query, decodeURIComponent((await params).segments.at(-1)!))
-  const lookupGroup = lookupGroupForWord(
-    word,
-    await getLookupGroup(selection.lookup ?? word, selection.lookup ? undefined : cached?.entry)
-  )
+  const selection = selectionForWordPath(query, decodeURIComponent(resolvedParams.segments.at(-1)!))
+  const { language, word } = route
+  const [cached, externalGroup] = await Promise.all([
+    loadCachedEntry(word),
+    selection.lookup && selection.lookup !== word
+      ? getLookupGroup(selection.lookup)
+      : Promise.resolve(undefined),
+  ])
+  const selectedLanguage = language ?? cached?.entry.languages[0]
+  const result = selectedLanguage ? cached?.entry.entries[selectedLanguage] : undefined
+  const rawLookupGroup =
+    selection.lookup && selection.lookup !== word
+      ? externalGroup
+      : cached?.entry || isKanaWord(word)
+        ? await getLookupGroup(
+            selection.lookup ?? word,
+            selection.lookup ? undefined : cached?.entry
+          )
+        : undefined
+  const lookupGroup = lookupGroupForWord(word, rawLookupGroup)
   const first = selectedLanguage
     ? entryNavigation({
         word,

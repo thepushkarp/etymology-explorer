@@ -108,7 +108,8 @@ export async function getSpendStats(client: CostGuardRedis | null = getRedis()):
 
   try {
     const spentUSD = parseSpend(await client.get(costKey()))
-    const mode = await getCostMode(client)
+    const mode: CostMode =
+      spentUSD >= monthlyLimitUSD * cacheOnlyAtPercent ? 'cache_only' : 'normal'
     return { spentUSD, limitUSD: monthlyLimitUSD, mode, period: currentMonth() }
   } catch (error) {
     console.error('[CostGuard] getSpendStats failed:', safeError(error))

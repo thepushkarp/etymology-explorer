@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getWordSuggestions } from '@/lib/wordSuggestions'
+import { after, NextRequest, NextResponse } from 'next/server'
+import { getWordSuggestionsWithMeta } from '@/lib/wordSuggestions'
 import { ApiResponse, WordSuggestion } from '@/lib/types'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { parseLanguageCode } from '@/lib/languages'
@@ -36,13 +36,30 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const cacheHeaders = {
-    // Redis caches complete prefix lookups. HTTP caching would also retain
-    // empty or partial suggestions returned during a provider outage.
-    'Cache-Control': 'no-store',
-  }
+  const { suggestions, complete } = await getWordSuggestionsWithMeta(
+    normalized,
+    language,
+    false,
+    request.signal,
+    undefined,
+    {
+      deferCacheWrite: (write) => {
+        try {
+          after(write)
+        } catch {
+          void write()
+        }
+      },
+    }
+  )
 
-  const suggestions = await getWordSuggestions(normalized, language, false, request.signal)
+  const cacheHeaders = {
+    // Only cache complete suggestion sets; degraded upstream lookups stay no-store.
+    'Cache-Control': complete
+      ? 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400'
+      : 'no-store',
+    'X-Suggestions-Complete': complete ? '1' : '0',
+  }
 
   return NextResponse.json<ApiResponse<{ suggestions: WordSuggestion[] }>>(
     {

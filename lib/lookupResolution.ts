@@ -178,7 +178,18 @@ async function resolveLookupLanguage(
   const matchingForms = new Set([word, ...readings])
   const terminals = new Map<string, SourceData>()
   const modelOnly = new Set<string>()
-  const checked = new Set<string>()
+  const checkedSupport = new Map<string, 'unverified' | 'linked'>()
+  const sourceMemo = new Map<string, Promise<SourceData | null>>()
+  const cachedSource = (target: string) => {
+    let pending = sourceMemo.get(target)
+    if (!pending) {
+      pending = source(target)
+      sourceMemo.set(target, pending)
+    }
+    return pending
+  }
+  const candidateTargets = new Set<string>()
+  const unverifiedRejections = new Set<string>()
   let preserveLatin = !hint && LATIN.test(word)
   let exact: SourceData | null = null
   let originalTargets: ScriptTarget[] = []
@@ -293,16 +304,59 @@ async function resolveLookupLanguage(
           b.proof?.length ? 'linked' : 'unverified'
         )
       )
-      const item = queue.shift()!
-      const target = canonicalizeWord(item.word)
-      if (checked.has(target)) continue
-      if (item.depth > 3) {
-        defer(item)
-        continue
+      const topSupport: 'linked' | 'unverified' = queue[0].proof?.length ? 'linked' : 'unverified'
+      // Batch parallel fetches only within the direct-link tier so unverified
+      // proposals can never consume budget ahead of a stronger link discovered by item 1.
+      const maxBatch =
+        topSupport === 'linked'
+          ? Math.min(4, Math.max(1, CONFIG.maxTotalFetches - budget.attempts))
+          : 1
+      const batch: Array<{
+        item: (typeof queue)[number]
+        target: string
+        support: 'linked' | 'unverified'
+      }> = []
+      const batchTargets = new Set<string>()
+      while (
+        queue.length &&
+        batch.length < maxBatch &&
+        (queue[0].proof?.length ? 'linked' : 'unverified') === topSupport
+      ) {
+        const item = queue.shift()!
+        const target = canonicalizeWord(item.word)
+        const previous = checkedSupport.get(target)
+        // Skip only if already checked with equal or stronger provenance (linked beats unverified).
+        if (
+          batchTargets.has(target) ||
+          previous === 'linked' ||
+          (previous === 'unverified' && topSupport === 'unverified')
+        )
+          continue
+        if (item.depth > 3) {
+          defer(item)
+          continue
+        }
+        batchTargets.add(target)
+        batch.push({ item, target, support: topSupport })
       }
-      checked.add(target)
-      try {
-        const data = await source(target)
+      if (!batch.length) continue
+      const fetched = await Promise.all(
+        batch.map(async ({ item, target, support }) => {
+          try {
+            return { item, target, support, data: await cachedSource(target), error: undefined }
+          } catch (error) {
+            return { item, target, support, data: null, error }
+          }
+        })
+      )
+      for (const { item, target, support, data, error } of fetched) {
+        checkedSupport.set(target, support)
+        if (error !== undefined) {
+          session.signal?.throwIfAborted()
+          defer(item)
+          console.warn('[Lookup] Candidate verification unavailable:', safeError(error))
+          continue
+        }
         if (!data) {
           if (item.proof?.length || item.discovered) defer(item)
           continue
@@ -320,16 +374,17 @@ async function resolveLookupLanguage(
         const form = data.lookup?.forms.find((form) => matchingForms.has(canonicalizeWord(form)))
         const linked = !!item.proof?.length
         if (item.relationship === 'form' && !linked && !form) {
-          resolution.incomplete = true
+          unverifiedRejections.add(target)
           continue
         }
         const correction =
           item.relationship === 'correction' &&
           Math.min(...[target, ...declared].map((value) => levenshteinDistance(word, value))) <= 2
         if (!linked && !readingMatch && !form && !correction) {
-          resolution.incomplete = true
+          unverifiedRejections.add(target)
           continue
         }
+        unverifiedRejections.delete(target)
         const relationship = form ? 'form' : item.relationship
         const proofs = [
           ...(item.proof ?? []),
@@ -350,6 +405,8 @@ async function resolveLookupLanguage(
           resolution.incomplete = true
           continue
         }
+        if (candidateTargets.has(target)) continue
+        candidateTargets.add(target)
         const candidate: LookupCandidate = {
           word: target,
           language,
@@ -362,12 +419,9 @@ async function resolveLookupLanguage(
         resolution.candidates.push(candidate)
         if (item.model) modelOnly.add(target)
         terminals.set(target, data)
-      } catch (error) {
-        session.signal?.throwIfAborted()
-        defer(item)
-        console.warn('[Lookup] Candidate verification unavailable:', safeError(error))
       }
     }
+    if (unverifiedRejections.size > 0) resolution.incomplete = true
   }
   await drain()
   if (
@@ -430,7 +484,7 @@ async function resolveLookupLanguage(
     preserveExactEntry,
     resolution,
     originalTargets,
-    verifiedCount: checked.size,
+    verifiedCount: checkedSupport.size,
     fallbackAttempted,
     terminal: resolution.selected ? terminals.get(resolution.selected.word) : undefined,
   }

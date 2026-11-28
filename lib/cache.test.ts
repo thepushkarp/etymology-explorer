@@ -496,4 +496,34 @@ describe('traced corpus discovery', () => {
     expect(await scanTracedWords()).toEqual([{ word: 'sale' }])
     expect(currentRedis.scan).toHaveBeenCalledTimes(102)
   })
+
+  test('stops legacy scans immediately once the shared 1,000-word limit is reached', async () => {
+    const letters = 'abcdefghijklmnopqrstuvwxyz'
+    const firstPage = Array.from({ length: 1000 }, (_, i) => {
+      const word =
+        letters[i % 26] +
+        letters[Math.floor(i / 26) % 26] +
+        letters[Math.floor(i / 676) % 26] +
+        'word'
+      return `etymology:v2.7:${word}`
+    })
+    currentRedis = fakeRedis({
+      scan: mock(async (cursor: string, options: { match: string }) => {
+        if (options.match === 'entry:v1:*') return ['0', []]
+        if (options.match === 'etymology:v2.7:*') {
+          const page = Number(cursor)
+          return [
+            page < 19 ? String(page + 1) : '0',
+            page === 0 ? firstPage : [`etymology:v2.7:extra${page}`],
+          ]
+        }
+        return ['1', ['etymology:beta:v9:fr:unused']]
+      }),
+      get: mock(async () => null),
+    })
+    const traced = await scanTracedWords()
+    expect(traced).toHaveLength(1000)
+    // 1 durable SCAN + 1 legacy SCAN page; never fetches remaining 19 pages or second legacy prefix.
+    expect(currentRedis.scan).toHaveBeenCalledTimes(2)
+  })
 })

@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import Link from 'next/link'
 import { SearchBox } from '@/components/SearchBox'
 import { LanguageSelect } from '@/components/LanguageSelect'
@@ -22,7 +23,7 @@ function HeaderSearch() {
   )
 }
 
-export function SiteHeader({ showSearch }: SiteHeaderProps) {
+export const SiteHeader = memo(function SiteHeader({ showSearch }: SiteHeaderProps) {
   return (
     <header className="mx-auto grid w-full max-w-3xl grid-cols-[1fr_auto] items-center gap-3 px-4 pt-5 sm:flex sm:gap-6 sm:px-6 sm:pt-7">
       <Link
@@ -42,4 +43,4 @@ export function SiteHeader({ showSearch }: SiteHeaderProps) {
       </div>
     </header>
   )
-}
+})

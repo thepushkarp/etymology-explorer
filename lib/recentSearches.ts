@@ -38,7 +38,10 @@ const RECENT_SEARCH_KEY = 'recent-searches:v3'
 export async function recordRecentSearch(
   word: string,
   client: RecentSearchRedis | null = getRedis(),
-  loadEntry = getCachedEntry
+  loadEntry: (
+    word: string
+  ) => Promise<{ entry: import('./types').WordEntry; stale: boolean } | null> = (target) =>
+    getCachedEntry(target, { durableOnly: true })
 ): Promise<boolean> {
   if (!client || !isValidWord(word)) return false
   const normalized = canonicalizeWord(word)

@@ -40,6 +40,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
   let onLockAttempt: ((busy: boolean) => void) | undefined
   let onSynthesisStarted: (() => void) | undefined
   let costMode = 'normal'
+  let rateLimitResult: { retryAfter: number } | null = null
   let languages: LanguageCode[] = ['en', 'fr']
   let otherScripts: ScriptTarget[] = []
   let resolutionIncomplete = false
@@ -67,6 +68,7 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     failureMetadata: undefined as unknown,
     published: 0,
     identity: 0,
+    rateLimitChecks: 0,
     budgets: [] as number[],
   }
   const usage = { inputTokens: 10, outputTokens: 5 }
@@ -160,6 +162,12 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
       calls.spend.push(value)
     },
   }))
+  mock.module('@/lib/rateLimit', () => ({
+    checkRateLimits: async () => {
+      calls.rateLimitChecks++
+      return rateLimitResult
+    },
+  }))
   mock.module('@/lib/counters', () => ({
     incrCounter: async () => {},
     incrLanguageCounter: async () => {},
@@ -248,8 +256,10 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     synthesisGate = undefined
     onLockAttempt = onSynthesisStarted = undefined
     costMode = 'normal'
+    rateLimitResult = null
     calls.identity = 0
     calls.published = 0
+    calls.rateLimitChecks = 0
     languages = ['en', 'fr']
     otherScripts = []
     resolutionIncomplete = false
@@ -979,5 +989,33 @@ if (process.env.ENTRY_ROUTE_TEST_WORKER !== '1') {
     expect(calls.research).toBe(0)
     expect(calls.writes).toBe(0)
     expect(saved.entry).toEqual(original)
+  })
+
+  test('strict etymology rate limits run only on uncached work and never block cached hits', async () => {
+    saved = { entry: entry(), stale: false }
+    rateLimitResult = { retryAfter: 42 }
+    const hit = await get()
+    expect(hit.status).toBe(200)
+    expect(calls.rateLimitChecks).toBe(0)
+    expect(calls.research).toBe(0)
+
+    saved = null
+    const miss = await get()
+    expect(miss.status).toBe(429)
+    expect(miss.headers.get('Retry-After')).toBe('42')
+    expect(calls.rateLimitChecks).toBe(1)
+    expect(calls.research).toBe(0)
+  })
+
+  test('transient per-language failures use the shorter 60s retry cooldown', async () => {
+    failLanguage = 'fr'
+    failureMessage = 'Source research incomplete: Etymonline timed out'
+    const started = Date.now()
+    expect((await get()).status).toBe(200)
+    const failure = saved!.entry.failedLanguages?.fr
+    expect(failure?.kind).toBe('transient')
+    const cooldownMs = Date.parse(failure!.retryAt) - started
+    expect(cooldownMs).toBeGreaterThan(30_000)
+    expect(cooldownMs).toBeLessThanOrEqual(70_000)
   })
 }

@@ -46,8 +46,7 @@ const BROAD_LANGUAGE: Record<string, string> = {
   'old persian': 'persian',
 }
 
-function compatibleLanguage(left: string, right: string): boolean {
-  const normalizedLeft = canonicalizeWord(normalizeLanguageName(left))
+function compatibleLanguage(normalizedLeft: string, right: string): boolean {
   const normalizedRight = canonicalizeWord(normalizeLanguageName(right))
   return (
     normalizedLeft === normalizedRight ||
@@ -67,17 +66,17 @@ interface MatchResult {
 /** Match within the caller's history scope and an explicitly identified language. */
 function findMatches(stage: AncestryStage, chains: ParsedEtymChain[]): MatchResult[] {
   const matches: MatchResult[] = []
+  if (typeof stage.form !== 'string' || typeof stage.stage !== 'string') return matches
+  const normalizedStageLang = canonicalizeWord(normalizeLanguageName(stage.stage))
+  const normalizedStageForm = normalize(stage.form)
 
   for (const chain of chains) {
     for (const link of chain.links) {
       if (
-        typeof stage.form === 'string' &&
-        typeof stage.stage === 'string' &&
-        compatibleLanguage(stage.stage, link.language) &&
         stage.isReconstructed === link.isReconstructed &&
-        [link.form, ...(link.variants ?? [])].some(
-          (form) => normalize(stage.form) === normalize(form)
-        )
+        compatibleLanguage(normalizedStageLang, link.language) &&
+        (normalizedStageForm === normalize(link.form) ||
+          Boolean(link.variants?.some((form) => normalizedStageForm === normalize(form))))
       ) {
         const provider = chain.provider ?? chain.source
         matches.push({

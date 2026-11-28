@@ -1,12 +1,13 @@
 'use client'
 
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { EnterIcon, SearchIcon } from '@/components/Icons'
+import { entryPagePath } from '@/lib/entrySelection'
 import { useHotkey } from '@/lib/hooks/useHotkey'
 import { useSuggestions } from '@/lib/hooks/useSuggestions'
 import { useWordNavigation } from '@/lib/hooks/useWordNavigation'
-import { canonicalizeWord, isValidWord } from '@/lib/validation'
-import { CONFIG } from '@/lib/config'
+import { canonicalizeWord, isValidWord, MAX_WORD_LENGTH } from '@/lib/validation'
 import type { LanguageCode } from '@/lib/languages'
 
 interface SearchBoxProps {
@@ -36,10 +37,16 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
   const inputRef = useRef<HTMLInputElement>(null)
   const listId = useId()
   const errorId = useId()
+  const router = useRouter()
   const navigateToWord = useWordNavigation()
   const suggestions = useSuggestions(value, language)
   const showList = open && suggestions.length > 0
   const activeIndex = active < suggestions.length ? active : -1
+  const highlightedWord = showList && activeIndex >= 0 ? suggestions[activeIndex] : undefined
+
+  useEffect(() => {
+    if (highlightedWord) router.prefetch(entryPagePath(highlightedWord, language))
+  }, [highlightedWord, language, router])
 
   useHotkey('/', () => inputRef.current?.focus())
 
@@ -48,7 +55,7 @@ export function SearchBox({ language, size = 'compact', autoFocus = false }: Sea
     const trimmed = canonicalizeWord(word)
     if (!isValidWord(trimmed)) {
       setOpen(false)
-      const limit = `(up to ${CONFIG.maxWordLength} characters)`
+      const limit = `(up to ${MAX_WORD_LENGTH} characters)`
       setError(
         trimmed
           ? `Use letters, spaces, apostrophes, or hyphens ${limit}.`

@@ -353,3 +353,76 @@ test('HTTP failures preserve actual provider usage on both transports', async ()
     else process.env.OPENROUTER_API_KEY = savedKey
   }
 })
+
+test('streamOpenRouterResponse completes immediately on response.completed even if the socket stays open', async () => {
+  const { streamOpenRouterResponse } = await import('./openrouterResponses')
+  const savedFetch = globalThis.fetch
+  const savedKey = process.env.OPENROUTER_API_KEY
+  process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
+  let cancelled = false
+  globalThis.fetch = (async () =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder()
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({
+                type: 'response.completed',
+                response: {
+                  output_text: '{"ok":true}',
+                  usage: { input_tokens: 10, output_tokens: 5, cost: 0.001 },
+                },
+              })}\n\n`
+            )
+          )
+          // Intentionally keep stream open without calling controller.close()
+        },
+        cancel() {
+          cancelled = true
+        },
+      }),
+      { status: 200, headers: { 'content-type': 'text/event-stream' } }
+    )) as unknown as typeof fetch
+  try {
+    const result = await streamOpenRouterResponse(
+      buildSynthesisRequest('complete evidence'),
+      () => {},
+      50
+    )
+    expect(result.output_text).toBe('{"ok":true}')
+    expect(result.usage).toEqual({ input_tokens: 10, output_tokens: 5, cost: 0.001 })
+    expect(cancelled).toBe(true)
+  } finally {
+    globalThis.fetch = savedFetch
+    if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
+    else process.env.OPENROUTER_API_KEY = savedKey
+  }
+})
+
+test('streamOpenRouterResponse bounds stalled HTTP error bodies by the deadline', async () => {
+  const { streamOpenRouterResponse } = await import('./openrouterResponses')
+  const savedFetch = globalThis.fetch
+  const savedKey = process.env.OPENROUTER_API_KEY
+  process.env.OPENROUTER_API_KEY = savedKey ?? 'test-key'
+  globalThis.fetch = (async () =>
+    new Response(
+      new ReadableStream({
+        start() {
+          // Never resolves or closes
+        },
+      }),
+      { status: 503 }
+    )) as unknown as typeof fetch
+  try {
+    const started = Date.now()
+    await expect(
+      streamOpenRouterResponse(buildSynthesisRequest('complete evidence'), () => {}, 30)
+    ).rejects.toThrow(/503/)
+    expect(Date.now() - started).toBeLessThan(500)
+  } finally {
+    globalThis.fetch = savedFetch
+    if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY
+    else process.env.OPENROUTER_API_KEY = savedKey
+  }
+})

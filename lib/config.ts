@@ -3,6 +3,8 @@
  * Every other module imports from here — single source of truth.
  */
 
+import { MAX_WORD_LENGTH, WORD_PATTERN } from './orthography'
+
 export const CONFIG = {
   // LLM
   model: 'openai/gpt-6-luna',
@@ -13,10 +15,8 @@ export const CONFIG = {
   rootExtractionMaxTokens: 100,
 
   // Input validation
-  maxWordLength: 120,
-  // Marks must follow letters; punctuation separates nonempty letter groups.
-  wordPattern:
-    /^(?:\p{L}\p{M}*)(?:[\u200C\u200D]?\p{L}\p{M}*)*(?:[ '’ʼ‐‑・-](?:\p{L}\p{M}*)(?:[\u200C\u200D]?\p{L}\p{M}*)*)*$/u,
+  maxWordLength: MAX_WORD_LENGTH,
+  wordPattern: WORD_PATTERN,
 
   // Rate limits (per IP)
   rateLimit: {
@@ -50,7 +50,9 @@ export const CONFIG = {
 
   // Cache TTLs (seconds)
   etymologyCacheTTL: 365 * 24 * 60 * 60, // durable corpus: 1 year
+  wordPageCacheTTL: 24 * 60 * 60, // Next.js Data Cache for validated hits (invalidated on write via revalidateTag)
   incompleteEtymologyCacheTTL: 5 * 60,
+  transientFailureCooldownSeconds: 60, // shorter retry cooldown for transient network/LLM blips; word lock prevents stampedes
   audioCacheTTL: 365 * 24 * 60 * 60, // 1 year
   negativeCacheTTL: 30 * 60, // 30m — limits repeat misses without cementing transient source failures
   sourceCacheTTL: 7 * 24 * 60 * 60, // 7 days — raw etymonline/wiktionary page data

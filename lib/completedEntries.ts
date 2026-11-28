@@ -27,14 +27,18 @@ export function rememberCompletedEntry(
 }
 
 export function getCompletedEntry(word: string, language?: LanguageCode): WordEntry | undefined {
-  return (
-    entries.get(routeKey(word, language)) ??
-    [...entries.values()].find(
-      (entry) =>
-        entry.word === canonicalizeWord(word) &&
-        (!language || entry.entries[language] || entry.failedLanguages?.[language])
-    )
-  )
+  const canonical = canonicalizeWord(word)
+  const direct = entries.get(`${language ?? 'auto'}:${canonical}`)
+  if (direct) return direct
+  for (const entry of entries.values()) {
+    if (
+      entry.word === canonical &&
+      (!language || entry.entries[language] || entry.failedLanguages?.[language])
+    ) {
+      return entry
+    }
+  }
+  return undefined
 }
 
 export function subscribeCompletedEntries(listener: () => void): () => void {

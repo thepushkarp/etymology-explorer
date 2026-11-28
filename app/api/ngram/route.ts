@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchNgram } from '@/lib/ngrams'
+import { fetchNgramStatus } from '@/lib/ngrams'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { ApiResponse } from '@/lib/types'
 import { LANGUAGES, parseLanguageCode } from '@/lib/languages'
@@ -38,13 +38,30 @@ export async function GET(request: NextRequest) {
         success: false,
         error: `Usage history is not available for ${LANGUAGES[language].englishName}.`,
       },
-      { status: 404 }
+      {
+        status: 404,
+        headers: {
+          'Cache-Control': 'public, max-age=86400, s-maxage=604800',
+        },
+      }
     )
   }
 
-  const result = await fetchNgram(normalized, { corpus })
+  const lookup = await fetchNgramStatus(normalized, { corpus })
 
-  if (!result || result.data.length === 0) {
+  if (lookup.status === 'error') {
+    return NextResponse.json<ApiResponse<null>>(
+      { success: false, error: 'Ngram service temporarily unavailable' },
+      {
+        status: 503,
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      }
+    )
+  }
+
+  if (lookup.status === 'not_found') {
     return NextResponse.json<ApiResponse<null>>(
       { success: false, error: 'Ngram data unavailable' },
       {
@@ -56,8 +73,8 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  return NextResponse.json<ApiResponse<typeof result>>(
-    { success: true, data: result },
+  return NextResponse.json<ApiResponse<typeof lookup.data>>(
+    { success: true, data: lookup.data },
     {
       headers: {
         'Cache-Control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000',

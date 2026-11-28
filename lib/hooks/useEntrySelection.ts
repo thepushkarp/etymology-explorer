@@ -1,6 +1,6 @@
 'use client'
 
-import { useSyncExternalStore } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
 import { entryPagePath, selectionFromLocation, type EntrySelection } from '../entrySelection'
 import type { LanguageCode } from '../languages'
 
@@ -26,10 +26,20 @@ export function useEntrySelection(
   language?: LanguageCode,
   initial: EntrySelection = {}
 ) {
+  const { capitalized, lookup, historyId } = initial
   const href = useSyncExternalStore(
     subscribe,
     () => `${window.location.pathname}${window.location.search}`,
-    () => entryPagePath(word, language, initial)
+    () => entryPagePath(word, language, { capitalized, lookup, historyId })
   )
-  return selectionFromLocation(href, word) ?? { ...initial, language }
+  return useMemo(
+    () =>
+      selectionFromLocation(href, word) ?? {
+        ...(capitalized ? { capitalized } : {}),
+        ...(lookup ? { lookup } : {}),
+        ...(historyId ? { historyId } : {}),
+        language,
+      },
+    [href, word, language, capitalized, lookup, historyId]
+  )
 }

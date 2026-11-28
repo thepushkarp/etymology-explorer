@@ -217,18 +217,58 @@ const LANGUAGE_PATTERN = new RegExp(
   'i'
 )
 
+const DATE_FRAGMENT = String.raw`(?:early|mid|late|c\.\s*)?\d{4}s?\b|(?:early|mid|late)\s+\d{1,2}c\.`
+const EXPLICIT_DATE_PATTERN = new RegExp(
+  String.raw`\b(?:first\s+)?(?:attested|recorded|used)\s+(?:in\s+|from\s+|since\s+)?(${DATE_FRAGMENT})`,
+  'i'
+)
+const LEADING_DATE_PATTERN = new RegExp(`^(${DATE_FRAGMENT})`, 'i')
+const MEANING_PATTERNS = [
+  /[""\u201c]([^""\u201d]+)[""\u201d]/, // double quotes (incl. smart quotes)
+  /[''\u2018]([^''\u2019]+)[''\u2019]/, // single quotes (incl. smart quotes)
+  /\(([^)]+)\)/, // parenthesized
+]
+const FORM_PATTERN = new RegExp(`^(${HISTORICAL_FORM})(?=$|[\\s,.;:"“”()])`, 'u')
+const PHRASE_FORM_PATTERN = new RegExp(
+  `^phrase\\s+(${HISTORICAL_FORM}(?:\\s+${HISTORICAL_FORM})*)(?=$|[,.;:"“”()])`,
+  'iu'
+)
+const VARIANT_ALSO_PATTERN = new RegExp(`^\\s*\\(also\\s+(${HISTORICAL_FORM})\\)`, 'iu')
+const READING_ANNOTATION_PATTERN =
+  /^\s*\(\s*transliteration:\s*([\p{Script=Latin}\p{M}ʿʾʼ’'ʹʺ* .‐‑-]+?)(?=\s*[,)]|$)|^\s*\(\s*([\p{Script=Latin}\p{M}ʿʾʼ’'ʹʺ* .‐‑-]+),\s*["“‘]/u
+const LOCALIZED_LANGUAGES: Record<string, string> = {
+  protoindoeuropeo: 'Proto-Indo-European',
+  'proto-indo-europeu': 'Proto-Indo-European',
+  'proto-indo-européen': 'Proto-Indo-European',
+  latino: 'Latin',
+  latim: 'Latin',
+  latín: 'Latin',
+  greco: 'Greek',
+  grego: 'Greek',
+  griego: 'Greek',
+  italien: 'Italian',
+  italiano: 'Italian',
+  espagnol: 'Spanish',
+  español: 'Spanish',
+  français: 'French',
+  francês: 'French',
+  portugais: 'Portuguese',
+  português: 'Portuguese',
+  'lat.': 'Latin',
+  lat: 'Latin',
+  'gr.': 'Greek',
+  gr: 'Greek',
+  'fr.': 'French',
+  'it.': 'Italian',
+  'esp.': 'Spanish',
+}
+
 /** Extract lexical attestation dates, not incidental dates elsewhere on a page. */
 function extractDate(text: string, source: SourceProviderId): string | undefined {
-  const date = String.raw`(?:early|mid|late|c\.\s*)?\d{4}s?\b|(?:early|mid|late)\s+\d{1,2}c\.`
-  const explicit = text.match(
-    new RegExp(
-      String.raw`\b(?:first\s+)?(?:attested|recorded|used)\s+(?:in\s+|from\s+|since\s+)?(${date})`,
-      'i'
-    )
-  )
+  const explicit = text.match(EXPLICIT_DATE_PATTERN)
   if (explicit) return explicit[1]
   // Etymonline entries conventionally open with their lexical date.
-  return source === 'etymonline' ? text.trim().match(new RegExp(`^(${date})`, 'i'))?.[1] : undefined
+  return source === 'etymonline' ? text.trim().match(LEADING_DATE_PATTERN)?.[1] : undefined
 }
 
 /**
@@ -236,14 +276,7 @@ function extractDate(text: string, source: SourceProviderId): string | undefined
  * Handles both single and double quotes, and parenthesized meanings.
  */
 function extractMeaning(text: string): string | undefined {
-  // Match "meaning", 'meaning', or (meaning)
-  const patterns = [
-    /[""\u201c]([^""\u201d]+)[""\u201d]/, // double quotes (incl. smart quotes)
-    /[''\u2018]([^''\u2019]+)[''\u2019]/, // single quotes (incl. smart quotes)
-    /\(([^)]+)\)/, // parenthesized
-  ]
-
-  for (const pattern of patterns) {
+  for (const pattern of MEANING_PATTERNS) {
     const match = text.match(pattern)
     if (match && match[1].length < 100) {
       return match[1].trim()
@@ -262,7 +295,7 @@ function extractForm(text: string): string | undefined {
 
   // Match a word form: could start with * (reconstructed), may include hyphens and diacritics
   // Stop at comma, quote, parenthesis, semicolon, or "meaning"
-  const formMatch = trimmed.match(new RegExp(`^(${HISTORICAL_FORM})(?=$|[\\s,.;:"“”()])`, 'u'))
+  const formMatch = trimmed.match(FORM_PATTERN)
   if (formMatch) {
     return formMatch[1].trim()
   }
@@ -292,21 +325,17 @@ function parseSegment(segment: string, sourceSnippet: string): ParsedEtymLink | 
   afterLang = afterLang.replace(/^root\s+(?=\*)/i, '')
 
   // Extract form from the text after the language name
-  const phrase = afterLang.match(
-    new RegExp(`^phrase\\s+(${HISTORICAL_FORM}(?:\\s+${HISTORICAL_FORM})*)(?=$|[,.;:"“”()])`, 'iu')
-  )
+  const phrase = afterLang.match(PHRASE_FORM_PATTERN)
   const form = phrase?.[1] ?? (/^phrase\b/i.test(afterLang) ? undefined : extractForm(afterLang))
   if (!form) return null
 
   // Only source-explicit alternatives are admitted, never an accent-folded guess.
   const afterForm = afterLang.slice(phrase ? phrase[0].length : form.length)
-  const variant = afterForm.match(new RegExp(`^\\s*\\(also\\s+(${HISTORICAL_FORM})\\)`, 'iu'))
+  const variant = afterForm.match(VARIANT_ALSO_PATTERN)
 
   // Explicit HTML reading annotations survive cleaning; unmarked readings
   // require a separate quoted gloss so a parenthetical meaning is not guessed.
-  const reading = afterForm.match(
-    /^\s*\(\s*transliteration:\s*([\p{Script=Latin}\p{M}ʿʾʼ’'ʹʺ* .‐‑-]+?)(?=\s*[,)]|$)|^\s*\(\s*([\p{Script=Latin}\p{M}ʿʾʼ’'ʹʺ* .‐‑-]+),\s*["“‘]/u
-  )
+  const reading = afterForm.match(READING_ANNOTATION_PATTERN)
   const transliteration = (reading?.[1] ?? reading?.[2])?.trim()
 
   // Extract meaning from the remainder
@@ -342,33 +371,7 @@ export function normalizeLanguageName(name: string): string {
   const lower = canonicalizeWord(name)
   if (lower === 'pie') return 'Proto-Indo-European'
   if (HISTORICAL_LANGUAGE_ALIASES[lower]) return HISTORICAL_LANGUAGE_ALIASES[lower]
-  const localized: Record<string, string> = {
-    protoindoeuropeo: 'Proto-Indo-European',
-    'proto-indo-europeu': 'Proto-Indo-European',
-    'proto-indo-européen': 'Proto-Indo-European',
-    latino: 'Latin',
-    latim: 'Latin',
-    latín: 'Latin',
-    greco: 'Greek',
-    grego: 'Greek',
-    griego: 'Greek',
-    italien: 'Italian',
-    italiano: 'Italian',
-    espagnol: 'Spanish',
-    español: 'Spanish',
-    français: 'French',
-    francês: 'French',
-    portugais: 'Portuguese',
-    português: 'Portuguese',
-    'lat.': 'Latin',
-    lat: 'Latin',
-    'gr.': 'Greek',
-    gr: 'Greek',
-    'fr.': 'French',
-    'it.': 'Italian',
-    'esp.': 'Spanish',
-  }
-  if (localized[lower]) return localized[lower]
+  if (LOCALIZED_LANGUAGES[lower]) return LOCALIZED_LANGUAGES[lower]
   // Capitalize first letter of each word
   return name.replace(/\b\w/g, (c) => c.toUpperCase())
 }

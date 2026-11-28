@@ -38,11 +38,18 @@ const LICENSE =
   'https://www.edrdg.org/ — CC BY-SA 4.0, https://creativecommons.org/licenses/by-sa/4.0/; ' +
   'https://www.edrdg.org/edrdg/licence.html; indexed from original XML'
 
+const MAX_CACHED_SHARDS = 8
+
 async function loadShard<T>(kind: 'forms' | 'entries', key: string): Promise<Record<string, T>> {
   const bucket = parseInt(createHash('sha256').update(key).digest('hex').slice(0, 2), 16) % 64
   const name = `${kind}-${bucket.toString(16).padStart(2, '0')}.json.gz`
   const cached = shards.get(name)
-  if (cached) return cached as Promise<Record<string, T>>
+  if (cached) {
+    // Refresh recency for LRU eviction.
+    shards.delete(name)
+    shards.set(name, cached)
+    return cached as Promise<Record<string, T>>
+  }
   const loading = (async () => {
     const raw = await readFile(path.join(process.cwd(), 'data/jmdict', name))
     const expected = manifest.shards[name as keyof typeof manifest.shards]
@@ -51,7 +58,7 @@ async function loadShard<T>(kind: 'forms' | 'entries', key: string): Promise<Rec
     return JSON.parse((await unzip(raw)).toString('utf8')) as Record<string, T>
   })()
   // Bound retained decompressed data; concurrent readers of one shard share work.
-  if (shards.size >= 4) shards.delete(shards.keys().next().value!)
+  if (shards.size >= MAX_CACHED_SHARDS) shards.delete(shards.keys().next().value!)
   shards.set(name, loading)
   try {
     return await loading
