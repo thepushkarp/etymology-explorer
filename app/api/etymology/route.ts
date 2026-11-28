@@ -30,6 +30,7 @@ import { resolveLookup } from '@/lib/lookupResolution'
 import { LookupProposalUnavailable } from '@/lib/lookupFallback'
 import { isValidWord, canonicalizeWord } from '@/lib/validation'
 import { getCostMode, recordSpend } from '@/lib/costGuard'
+import { checkRateLimits } from '@/lib/rateLimit'
 import {
   tryAcquireLock,
   releaseLock,
@@ -84,18 +85,23 @@ function languageFailure(error: unknown): LanguageFailure {
     /\b(?:401|403|quota|credits?|billing|balance|payment)\b|invalid_api_key|authentication|permission.denied|context[_ ](?:length|window|limit)/i.test(
       actual
     )
+  const kind: LanguageFailure['kind'] = validation
+    ? 'validation'
+    : !unavailable &&
+        (isTransientSynthesisError(error) ||
+          /source research incomplete|language resolution incomplete/i.test(actual) ||
+          classified.streamErrorType === 'rate_limit' ||
+          classified.streamErrorType === 'network')
+      ? 'transient'
+      : 'unavailable'
+  const cooldownSeconds =
+    kind === 'transient'
+      ? CONFIG.transientFailureCooldownSeconds
+      : CONFIG.incompleteEtymologyCacheTTL
   return {
-    kind: validation
-      ? 'validation'
-      : !unavailable &&
-          (isTransientSynthesisError(error) ||
-            /source research incomplete|language resolution incomplete/i.test(actual) ||
-            classified.streamErrorType === 'rate_limit' ||
-            classified.streamErrorType === 'network')
-        ? 'transient'
-        : 'unavailable',
+    kind,
     message: classified.message,
-    retryAt: new Date(Date.now() + CONFIG.incompleteEtymologyCacheTTL * 1000).toISOString(),
+    retryAt: new Date(Date.now() + cooldownSeconds * 1000).toISOString(),
   }
 }
 
@@ -140,7 +146,7 @@ export async function GET(request: NextRequest) {
     } catch {
       return respond.error('Service configuration error', { status: 503 })
     }
-    if (!CONFIG.features.publicSearchEnabled || CONFIG.features.forceCacheOnly) {
+    if (!CONFIG.features.publicSearchEnabled) {
       return respond.error('Service temporarily unavailable', { status: 503 })
     }
     const word = request.nextUrl.searchParams.get('word')
@@ -282,7 +288,7 @@ export async function GET(request: NextRequest) {
     const checkedRequestedNegative = !alias && !refresh && !recoveringSavedFailure
     const [requestedNegative, costMode] = await Promise.all([
       checkedRequestedNegative ? getNegativeCache(requestedWord, hint) : Promise.resolve(null),
-      getCostMode(),
+      CONFIG.features.forceCacheOnly ? Promise.resolve('cache_only' as const) : getCostMode(),
     ])
     if (requestedNegative) return noSources(requestedNegative.otherScripts)
     // Automatic absence cannot exclude a specialist-only explicitly hinted entry.
@@ -296,6 +302,14 @@ export async function GET(request: NextRequest) {
         'Monthly budget reached. Cached words still work — try again next month for new ones.',
         { status: 503, errorType: 'budget', headers: { 'X-Protection-Mode': costMode } }
       )
+    }
+    const rateLimited = await checkRateLimits(request, ['etymology', 'etymologyDaily'])
+    if (rateLimited) {
+      return respond.error('Too many requests. Please slow down.', {
+        status: 429,
+        errorType: 'rate_limit',
+        unaryHeaders: { 'Retry-After': String(rateLimited.retryAfter) },
+      })
     }
     const budget = new SourceFetchBudget(CONFIG.maxEntryFetches)
     let emitProgress: ((event: StreamEvent) => void) | undefined

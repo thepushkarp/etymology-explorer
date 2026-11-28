@@ -1,11 +1,14 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 import { NextRequest } from 'next/server'
 import { GET } from '@/app/api/ngram/route'
 
-function ngramRequest(word?: string): NextRequest {
+function ngramRequest(word?: string, language?: string): NextRequest {
   const url = new URL('http://localhost:3000/api/ngram')
   if (word !== undefined) {
     url.searchParams.set('word', word)
+  }
+  if (language !== undefined) {
+    url.searchParams.set('language', language)
   }
   return new NextRequest(url)
 }
@@ -46,5 +49,33 @@ describe('/api/ngram input validation', () => {
     const response = await GET(ngramRequest('a'.repeat(121)))
 
     expect(response.status).toBe(400)
+  })
+})
+
+describe('/api/ngram upstream error handling', () => {
+  test('returns uncached 503 on upstream outages instead of cacheable 404', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('Service Unavailable', { status: 503 })
+    )
+    try {
+      const response = await GET(ngramRequest('etymology', 'en'))
+      expect(response.status).toBe(503)
+      expect(response.headers.get('cache-control')).toBe('no-store')
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  test('returns cacheable 404 when Google Books reports no timeseries', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } })
+    )
+    try {
+      const response = await GET(ngramRequest('etymology', 'en'))
+      expect(response.status).toBe(404)
+      expect(response.headers.get('cache-control')).toContain('max-age=3600')
+    } finally {
+      fetchSpy.mockRestore()
+    }
   })
 })

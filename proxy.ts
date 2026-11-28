@@ -1,41 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Ratelimit } from '@upstash/ratelimit'
-import { CONFIG } from '@/lib/config'
-import { getRedis } from '@/lib/redis'
 import { candidateLanguages, isLanguageCode, LANGUAGES, wordPagePath } from '@/lib/languages'
 import { getCachedSpellingEntry } from '@/lib/cache'
+import { checkRateLimits, type LimiterName } from '@/lib/rateLimit'
 import { canonicalizeWord, isValidWord } from '@/lib/validation'
 
-type LimiterName = keyof typeof CONFIG.rateLimit
-type Window = `${number} ${'s' | 'm' | 'h' | 'd'}`
-
-const LIMITER_PREFIX: Record<LimiterName, string> = {
-  etymology: 'etym',
-  etymologyDaily: 'etym-daily',
-  pronunciation: 'pron',
-  general: 'gen',
-}
-
-const limiters = new Map<LimiterName, Ratelimit>()
-
-// Created lazily: null (no rate limiting) when Redis is not configured.
-function getLimiter(name: LimiterName): Ratelimit | null {
-  const existing = limiters.get(name)
-  if (existing) return existing
-  const redis = getRedis()
-  if (!redis) return null
-  const { requests, window } = CONFIG.rateLimit[name]
-  const limiter = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(requests, window as Window),
-    prefix: `${CONFIG.rateLimitPrefix}:${LIMITER_PREFIX[name]}`,
-  })
-  limiters.set(name, limiter)
-  return limiter
-}
-
+// Proxy enforces coarse per-IP caps across API routes. Strict etymology caps
+// (20/min + 200/day) run in app/api/etymology/route.ts only when a request
+// misses cache and would trigger live source/LLM work.
 function limitersFor(pathname: string): LimiterName[] {
-  if (pathname === '/api/etymology') return ['etymology', 'etymologyDaily']
   if (pathname === '/api/pronunciation') return ['pronunciation']
   return ['general']
 }
@@ -47,17 +19,6 @@ export function legacySearchRedirect(url: URL): string | null {
   if (!raw) return null
   const word = canonicalizeWord(raw)
   return isValidWord(word) ? wordPagePath(word) : null
-}
-
-function getClientIp(request: NextRequest): string {
-  // Trust Vercel's x-forwarded-for — Vercel's edge proxy overwrites this header,
-  // so it's reliable whether or not Cloudflare is in the path.
-  // Do NOT trust cf-connecting-ip: it can be forged if the origin is hit directly.
-  return (
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    'unknown'
-  )
 }
 
 export async function proxy(request: NextRequest) {
@@ -97,24 +58,12 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  if (
-    pathname.startsWith('/api/') &&
-    pathname !== '/api/health' &&
-    pathname !== '/api/changelog' &&
-    CONFIG.features.rateLimitEnabled
-  ) {
-    const ip = getClientIp(request)
-    const active = limitersFor(pathname)
-      .map(getLimiter)
-      .filter((limiter): limiter is Ratelimit => limiter !== null)
-    const results = await Promise.all(active.map((limiter) => limiter.limit(ip)))
-    const blocked = results.find((result) => !result.success)
-
+  if (pathname.startsWith('/api/') && pathname !== '/api/health' && pathname !== '/api/changelog') {
+    const blocked = await checkRateLimits(request, limitersFor(pathname))
     if (blocked) {
-      const retryAfter = Math.ceil((blocked.reset - Date.now()) / 1000)
       return NextResponse.json(
         { success: false, error: 'Too many requests. Please slow down.' },
-        { status: 429, headers: { 'Retry-After': String(Math.max(retryAfter, 1)) } }
+        { status: 429, headers: { 'Retry-After': String(blocked.retryAfter) } }
       )
     }
   }

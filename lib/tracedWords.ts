@@ -67,8 +67,7 @@ export async function scanTracedWords(): Promise<TracedWord[]> {
     return words.size >= MAX_TRACED_WORDS
   }
 
-  const scanPrefix = async (pattern: string, stopWhenFull: boolean) => {
-    const found: string[] = []
+  const scanPrefix = async (pattern: string) => {
     let cursor = '0'
     let batches = 0
     try {
@@ -79,32 +78,20 @@ export async function scanTracedWords(): Promise<TracedWord[]> {
         })
         cursor = String(nextCursor)
         for (const key of keys) {
-          if (stopWhenFull) {
-            if (collect(key)) return found
-          } else {
-            found.push(key)
-          }
+          if (collect(key)) return
         }
         batches++
       } while (cursor !== '0' && batches < MAX_SCAN_BATCHES_PER_PREFIX)
     } catch (error) {
       console.error('[TracedWords] Redis scan failed:', safeError(error))
     }
-    return found
   }
 
   // Scan durable entries first so a full 1,000-word corpus skips legacy prefix scans entirely.
-  await scanPrefix(ENTRY_SCAN_PATTERN, true)
-  if (words.size < MAX_TRACED_WORDS) {
-    const legacyKeyGroups = await Promise.all(
-      LEGACY_SCAN_PATTERNS.map((pattern) => scanPrefix(pattern, false))
-    )
-    for (const keys of legacyKeyGroups) {
-      for (const key of keys) {
-        if (collect(key)) break
-      }
-      if (words.size >= MAX_TRACED_WORDS) break
-    }
+  await scanPrefix(ENTRY_SCAN_PATTERN)
+  for (const pattern of LEGACY_SCAN_PATTERNS) {
+    if (words.size >= MAX_TRACED_WORDS) break
+    await scanPrefix(pattern)
   }
 
   if (legacy.size > 0) {

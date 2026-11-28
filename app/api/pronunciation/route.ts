@@ -80,7 +80,10 @@ export async function GET(request: NextRequest) {
   }
 
   const lockKey = `lock:${pronunciationKey(normalized, language, ipa)}`
-  const [acquisition, costMode] = await Promise.all([tryAcquireLock(lockKey), getCostMode()])
+  const [acquisition, costMode] = await Promise.all([
+    tryAcquireLock(lockKey),
+    CONFIG.features.forceCacheOnly ? Promise.resolve('cache_only' as const) : getCostMode(),
+  ])
 
   if (acquisition.status === 'busy') {
     console.log(`[Pronunciation] Waiting for in-flight audio for "${normalized}"`)
