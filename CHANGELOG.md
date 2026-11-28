@@ -8,6 +8,10 @@ plain-text bullet under a `###` group. `Unreleased` appears only in beta builds.
 
 ## [Unreleased]
 
+### Changed
+
+- Rotate the homepage 3D die so 3 faces forward at rest and hovering reveals 1 on top, 3 in front, and 5 on the right.
+
 ## [0.2.1] - 2026-11-28
 
 ### Changed
